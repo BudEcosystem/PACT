@@ -1,0 +1,38 @@
+description: Stops card numbers reaching the model, a tool, or the transcript.
+
+# EVERY agent here, not only the ones that list it. `fraud-checker` reads Zendesk
+# tickets — the very source this file names as carrying "whatever the customer
+# pasted into it last week" — and used to read them with no redaction at all,
+# because redaction was opt-in per agent while watching, which can do nothing,
+# was workspace-wide. The agent that forgets to list this is the one that leaks.
+applies-to: every-agent
+
+# Two moments, one rule.
+#
+# `step.message.before` catches what the customer typed, before the model reads
+# it. It cannot catch what comes back the other way: a ticket read out of Zendesk
+# carries whatever the customer pasted into it last week, and the model is
+# perfectly capable of copying that into the `payments` call it then makes. By
+# then `step.message.before` has long since run.
+#
+# So the second line sits at the last moment before a value is handed to a tool,
+# and masks inside the call's arguments — including arguments nested inside other
+# arguments, because a card number in `card.number` has left the building exactly
+# as surely as one at the top.
+#
+# This was two files for a round — `redact-card-numbers.yaml` and
+# `redact-card-numbers-in-tool-calls.yaml` — because `when:` held one address.
+# They differed in `description:` and `when:` and in nothing else: same
+# `applies-to:`, same `may:`, the same two sentences copied out. Two copies of
+# one rule is two places to add the next thing that must be hidden, and two
+# places for them to disagree about what "a card number" means.
+when:
+  - step.message.before
+  - step.tool.before
+
+may:
+  - hide-values
+
+rules:
+  - replace anything that looks like a card number with "[card number removed]"
+  - do the same for anything that looks like a bank account

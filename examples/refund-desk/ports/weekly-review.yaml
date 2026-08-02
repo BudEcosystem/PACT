@@ -1,0 +1,13 @@
+# The clock is a port. There is no separate `schedules/` kind and there never
+# should have been two: `kind: schedule` was already a choice on a port, and a
+# port written that way could not be made to work — `every:` and `says:` were
+# refused as "not something a port can have", while the same file with those two
+# lines deleted loaded clean, declaring itself a timer that can never fire.
+description: Summarise the week's refund decisions for the team.
+kind: schedule
+every: Friday at 4pm
+answers: refund-desk
+says: |
+  Summarise this week's refund decisions. How many approved, how many
+  declined, and anything a person had to step in on.
+if-still-running: skip

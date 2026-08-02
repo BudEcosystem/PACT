@@ -1,0 +1,52 @@
+# The shape that makes this a debate rather than two opinions collected once.
+#
+# `hear` asks both sides. `weigh` is a stage neither side occupies: it reads what
+# they said and says where they actually disagree — which is usually narrower
+# than either of them claims. Then it goes back to `hear` once, so each side gets
+# to answer the other's strongest point rather than its own summary of it.
+#
+# Two rounds, not three. A third round is where sides begin restating, and the
+# cost is the same as the first two.
+description: >
+  Hear both sides, say where they actually disagree, hear them again on that
+  point, then decide.
+
+starts-at: hear
+
+steps:
+  hear:
+    does: use-tools
+    # `use-tools`, NOT `ask-someone`. This cost a round to get wrong and is worth
+    # the sentence: `ask-someone` parks the run for a PERSON, and its `asks:`
+    # names a question with a human audience and a deadline. Teammates are not
+    # people — they are offered to the model as tools, so asking one is
+    # `use-tools`. Written the other way, this stage suspended before a single
+    # model call and the debate never happened.
+    says: >
+      Put the point to both sides and collect what each of them says. Do not
+      argue with either of them here.
+    then:
+      used-a-tool: hear
+      answered: weigh
+
+  weigh:
+    does: check-its-work
+    says: >
+      Say where the two sides actually disagree — the one point that, if it went
+      the other way, would change the answer. Ignore everything they agree on
+      and everything that is a difference of emphasis.
+    # Two passes. A third is where sides restate rather than answer.
+    at-most: 2
+    then:
+      used-a-tool: weigh
+      answered: hear
+      too-many-times: decide
+
+  decide:
+    does: answer
+    says: >
+      Give the answer, say which side it went to, and say what the strongest
+      point against it was. A verdict that does not name the best argument it
+      rejected has not been reached, it has been announced.
+    then:
+      answered: done

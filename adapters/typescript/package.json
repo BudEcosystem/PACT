@@ -1,0 +1,17 @@
+{
+  "name": "pact-adapters-ts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "trace": "node --experimental-strip-types src/run-trace.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ai": "^5.0.220",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2",
+    "@types/node": "^22.10.2"
+  }
+}

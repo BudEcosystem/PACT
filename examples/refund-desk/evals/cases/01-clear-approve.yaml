@@ -1,0 +1,9 @@
+when: |
+  A customer bought a lamp 6 days ago for 40 USD. It arrived with a cracked
+  base. They have attached a photo showing the crack. They want their money back.
+expect:
+  decision: approved
+  amount: 40 USD
+because: Within 30 days and the item arrived damaged, so policy allows a full refund.
+must-also:
+  - must-call-before: { call: payments/issue-refund, first: payments/look-up-order }

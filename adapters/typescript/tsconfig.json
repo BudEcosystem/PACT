@@ -1,0 +1,18 @@
+{
+  "//": "1238 lines of TypeScript were never type-checked. There was no tsconfig, `typescript` was not a dependency, and `node --experimental-strip-types` ERASES annotations without checking them — so the 'second, independent port' the README offers as evidence had no static check of any kind, and a type error survived everywhere except the two code paths the two fixtures walk. `scripts/test-all.sh` runs `tsc --noEmit` before the adapter suite now.",
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": false,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"]
+}

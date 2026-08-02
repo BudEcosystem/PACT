@@ -1,0 +1,16 @@
+[package]
+name = "pact-diag"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description.workspace = true
+repository.workspace = true
+
+[dependencies]
+annotate-snippets = { workspace = true }
+camino = { workspace = true }
+serde = { workspace = true }
+
+[lints]
+workspace = true

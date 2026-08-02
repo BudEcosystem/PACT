@@ -1,0 +1,38 @@
+# Nothing goes out over 200 USD, and no reply reaches a customer, without a
+# person saying yes. This is enforcement, not a note in the instructions.
+#
+# A rule says WHEN to ask and WHY. What the person reads, who is asked, how
+# long they have, and what counts as an answer all live in the question it
+# names — so the first and third rules share one wording instead of repeating
+# it, and the second can ask for something a yes-or-no cannot carry.
+#
+# `atom:` used to be the first key of every line here and nothing ever read it —
+# the shape is told apart by which keys are present, and deleting it from all
+# three rules gave byte-identical results. `name:` was a second spelling of
+# `tool:` for the rule that watches a whole action. Both are gone: one key means
+# one thing, and both halves of `<tool>/<action>` are checked against `tools:`,
+# so a misspelling is refused here instead of gating nothing.
+
+# EVERY agent, not only the one that names this file. Approval used to bind
+# per-agent and opt-in: `fraud-checker` uses `zendesk`, `zendesk` exposes
+# the reply action, the third rule below gates it — and `pact waits` listed
+# seven waits of which every one said `refund-desk`. The agent that forgets to
+# name the money rules is the agent that spends without asking, which is the same
+# argument this project already made for card numbers one kind over.
+applies-to: every-agent
+
+ask-a-person:
+  - when:
+      - { tool: payments/issue-refund, arg: amount, more-than: 200 USD }
+    because: a refund over 200 USD is a management decision
+    question: is-this-ok
+
+  - when:
+      - { tool: payments/issue-refund, arg: amount, more-than: 500 USD }
+    because: above 500 USD a person sets the figure, rather than approving one the model chose
+    question: how-much-to-refund
+
+  - when:
+      - { tool: zendesk/reply }
+    because: nothing goes to a customer without a person seeing it first
+    question: is-this-ok

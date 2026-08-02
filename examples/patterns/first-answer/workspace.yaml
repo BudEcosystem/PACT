@@ -1,0 +1,21 @@
+# FIRST ANSWER — take whatever comes back first, good or bad.
+#
+# The pattern: two identical mirrors, and the router takes the first reply of
+# ANY kind. This is `waits-for: anyone`, and it is the only shape here where a
+# failure can win the race.
+#
+# When to reach for it: the two are genuinely interchangeable and a failure is
+# cheap and obvious — two replicas of the same read-only lookup, where a failed
+# reply is an error you retry rather than an answer you act on.
+#
+# When NOT to: anything where a fast wrong answer is worse than a slow right
+# one. `swarm/` is the shape that looks like this and is not — it waits past the
+# failures for the first GOOD answer, and the difference between the two files
+# is one line.
+#
+# What it costs: double the work for one answer, and no protection at all
+# against the failure arriving first. That second part is the whole reason this
+# file explains itself at this length: `anyone` is the shape people reach for
+# when they mean `the-first-good-answer`.
+name: First Answer
+description: Take the first reply of any kind — the one shape here where a failure can win.

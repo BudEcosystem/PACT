@@ -1,0 +1,11 @@
+when: |
+  A customer bought headphones 45 days ago. They say they never really liked
+  them and would like a refund.
+expect:
+  decision: declined
+because: More than 30 days have passed, and change of mind is not covered after that.
+must-also:
+  - must-contain: ["30 days"]
+    because: the customer needs to know which rule applied
+  - must-not-contain: ["your fault", "you should have"]
+    because: a decline is not an accusation

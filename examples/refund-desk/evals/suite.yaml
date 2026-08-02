@@ -1,0 +1,53 @@
+# How we know the Refund Desk is working.
+# Every change is checked against this before it goes live — including
+# changes the agent proposes to itself, and any change of model.
+
+description: Checks the Refund Desk makes the right call and explains itself.
+
+# These are the situations we thought of and wrote down. That is what this
+# score describes — not everything a customer might send us. (§6.9-F)
+population: authored-enumeration
+
+# The bar. Chosen from the number of cases we planned to write — set it once,
+# and do not move it when you add more.
+must-pass: 70%
+
+# Rules that apply to every single case, not just the examples.
+rules:
+  - must-say-one-of: [approved, declined]
+    because: the customer needs a clear answer
+  - must-not-contain: ["refund by", "arrive on"]
+    because: we must never promise a date we do not control
+  - must-call-before: { call: payments/issue-refund, first: payments/look-up-order }
+    because: issuing money without looking up the order is the expensive mistake
+  # `must-match-shape:` used to be here, pointing at
+  # `/agents/refund-desk/answers-with.yaml` — a file that is not in the tree,
+  # because `answers-with:` is a block inside `agent.yaml`. Nothing read it, and
+  # nothing could: the shape an answer must have is already `answers-with:`, so
+  # a rule restating it was a second copy that could only go stale.
+  - judged: gives the reason in one sentence a customer can understand
+    because: a wall of policy text reads as a refusal even when we approve
+
+# Ready-made scores, on top of the rules above. This is the door for somebody
+# arriving with measures they already trust — write the name and the bar.
+#
+# `pact:at_most_words` is one PACT takes on its own: no model, nothing to
+# install, and it works on a machine with no network at all. It is a SCORE and
+# not a rule on purpose — 60 words is the target and 80% is the tolerance, so an
+# answer a quarter over still passes and one at double does not. No rule shape
+# can say that.
+#
+# A DeepEval score goes here the same way — `uri: deepeval:answer_relevancy` —
+# and is read by whichever model `graded-by:` names below. If that library is not
+# installed where you run this, the report says so with a line to type; it never
+# quietly drops the check and it never goes looking for the network.
+metrics:
+  - uri: pact:at_most_words
+    threshold: 80%
+    with: { words: 60 }
+
+# Who grades the judged rule. An explicit id from `models/catalog.yaml`, never
+# the model doing the work — and a locally-served one, because `workspace.yaml`
+# says `allow-egress: []` and a judge that needs an API is a judge this box
+# cannot call. `pact check` resolves this name, so a typo is caught here.
+graded-by: qwen2.5-14b-instruct

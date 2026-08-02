@@ -1,0 +1,7 @@
+name: one-line-gate
+workspace-id: 01JC5S8W0G7QK4T2H9RA3XB6ND
+description: The smallest workspace that stops and asks a person before money moves.
+owner: support-operations
+
+# Nothing here talks to anything outside this box.
+allow-egress: []

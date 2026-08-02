@@ -1,0 +1,8 @@
+description: Refund requests that arrive by email.
+kind: inbound-call
+through: helpdesk
+answers: refund-desk
+same-conversation-when:
+  - they are replies to the same email
+who-can-reach-it:
+  - anyone who emails support@

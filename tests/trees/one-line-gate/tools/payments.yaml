@@ -1,0 +1,31 @@
+description: Where refunds are issued.
+
+url: host/payments
+method: post
+
+actions:
+  look-up-order:
+    description: Find an order by its number.
+    takes:
+      order-number: text
+    reads-only: yes
+
+  issue-refund:
+    description: Send money back to the customer.
+    takes:
+      order-number: text
+      amount: money
+    spends-money: yes
+    same-request-key: order-number
+
+    # THIS IS THE WHOLE GATE. There is no `questions/` folder in this workspace
+    # and no `policies/` folder either, and a refund still stops and waits for
+    # somebody to say yes.
+    #
+    # The long form is three files and thirteen lines — a question, a policy
+    # file, and a rule inside it — and it is what to write when the decision
+    # belongs to a named team, or only above a figure, or needs an answer a yes
+    # cannot carry. It also WINS over this line wherever both are written, and
+    # `pact check` says so, so nobody's rule is quietly overruled by somebody
+    # else's shorthand.
+    needs-a-person: yes

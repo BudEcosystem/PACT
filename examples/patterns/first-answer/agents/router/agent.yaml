@@ -1,0 +1,24 @@
+name: Router
+description: Takes the first reply of any kind from two interchangeable mirrors.
+instructions: |
+  You are given a lookup. Two mirrors can answer it and they are
+  interchangeable.
+
+  Ask both and use the first reply. If that reply is an error, say so and stop —
+  do not quietly fall back to the other one. Falling back would make this a
+  different shape from the one written down, and the next person reading the
+  file would be reading about a system that no longer exists.
+
+team:
+  mirror-a: answers the lookup
+  mirror-b: answers the lookup
+
+teamwork:
+  # ANY reply, including a failure. See the workspace file: this is the line
+  # people write when they mean `the-first-good-answer`.
+  waits-for: anyone
+  starts: all-at-once
+  divides-the-budget: evenly
+  # `carry-on` because there is nothing to carry on to — the first reply has
+  # already been taken by the time a second one could fail.
+  if-someone-fails: carry-on

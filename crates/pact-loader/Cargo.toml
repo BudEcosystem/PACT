@@ -1,0 +1,27 @@
+[package]
+name = "pact-loader"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description.workspace = true
+repository.workspace = true
+
+[dependencies]
+pact-diag = { workspace = true }
+pact-doc = { workspace = true }
+# `report` reads `answer-within: 1m30s` through the schema's own duration
+# reader rather than growing a second one. The copies that mistake replaces all
+# read `1m30s` as one second — a wait ninety times shorter than the one written.
+pact-schema = { workspace = true }
+camino = { workspace = true }
+indexmap = { workspace = true }
+serde_json = { workspace = true }
+unicode-normalization = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+pact-doc = { workspace = true }
+
+[lints]
+workspace = true

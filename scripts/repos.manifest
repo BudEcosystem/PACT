@@ -1,0 +1,180 @@
+# category<TAB>local_name<TAB>git_url<TAB>depth
+# ---------------------------------------------------------------------------
+# TIER 1 — TARGET FRAMEWORKS (must be portable across ALL of these)
+# ---------------------------------------------------------------------------
+frameworks	pydantic-ai	https://github.com/pydantic/pydantic-ai	1
+frameworks	langgraph	https://github.com/langchain-ai/langgraph	1
+frameworks	langchain	https://github.com/langchain-ai/langchain	1
+frameworks	autogen	https://github.com/microsoft/autogen	1
+frameworks	openai-agents-python	https://github.com/openai/openai-agents-python	1
+frameworks	openai-agents-js	https://github.com/openai/openai-agents-js	1
+frameworks	anthropic-sdk-python	https://github.com/anthropics/anthropic-sdk-python	1
+frameworks	claude-agent-sdk-python	https://github.com/anthropics/claude-agent-sdk-python	1
+frameworks	claude-agent-sdk-ts	https://github.com/anthropics/claude-agent-sdk-typescript	1
+frameworks	vercel-ai	https://github.com/vercel/ai	1
+frameworks	vercel-eve	https://github.com/vercel/eve	1
+
+# ---------------------------------------------------------------------------
+# TIER 2 — ADJACENT FRAMEWORKS (generalisability pressure-tests)
+# ---------------------------------------------------------------------------
+frameworks2	google-adk-python	https://github.com/google/adk-python	1
+frameworks2	google-adk-java	https://github.com/google/adk-java	1
+frameworks2	crewai	https://github.com/crewAIInc/crewAI	1
+frameworks2	semantic-kernel	https://github.com/microsoft/semantic-kernel	1
+frameworks2	llama_index	https://github.com/run-llama/llama_index	1
+frameworks2	smolagents	https://github.com/huggingface/smolagents	1
+frameworks2	agno	https://github.com/agno-agi/agno	1
+frameworks2	strands-sdk-python	https://github.com/strands-agents/sdk-python	1
+frameworks2	mastra	https://github.com/mastra-ai/mastra	1
+frameworks2	haystack	https://github.com/deepset-ai/haystack	1
+frameworks2	dify	https://github.com/langgenius/dify	1
+frameworks2	langflow	https://github.com/langflow-ai/langflow	1
+frameworks2	swarm	https://github.com/openai/swarm	1
+frameworks2	atomic-agents	https://github.com/BrainBlend-AI/atomic-agents	1
+frameworks2	agentscope	https://github.com/agentscope-ai/agentscope	1
+frameworks2	camel	https://github.com/camel-ai/camel	1
+frameworks2	metagpt	https://github.com/FoundationAgents/MetaGPT	1
+frameworks2	openhands	https://github.com/All-Hands-AI/OpenHands	1
+frameworks2	swe-agent	https://github.com/SWE-agent/SWE-agent	1
+frameworks2	agentkit-inngest	https://github.com/inngest/agent-kit	1
+frameworks2	llamaindex-workflows	https://github.com/run-llama/workflows-py	1
+
+# ---------------------------------------------------------------------------
+# TIER 3 — EVALUATION (DeepEval feature parity is a hard requirement)
+# ---------------------------------------------------------------------------
+eval	deepeval	https://github.com/confident-ai/deepeval	1
+eval	ragas	https://github.com/explodinggradients/ragas	1
+eval	promptfoo	https://github.com/promptfoo/promptfoo	1
+eval	inspect_ai	https://github.com/UKGovernmentBEIS/inspect_ai	1
+eval	lm-evaluation-harness	https://github.com/EleutherAI/lm-evaluation-harness	1
+eval	opencompass	https://github.com/open-compass/opencompass	1
+eval	helm	https://github.com/stanford-crfm/helm	1
+eval	openai-evals	https://github.com/openai/evals	1
+eval	phoenix	https://github.com/Arize-ai/phoenix	1
+eval	openinference	https://github.com/Arize-ai/openinference	1
+eval	agentbench	https://github.com/THUDM/AgentBench	1
+eval	tau-bench	https://github.com/sierra-research/tau-bench	1
+eval	swe-bench	https://github.com/SWE-bench/SWE-bench	1
+eval	gaia-benchmark	https://github.com/aymeric-roucher/GAIA	1
+eval	agentops	https://github.com/AgentOps-AI/agentops	1
+eval	langfuse	https://github.com/langfuse/langfuse	1
+eval	trulens	https://github.com/truera/trulens	1
+eval	giskard	https://github.com/Giskard-AI/giskard	1
+eval	garak	https://github.com/NVIDIA/garak	1
+eval	terminal-bench	https://github.com/laude-institute/terminal-bench	1
+
+# ---------------------------------------------------------------------------
+# TIER 4 — PROMPT/PIPELINE OPTIMIZATION (the engine of model portability)
+# ---------------------------------------------------------------------------
+optim	dspy	https://github.com/stanfordnlp/dspy	1
+optim	gepa	https://github.com/gepa-ai/gepa	1
+optim	textgrad	https://github.com/zou-group/textgrad	1
+optim	trace	https://github.com/microsoft/Trace	1
+optim	adalflow	https://github.com/SylphAI-Inc/AdalFlow	1
+optim	baml	https://github.com/BoundaryML/baml	1
+optim	guidance	https://github.com/guidance-ai/guidance	1
+optim	outlines	https://github.com/dottxt-ai/outlines	1
+optim	agent-lightning	https://github.com/microsoft/agent-lightning	1
+optim	opto	https://github.com/microsoft/Trace	1
+optim	promptwizard	https://github.com/microsoft/PromptWizard	1
+optim	sammo	https://github.com/microsoft/sammo	1
+optim	autogen-agentchat-optim	https://github.com/microsoft/autogen	1
+optim	distilabel	https://github.com/argilla-io/distilabel	1
+
+# ---------------------------------------------------------------------------
+# TIER 5 — MODEL PORTABILITY / ROUTING / GATEWAY
+# ---------------------------------------------------------------------------
+routing	litellm	https://github.com/BerriAI/litellm	1
+routing	routellm	https://github.com/lm-sys/RouteLLM	1
+routing	openrouter-docs	https://github.com/OpenRouterTeam/openrouter-examples	1
+routing	portkey-gateway	https://github.com/Portkey-AI/gateway	1
+routing	aisuite	https://github.com/andrewyng/aisuite	1
+routing	semantic-router	https://github.com/aurelio-labs/semantic-router	1
+routing	vllm	https://github.com/vllm-project/vllm	1
+routing	sglang	https://github.com/sgl-project/sglang	1
+
+# ---------------------------------------------------------------------------
+# TIER 6 — INTEROP PROTOCOLS & STANDARDS
+# ---------------------------------------------------------------------------
+protocols	mcp-spec	https://github.com/modelcontextprotocol/modelcontextprotocol	1
+protocols	mcp-python-sdk	https://github.com/modelcontextprotocol/python-sdk	1
+protocols	mcp-servers	https://github.com/modelcontextprotocol/servers	1
+protocols	a2a-spec	https://github.com/a2aproject/A2A	1
+protocols	a2a-python	https://github.com/a2aproject/a2a-python	1
+protocols	acp	https://github.com/i-am-bee/acp	1
+protocols	agntcy-oasf	https://github.com/agntcy/oasf	1
+protocols	agntcy-dir	https://github.com/agntcy/dir	1
+protocols	agents-md	https://github.com/openai/agents.md	1
+protocols	otel-semconv	https://github.com/open-telemetry/semantic-conventions	1
+protocols	cloudevents	https://github.com/cloudevents/spec	1
+protocols	serverless-workflow	https://github.com/serverlessworkflow/specification	1
+protocols	oam-spec	https://github.com/oam-dev/spec	1
+protocols	json-schema-spec	https://github.com/json-schema-org/json-schema-spec	1
+protocols	openapi-spec	https://github.com/OAI/OpenAPI-Specification	1
+protocols	asyncapi	https://github.com/asyncapi/spec	1
+protocols	oci-image-spec	https://github.com/opencontainers/image-spec	1
+protocols	oras	https://github.com/oras-project/oras	1
+protocols	sigstore-cosign	https://github.com/sigstore/cosign	1
+protocols	in-toto-attestation	https://github.com/in-toto/attestation	1
+protocols	cyclonedx-spec	https://github.com/CycloneDX/specification	1
+protocols	agent-client-protocol	https://github.com/zed-industries/agent-client-protocol	1
+protocols	ag-ui	https://github.com/ag-ui-protocol/ag-ui	1
+
+# ---------------------------------------------------------------------------
+# TIER 7 — CONFIG / POLICY / SCHEMA LANGUAGES (no-code surface design)
+# ---------------------------------------------------------------------------
+config	cue	https://github.com/cue-lang/cue	1
+config	kcl	https://github.com/kcl-lang/kcl	1
+config	opa	https://github.com/open-policy-agent/opa	1
+config	jsonnet	https://github.com/google/jsonnet	1
+config	dhall-lang	https://github.com/dhall-lang/dhall-lang	1
+config	pkl	https://github.com/apple/pkl	1
+config	cel-spec	https://github.com/google/cel-spec	1
+config	kubevela	https://github.com/kubevela/kubevela	1
+config	crossplane	https://github.com/crossplane/crossplane	1
+
+# ---------------------------------------------------------------------------
+# TIER 8 — FILE/FOLDER-BASED DEFINITION PRIOR ART (the "AI OS filesystem")
+# ---------------------------------------------------------------------------
+filedef	prompty	https://github.com/microsoft/prompty	1
+filedef	dotprompt	https://github.com/google/dotprompt	1
+filedef	genkit	https://github.com/firebase/genkit	1
+filedef	promptl	https://github.com/latitude-dev/promptl	1
+filedef	agent-rules	https://github.com/steipete/agent-rules	1
+filedef	continue	https://github.com/continuedev/continue	1
+filedef	aider	https://github.com/Aider-AI/aider	1
+filedef	opencode	https://github.com/sst/opencode	1
+filedef	goose	https://github.com/block/goose	1
+filedef	cline	https://github.com/cline/cline	1
+filedef	roo-code	https://github.com/RooCodeInc/Roo-Code	1
+filedef	skills-anthropic	https://github.com/anthropics/skills	1
+filedef	nextjs-app-router	https://github.com/vercel/next.js	1
+
+# ---------------------------------------------------------------------------
+# TIER 9 — MEMORY / LEARNING / SELF-IMPROVEMENT
+# ---------------------------------------------------------------------------
+memory	mem0	https://github.com/mem0ai/mem0	1
+memory	letta	https://github.com/letta-ai/letta	1
+memory	zep	https://github.com/getzep/zep	1
+memory	cognee	https://github.com/topoteretes/cognee	1
+memory	memgpt-paper-code	https://github.com/letta-ai/letta	1
+memory	voyager	https://github.com/MineDojo/Voyager	1
+memory	reflexion	https://github.com/noahshinn/reflexion	1
+memory	agent-workflow-memory	https://github.com/zorazrw/agent-workflow-memory	1
+memory	expel	https://github.com/LeapLabTHU/ExpeL	1
+
+# ---------------------------------------------------------------------------
+# TIER 10 — DURABLE EXECUTION / ORCHESTRATION RUNTIME
+# ---------------------------------------------------------------------------
+runtime	temporal	https://github.com/temporalio/temporal	1
+runtime	restate	https://github.com/restatedev/restate	1
+runtime	dbos-transact-py	https://github.com/dbos-inc/dbos-transact-py	1
+runtime	inngest	https://github.com/inngest/inngest	1
+runtime	dapr	https://github.com/dapr/dapr	1
+runtime	dapr-agents	https://github.com/dapr/dapr-agents	1
+runtime	wasmtime	https://github.com/bytecodealliance/wasmtime	1
+runtime	wasm-component-model	https://github.com/WebAssembly/component-model	1
+runtime	wasi-cli	https://github.com/WebAssembly/wasi-cli	1
+runtime	firecracker	https://github.com/firecracker-microvm/firecracker	1
+runtime	e2b	https://github.com/e2b-dev/E2B	1
+runtime	microsandbox	https://github.com/microsandbox/microsandbox	1

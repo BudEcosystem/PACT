@@ -1,0 +1,19 @@
+# PIPELINE — one after another, because the second one needs the first one's work.
+#
+# The pattern: a drafter writes, then a checker checks what was written. They
+# are started in order and both are waited for.
+#
+# When to reach for it: the order is a real dependency, not a preference.
+# Checking a draft that does not exist yet is not a slower version of checking
+# it — it is a different, useless job.
+#
+# What it costs: wall-clock. This is the slowest shape here by construction:
+# the total is the sum of the stages rather than the longest of them. If your
+# stages do NOT depend on each other, `starts: all-at-once` is the same work in
+# less time, and choosing this by habit is how a two-second job becomes six.
+#
+# What goes wrong: `if-someone-fails: stop-the-others` is doing real work here.
+# In a pipeline, a failed drafter means the checker is about to check nothing,
+# and letting it run produces a confident review of an empty page.
+name: Pipeline
+description: Draft first, then check the draft — in that order, because the second needs the first.

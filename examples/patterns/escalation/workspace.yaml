@@ -1,0 +1,24 @@
+# ESCALATION — when a teammate fails, a person decides, not a default.
+#
+# The pattern: a valuer is asked what something is worth, and if it cannot say,
+# the run STOPS and asks a person. It does not carry on with a guess and it does
+# not fail the whole request.
+#
+# When to reach for it: the failure is one where both other answers are wrong.
+# Carrying on means acting without the check that exists to stop the expensive
+# mistake; stopping means refusing work that a person could have unblocked in
+# ten seconds. `ask-a-person` is the third option, and it needs a real question
+# with a real audience and a real deadline — which is what the file in
+# `questions/` is.
+#
+# What it costs: latency measured in however long a person takes, and somebody
+# has to be there. `if-nobody-answers:` is where you say what happens when they
+# are not, and it is not optional — a park with no answer and no deadline is a
+# hang wearing a governance label.
+#
+# What goes wrong: writing `ask-a-person` and no `asks:` line. The run stops
+# with wording and nothing else — nobody named to ask, no deadline, no answer
+# shape — which from the outside is indistinguishable from a crash. `pact check`
+# refuses it.
+name: Escalation
+description: When the valuer cannot say, a person decides — not a default and not a failure.

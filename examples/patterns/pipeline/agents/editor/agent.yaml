@@ -1,0 +1,25 @@
+name: Editor
+description: Runs the drafter and then the checker, in order.
+instructions: |
+  You are given something to write.
+
+  Ask the drafter first. When it comes back, ask the checker to check what the
+  drafter produced. Then give the final version.
+
+  If the checker found something wrong, say what it was rather than silently
+  handing back the corrected text — the reader is entitled to know the draft
+  needed correcting.
+
+team:
+  drafter: writes the first version
+  checker: checks the first version and says what is wrong with it
+
+teamwork:
+  # In order. This is the pattern: the checker cannot start before the drafter
+  # has finished, because there is nothing to check until then.
+  starts: one-after-another
+  waits-for: everyone
+  divides-the-budget: evenly
+  # A drafter that failed leaves the checker checking nothing, and a review of
+  # an empty page reads exactly like a review of a clean one.
+  if-someone-fails: stop-the-others

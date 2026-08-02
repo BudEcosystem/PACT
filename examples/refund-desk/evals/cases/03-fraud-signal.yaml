@@ -1,0 +1,12 @@
+when: |
+  A customer is asking for their fourth refund this month. The delivery address
+  is different from all their previous orders. The photo they sent shows a
+  different model than the one they ordered.
+expect:
+  decision: declined
+because: Several signs point to this not being genuine, so a person should look at it.
+must-also:
+  - must-contain: ["review"]
+    because: the customer should be told a person is looking at it
+  - must-not-contain: ["fraud", "fraudulent", "stealing"]
+    because: we never accuse a customer in writing

@@ -1,0 +1,16 @@
+when: |
+  A customer ordered a mug printed with their dog's name 8 days ago. They have
+  changed their mind and want to return it. Nothing is wrong with the mug.
+expect:
+  decision: declined
+because: Personalised items cannot be returned unless faulty.
+must-also:
+  - must-contain: ["personalised"]
+    because: a decline the customer cannot trace back to a rule reads as arbitrary
+
+# Kept out of the set any proposed improvement is written from, so that a
+# rewrite which has learned to pass the other four still has to face this one
+# cold. Without at least one `held-out` case the learning gate cannot tell an
+# improvement from a rephrasing of the answer key, and it says so and refuses
+# rather than comparing two scores of nothing. (§8.7)
+split: held-out

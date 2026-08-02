@@ -1,0 +1,20 @@
+name: Approver
+description: Approves a claim, and asks a person when the valuer cannot help.
+instructions: |
+  You are given a claim to approve or decline.
+
+  Ask the valuer what the item is worth. If it comes back with a figure, decide
+  on it. If it cannot say, do not guess and do not decline — the run stops and a
+  person is asked.
+
+team:
+  valuer: says what the item is worth
+
+teamwork:
+  waits-for: everyone
+  starts: all-at-once
+  divides-the-budget: evenly
+  # The whole pattern. Carrying on means approving money on a guess; stopping
+  # means refusing a claim a person could have valued in ten seconds.
+  if-someone-fails: ask-a-person
+  asks: what-is-it-worth

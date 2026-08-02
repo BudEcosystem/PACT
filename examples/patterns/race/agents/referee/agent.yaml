@@ -1,0 +1,27 @@
+name: Referee
+description: Answers with whatever came back in time.
+instructions: |
+  You are given a question with a hard deadline.
+
+  Ask both lanes. Answer with what came back before the deadline. If the slow
+  lane did not make it, say so in your answer — the reader needs to know they
+  are holding the quick answer rather than the considered one.
+
+team:
+  fast-lane: answers quickly from what it already has
+  slow-lane: takes longer and checks more
+
+teamwork:
+  waits-for: whoever-answers-in-time
+  # Twenty seconds is the whole pattern. Change this number and you have
+  # changed which lane usually wins, which is a product decision and belongs in
+  # a file somebody can read.
+  gives-up-after: 20s
+  starts: all-at-once
+  # As-needed, because the two lanes do very different amounts of work and a
+  # fixed split would either starve the slow one or waste the fast one's share.
+  divides-the-budget: as-needed
+  # A lane that fails has, from here, simply not answered in time — which this
+  # shape already handles. Stopping the other one would throw away the answer
+  # the deadline exists to protect.
+  if-someone-fails: carry-on

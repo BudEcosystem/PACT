@@ -1,0 +1,25 @@
+# One refund per request. The approval policy asks a person about the AMOUNT,
+# and nothing there notices a second refund of a perfectly ordinary size,
+# because each call is looked at on its own.
+#
+# The sentence below is one of the three PACT knows how to carry out — they are
+# listed under `rules:` in spec/schema.yaml. A sentence outside that list is
+# refused by name rather than loaded and ignored, which is what this file used
+# to be: it said "stop and ask a person", nothing anywhere read it, and every
+# refund after the first went through.
+#
+# "stop" here means stop. An interceptor's powers are the five under `may:` and
+# asking a person is not one of them — that is what `policies/approvals.yaml`
+# is for, and it is a different thing: a gate a person can open, rather than a
+# rule that ends the run.
+description: Stops the run if it tries to issue more than one refund per request.
+
+when: step.tool.before
+
+may:
+  - stop-the-run
+
+rules:
+  - >-
+    if payments is called more than 1 time in one run, stop and say "A second
+    refund in one conversation needs a person. Nothing further has been done."

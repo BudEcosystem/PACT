@@ -1,0 +1,65 @@
+# `pact:loop/reflexion` — do the work, criticise it in writing, do it again.
+#
+# `careful` in the worked example checks a decision once against a written
+# policy. This is the other half of that idea: the criticism is not measured
+# against a document, it is the agent's own account of what it got wrong, and
+# it is handed back to a second attempt as input.
+#
+# The two stages are separate on purpose and it is the same reason `careful`
+# separates `re-read` from `reply`: the words that come out of a critique are a
+# critique — "I assumed the delivery date and never checked it" — and a second
+# attempt written in the same breath as the criticism tends to defend the first
+# one rather than replace it.
+#
+# What it costs: two extra model calls per round, and there are at most two
+# rounds. `at-most: 2` sits on the critique because a third pass is an argument
+# with itself, not a check — the same number and the same reasoning as
+# `careful`'s `re-read`. When it is spent the run answers rather than looping;
+# `revise` and `critique` point at each other, and that ring is only safe
+# because one of them is bounded.
+#
+# Copy this file into your own `loops/` folder and change it. Nothing in here
+# is privileged — it is read by the same code that reads a shape you write.
+
+description: >
+  Do the work, write down what is wrong with what you did, then do it again
+  with that criticism in front of you. At most two rounds, then answer.
+
+starts-at: attempt
+
+steps:
+  attempt:
+    does: use-tools
+    then:
+      used-a-tool: attempt
+      answered: critique
+
+  critique:
+    does: check-its-work
+    says: >
+      Say what is wrong with the answer you just gave: what it missed, what it
+      assumed without checking, and what you would do differently. Do not
+      rewrite the answer here — only say what is wrong with it.
+    # Two passes is a check; a third is an argument with itself.
+    at-most: 2
+    then:
+      used-a-tool: critique
+      answered: revise
+      too-many-times: reply
+
+  revise:
+    does: use-tools
+    says: >
+      Do the work again with the criticism you just wrote in front of you. Fix
+      what you said was wrong rather than defending it.
+    then:
+      used-a-tool: revise
+      # Back for another round. Safe because `critique` is bounded and routes
+      # out when it is spent — without that `at-most:` these two would be a ring
+      # with no exit, which the harness detects and refuses rather than spinning.
+      answered: critique
+
+  reply:
+    does: answer
+    then:
+      answered: done

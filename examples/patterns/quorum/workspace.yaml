@@ -1,0 +1,20 @@
+# QUORUM — carry on once enough of them agree, not once all of them have.
+#
+# The pattern: three readers look at the same thing independently, and the
+# referee moves as soon as two have come back with a good answer. The third is
+# not waited for.
+#
+# When to reach for it: the readers are interchangeable, one of them being slow
+# or broken is normal, and two agreeing is evidence enough. A medical triage
+# desk that needs two of three opinions before routing is this shape.
+#
+# What it costs: you pay for three readers every time and use two. That is the
+# trade — you are buying tail latency, not accuracy, and you are paying a third
+# more than a two-reader version of the same thing.
+#
+# What goes wrong: `enough-is:` set to the size of the team is `waits-for:
+# everyone` written the long way, and set to 1 it is `anyone`. Both load, both
+# do something sensible, and neither is a quorum — so if you copy this file,
+# copy the number with it and change it on purpose.
+name: Quorum
+description: Carry on once two of three readers agree, without waiting for the third.

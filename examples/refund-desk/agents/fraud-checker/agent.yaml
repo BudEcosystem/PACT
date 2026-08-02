@@ -1,0 +1,7 @@
+name: Fraud Checker
+description: Looks for signs that a refund request is not genuine.
+uses:
+  - zendesk
+answers-with:
+  concern: one of none, low, high
+  why: text

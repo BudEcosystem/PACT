@@ -1,0 +1,13 @@
+name: refund-desk
+workspace-id: 01J8ZK4Q7M2XN5V3B9C1D6F0AE
+description: The refund decision system for the customer support team.
+owner: support-operations
+
+# Nothing about this system may talk to anything outside this box.
+# Adding a role here is a change a person has to approve. (§6.5a)
+allow-egress: []
+
+# What may never leave, for every agent here, is written in `redaction.yaml`
+# next to this file — one for the whole system, because what may not leave is a
+# fact about the system rather than about one agent. There is no line here
+# naming it: the file is the setting, the way `learning.yaml` is. (R61)

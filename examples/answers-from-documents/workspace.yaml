@@ -1,0 +1,17 @@
+# A desk that answers out of a set of documents, and says which one it used.
+#
+# This is the shape most enterprise agents actually have, and until `knowledge:`
+# existed it could not be written at all. PACT does not retrieve, embed, index
+# or chunk — a runtime that does all four already exists. What is here is what
+# that runtime is told, and what a reviewer can read: which documents, how they
+# are found, how many pieces come back, and whether an answer has to say where
+# it came from.
+name: Staff desk
+description: Answers staff questions out of the handbook, and cites it.
+
+# `words` and not `meaning`, so this whole workspace runs with nothing leaving
+# the box. Matching what a question is ABOUT needs an embedder, and an embedder
+# is a model somewhere else — so `looked-up-by: meaning` here would be refused
+# by the line below rather than quietly calling a hosted model on every question
+# a member of staff types.
+allow-egress: []

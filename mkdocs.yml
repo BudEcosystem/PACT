@@ -1,0 +1,52 @@
+site_name: PACT
+site_description: A portable contract for AI agents — a folder of YAML and Markdown that runs on seven frameworks and two runtimes.
+docs_dir: site-docs
+site_dir: site
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle: { icon: material/brightness-7, name: Dark mode }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle: { icon: material/brightness-4, name: Light mode }
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - tables
+  - toc: { permalink: true }
+
+nav:
+  - Home: index.md
+  - Start here:
+      - Why PACT exists: concepts/why.md
+      - How it works: concepts/how.md
+      - What you write: concepts/what.md
+  - Concepts:
+      - The Expansion Rule: concepts/expansion-rule.md
+      - Contract, strategy, substrate: concepts/contract-strategy-substrate.md
+      - The harness owns the loop: concepts/harness.md
+      - Governance and refusal: concepts/governance.md
+  - Guide:
+      - Your first agent: guide/first-agent.md
+      - Adding a tool: guide/tools.md
+      - Gating an action on a person: guide/approvals.md
+      - Evals and scoring: guide/evals.md
+  - Reference:
+      - The 43 kinds: reference/kinds.md
+      - Command line: reference/cli.md
+      - Adapters and the lattice: reference/adapters.md
+  - Status:
+      - What is true today: status/verified.md
+      - Gaps and blockers: status/gaps.md
+      - Roadmap: status/roadmap.md
+      - Compared to Eve: status/eve.md

@@ -1,0 +1,24 @@
+name: Assessor
+description: Runs a researcher and a summariser on one shared budget.
+instructions: |
+  You are given a topic to report on.
+
+  Ask the researcher to find out what is true, and the summariser to put it into
+  one paragraph. Both are working from the same budget, so if the researcher
+  comes back thin, say so rather than padding the summary.
+
+team:
+  researcher: finds out what is true, which takes reading
+  summariser: puts what was found into one paragraph
+
+teamwork:
+  waits-for: everyone
+  starts: one-after-another
+  # By share, because reading is most of the work here and summarising is not.
+  # An even split would leave the summariser holding budget it cannot use while
+  # the researcher stops early.
+  divides-the-budget: by-share
+  shares:
+    researcher: 75%
+    summariser: 25%
+  if-someone-fails: stop-the-others

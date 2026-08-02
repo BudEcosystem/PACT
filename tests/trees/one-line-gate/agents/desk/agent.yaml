@@ -1,0 +1,4 @@
+name: Desk
+description: Refunds a customer when the order really is refundable.
+uses:
+  - payments

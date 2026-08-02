@@ -1,0 +1,13 @@
+description: Where customers reach us — the #support channel in Slack.
+kind: conversation
+through: slack
+answers: refund-desk
+
+# Two messages belong to the same conversation when they are in the same
+# thread. Without this every reply would start from nothing.
+same-conversation-when:
+  - they are in the same thread
+
+who-can-reach-it:
+  - people in our Slack workspace
+

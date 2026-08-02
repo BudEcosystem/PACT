@@ -1,0 +1,60 @@
+description: Keeps a long back-and-forth inside what the model can hold.
+
+when-full: 85%
+
+# The one thing no other framework lets you say. A refund conversation that
+# forgets that a person already approved something, or forgets what the customer
+# actually asked for, is worse than one that runs out of room.
+#
+# Three ways to name a set of messages, and all three are here: by what a message
+# IS (`approved or declined`, `original request` — marks PACT stamps), by where
+# it CAME FROM (`the payments tool` — a tool of this workspace), and by the words
+# in it (anything else).
+#
+# `- the refund policy` used to be the first line here and it kept nothing: a
+# skill is not a message, so no message ever carries `from:refund-policy`. It is
+# gone because it is also unnecessary — a written procedure reaches the model in
+# the instructions, which tidying never touches.
+always-keep:
+  - anything a person approved or declined
+  - the customer's original request
+  - anything the payments tool said
+
+# Gentlest first. Each one is applied on top of the one before, and the moment
+# it fits, the rest are not run.
+then:
+  - what: shorten-long-results
+    applies-to: anything a tool returned earlier
+    down-to: 2000 characters
+  - what: summarise-older
+    applies-to: everything before the last few messages
+  # Only reached if shortening and summarising were not enough. Nothing throws
+  # the thinking away unless this line is here — which is the opposite of what
+  # every framework does for you silently.
+  - what: drop-parts
+    applies-to: the model's own thinking
+  # Not "the last 10 messages". Ten messages is a different amount of
+  # conversation every time; since the last approval is the same amount of
+  # conversation every time, and it is the part that matters here.
+  - what: keep-recent-only
+    down-to: everything since the last approval
+
+# Deliberately a different model from the one deciding refunds. A model
+# summarising its own history carries its own mistakes forward.
+#
+# It names a model, by the id `models/catalog.yaml` publishes — and `pact check`
+# resolves it, so a typo here is caught where you are rather than at run time in
+# another language. It used to read `models/summariser`, which looked like a
+# path, was not a catalogue id, named nothing in this workspace, and could never
+# have resolved to anything.
+#
+# A locally-served one, because `workspace.yaml` says `allow-egress: []` and a
+# summariser that needs an API is a summariser this box cannot call.
+summarised-by: qwen2.5-14b-instruct
+
+# A refund conversation nobody can shrink is not one to send anyway and hope.
+if-it-still-does-not-fit: ask-a-person
+
+# And this is what they are asked. Every place that can stop and ask names
+# the question, or the run parks with nothing to show.
+asks: too-long-to-send

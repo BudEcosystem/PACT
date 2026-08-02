@@ -1,0 +1,31 @@
+# What the desk actually did, written down as it does it.
+#
+# This is the OBSERVE half of the same moments `interceptors/` binds to, and it
+# is deliberately a different kind of document rather than an interceptor with
+# an empty `may:` list. There is no `may:` here because there is nothing this
+# may do: it cannot hide a value, it cannot stop the run, and it cannot send the
+# run somewhere else. That is why nobody had to approve it and why it sits in a
+# folder of its own.
+#
+# The two halves next to each other, on the same run:
+#   interceptors/redact-card-numbers.yaml   CHANGES what `payments` is handed —
+#                                           `step.tool.before` is the second
+#                                           moment on its `when:` list
+#   watch/tool-calls.yaml (this file)       writes down THAT `payments` was
+#                                           called
+#
+# and the second one cannot undo the first, because a line here only ever
+# carries names, moments and outcomes — never the words or the values involved.
+description: >
+  Records every tool call the desk finishes, so that afterwards you can read
+  back what it actually did rather than take its word for it.
+
+# Every time one of its tools has finished. `step` because a tool call happens
+# inside one step of the thinking, `tool` because that is the thing, and
+# `completed` because that is the moment.
+when: step.tool.completed
+
+# One line per tool call, in this workspace's own `.pact` area. Just a file
+# name — the area is chosen for you, so a record can never land on top of
+# something you wrote.
+writes-to: tool-calls.jsonl

@@ -1,0 +1,24 @@
+description: Asked when a refund conversation cannot be shortened enough to send.
+
+# The context policy next door says `if-it-still-does-not-fit: ask-a-person`,
+# and this is what it asks. Every place in PACT that can stop and ask names the
+# question it asks, because a run parked with nothing to show is, from the
+# outside, indistinguishable from a run that has hung.
+#
+# Eve reaches this point too and has nothing to ask with: when its compaction
+# ladder bottoms out it sends the oversized history and says nothing.
+says: This conversation is too long to send in full. Carry on with what fits?
+
+answer:
+  approved: yes or no
+  because: text
+
+shows:
+  - how-much-over
+
+asked-of: [support-leads]
+answer-within: 15m
+
+# Carrying on means sending a shortened refund history to a model deciding
+# about money. Nobody answering is not a reason to do that.
+if-nobody-answers: stop-and-say-so

@@ -1,0 +1,23 @@
+# The documents themselves are in `documents/` beside this file. They are kept
+# as FILES and not as settings, so a table stays a table and a heading stays a
+# heading — and so `pact show` can digest them, which is what makes "these are
+# the documents the answer came from" checkable rather than asserted.
+description: The staff handbook everyone asks about.
+
+# `words` matches the words somebody typed, which is what you want for clause
+# numbers and policy references — and it needs nothing outside this box.
+looked-up-by: words
+
+# How much comes back for one question. More is not better: every extra passage
+# is more text a poisoned document could be hiding in.
+passages-at-most: 3
+
+# The whole of what this desk is for. An answer with no source is not an answer:
+# if the handbook could not be read at all, the turn fails and says so rather
+# than answering from what the model already knew and citing a document it never
+# opened.
+must-cite: yes
+
+use-when: somebody asks about leave, expenses, working hours or notice periods
+do-not-use-when: somebody asks about their own pay or a personal grievance
+if-unsure: say the handbook does not cover it and point them at the people team

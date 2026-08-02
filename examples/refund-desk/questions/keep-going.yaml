@@ -1,0 +1,19 @@
+description: Asked when a run reaches one of its limits before it has an answer.
+
+# Eve has this exact question and no way to express it, so it ships as an
+# Approve/Stop pair borrowed from the approval widget. Written honestly it is
+# not an approval at all — nothing is being approved, someone is being asked
+# whether to spend more.
+says: This is taking longer than it should. Keep going?
+
+answer:
+  keep-going: yes or no
+
+shows:
+  - spent-so-far
+  - steps-taken
+
+asked-of: [support-leads]
+answer-within: 10m
+
+if-nobody-answers: stop-and-say-so

@@ -1,0 +1,41 @@
+# Let the Refund Desk get better from real conversations.
+#
+# `propose-only` means: it may suggest improvements, and every one of them
+# comes to your weekly review. Nothing changes by itself. (§8.7)
+#
+# This one line is the whole decision. There used to be an `auto-apply: no`
+# beside it, and the pair could disagree without anybody being told —
+# `propose-only` with `auto-apply: yes` loaded cleanly and the `yes` was
+# thrown away. The other choice here is `applies-safe-changes-itself`, and
+# it is a different kind of decision: it puts wording changes live with
+# nobody reading them first.
+enabled: propose-only
+
+# What it may propose changes to. These are safe: they change how it words
+# things, never what it is allowed to do.
+may-improve-on-its-own:
+  - phrasing
+  - examples
+  - skill-notes
+
+# What always needs a person to say yes. These change what the agent can
+# actually do, so nobody gets to skip the review.
+needs-a-person-to-approve:
+  - tools
+  - permissions
+  - team
+  - limits
+  - evals
+  - policy-clauses
+
+# In propose-only mode the accept test is simply: a person read it and said yes.
+keep-only-if: a-person-approves-it
+
+# Show proposed changes to the team once a week.
+review: weekly
+
+cycle-limits: { per-cycle: 4, per-month: 20 USD, evals: 2000 }
+
+models:
+  execution:  { role: llm }
+  reflection: { role: reflector }

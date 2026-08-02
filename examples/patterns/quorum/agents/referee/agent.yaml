@@ -1,0 +1,31 @@
+name: Referee
+description: Decides once enough readers have come back.
+instructions: |
+  You are given a passage and a question about it. Three readers are looking at
+  it independently.
+
+  Ask all three. As soon as two of them have answered, decide — do not wait for
+  the third. Say which two you used and whether they agreed with each other.
+
+  If the two you got disagree, say so plainly rather than picking one.
+
+team:
+  reader-a: reads the passage and answers the question
+  reader-b: reads the passage and answers the question
+  reader-c: reads the passage and answers the question
+
+teamwork:
+  # Two out of three. This is the whole pattern; every other line supports it.
+  waits-for: enough-of-them
+  enough-is: 2
+  # All three start together — starting them one after another would make the
+  # quorum arrive no sooner than the second-slowest reader, which is the thing
+  # this shape exists to avoid.
+  starts: all-at-once
+  # Evenly, because the readers do the same work. `by-share` here would be
+  # asserting a difference between them that the instructions say is not there.
+  divides-the-budget: evenly
+  # A reader that fails is not an emergency: the quorum is two, and there are
+  # three. Carrying on is the honest response, and the referee says which two it
+  # used, so a run that quietly lost one is still visible in the answer.
+  if-someone-fails: carry-on

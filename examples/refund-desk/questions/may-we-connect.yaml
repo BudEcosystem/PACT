@@ -1,0 +1,48 @@
+description: Asks a person to allow this desk to use the payments connection.
+
+# `resources/payments-server.yaml` says where the payments credential lives. It does
+# not say that anybody has agreed this desk may spend money through it, and
+# those are two different facts — the platform team publishing a server is not
+# the support team consenting to be billed by it.
+#
+# Eve stops here too; it is the one place it pauses for a scoped authorisation
+# and comes back. But there it is a fifth kind of pause with its own state key,
+# its own resume path and its own guard, so the only wording it can put on the
+# screen is whatever that subsystem hardcodes. Here it is the same waiting as
+# the four questions beside this one, which is why the only thing that had to
+# be written is what to say.
+says: May we use the payments connection for this?
+
+answer:
+  approved: yes or no
+  because: text
+
+# `approved` is the word every yes-or-no in here uses, and it is the word that
+# makes a no mean no: a question whose answer has no `approved` line is taken
+# as granted the moment it is answered at all. Saying "not this one" has to be
+# sayable.
+
+# A connection is never granted in the abstract — it is granted for something,
+# and this is the something. Shown as quoted values in their own box, so the
+# order number a customer typed cannot read as an instruction to the person
+# being asked.
+shows:
+  - order-number
+  - amount
+
+# The support lead is who normally answers, and their manager is named here
+# rather than under `escalates-to:` because there is nowhere further to send
+# this: below it says the run stops, and stopping is what should happen when
+# the two people who could allow a payment connection both stay silent.
+asked-of: [support-leads, support-manager]
+
+# Longer than the 30m an individual refund gets. This is asked once, not once
+# per customer — but a customer is behind it, so it cannot sit for an
+# afternoon either.
+answer-within: 1h
+
+# Nobody answering is not somebody refusing, and neither of them is a yes. The
+# run ends and says which connection it was waiting on, because a refund desk
+# that quietly carried on without the payments system would look, from the
+# customer's side, exactly like one that had paid them.
+if-nobody-answers: stop-and-say-so

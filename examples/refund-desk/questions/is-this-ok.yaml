@@ -1,0 +1,38 @@
+description: The yes-or-no a person is asked before money moves or a customer hears from us.
+
+# Approval is not a special kind of thing in PACT. It is this: one question
+# whose answer happens to be a single yes-or-no. `how-much-to-refund.yaml`
+# sitting next to it asks for an amount instead, through exactly the same
+# mechanism and with no escape hatch.
+says: Please check this before it happens.
+
+answer:
+  approved: yes or no
+  because: text
+
+# Shown to the approver as quoted values in their own box — never folded into
+# the sentence above. Text a customer typed must not be able to read as an
+# instruction to the person approving.
+#
+# Both halves of what the line at the top of this file promises. Two rules in
+# `policies/approvals.yaml` put this question: one before `payments/issue-refund`
+# — the money — and one before `zendesk/reply`, which is *"a customer hears from
+# us"*. Only the money half had names here, so the approver of a reply read
+# *"Please check this before it happens."* and nothing else: not the message they
+# were about to send, not the ticket it was on. `Question.about_call` filters
+# with `if k in args`, so both lines simply vanished at that park and nothing
+# anywhere said so. `pact check` now holds every name here against the `takes:`
+# of the actions the rules reach, which is what found this.
+shows:
+  - amount
+  - order-number
+  - message
+  - ticket-id
+
+asked-of: [support-leads]
+answer-within: 30m
+
+# Silence is not a yes. There is deliberately no wording here that would let it
+# become one.
+if-nobody-answers: escalate
+escalates-to: [support-manager]

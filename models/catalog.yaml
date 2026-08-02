@@ -1,0 +1,724 @@
+# models/catalog.yaml — DISTRIBUTION-SUPPLIED. Local-first, offline-authoritative.
+#
+# The author never writes this file. `20-ARCHITECTURE-DRAFT.md` §4.2 is normative
+# on that point and gives the reason: the first thing a D14 system needs in order
+# to run was the one file D14 had no no-code path for. A support lead cannot hand
+# enter a context window for every model they might be moved onto, so the
+# distribution ships it and a workspace-local `models/catalog.yaml` is an
+# optional override layer, never a prerequisite.
+#
+# It is read from disk with no network call (D8, D17). Everything here was
+# recorded by hand from a published source named per figure; nothing is fetched.
+#
+# WHAT IT IS FOR, today: a context policy is measured against what the model can
+# hold, and until this file existed nothing could say. `harness.py` probed the
+# transport, every shipped transport answered nothing, and so every run with
+# `context-policy:` on it reported the policy as unenforced. The mechanism was
+# honest and inert. One row per model, one window per row, one place it comes
+# from.
+#
+# AND THE SAME FOR MONEY, from the same rows. `cost-per-request-under:` and
+# `tokens-at-most:` were in exactly that state one round longer: no shipped
+# transport implemented `usage()`, so `harness._meter_usage` found nothing and
+# `Limits.unmeterable` put BOTH ceilings on `RunResult.unmetered` on every real
+# run — an author's spend cap, honest and inert. The `cost:` block below was
+# already here on every row; what was missing was a transport that read the
+# token counts off the response it builds and a single place to price them.
+# `resolve.price_of` is that place, `input-per-mtok` and `output-per-mtok` are
+# both required to produce a figure, and the transports whose wire format
+# carries the counts — the Anthropic SDK, AutoGen, the OpenAI Agents SDK and
+# Ollama — now answer. One row per model, one price per row, one place it comes
+# from.
+#
+# A PRICE ONLY ONE VENDOR CARRIES IS NOT A CEILING. Everything above was true
+# and the money half still could not bite outside one family. Count the rows as
+# they were: three Anthropic rows publishing both halves of a price; five
+# locally-served rows priced at a SOURCED 0 USD, which meter perfectly and read
+# zero for the life of the workspace (`RunResult.never_reached` says so out
+# loud); and one hosted row, `gpt-5.4`, publishing no price at all. So there was
+# exactly one vendor on this list whose rows could make a spend cap fire, and an
+# author who pinned anything else got `cost-per-request-under` and
+# `tokens-at-most` handed back on `RunResult.unmetered` — the honest-and-inert
+# state this file exists to end, surviving one vendor at a time. The transports
+# most likely to be pointed at somebody else's API, the OpenAI-Agents one and
+# any OpenAI-compatible endpoint, had nothing priced to bind.
+#
+# The rows below the Anthropic ones close that: OpenAI, Google and xAI models
+# the shipped transports can actually name, each with a price AND a window, so
+# the ceiling an author writes is enforced against the model they chose rather
+# than against whichever model this distribution happened to have priced.
+#
+# WHERE THOSE FIGURES WERE READ. Two dependencies already vendored in this tree,
+# both pinned by digest, neither fetched at run time (D8, D17): `genai-prices`
+# 0.0.72, whose bundled `genai_prices/data.py` carries a per-model
+# `context_window` and a per-million input/output price and is pinned in
+# `adapters/python/uv.lock`; and `@ai-sdk/gateway` 2.0.119, whose
+# `dist/index.d.ts` carries the model-id list the Vercel AI transport can bind
+# and is pinned in `adapters/typescript/package-lock.json`. Naming both is the
+# point of the rule: a reader can open either file on a machine with no network
+# and see the number this row claims.
+#
+# PROVENANCE IS PER FIGURE. §4.2's fifth finding is explicit — "PACT requires
+# per-field `source` + `as-of` on the *resolved* entry, not on the layer" — with
+# LangChain's shipped precedent named as the anti-pattern: an upstream feed that
+# records source and date, a hand-written override layer that records nothing,
+# and a merged result no consumer can attribute. So `context-window` is a
+# `value:` with its own `provenance:`, the same shape §4.2 gives `reasoning:` and
+# every `benchmarks:` entry, rather than the bare scalar its illustrative snippet
+# happens to show.
+#
+# A FIGURE NOBODY CAN SOURCE IS WRITTEN `unknown`. §4.2: "Where a field cannot be
+# discovered it is recorded as `unknown`". It is not guessed and it is not
+# silently omitted — a `value: unknown` row makes the transport report no window,
+# which puts `context-policy` on `RunResult.unmetered` where the author can read
+# it. A `cost: unknown` row goes out the same door for the same reason (T7): a
+# transport bound to it exposes no `usage()` at all, so `cost-per-request-under`
+# and `tokens-at-most` are reported as unenforced rather than metered at 0.00
+# USD. Pricing an unsourced row at zero would give the author a spend cap that
+# can never be reached, which is strictly worse than having no cap — the same
+# mistake `_cost` already records for the recommendation line, spending real
+# money instead of printing a wrong figure.
+#
+# UNKNOWN BINDS AND RANKS LAST. Decision Y12 (`20-ARCHITECTURE-DRAFT.md` §4.2)
+# is explicit: "A row with no `reasoning` block is UNKNOWN. At core tier UNKNOWN
+# BINDS and ranks last." That rule is why an unsourced figure is safe to write
+# down — an `unknown` never empties the candidate set, it only loses a tie. The
+# same rule is applied to `context-window` here, because the two fields answer
+# beginner-tier predicates (`reasoning:`, `context-at-least:`) and a beginner
+# predicate that can silently match nothing is the defect Y12 was written about.
+#
+# `reasoning:` IS POSITIONING, NOT A BENCHMARK, AND SAYS SO. §4.2's illustrative
+# row derives the rung from a `benchmarks:` block. No open benchmark figures have
+# been imported into this distribution, so nothing here is derived from one. Where
+# the vendor publishes a positioning statement that maps onto the ladder, the rung
+# is recorded with that statement as its source and `harness: positioning` saying
+# what kind of claim it is. Where no such statement exists, the rung is `unknown`.
+# Nine of the thirteen rows below are `unknown`, and that is the honest number —
+# it went UP with the four rows added for the other hosted vendors, because a
+# price and a window were sourceable for each of them and a rung was not, and
+# inventing the rung to make the row look complete is the one thing this file
+# does not do.
+#
+# `endpoint: local` IS WHAT MAKES A ROW AIR-GAPPABLE. Decision Y16: "Egress is a
+# property of the BINDING, not of one model role... the resolver refuses to bind
+# any role whose catalogue row has a non-local `served-by.endpoint` unless
+# listed" in `workspace.yaml`'s `allow-egress:`. So every runtime that serves the
+# weights on the machine says `endpoint: local` out loud rather than leaving it
+# to be inferred from the runtime's name — `ollama` looking local because of how
+# it is spelled is exactly the `model.provider.includes("anthropic")` string
+# match this file exists to replace.
+
+version: 1
+
+# Which model PACT binds when the author pins none. `spec/schema.yaml` promises
+# exactly this on the agent's `model:` field — "Leave this out and PACT picks."
+# A locally-servable model, because D17 puts fully air-gapped in the deployment
+# set and a default that needs a hosted API is a default that cannot run there.
+default: qwen2.5-7b-instruct
+
+models:
+
+  # ───────────────────────────────────────────── locally served (D17: no network)
+
+  qwen2.5-7b-instruct:
+    family: qwen2.5
+    tier: small
+    # What the runtime calls it. The same weights carry different ids on
+    # different runtimes — §4.2: "The catalogue is therefore keyed on (model,
+    # provider, runtime)" — so the row is looked up under every id it answers to
+    # rather than being duplicated once per runtime.
+    also-known-as:
+      - "qwen2.5:7b-instruct"
+      - "qwen2.5-7b-instruct"
+    served-by:
+      - { runtime: ollama, endpoint: local }
+      - { runtime: vllm, endpoint: local }
+    capabilities:
+      tool-calling: parallel
+      modality-in: [text]
+      modality-out: [text]
+      context-window:
+        value: 32768
+        provenance:
+          source: >
+            Qwen2.5-7B-Instruct model card, published `config.json`
+            (`max_position_embeddings`). The 131072 figure quoted elsewhere is
+            the YaRN-extended length and needs a serving-side override, so it is
+            not what an unconfigured runtime will hold.
+          date: 2026-07-28
+          as-of: 2026-07-28
+          recorded-by: jithinvg@bud.studio
+    reasoning:
+      value: unknown
+      provenance:
+        source: >
+          No positioning statement for this model maps onto the four-rung
+          ladder, and no benchmark figures have been imported into this
+          distribution. Written `unknown` rather than guessed: Y12 makes UNKNOWN
+          bind and rank last, so saying so costs the row a tie-break and never a
+          candidacy.
+        harness: none
+        as-of: 2026-07-28
+        recorded-by: jithinvg@bud.studio
+    cost: { input-per-mtok: 0 USD, output-per-mtok: 0 USD }
+
+  qwen2.5-14b-instruct:
+    family: qwen2.5
+    tier: mid
+    also-known-as:
+      - "qwen2.5:14b-instruct"
+      - "qwen2.5-14b-instruct"
+    served-by:
+      - { runtime: ollama, endpoint: local }
+      - { runtime: vllm, endpoint: local }
+    capabilities:
+      tool-calling: parallel
+      modality-in: [text]
+      modality-out: [text]
+      context-window:
+        value: 32768
+        provenance:
+          source: >
+            Qwen2.5-14B-Instruct model card, published `config.json`
+            (`max_position_embeddings`).
+          date: 2026-07-28
+          as-of: 2026-07-28
+          recorded-by: jithinvg@bud.studio
+    reasoning:
+      value: unknown
+      provenance:
+        source: >
+          No positioning statement for this model maps onto the four-rung
+          ladder, and no benchmark figures have been imported into this
+          distribution. Written `unknown` rather than guessed: Y12 makes UNKNOWN
+          bind and rank last, so saying so costs the row a tie-break and never a
+          candidacy.
+        harness: none
+        as-of: 2026-07-28
+        recorded-by: jithinvg@bud.studio
+    cost: { input-per-mtok: 0 USD, output-per-mtok: 0 USD }
+
+  llama3.2-1b-instruct:
+    family: llama3.2
+    tier: small
+    also-known-as:
+      - "llama3.2:1b"
+      - "llama3.2-1b-instruct"
+    served-by:
+      - { runtime: ollama, endpoint: local }
+    capabilities:
+      tool-calling: single
+      modality-in: [text]
+      modality-out: [text]
+      context-window:
+        value: 131072
+        provenance:
+          source: >
+            Llama 3.2 1B Instruct model card, published context length.
+          date: 2026-07-28
+          as-of: 2026-07-28
+          recorded-by: jithinvg@bud.studio
+    reasoning:
+      value: simple
+      provenance:
+        source: >
+          Llama 3.2 model card: the 1B is published for on-device summarising,
+          rewriting and instruction following, and the reasoning-heavy work is
+          directed at the larger sizes in the same family.
+        harness: >
+          positioning, not a measurement. The vendor's own placement of this
+          model relative to its siblings, read onto the four-rung ladder. It is
+          not derived from a benchmark run, and this file has no `benchmarks:`
+          block to derive one from.
+        as-of: 2026-07-28
+        recorded-by: jithinvg@bud.studio
+    cost: { input-per-mtok: 0 USD, output-per-mtok: 0 USD }
+
+  # The only locally-served row that can look at a picture. It is here because
+  # the worked example asks for one: `examples/refund-desk` writes `images: yes`
+  # under a workspace whose `allow-egress:` is empty, and with no row like this
+  # the resolver's only honest answer to the flagship D20 artifact was "nothing
+  # in the catalogue can serve this without leaving the box". D16 puts vision in
+  # v1 and D17 puts air-gapped in the deployment set; a distribution that meets
+  # both needs at least one row that meets both.
+  qwen2.5-vl-7b-instruct:
+    family: qwen2.5-vl
+    tier: small
+    also-known-as:
+      - "qwen2.5vl:7b"
+      - "qwen2.5-vl-7b-instruct"
+    served-by:
+      - { runtime: ollama, endpoint: local }
+      - { runtime: vllm, endpoint: local }
+    capabilities:
+      tool-calling: parallel
+      modality-in: [text, image]
+      modality-out: [text]
+      # Unknown on purpose, and it is the interesting case rather than an
+      # oversight: this row is the one an air-gapped vision agent binds, and it
+      # binds even though nobody here can say how much it holds. Y12's rule
+      # carries it — UNKNOWN binds and ranks last — so the author gets a model
+      # that can see, plus `context-policy` on `unmetered` telling them the
+      # window could not be measured. Both facts, neither guessed.
+      context-window:
+        value: unknown
+        provenance:
+          source: >
+            The id, the runtimes that serve it and its vision support are taken
+            from the Qwen2.5-VL model card. No context-window figure has been
+            imported: the published `max_position_embeddings` for this row has
+            not been read from a source inside this tree, and this distribution
+            does not publish a figure it cannot attribute. What IS in the tree
+            was looked at and refused, which is worth writing down so the next
+            person does not repeat the search — `genai-prices` 0.0.72 carries
+            32,768 for `Qwen/Qwen2.5-VL-7B-Instruct`, but as the window ONE
+            hosted router serves it with, and that is a fact about a serving
+            configuration rather than about these weights. This row is bound by
+            `ollama` and `vllm` on the author's own machine, where the figure is
+            whatever that runtime was started with; publishing a hosted
+            provider's limit as if it were the model's would be the same
+            measured-against-the-wrong-number defect one layer down.
+          date: 2026-07-28
+          as-of: 2026-07-28
+          recorded-by: jithinvg@bud.studio
+    reasoning:
+      value: unknown
+      provenance:
+        source: >
+          No positioning statement for this model maps onto the four-rung
+          ladder, and no benchmark figures have been imported into this
+          distribution. Written `unknown` rather than guessed: Y12 makes UNKNOWN
+          bind and rank last, so saying so costs the row a tie-break and never a
+          candidacy.
+        harness: none
+        as-of: 2026-07-28
+        recorded-by: jithinvg@bud.studio
+    cost: { input-per-mtok: 0 USD, output-per-mtok: 0 USD }
+
+  gpt-oss-20b:
+    family: gpt-oss
+    tier: mid
+    also-known-as:
+      - "gpt-oss:20b"
+      - "gpt-oss-20b"
+    served-by:
+      - { runtime: ollama, endpoint: local }
+      - { runtime: vllm, endpoint: local }
+    capabilities:
+      tool-calling: parallel
+      modality-in: [text]
+      modality-out: [text]
+      context-window:
+        value: 131072
+        provenance:
+          source: >
+            gpt-oss-20b model card, published context length.
+          date: 2026-07-28
+          as-of: 2026-07-28
+          recorded-by: jithinvg@bud.studio
+    reasoning:
+      value: unknown
+      provenance:
+        source: >
+          No positioning statement for this model maps onto the four-rung
+          ladder, and no benchmark figures have been imported into this
+          distribution. Written `unknown` rather than guessed: Y12 makes UNKNOWN
+          bind and rank last, so saying so costs the row a tie-break and never a
+          candidacy.
+        harness: none
+        as-of: 2026-07-28
+        recorded-by: jithinvg@bud.studio
+    cost: { input-per-mtok: 0 USD, output-per-mtok: 0 USD }
+
+  # ─────────────────────────────────────────────────────── served over an API
+
+  claude-opus-5:
+    family: claude
+    tier: frontier
+    served-by:
+      - { runtime: anthropic-api }
+    capabilities:
+      tool-calling: parallel
+      modality-in: [text, image]
+      modality-out: [text]
+      context-window:
+        value: 1000000
+        provenance:
+          source: >
+            Anthropic model documentation, models overview table
+            (platform.claude.com/docs/en/about-claude/models/overview).
+          date: 2026-06-24
+          as-of: 2026-06-24
+          recorded-by: jithinvg@bud.studio
+    reasoning:
+      value: deep
+      provenance:
+        source: >
+          Anthropic model documentation, models overview table: published as the
+          most capable model of the family, for the hardest reasoning work.
+        harness: >
+          positioning, not a measurement. The vendor's own placement of this
+          model relative to its siblings, read onto the four-rung ladder. It is
+          not derived from a benchmark run, and this file has no `benchmarks:`
+          block to derive one from.
+        as-of: 2026-06-24
+        recorded-by: jithinvg@bud.studio
+    cost: { input-per-mtok: 5.00 USD, output-per-mtok: 25.00 USD }
+
+  claude-sonnet-5:
+    family: claude
+    tier: frontier
+    served-by:
+      - { runtime: anthropic-api }
+    capabilities:
+      tool-calling: parallel
+      modality-in: [text, image]
+      modality-out: [text]
+      context-window:
+        value: 1000000
+        provenance:
+          source: >
+            Anthropic model documentation, models overview table
+            (platform.claude.com/docs/en/about-claude/models/overview).
+          date: 2026-06-24
+          as-of: 2026-06-24
+          recorded-by: jithinvg@bud.studio
+    reasoning:
+      value: careful
+      provenance:
+        source: >
+          Anthropic model documentation, models overview table: published as the
+          balanced model — high-volume work that still needs care.
+        harness: >
+          positioning, not a measurement. The vendor's own placement of this
+          model relative to its siblings, read onto the four-rung ladder. It is
+          not derived from a benchmark run, and this file has no `benchmarks:`
+          block to derive one from.
+        as-of: 2026-06-24
+        recorded-by: jithinvg@bud.studio
+    cost: { input-per-mtok: 3.00 USD, output-per-mtok: 15.00 USD }
+
+  claude-haiku-4-5:
+    family: claude
+    tier: mid
+    served-by:
+      - { runtime: anthropic-api }
+    capabilities:
+      tool-calling: parallel
+      modality-in: [text, image]
+      modality-out: [text]
+      context-window:
+        value: 200000
+        provenance:
+          source: >
+            Anthropic model documentation, models overview table
+            (platform.claude.com/docs/en/about-claude/models/overview).
+          date: 2026-06-24
+          as-of: 2026-06-24
+          recorded-by: jithinvg@bud.studio
+    reasoning:
+      value: steady
+      provenance:
+        source: >
+          Anthropic model documentation, models overview table: published as the
+          fastest model of the family, for low-latency work.
+        harness: >
+          positioning, not a measurement. The vendor's own placement of this
+          model relative to its siblings, read onto the four-rung ladder. It is
+          not derived from a benchmark run, and this file has no `benchmarks:`
+          block to derive one from.
+        as-of: 2026-06-24
+        recorded-by: jithinvg@bud.studio
+    cost: { input-per-mtok: 1.00 USD, output-per-mtok: 5.00 USD }
+
+  # A row that says out loud what it does not know — and now says it about ONE
+  # figure instead of two. The window was `unknown` because nothing in the tree
+  # carried one; `genai-prices` does, so it is written down and this model's
+  # context policy is measured rather than reported as unmeasurable.
+  #
+  # The PRICE stays `unknown`, and the reason changed rather than went away.
+  # `genai-prices` publishes it as a TIERED figure — 2.50 USD per million input
+  # tokens up to a 272,000-token request and 5.00 USD above it, 15.00 and 22.50
+  # out — and `cost:` below holds one number per direction. Writing the base rate
+  # would under-bill every long request by half, which is the undercount
+  # `resolve.price_of` refuses on its own doorstep ("the input bill wearing the
+  # whole bill's name"), and writing the high rate would over-bill every short
+  # one and stop runs the author's cap never meant to stop. So the honest answer
+  # is the one this file already has a word for. An author who needs a spend cap
+  # on this family binds `gpt-5.4-mini` or `gpt-5.5` below, both of which
+  # publish a single flat price, and a future `cost:` that can hold a tier is
+  # what would let this row carry its own.
+  gpt-5.4:
+    family: gpt-5
+    tier: frontier
+    also-known-as:
+      # The AI SDK gateway spells every model `<provider>/<model>` — its own
+      # README calls `gateway('xai/grok-3-beta')` — and its vendored
+      # `dist/index.d.ts` lists this one as `openai/gpt-5.4`. Written down so
+      # the Vercel transport looks the row up instead of missing it, which is
+      # what `also-known-as` is for.
+      - "openai/gpt-5.4"
+    served-by:
+      - { runtime: openai-api }
+    capabilities:
+      tool-calling: parallel
+      modality-in: [text, image]
+      modality-out: [text]
+      context-window:
+        value: 1050000
+        provenance:
+          source: >
+            `genai-prices` 0.0.72, the offline price and context-window data
+            bundled with the package at `genai_prices/data.py` and pinned by
+            digest in `adapters/python/uv.lock`. Read from the `openai`
+            provider's `gpt-5.4` entry, field `context_window`. The model id
+            itself is also in the AI SDK gateway model list vendored at
+            `adapters/typescript/node_modules/@ai-sdk/gateway/dist/index.d.ts`,
+            as `openai/gpt-5.4`.
+          date: 2026-07-22
+          as-of: 2026-07-28
+          recorded-by: jithinvg@bud.studio
+    reasoning:
+      value: unknown
+      provenance:
+        source: >
+          No positioning statement for this model maps onto the four-rung
+          ladder, and no benchmark figures have been imported into this
+          distribution. Written `unknown` rather than guessed: Y12 makes UNKNOWN
+          bind and rank last, so saying so costs the row a tie-break and never a
+          candidacy.
+        harness: none
+        as-of: 2026-07-28
+        recorded-by: jithinvg@bud.studio
+    # Deliberately unpriced, for the reason written above the row: the published
+    # figure is tiered and this block holds one number per direction. `unknown`
+    # is not zero — `resolve._cost` reads it as "nobody published one", the row
+    # ranks last instead of ranking cheapest, and a transport bound to it reports
+    # `cost-per-request-under` as unenforced rather than metering it at 0.00 USD.
+    cost: { input-per-mtok: unknown, output-per-mtok: unknown }
+
+  # The first row outside Anthropic whose price can make a spend cap fire. The
+  # OpenAI Agents transport could already count the tokens a call carried — it
+  # reads them off `agents.usage.Usage`, the object the SDK's own response
+  # carries — and still reported `cost-per-request-under` as unenforced, because
+  # the only id it could bind on its own vendor was `gpt-5.4` and that row
+  # publishes no price. The OpenAI-compatible transport was one step worse off
+  # in a way that looks better: it binds locally-served rows priced at a sourced
+  # 0 USD, so its cap metered perfectly and read zero forever. Neither of them
+  # could refuse anything. This row is the difference.
+  #
+  # Chosen over its siblings for one reason: its price is FLAT. `gpt-5.4` and
+  # `gpt-5.4-pro` are tiered at 272,000 tokens and cannot be written here
+  # truthfully; this one is 0.75 in and 4.50 out at every request size, so the
+  # figure below is the figure an author is billed.
+  #
+  # `modality-in: [text]` is the conservative half of this row and it is a claim,
+  # so it says where it stands: no image-input statement for this model could be
+  # read from any source vendored in this tree. Recorded text-only rather than
+  # optimistically, because the two mistakes are not symmetrical — claiming
+  # vision this row may not have binds a photo-reading agent to a model that
+  # cannot see, and the failure arrives mid-run in another language, while
+  # claiming too little only loses the row a candidacy and prints the reason
+  # ("gpt-5.4-mini cannot images") where an author can read it and override it.
+  gpt-5.4-mini:
+    family: gpt-5
+    tier: mid
+    also-known-as:
+      - "openai/gpt-5.4-mini"
+    served-by:
+      - { runtime: openai-api }
+    capabilities:
+      # `parallel` because the OpenAI request type vendored in this tree carries
+      # `parallel_tool_calls` — "whether to enable parallel function calling
+      # during tool use" — at `openai/types/chat/completion_create_params.py` in
+      # `openai` 2.48.0. A property of the API these weights are served over,
+      # read from the client this distribution actually ships.
+      tool-calling: parallel
+      modality-in: [text]
+      modality-out: [text]
+      context-window:
+        value: 400000
+        provenance:
+          source: >
+            `genai-prices` 0.0.72, the offline price and context-window data
+            bundled with the package at `genai_prices/data.py` and pinned by
+            digest in `adapters/python/uv.lock`. Read from the `openai`
+            provider's `gpt-5.4-mini` entry, field `context_window`. The model id
+            is also in the AI SDK gateway model list vendored at
+            `adapters/typescript/node_modules/@ai-sdk/gateway/dist/index.d.ts`,
+            as `openai/gpt-5.4-mini`.
+          date: 2026-07-22
+          as-of: 2026-07-28
+          recorded-by: jithinvg@bud.studio
+    reasoning:
+      value: unknown
+      provenance:
+        source: >
+          No positioning statement for this model maps onto the four-rung
+          ladder, and no benchmark figures have been imported into this
+          distribution. Written `unknown` rather than guessed: Y12 makes UNKNOWN
+          bind and rank last, so saying so costs the row a tie-break and never a
+          candidacy.
+        harness: none
+        as-of: 2026-07-28
+        recorded-by: jithinvg@bud.studio
+    # Both halves from `genai-prices` 0.0.72, the `openai` provider's
+    # `gpt-5.4-mini` entry, fields `prices.input_mtok` and `prices.output_mtok`,
+    # as published on 2026-07-22 and checked on 2026-07-28 by
+    # jithinvg@bud.studio. The source cannot sit inside `cost:` the way it sits
+    # inside `context-window:` — the schema gives `input-per-mtok` a plain text
+    # value and no `provenance:` block — so it is written here, where a reader
+    # looking at the number will see it.
+    cost: { input-per-mtok: 0.75 USD, output-per-mtok: 4.50 USD }
+
+  # The flat-priced frontier row of the same family, so "the cheapest model that
+  # passes" has somewhere above the mid row to look on this vendor. `gpt-5.4` is
+  # the family's other frontier row and carries no price at all, which is why
+  # this one is here rather than being left to it.
+  gpt-5.5:
+    family: gpt-5
+    tier: frontier
+    also-known-as:
+      - "openai/gpt-5.5"
+    served-by:
+      - { runtime: openai-api }
+    capabilities:
+      # Same source as `gpt-5.4-mini`: `parallel_tool_calls` on the vendored
+      # OpenAI request type.
+      tool-calling: parallel
+      modality-in: [text]
+      modality-out: [text]
+      context-window:
+        value: 1000000
+        provenance:
+          source: >
+            `genai-prices` 0.0.72, bundled data at `genai_prices/data.py`,
+            pinned by digest in `adapters/python/uv.lock`. Read from the
+            `openai` provider's `gpt-5.5` entry, field `context_window`. The
+            model id is also in the AI SDK gateway model list vendored at
+            `adapters/typescript/node_modules/@ai-sdk/gateway/dist/index.d.ts`,
+            as `openai/gpt-5.5`.
+          date: 2026-07-22
+          as-of: 2026-07-28
+          recorded-by: jithinvg@bud.studio
+    reasoning:
+      value: unknown
+      provenance:
+        source: >
+          No positioning statement for this model maps onto the four-rung
+          ladder, and no benchmark figures have been imported into this
+          distribution. Written `unknown` rather than guessed: Y12 makes UNKNOWN
+          bind and rank last, so saying so costs the row a tie-break and never a
+          candidacy.
+        harness: none
+        as-of: 2026-07-28
+        recorded-by: jithinvg@bud.studio
+    # `genai-prices` 0.0.72, `openai` provider, `gpt-5.5`, fields
+    # `prices.input_mtok` and `prices.output_mtok`. Published 2026-07-22,
+    # checked 2026-07-28 by jithinvg@bud.studio.
+    cost: { input-per-mtok: 5.00 USD, output-per-mtok: 30.00 USD }
+
+  # The second hosted vendor with a price, which is what makes the ceiling a
+  # ceiling rather than an Anthropic feature. It is also the only row here whose
+  # image support is stated by its own source rather than left out for want of
+  # one: `pydantic-ai` 2.18.0's Google profile records that Gemini 3-and-newer
+  # models accept `image/png`, `image/jpeg`, `image/webp` and `application/pdf`
+  # in native function responses, which is an image-input claim made by a
+  # dependency this distribution ships and runs.
+  gemini-3.5-flash:
+    family: gemini-3.5
+    tier: mid
+    also-known-as:
+      - "google/gemini-3.5-flash"
+    served-by:
+      - { runtime: google-api }
+    capabilities:
+      # `single`, not `parallel`. `pydantic_ai/profiles/google.py` in
+      # `pydantic-ai` 2.18.0 returns `supports_tools=True` for every non-image
+      # Gemini model, so "it can use tools" is sourced; nothing vendored here
+      # says how many at once, and `parallel` is a stronger claim than the
+      # source makes. An author who needs several in one go is told `cannot
+      # parallel-tools` and can override the row.
+      tool-calling: single
+      modality-in: [text, image]
+      modality-out: [text]
+      context-window:
+        value: 1000000
+        provenance:
+          source: >
+            `genai-prices` 0.0.72, bundled data at `genai_prices/data.py`,
+            pinned by digest in `adapters/python/uv.lock`. Read from the
+            `google` provider's `gemini-3.5-flash` entry, field
+            `context_window`. The model id is also in the AI SDK gateway model
+            list vendored at `adapters/typescript/node_modules/@ai-sdk/gateway/
+            dist/index.d.ts`, as `google/gemini-3.5-flash`, and its CHANGELOG
+            records the id being added.
+          date: 2026-07-22
+          as-of: 2026-07-28
+          recorded-by: jithinvg@bud.studio
+    reasoning:
+      value: unknown
+      provenance:
+        source: >
+          No positioning statement for this model maps onto the four-rung
+          ladder, and no benchmark figures have been imported into this
+          distribution. Written `unknown` rather than guessed: Y12 makes UNKNOWN
+          bind and rank last, so saying so costs the row a tie-break and never a
+          candidacy.
+        harness: none
+        as-of: 2026-07-28
+        recorded-by: jithinvg@bud.studio
+    # `genai-prices` 0.0.72, `google` provider, `gemini-3.5-flash`, fields
+    # `prices.input_mtok` and `prices.output_mtok` — the standard tier, which
+    # that entry's own `price_comments` says is what it records. Published
+    # 2026-07-22, checked 2026-07-28 by jithinvg@bud.studio.
+    cost: { input-per-mtok: 1.50 USD, output-per-mtok: 9.00 USD }
+
+  # A third hosted vendor, and the row whose capabilities come straight out of
+  # the source rather than out of a judgement about it: `genai-prices` records
+  # this model as supporting "text and image inputs with text outputs, function
+  # calling, structured outputs, and reasoning". Every capability below is that
+  # sentence, read once.
+  grok-4.5:
+    family: grok-4
+    tier: frontier
+    also-known-as:
+      - "xai/grok-4.5"
+    served-by:
+      - { runtime: xai-api }
+    capabilities:
+      # "function calling" is stated; several at once is not. Same rule as the
+      # Gemini row above, and the same override if a workspace knows better.
+      tool-calling: single
+      modality-in: [text, image]
+      modality-out: [text]
+      context-window:
+        value: 500000
+        provenance:
+          source: >
+            `genai-prices` 0.0.72, bundled data at `genai_prices/data.py`,
+            pinned by digest in `adapters/python/uv.lock`. Read from the `x-ai`
+            provider's `grok-4.5` entry, field `context_window`. The model id is
+            also in the AI SDK gateway model list vendored at
+            `adapters/typescript/node_modules/@ai-sdk/gateway/dist/index.d.ts`,
+            as `xai/grok-4.5`, and its CHANGELOG records the id being added.
+          date: 2026-07-22
+          as-of: 2026-07-28
+          recorded-by: jithinvg@bud.studio
+    reasoning:
+      value: unknown
+      provenance:
+        source: >
+          The vendor line quoted in `genai-prices` calls this the "most
+          intelligent and fastest flagship model", which places it against its
+          own siblings and not onto this ladder's four rungs — and a rung is
+          what `needs.reasoning:` compares against. Written `unknown` rather
+          than read across: Y12 makes UNKNOWN bind and rank last, so saying so
+          costs the row a tie-break and never a candidacy.
+        harness: none
+        as-of: 2026-07-28
+        recorded-by: jithinvg@bud.studio
+    # `genai-prices` 0.0.72, `x-ai` provider, `grok-4.5`, fields
+    # `prices.input_mtok` and `prices.output_mtok`. Published 2026-07-22,
+    # checked 2026-07-28 by jithinvg@bud.studio.
+    cost: { input-per-mtok: 2.00 USD, output-per-mtok: 6.00 USD }

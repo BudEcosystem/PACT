@@ -1,0 +1,66 @@
+# `pact:loop/tree-of-thought` — write down three ways, argue against each, take
+# the one left standing.
+#
+# The failure this is for: an agent commits to the first approach that occurs
+# to it, and everything after that is elaboration of a choice nobody examined.
+# `plan-then-do` does not help — it writes ONE plan, earlier.
+#
+# So the first stage is asked for three, and forbidden from choosing. The
+# second is asked to attack all three before picking. Both are cheap stages
+# with no tools; the expensive stage is the one that acts, and it acts once.
+#
+# **This is a tree only in the sense that three branches are written down and
+# two are cut.** PACT's loop is a state machine over stages, so it cannot
+# actually run three branches and compare what happened — that would need a
+# stage to execute more than once with different context, and nothing in
+# `loop:` or `context-policy:` can express that. What ships here is the part
+# that fits: the branches are enumerated in writing, and the pruning is
+# reviewable because it is in the transcript. If you need real branch
+# execution, run three agents and combine them — that is `teamwork:`, not a
+# loop shape.
+#
+# What it costs: two model calls before any work happens. On a question with
+# one obvious approach that is two calls wasted, which is why this is not the
+# default.
+#
+# Copy this file into your own `loops/` folder and change it. Nothing in here
+# is privileged — it is read by the same code that reads a shape you write.
+
+description: >
+  Write down three different ways this could be approached, say what would go
+  wrong with each, then carry out the one that survives. The branches are
+  written down and pruned in the transcript, not executed and compared.
+
+starts-at: propose
+
+steps:
+  propose:
+    does: think
+    says: >
+      Write down three different ways this could be approached. Number them.
+      Do not choose between them and do not start any of them.
+    then:
+      used-a-tool: judge
+      answered: judge
+
+  judge:
+    does: check-its-work
+    says: >
+      Take each of the three in turn and say what would go wrong with it. Then
+      say which one survives best, and why the other two do not.
+    # Two passes at most: judging your own judgement is where this shape stops
+    # earning its keep. Spent, it goes and does the work.
+    at-most: 2
+    then:
+      used-a-tool: judge
+      answered: follow
+      too-many-times: follow
+
+  follow:
+    does: use-tools
+    says: >
+      Carry out the approach you chose. If it fails in the way you predicted it
+      might, say so rather than switching to another one silently.
+    then:
+      used-a-tool: follow
+      answered: done

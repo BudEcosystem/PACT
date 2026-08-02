@@ -1,0 +1,26 @@
+# Written by hand, four lines. The endpoint and the credential are both
+# references the host resolves — never values, never a command, never args, so
+# reviewing an untrusted workspace is never an act of running its code. (§11.5)
+#
+# Ask your platform team which endpoint name and which credential reference this
+# machine already publishes; both are their list, not a file in here.
+resource-kind: mcp-server
+endpoint: host/payments-mcp
+auth: { by-reference: host/payments-credential }
+
+# Pointing at where the payments credential is kept is not the same as having
+# been allowed to use it. The line above says which credential; it does not say
+# that this desk may spend money through it, and the first run that reaches
+# here may find that nobody has ever said yes.
+#
+# Failing at that point would be the wrong answer. A ticket is open, a customer
+# is waiting, and the missing thing is one person's yes — so the run stops here
+# and waits for it, then carries on from where it stopped rather than making
+# somebody start the whole request again.
+#
+# The line names the question; the wording, who is asked, how long they have
+# and what happens if nobody answers all live in that file, next to the four
+# other questions this system can ask.
+asks-to-connect: may-we-connect
+
+description: Our payment system, as the platform team publishes it.

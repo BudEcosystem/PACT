@@ -1,0 +1,20 @@
+# RACE — take whatever came back before the clock ran out, and name who missed it.
+#
+# The pattern: two lanes are asked the same thing, one cheap and quick, one
+# thorough and slow. The deadline is the point — whatever has arrived when it
+# expires is what gets used.
+#
+# When to reach for it: there is a real deadline outside the system. A caller is
+# on the line; a page is rendering. An answer at 21 seconds is worth nothing
+# when the budget was 20, however good it is.
+#
+# What it costs: you pay for the slow lane every time even when you almost never
+# wait for it. And you get a WORSE answer under load, which is the honest trade
+# and the reason `gives-up-after:` is a line somebody writes rather than a
+# timeout buried in a client.
+#
+# What goes wrong: whoever missed the deadline is NAMED in the answer, not
+# quietly dropped. A race that silently degrades looks exactly like a race that
+# is working, right up until someone asks why the answers got worse.
+name: Race
+description: Take what arrived before the deadline, and say who did not make it.

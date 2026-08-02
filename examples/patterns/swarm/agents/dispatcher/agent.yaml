@@ -1,0 +1,22 @@
+name: Dispatcher
+description: Takes the first solver that comes back with something that works.
+instructions: |
+  You are given a problem. Three solvers are attacking it in different ways.
+
+  Ask all three and take the first answer that actually solves it. Say which
+  solver produced it and what its approach was — the next person to see this
+  problem wants to know which angle worked, not just the answer.
+
+team:
+  solver-a: attacks it directly, from first principles
+  solver-b: looks for a case where somebody has solved this before
+  solver-c: works backwards from what the answer must look like
+
+teamwork:
+  # The FIRST GOOD one, not the first one. A solver that fails fastest must not
+  # win the race.
+  waits-for: the-first-good-answer
+  starts: all-at-once
+  divides-the-budget: evenly
+  # A solver failing is the expected case here — that is why there are three.
+  if-someone-fails: carry-on

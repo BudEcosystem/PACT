@@ -1,0 +1,12 @@
+when: |
+  A customer bought a discounted jacket 3 days ago in the sale. The zip was
+  broken on arrival. They ask whether sale items can be refunded.
+expect:
+  decision: approved
+because: Sale items follow the same rules as full-price items, and this one was faulty.
+
+# Held out for the same reason as the personalised mug: two cases is the least
+# that can move a percentage, and these two are the ones whose rules an eager
+# rewrite is most likely to flatten — "never return personalised" and "sale
+# items are not special" pull in opposite directions.
+split: held-out

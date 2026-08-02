@@ -1,0 +1,62 @@
+# `pact:loop/answer-more-than-once` — work it through three times, then say
+# which answer you are standing behind.
+#
+# The failure this is for: a question with one arithmetic slip in the middle
+# produces one confident wrong answer, and nothing about the answer says which
+# kind it is. Working it three times does not fix the slip — it makes the slip
+# VISIBLE, because two of the three will disagree with it and the final stage
+# has to say so.
+#
+# **It is named for what it does, not for the technique it resembles.** The
+# technique is called self-consistency, and self-consistency samples the model
+# INDEPENDENTLY — each attempt starting from the question and seeing none of
+# the others. This does not do that, and cannot: every stage of a PACT loop
+# reads the same conversation, so attempt three has attempts one and two in
+# front of it. That makes them correlated, and correlated samples agreeing tells
+# you less than independent ones agreeing.
+#
+# Calling it `self-consistency` would be claiming the statistical property it
+# does not have. What it honestly gives you is a second and third pass with an
+# instruction to start over from the question, and a final stage that must
+# report disagreement rather than quietly picking one. If you need real
+# independence, run the agent three times from the outside and compare — the
+# harness cannot give a stage a fresh context, and no line in `loop:` or
+# `context-policy:` can ask for one.
+#
+# What it costs: three times the model calls, every time, whether or not the
+# question was ever in doubt. That is the most expensive shape PACT ships.
+#
+# Copy this file into your own `loops/` folder and change it. Nothing in here
+# is privileged — it is read by the same code that reads a shape you write.
+
+description: >
+  Work the whole question through three times, starting again from the question
+  each time, then say which answer you are standing behind and whether the
+  attempts disagreed. The attempts share a conversation, so they are not
+  independent samples.
+
+starts-at: attempt
+
+steps:
+  attempt:
+    does: think
+    says: >
+      Work the whole question through from the beginning and give your answer.
+      Start from the question itself, not from anything you have already said.
+    # Three passes. The fourth entry finds this spent and routes to `settle`,
+    # which is what stops it being an unbounded loop over the most expensive
+    # shape here.
+    at-most: 3
+    then:
+      used-a-tool: attempt
+      answered: attempt
+      too-many-times: settle
+
+  settle:
+    does: answer
+    says: >
+      You have worked this through more than once. Say which answer you are
+      giving. If the attempts disagreed, say that they disagreed and which one
+      you are standing behind — do not present it as though it were settled.
+    then:
+      answered: done

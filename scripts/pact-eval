@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Score an agent against the checks its author wrote.
+#
+#     ./scripts/pact-eval examples/refund-desk
+#
+# `pact check` says whether your folder is well-formed. This says whether it
+# PASSES — the verdict, the score against your own `must-pass:` bar, every
+# example that came out wrong and why, and every rule you wrote that nothing
+# could apply.
+#
+# It exists because the eval runner lives in the Python adapter, which is the
+# port that runs models, and running it by hand means knowing where that port
+# keeps its source. That is a thing to know, and D14 says a non-technical author
+# must not have to know it. This is one line instead.
+#
+# Everything below is a way of finding an interpreter that has the adapter's
+# dependencies. Nothing here reaches the network, and neither does what it runs
+# (D17): the model catalogue is read off the disk, and the model itself has to be
+# served on this machine or the run says so and scores nothing.
+set -euo pipefail
+
+here="$(cd "$(dirname "$0")/.." && pwd)"
+export PYTHONPATH="$here/adapters/python/src${PYTHONPATH:+:$PYTHONPATH}"
+# So the report's "run this again with" line is the spelling the reader typed.
+# A report that ends by telling somebody to run something that does not work for
+# them is the same dead end as no report at all.
+export PACT_EVAL_COMMAND="./scripts/pact-eval"
+
+# The adapter's own virtual environment first, because it is the one that has
+# `httpx` and `pyyaml` and it needs no network to use. `uv` next, which builds
+# that environment. A bare `python3` last, and only because a distribution that
+# installed the adapter system-wide is a real case — it is checked rather than
+# assumed, so the failure is a sentence and not an ImportError traceback.
+venv="$here/adapters/python/.venv/bin/python"
+if [ -x "$venv" ]; then
+  exec "$venv" -m pact_adapters.evals "$@"
+fi
+if command -v uv >/dev/null 2>&1; then
+  exec uv run --project "$here/adapters/python" python -m pact_adapters.evals "$@"
+fi
+if python3 -c "import httpx, yaml" >/dev/null 2>&1; then
+  exec python3 -m pact_adapters.evals "$@"
+fi
+
+cat >&2 <<'MISSING'
+error: the eval runner needs the PACT Python adapter and its dependencies, and
+       neither is set up on this machine
+  --> the command line:1:1
+  fix: run `uv sync` inside `adapters/python`, then try this command again
+  rule: pact-eval/no-python
+MISSING
+exit 3

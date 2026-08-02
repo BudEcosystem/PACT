@@ -1,0 +1,48 @@
+# `pact:question/is-this-ok` — the question you get when an action says
+# `needs-a-person: yes` and nothing else is written.
+#
+# It sits beside `spec/loops/` for the same reason: a shipped default is a thing
+# an author can READ and copy, not a constant compiled into somebody's runtime.
+# Eve's equivalent has no file — `approval: 'always'` on a tool produces a
+# two-option widget assembled in code, so the wording, the audience and the
+# deadline of the only human control in the system are not anywhere a support
+# lead could look at them.
+#
+# Everything below is ordinary. There is not one line here a support lead could
+# not have typed themselves, which is the point: the short form does not buy a
+# weaker gate, it buys not having to type this file. The discipline every
+# written question carries — who is asked, how long they have, what happens when
+# nobody does — is all here, and the short form cannot switch any of it off.
+#
+# TWO LINES ARE DELIBERATELY ABSENT, and are filled in from the action being
+# gated so that the person reads real wording rather than a placeholder:
+#
+#   because:   which tool is about to do what, in the action's own words
+#   shows:     the values that action was called with
+#
+# What this file cannot know is who, in your organisation, decides. So it names
+# whoever is running the agent — the only party PACT can be sure exists. Naming
+# a real team is the one thing that needs the longer form (a question of your
+# own and a rule in `policies/`), and that form wins wherever both are written.
+
+description: The yes-or-no PACT puts when an action says it needs a person and nothing else is written.
+
+says: Somebody has to say yes before this runs.
+
+answer:
+  approved: yes or no
+  because: text
+
+# Not a team name, because this file does not know your teams. Whoever is
+# running the agent is the one party that certainly exists; write your own
+# question if the decision belongs somewhere else.
+asked-of: [whoever-is-running-this]
+
+answer-within: 30m
+
+# Never `escalate`: there is nobody here to escalate TO, so the deadline would
+# arrive and dead-end. `decline` was the other candidate and is worse as a
+# default — a run that carries on having been refused by nobody looks, from the
+# outside, exactly like a run a person turned down. Stopping and saying so is
+# the outcome that cannot be mistaken for a decision somebody made.
+if-nobody-answers: stop-and-say-so

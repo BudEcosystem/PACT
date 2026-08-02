@@ -1,0 +1,55 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/pact-diag",
+    "crates/pact-doc",
+    "crates/pact-loader",
+    "crates/pact-schema",
+    "crates/pact-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92"
+license = "Apache-2.0"
+repository = "https://github.com/bud/agent-inter-op"
+description = """\
+PACT — a portable agent specification. A folder of ordinary YAML and Markdown \
+that runs unchanged across seven agent frameworks, with the governance an \
+author wrote held by the runtime rather than by convention."""
+
+[workspace.dependencies]
+# `version` beside `path`, which is what `cargo package` requires: a path
+# dependency with no version cannot be published, because the published copy has
+# to say which released version of its sibling it wants. Register row C6 — there
+# was no install path at all, and this was the first of the reasons.
+pact-diag = { path = "crates/pact-diag", version = "0.1.0" }
+pact-doc = { path = "crates/pact-doc", version = "0.1.0" }
+pact-loader = { path = "crates/pact-loader", version = "0.1.0" }
+pact-schema = { path = "crates/pact-schema", version = "0.1.0" }
+
+anyhow = "1"
+annotate-snippets = "0.12"
+camino = "1.2"
+indexmap = { version = "2", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+# `preserve_order`, because ORDER IS PART OF THE DOCUMENT. The loader goes to
+# lengths to make it deterministic — ordinals ascending, then byte-order by name,
+# never filesystem order — and calls that reproducibility a property of the
+# digest. Emitting `pact show` with keys sorted threw it away at the boundary:
+# `instructions/01-tone.md` and `02-length.md` reached the adapter as `length`
+# then `tone`, so a field split across files came back in the wrong order. The
+# canonical form still sorts keys (`canonical.rs`), which is a different job and
+# is unaffected.
+serde_json = { version = "1", features = ["preserve_order"] }
+thiserror = "2"
+unicode-normalization = "0.1"
+sha2 = "0.10"
+yaml-rust2 = "0.11"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }

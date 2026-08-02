@@ -1,0 +1,17 @@
+description: Our customer support system. Used to read tickets and reply.
+
+connect: zendesk-server    # -> /resources/zendesk-server.yaml
+
+actions:
+  read-ticket:
+    description: Read a support ticket and its history.
+    takes:
+      ticket-id: text
+    reads-only: yes
+    bind: { customer-id: run-inputs.customer-id }
+  reply:
+    description: Send a reply to the customer.
+    takes:
+      ticket-id: text
+      message: text
+    bind: { customer-id: run-inputs.customer-id }

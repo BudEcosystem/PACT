@@ -1,0 +1,4 @@
+name: Staff desk
+description: Answers questions about leave, expenses and working hours.
+uses:
+  - staff-handbook

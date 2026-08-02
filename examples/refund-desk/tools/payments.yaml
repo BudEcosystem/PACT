@@ -1,0 +1,37 @@
+description: Where refunds are actually issued.
+
+# The TOOL is `payments`; the SERVER it reaches is `payments-server`. They are
+# deliberately spelled differently, and the difference is load-bearing: `uses:`
+# names tools, never servers, so anything that wants to know which connections
+# this agent can reach has to walk `uses:` -> this line -> `resources/`. While
+# both were spelled `payments`, a reader that skipped the middle hop found the
+# right answer by coincidence — and `LoadReport` did exactly that for a round,
+# so renaming the tool alone took the connection wait off the scheduler's list
+# while the harness went on parking for it.
+#
+# One name, resolved: `pact check` holds this against `resources:`, so the typo
+# that used to take the whole `may-we-connect` wait off `pact waits` — a human
+# consent gate on money, disappearing in silence — is refused here.
+connect: payments-server   # -> /resources/payments-server.yaml
+
+# The only actions this agent may call. Anything else on the server is refused.
+#
+# `takes:` is what the model is actually shown. Until it existed every tool was
+# offered with no arguments at all, so `inspects:`, `bind:` and
+# `same-request-key:` all named arguments nothing declared.
+actions:
+  look-up-order:
+    description: Find an order by its number.
+    takes:
+      order-number: text
+    reads-only: yes
+    bind: { customer-id: run-inputs.customer-id }
+  issue-refund:
+    description: Send money back to the customer.
+    takes:
+      order-number: text
+      amount: money
+    spends-money: yes
+    same-request-key: order-number
+    bind:     { customer-id: run-inputs.customer-id }
+    inspects: [amount]     # what the approval gate is allowed to look at

@@ -1,0 +1,19 @@
+# WEIGHTED — the money follows the work, not the headcount.
+#
+# The pattern: two teammates share one request's budget, and they do very
+# different amounts of work, so they are given different shares of it.
+#
+# When to reach for it: one teammate reliably needs more room than the other and
+# you know which. Splitting evenly here does not save money — it starves the
+# expensive one into a worse answer while the cheap one leaves its half unused.
+#
+# What it costs: the shares are a guess until you have measured them, and a
+# stale split is worse than an even one because it looks deliberate. Revisit
+# these numbers when the work changes.
+#
+# What goes wrong: `shares:` must cover the team. A name missing from it, or a
+# name in it that is not on the team, is the kind of mistake that shows up as
+# one teammate mysteriously running out of room — so `pact check` refuses both
+# rather than dividing what is left.
+name: Weighted
+description: Split one request's budget by how much work each teammate actually does.

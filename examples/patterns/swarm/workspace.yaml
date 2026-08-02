@@ -1,0 +1,21 @@
+# SWARM — many tries at once, keep the first one that actually worked.
+#
+# The pattern: three solvers attack the same problem from different angles and
+# the dispatcher takes the first GOOD answer. Not the first answer —
+# `the-first-good-answer` keeps waiting past the ones that come back wrong,
+# which is the whole difference between this and `anyone`.
+#
+# When to reach for it: the problem is one where an attempt either works or
+# visibly does not, and different approaches genuinely have different odds. A
+# search over an unfamiliar codebase is this shape; a judgement call is not,
+# because "first good" needs a definition of good that survives being rushed.
+#
+# What it costs: three times the work for one answer, every time, and the two
+# that lose are pure waste. That is the trade — you are buying the best of three
+# odds and paying three times for it.
+#
+# What goes wrong: `waits-for: anyone` looks like the same line and is not. It
+# takes the first reply OF ANY KIND, so a solver that fails fastest wins, which
+# is the opposite of what this file is for.
+name: Swarm
+description: Three approaches at once; take the first one that actually worked.

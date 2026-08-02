@@ -1,0 +1,22 @@
+description: Asks a person to set the refund figure themselves, above 500 USD.
+
+# This is the question Eve cannot ask. Its requests are structurally two
+# options named approve and deny, so "how much?" has nowhere to go: the best it
+# can do is approve or reject a number the model chose.
+#
+# Here the answer shape says `money`, so the person types the figure and the
+# refund is issued for what they typed.
+says: How much should we refund on this order?
+
+answer:
+  amount: money
+  because: text
+
+shows:
+  - amount
+  - order-number
+
+asked-of: [support-leads]
+answer-within: 4h
+
+if-nobody-answers: decline

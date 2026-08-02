@@ -1,0 +1,33 @@
+description: Asked when one of the specialists could not answer at all.
+
+# This used to be `is-this-ok`, shared with the approvals policy — and sharing it
+# was the mistake. `is-this-ok` shows `amount` and `order-number`, which are
+# arguments of the call being approved; a teammate who could not answer is not a
+# call, so both lines were dropped in silence and the person was shown the
+# wording and nothing else. They were being asked to decide whether to refund
+# without a fraud check, with no idea who had failed or why.
+#
+# One question per kind of park, and `pact check` now holds every `shows:` name
+# against what THAT park can supply.
+says: >-
+  One of the checks could not be completed. Decide whether to carry on with
+  what we have.
+
+answer:
+  approved: yes or no
+  because: text
+
+# The three things a teammate park really has. Named here rather than left to
+# `is-this-ok`'s call arguments, which this park has none of.
+shows:
+  - who-could-not-answer
+  - why-they-could-not
+  - who-did-answer
+
+asked-of: [support-leads]
+answer-within: 30m
+
+# Carrying on without a fraud check is exactly the mistake that costs money, so
+# silence is not a way to reach it.
+if-nobody-answers: escalate
+escalates-to: [support-manager]

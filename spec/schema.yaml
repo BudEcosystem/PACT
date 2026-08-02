@@ -1,0 +1,3916 @@
+# The PACT specification, written in PACT.
+#
+# This file IS the schema. There is no Rust enum mirroring it, no code
+# generation step, and no recompile needed to add a field — which is invariant
+# E-3 ("new authoring surface is free") stated as a testable property rather
+# than an intention.
+#
+# It is loaded by the same loader that reads an agent, so it obeys the same
+# Expansion Rule: `groups:` here could equally be a `groups/` folder with one
+# file per kind, and nothing else would change.
+#
+# ── STATUS ────────────────────────────────────────────────────────────────────
+# R5. Brought to the CORE TIER of 20-ARCHITECTURE-DRAFT.md. Three things
+# changed and each closes a hole the draft names:
+#
+#   1. `aliases:` are GONE from the native authoring path (X1). They made
+#      `explode` non-injective (`tools` and `skills` both mapped to `uses`) and
+#      they let `slo:` silently discard an existing `limits:` with zero
+#      diagnostics. Alias tables live only inside importers now, applied at
+#      LOAD-6 and only for documents declaring a foreign origin.
+#
+#   2. Every field carries `surface:` and `tier:`. Nothing downstream works
+#      without them: §2.2's projections, §8.2's governance zones and §8.3's
+#      blast-radius classifier are all lookups into these two columns. A field
+#      with no `surface:` is BR-UNKNOWN → GOVERNED → CLASS-4 (LOAD-12), and a
+#      field with no `tier:` defaults to `expert`, so an omission TIGHTENS
+#      validation and fails the `no-code` badge rather than widening the core
+#      surface silently.
+#
+#   3. The free-text lists are closed enums. `may-improve-on-its-own:
+#      [wording, tools, permissions, everything]` used to load clean — the
+#      permission surface of the self-modification system was unvalidated
+#      free text.
+#
+# R6. Four field attributes were added, and all four exist so that a check the
+# product used to lack is DATA rather than a Rust `if` per pairing (F-1):
+#
+#   `names:`      the value must be one of the keys of a map. A bare name is a
+#                 map at the top of the workspace (`names: questions`); a `^`
+#                 means the nearest enclosing block that has one (`names:
+#                 ^steps`, used by a stage that routes to another stage in its
+#                 own loop); a list means any of them. Before this, `loop:
+#                 carefull`, `asks: keep-goin` and `then: {answered: repl}` all
+#                 loaded clean and failed later, at run time, in another
+#                 language, in a process the author never starts.
+#   `key-names:`  the same as `names:`, one level over: the KEYS of a `map of
+#                 ...` have to name something that is there. `agent.team`'s own
+#                 help says to give each member a folder under `agents/`, and
+#                 until this existed a member with no folder loaded clean and
+#                 was offered to the model as somebody it could ask.
+#   `or-one-of:`  literal values accepted besides a name — `done` for a stage
+#                 that finishes, `pact:loop/standard` for a shipped shape.
+#   `at-least:`   the smallest number a whole-number field may hold. `at-most: 0`
+#                 means a stage that may never run. WHOLE NUMBERS ONLY: a
+#                 `duration` field already has a floor of its own — a length of
+#                 time is always more than nothing, checked by the type in
+#                 `Schema::check_floor` and reported as `schema/below-the-floor`
+#                 — so an `at-least:` written under one would load and do
+#                 nothing. If a particular deadline ever needs a floor of its
+#                 own (`answer-within` no shorter than 30s, say), that is a new
+#                 attribute, not this one, because 30 here would have to mean
+#                 milliseconds and nobody would guess that.
+#   `needed-when:` the same as `needs-also:`, conditioned on a VALUE.
+#                 `needs-also:` fires on presence, which is right for a ceiling
+#                 (any ceiling needs an action) and wrong for the three pairings
+#                 that turned up in verification: `spends-money: no` must not
+#                 demand a same-request key, `waits-for: enough-of-them` needs
+#                 `enough-is:` and the other four spellings do not, and a
+#                 `does: ask-someone` stage needs `asks:` while a `does: think`
+#                 stage has nothing to ask. All three were refused by the Python
+#                 side at run time and accepted here, which is the split every
+#                 attribute in this list exists to close.
+#   `describe:`   on a GROUP, the plain-language phrase a diagnostic uses in
+#                 place of the group's own name.
+#   `shapes:`     the closed answer-shape vocabulary, on a field typed
+#                 `answer-shape`. Written like `parts:` — one entry per shape,
+#                 every spelling that means it — and read by the checker and by
+#                 `questions.Shape.parse` from this one copy.
+#
+# What `names:` deliberately does NOT cover, because the tree does not carry the
+# answer: anything the HOST binds rather than the workspace (`port.through:`
+# names a connector your runtime has set up, and no file here lists them), and
+# narrowing `may-use:` to the tools of the particular agent that named the loop
+# — a loop document does not know which agent will use it, so `pact check` holds
+# it to "something this workspace has" and `Loop.check_against` holds it to
+# "something this agent has" before the first model call.
+#
+# `open: true` does not exist in this language. An unvalidated group is an
+# unclassified group (LOAD-13).
+#
+# This file is COMPILED INTO THE BINARY and its sha256 is verified at startup.
+# It is never discovered from a workspace. `$PACT_SPEC` is gone from release
+# builds. The copy here is the source that gets compiled in.
+# ──────────────────────────────────────────────────────────────────────────────
+
+groups:
+
+  # The top of a workspace: one system, made of agents.
+  workspace:
+    fields:
+      name:
+        type: text
+        required: yes
+        surface: S-GOV
+        tier: core
+        help: what this whole system is called
+      pact-version:
+        # C1. `apiVersion: pact.dev/v1` existed in the discovery INDEX and
+        # nowhere in the format, so the thing a consumer versioned against was
+        # the projection rather than the document. A format that cannot version
+        # cannot evolve without breaking every consumer silently.
+        #
+        # `tier: expert` and not core: a no-code author never writes this line,
+        # and the absent case is the one they get — assume the version this build
+        # reads. It exists for the tree that has to keep working across an
+        # upgrade, and for the runtime that has to refuse one it cannot.
+        type: text
+        surface: S-GOV
+        tier: expert
+        help: >
+          which version of the PACT format this workspace is written for, as
+          `pact.dev/v1`. Leave it out and PACT reads it as the version this
+          build understands. Write it when you want a tree to be refused
+          loudly by a runtime too old to read it, rather than misread quietly.
+      workspace-id:
+        type: text
+        surface: S-GOV
+        tier: core
+        help: >
+          the stable identity of this workspace. Any long random string will
+          do, and once it is written you never change it. It is what keeps
+          another team's evidence from being mixed with yours.
+      description:
+        type: text
+        surface: S-GEN
+        tier: core
+        help: one line on what the system is for
+      owner:
+        type: text
+        surface: S-GOV
+        tier: core
+        help: the team or person responsible for it
+      profile:
+        type: text
+        surface: S-GOV
+        tier: core
+        help: which set of defaults to use, e.g. production or development
+      durability:
+        # A8. The §4 row that already promises this field
+        # (`docs/50-NOT-COPIED.md` — "Durability is declared and the host
+        # supplies it") finally has one.
+        #
+        # NOT `requires-of-the-runtime: {durable-resume: yes}`. That is two
+        # settings for one decision (R59), it was deleted in writing during
+        # review, and `durable_resume` is already a lattice key on ELEVEN
+        # transports with its own three-value vocabulary meaning what a
+        # TRANSPORT can do. One spelling for two facts would make the only
+        # interesting comparison — what this workspace needs against what this
+        # transport does — unwritable.
+        #
+        # Contradictable, which is what makes it worth writing at all: `pact
+        # waits` already finds every place a tree parks (thirteen of them in the
+        # worked example, out to four hours), so `durability: none` on a tree
+        # that parks is a claim the tree itself disproves. `allow-egress: []`
+        # has the same property; `durable-resume: yes` could only ever be
+        # confirmed, never contradicted.
+        #
+        # A closed list rather than a map: a field nothing knows about has no
+        # `surface:` (R41), and declaring a container before there is a second
+        # thing to put in it is cost with no benefit.
+        type: one-of
+        choices: [none, checkpoint, durable-execution]
+        surface: S-GOV
+        tier: expert
+        help: >
+          what the system running this keeps when a run stops part-way. `none`
+          means nothing survives, so a run that parks for a person starts again
+          from the beginning. `checkpoint` means the run picks up where it left
+          off. `durable-execution` means that and more: a record that outlives
+          this run, which is what a `same-request-key-across:` wider than one
+          run needs. Leave it out and PACT assumes nothing.
+      allow-egress:
+        type: list of one-of
+        # B9. The six choices were all MODEL roles (R30's job), while the help
+        # promised the whole boundary. MEASURED under `allow-egress: []`: a tool
+        # with `url: https://vendor.example.com/upload`, `method: post` and an
+        # upload action printed "OK — loaded cleanly (19 settings)" — no resource
+        # file needed, which is why it is the door an attacker writes.
+        #
+        # `tools` is the seventh PART, not a seventh model role, and it is ONE
+        # setting rather than two: a sibling hostname allow-list would be R61
+        # (two settings for what must never leave a workspace) and R20 (a name
+        # only the host can resolve) at the same time.
+        #
+        # Which fields carry an outbound address is data — `reaches-outside:` —
+        # so the next one joins by existing rather than by being remembered.
+        choices: [llm, stt, tts, embedder, judge, reflector, tools]
+        surface: S-EXEC
+        tier: core
+        help: >
+          which parts of this system are allowed to talk to something outside
+          this box. Empty means nothing is. Adding a role here always needs a
+          person to approve it.
+      agents:
+        type: map of group:agent
+        surface: S-TOPO
+        tier: core
+        help: the agents that make up this system
+      tools:
+        type: map of group:tool
+        surface: S-CAP
+        tier: core
+        help: the outside systems these agents may reach
+      resources:
+        type: map of group:resource
+        surface: S-CAP
+        tier: core
+        help: servers, sandboxes and stores the system connects to
+      knowledge:
+        # A7. The commonest enterprise shape — an agent that answers out of a
+        # set of documents — could not be written at all.
+        #
+        # The folder form is free: `knowledge/hr-handbook/hr-handbook.yaml` is
+        # expanded by the generic directory walker and reaches schema validation
+        # already, so only this declaration was missing.
+        type: map of group:knowledge
+        surface: S-CAP
+        tier: core
+        help: sets of documents the agents look things up in and quote back
+      skills:
+        # Was `map of anything`, which made a skill the one thing `uses:` can
+        # name that has no kind: renaming `use-when:` to `use-wen:` in a
+        # SKILL.md loaded clean, and the skill silently lost the line that
+        # decides when it is picked.
+        type: map of group:skill
+        surface: S-GEN
+        tier: core
+        help: written procedures and reference material the agents follow
+      policies:
+        type: map of group:policy
+        surface: S-EXEC
+        tier: core
+        help: the rules about what needs a person, and what must never be sent
+      redaction:
+        # ONE field, where there were two for one idea (R61). `redactions:` was
+        # a map that could hold several and `redaction:` was the one name that
+        # could be bound, so a second set was unbindable by construction — and
+        # the warning written for exactly that case said *"Add a line:
+        # `redaction: staff-data` in workspace.yaml"*, which REPLACES the name
+        # already there and switches the first set off in silence. Measured, the
+        # obvious repair was refused too: `redaction: [customer-data,
+        # staff-data]` printed *"'redaction' should be some text, but it is a
+        # list"* — a true sentence about a shape the format should never have
+        # offered.
+        #
+        # It is written as `redaction.yaml` at the top of the workspace, which is
+        # the shape `learning:` above already has: a group-typed field of the
+        # workspace, so the Expansion Rule makes the file the field and there is
+        # nothing to bind and nothing to misspell. An author who has met one has
+        # met the other.
+        type: group:redaction
+        surface: S-EXEC
+        tier: core
+        help: >
+          what must never leave this workspace. Write it in a file called
+          `redaction.yaml` next to `workspace.yaml`, and put everything you want
+          kept in inside that one file, one line each. There is one for the
+          whole system, the same way `watch:` is: what may not leave is a fact
+          about the workspace, not about one agent, and letting an agent opt out
+          by deleting a line is not a setting anybody wants.
+      questions:
+        type: map of group:question
+        surface: S-EXEC
+        tier: core
+        help: >
+          the things a person can be asked, and what counts as an answer to
+          each. Saying yes or no is one of these, not a separate idea.
+      evals:
+        type: group:evals
+        surface: S-GOV
+        tier: core
+        help: how you know the system works
+      learning:
+        type: group:learning
+        surface: S-GOV
+        tier: core
+        help: whether and how the system may improve itself
+      ports:
+        type: map of group:port
+        surface: S-TOPO
+        tier: core
+        help: >
+          how the outside world reaches these agents — people talking to them,
+          other systems calling in, and the clock. A timer is a port with an
+          `every:` line saying when to run; it needs nothing else to be one.
+      loops:
+        type: map of group:loop
+        surface: S-CTRL
+        tier: expert
+        help: named shapes of thinking that agents can point at
+      context-policies:
+        type: map of group:context-policy
+        surface: S-CTRL
+        tier: core
+        help: named rules for keeping a long conversation inside what a model can hold
+      bundles:
+        # G10. `defineExtension` packages tools, connections, skills, instruction
+        # fragments and hooks as one installable npm unit — the one real sharing
+        # mechanism Eve has, and the reason its own docs can say "copy the
+        # markdown under each skills/ directory" about subagents without that
+        # being the whole story.
+        #
+        # A FOLDER, not a package. Eve's extension is npm, so mounting one runs
+        # a build and, through `instructions.ts`, author code (R5, R42). A bundle
+        # is definitions the same loader reads, which is what lets `pact check`
+        # point a diagnostic at a line inside it instead of at the fact that it
+        # exists.
+        type: map of group:bundle
+        surface: S-CAP
+        tier: expert
+        help: >
+          sets of ready-made capabilities this workspace uses. Each says where
+          its folder is and which kinds it may contribute; anything else it
+          contains is refused rather than quietly mounted.
+      interceptors:
+        type: map of group:interceptor
+        surface: S-EXEC
+        tier: expert
+        help: >
+          rules that can change what happens mid-run, not merely watch it. Each
+          one says on its own line whether it covers every agent here or only
+          the agents that name it.
+      watch:
+        type: map of group:watch
+        surface: S-GOV
+        tier: core
+        help: >
+          the things to write down as they happen, so that afterwards you can
+          read what the system actually did instead of taking its word for it.
+          Nothing here can change anything — these only look.
+      models:
+        type: group:catalog
+        surface: S-CAP
+        tier: expert
+        help: >
+          extra AI models this machine can serve, on top of the ones PACT
+          already knows about. You only need this if you run a model PACT has
+          never heard of. Write it in `models/catalog.yaml`, one entry per
+          model, each saying how much it can hold and where that number
+          came from.
+
+  agent:
+    fields:
+      name:
+        # NOT required. The folder is the identity — `team:` keys,
+        # `port.answers:`, `teamwork.shares` and every diagnostic resolve
+        # against it, and this line reaches only the A2A card. Requiring it made
+        # every author write a second name on every agent that changed no
+        # behaviour, and let the two disagree in silence: an agent in
+        # `agents/policy-checker/` carrying `name: Fraud Checker` loaded clean
+        # and published a card under the wrong identity. Left out, the folder
+        # name is used — which is what `ir.py` already did.
+        type: text
+        surface: S-GEN
+        tier: core
+        help: >
+          what to call this agent when a person reads about it. Leave it out and
+          the folder name is used, which is the name everything else here
+          resolves against anyway.
+      description:
+        type: text
+        required: yes
+        surface: S-GEN
+        tier: core
+        help: one line a colleague would understand
+      instructions:
+        # Required, and `description:` above it already was, which was backwards
+        # for six rounds: the description is one line for a colleague and this is
+        # the only line that makes the agent do anything. Measured — deleting all
+        # three `instructions.md` files from `examples/refund-desk` gave
+        # "OK — loaded cleanly" three times, so a workspace of three agents that
+        # would do nothing at all passed the check that exists to say whether it
+        # will work. `discover` already knew and printed `runnable: false`;
+        # `check`, the command an author actually runs, said nothing.
+        #
+        # Eve's equivalent (`AgentSourceManifest.instructions`, item 35 of the
+        # capability inventory) accepts one file, a module, or a directory of
+        # layers — the same three spellings PACT already has. What is added here
+        # is that the setting is not optional, and it is added as data rather
+        # than as a check somebody has to write.
+        #
+        # The help names BOTH spellings on purpose. `schema/missing-field` builds
+        # its fix as "Add a line: `<field>: ...` — <help>", so help text naming
+        # only the inline form would send an author who keeps their words in
+        # `instructions.md` to the wrong file to fix a file they had written
+        # correctly in the other place. The folder form
+        # (`agents/<name>/instructions/01-tone.md`) needs no mention: it also
+        # arrives as an `instructions` value, so it never draws this message.
+        # `may-be-a-folder:` is the half `Ty::Text` could not state. The arm in
+        # `crates/pact-schema/src/lib.rs` forgave a map of prose under EVERY text
+        # field, which is right for this one, for `variant.instructions` and for
+        # `skill.content`, and wrong for the twenty-two that resolve a name.
+        # MEASURED: `loop: carefull` was refused with the real loops offered,
+        # while `loop: {banana: purple}` printed "OK — loaded cleanly" and
+        # skipped name resolution altogether. One missing predicate turned off a
+        # check that was already written, on twenty-two fields.
+        #
+        # No field may carry both this and `names:`, and a test says so.
+        may-be-a-folder: yes
+        type: text
+        required: yes
+        surface: S-GEN
+        tier: core
+        help: >
+          what it should actually do, in plain words. That line can go in
+          `agent.yaml`, or the same words can go in
+          `agents/<name>/instructions.md` beside it — the two mean exactly the
+          same thing, so write it in whichever file you already have open.
+          Once it runs past a paragraph, the separate file is the usual place.
+      team:
+        type: map of text
+        key-names: agents
+        surface: S-TOPO
+        tier: core
+        help: >
+          who helps with this work, and what each of them is for. Give each
+          one a folder under `agents/`, and use the sentence you put here as
+          the first line of their instructions. An agent may not name itself,
+          and two agents may not name each other — a team that loops has no
+          bottom, and the run that finds out is the one a customer is waiting
+          on.
+      teamwork:
+        type: group:teamwork
+        surface: S-TOPO
+        tier: core
+        help: >
+          how it waits for the team, and how what it may spend is shared out
+          between them. Leave it out and it waits for all of them, asks them at
+          the same time, and gives each an equal share.
+      uses:
+        type: list of text
+        names: [tools, skills, knowledge]
+        surface: S-ROUTE
+        tier: core
+        help: >
+          the tools, skills and sets of documents this agent may use — a tool
+          it may call, a procedure it may read, a corpus it may look things up in
+      accepts:
+        # Was `map of text` and checked by nothing, while `question.answer` — the
+        # same mini-language, one field over — was held to a closed vocabulary by
+        # `Shape.parse`. The worked example's own lines failed its own parser:
+        # `photos: list of images`, `concern: none, low, or high`,
+        # `clause: which part of the policy says so`. One vocabulary, held in one
+        # place, on all four fields that use it.
+        type: map of answer-shape
+        shapes: &the-answer-shapes
+          text: [text, some text, a sentence, a note]
+          yes-or-no: [yes-or-no, yes or no, yes-no, yes/no, boolean]
+          money: [money, an amount of money, an amount]
+          number: [number, a number]
+          whole-number: [whole-number, whole number, a whole number, integer]
+          images: [images, a picture, pictures, list of images, an image]
+          audio: [audio, a recording, a voice message, list of audio]
+          file: [file, a file, an attachment, list of files]
+        surface: S-CAP
+        tier: core
+        help: >
+          what you can send it, one line per thing — for example
+          `message: text` or `photos: images`. The shapes are `text`,
+          `yes or no`, `money`, `number`, `whole number`, `images`, `audio` and
+          `file`, or `one of a, b, c` to choose between things you name.
+      answers-with:
+        type: map of answer-shape
+        shapes: *the-answer-shapes
+        surface: S-CAP
+        tier: core
+        help: >
+          what it hands back when it is done, one line per thing — for example
+          `decision: one of approved, declined`. The same shapes `accepts:`
+          takes.
+      answers-with-mode:
+        type: one-of
+        choices: [text, native-json-schema, tool, prompted]
+        surface: S-CAP
+        tier: expert
+        help: >
+          how the answer is constrained on the wire. Leave it out: PACT picks
+          from the shape you declared above, and records what it picked.
+      run-inputs:
+        type: map of answer-shape
+        shapes: *the-answer-shapes
+        surface: S-CAP
+        tier: core
+        help: >
+          values the surrounding system supplies for every run — a customer id,
+          a locale — one line per value, with the same shapes `accepts:` takes.
+          The model never chooses these and never sees them as something it
+          could change.
+      needs:
+        type: group:needs
+        surface: S-CAP
+        tier: core
+        help: what the AI model behind it has to be capable of
+      limits:
+        type: group:limits
+        surface: S-GOV
+        tier: core
+        help: how fast, how cheap, and how long it may run
+      settings:
+        type: group:settings
+        surface: S-CTRL
+        tier: core
+        help: how the model itself is asked to behave
+      policy:
+        type: text
+        names: policies
+        surface: S-EXEC
+        tier: core
+        help: which policy file says what needs a person's approval
+      evals:
+        type: text
+        # KEPT, and it is worth saying why after the round that asked to delete
+        # it: its value space is one address today (`workspace.evals` is a
+        # `group:`, not a `map of`), so the field restates a fact the tree
+        # already fixes. It stays because the day `workspace.evals` becomes a map
+        # of suites, this is the line that says which one — and because deleting
+        # it would silently change what a tree with it in means.
+        #
+        # The one authored cross-reference in the worked example that was
+        # written as a PATH rather than a name, and so the only one nothing
+        # held. Until this line, `evals: /evals/suit.yaml` — a file that is not
+        # there — printed "OK — loaded cleanly (468 settings)" and left the
+        # agent with no checks at all, which is the exact opposite of what the
+        # line was written to guarantee.
+        #
+        # `pact:evals` rather than a plain `names: evals` because `evals:` is a
+        # SET OF SETTINGS, not a map of suites: resolving against it as a map
+        # would have accepted `evals: cases`, which is a field inside the suite.
+        # The checker supplies the suites this tree really has, and both
+        # spellings of the one address — `evals` and `/evals/suite.yaml`.
+        names: pact:evals
+        surface: S-GOV
+        tier: core
+        help: >
+          which checks this agent has to pass. Write the name of the folder the
+          checks are in — `evals` — or the file itself, `/evals/suite.yaml`;
+          both mean the same thing. A name that is not there is refused, and the
+          message names the ones that are.
+      model:
+        type: text
+        # Resolved against the models PACT ships knowledge of, plus any this
+        # workspace added in `models/catalog.yaml`. Until it was,
+        # `model: qwen2.5-7b-instrukt` loaded clean and failed later, at run
+        # time, in another language — the exact failure class `names:` exists to
+        # end, on the one field where the consequence is that a tidying rule is
+        # measured against nothing and reported as unenforced.
+        names: pact:models
+        surface: S-CAP
+        tier: core
+        help: >
+          pin one exact model, if you must. Leave this out and PACT picks. A
+          model that only runs somewhere else is refused here when
+          `allow-egress:` in workspace.yaml does not list `llm` — the check says
+          which locally-served one to write instead.
+      model-for-checking:
+        # G14. Eve resolves the model at three scopes with precedence
+        # step > turn > session > fallback (`guides/dynamic-capabilities.md`),
+        # and records the operational reason it matters: *"prompt caches are per
+        # model, so switching mid-session re-ingests the conversation at uncached
+        # prices."* PACT's `model:` was single-valued, so it could neither
+        # express the switch nor warn about its cost.
+        #
+        # ONE extra scope, not three. Eve's `step` scope is what makes its own
+        # warning necessary — a model chosen per step re-ingests the
+        # conversation every step, which is the pathological case its docs
+        # describe. The case authors actually have is "think with a cheaper
+        # model, check with a better one", and that is a stage, not a step. So
+        # the stage is the scope PACT offers and the pathological one is simply
+        # not spellable.
+        type: text
+        names: pact:models
+        needs-also: [loop]
+        surface: S-CAP
+        tier: expert
+        help: >
+          a different model for the stages that check work, when the checking
+          deserves a better one than the doing. Needs a `loop:`, because a
+          stage is where the difference applies. Everything else uses `model:`.
+          Expect the conversation to be read again from the start each time it
+          switches, which costs — so switch once, not per step.
+      loop:
+        type: text
+        names: loops
+        or-one-of: [pact:loop/standard, pact:loop/plan-then-do, pact:loop/react,
+                    pact:loop/reflexion, pact:loop/tree-of-thought,
+                    pact:loop/answer-more-than-once]
+        surface: S-CTRL
+        tier: expert
+        help: >
+          how this agent thinks: `pact:loop/standard`, `pact:loop/plan-then-do`,
+          or the name of a shape you wrote in `loops/`. Leave it out and the
+          standard shape is used — work, look at what came back, answer.
+      variants:
+        # Was `map of anything`, read by nothing, while the ONE mechanism this
+        # project leads with — model portability — had its strategies written as
+        # Python lambdas in a test file. `resolve()` took
+        # `dict[str, Callable[[AgentSpec], AgentSpec]]` and the only ones in the
+        # tree were two lines of `test_model_portability.py`, including the exact
+        # `decomposed` strategy README.md advertises in
+        # *"RECOMMENDED: claude-haiku-4-5 — passes at 100% using the 'decomposed'
+        # strategy"*. That is "expert users write code for this" on the headline
+        # differentiator, which D14 rules out for any capability in the core.
+        #
+        # `map of anything` also made it an unclassified group, which this file's
+        # own header forbids: `utter-nonsense: [1, 2, 3]` under `variants:`
+        # loaded clean and `pact show` carried it verbatim.
+        type: map of group:variant
+        surface: S-CTRL
+        tier: expert
+        help: >
+          other ways to run the same agent, for models that need more help or
+          less. Each one is tried in the order you wrote them, after the agent as
+          you authored it, and the first that passes the checks is the one that
+          runs — so a smaller model can be made to work without a second agent.
+
+      context-policy:
+        type: text
+        names: context-policies
+        surface: S-CTRL
+        tier: core
+        help: >
+          which tidying rules to use when the conversation gets too long.
+          Leave it out and no tidying happens at all — a conversation that
+          outgrows the model fails where you can see it, rather than being
+          quietly cut down.
+      remembers:
+        type: map of group:state
+        surface: S-GOV
+        tier: core
+        help: what this agent keeps between messages, and for how long
+      interceptors:
+        type: list of text
+        names: interceptors
+        surface: S-EXEC
+        tier: expert
+        help: which rules may change what happens as it runs
+
+  variant:
+    describe: something a variant can have
+    fields:
+      when:
+        type: text
+        surface: S-GEN
+        tier: expert
+        help: >
+          when this way of working is worth trying, in one line. It is printed
+          beside the result, so write it for whoever reads the report.
+      instructions:
+        # A folder of prose is a way of writing this. See
+        # `agent.instructions` for what gating on the type alone forgave.
+        may-be-a-folder: yes
+        type: text
+        surface: S-GEN
+        tier: expert
+        help: >
+          what to say instead of the agent's own instructions. Leave it out to
+          keep them.
+      says:
+        type: text
+        surface: S-GEN
+        tier: expert
+        help: >
+          an extra line added after the agent's instructions, rather than in
+          place of them. Use this for *"Always look the order up before
+          deciding"* — the sentence that makes a smaller model reliable.
+      steps-at-most:
+        type: integer
+        at-least: 1
+        surface: S-CTRL
+        tier: expert
+        help: >
+          how many turns this way of working may take. A model that has to be
+          walked through the work needs more of them.
+      may-use:
+        type: list of text
+        names: [tools, skills, knowledge]
+        surface: S-ROUTE
+        tier: expert
+        help: >
+          narrow the tools and procedures to these, for this way of working
+          only. Leave it out to keep all of them.
+  # ── THE MODEL CATALOGUE, AS A WORKSPACE MAY EXTEND IT ───────────────────────
+  # PACT ships a catalogue of the models it knows about — how much each one can
+  # hold, which runtimes serve it, what it costs — and the author never writes
+  # it. This is the OVERRIDE LAYER: a machine serving a model the distribution
+  # has never heard of writes a row for it here, in `models/catalog.yaml` inside
+  # the workspace, and that row wins.
+  #
+  # It exists because without it an air-gapped author serving their own model had
+  # no path at all: nothing could say what their model holds, so their
+  # `context-policy:` was permanently reported as unenforced, and the only fix
+  # was editing a file inside the distribution whose own first line says they
+  # never write it. That is a D14/D17 failure — "experts edit the product" is the
+  # same answer as "experts write code for that".
+  #
+  # EVERY FIGURE CARRIES WHERE IT CAME FROM. Not decoration: a hand-written
+  # override layer that records nothing is how a merged catalogue ends up with
+  # numbers nobody can attribute, which is the shipped precedent the
+  # architecture names as the anti-pattern. A number with no source is a number
+  # somebody guessed, and a policy measured against a guess is worse than one
+  # reported as unmeasured.
+  catalog:
+    describe: something a model catalogue can have
+    fields:
+      version:
+        type: text
+        surface: S-GEN
+        tier: expert
+        help: which version of this file's own layout it is written in. Write `1`.
+      default:
+        type: text
+        surface: S-CAP
+        tier: expert
+        help: >
+          which model to use when an agent names none. Leave it out to keep the
+          one PACT already picks.
+      models:
+        type: map of group:model
+        surface: S-CAP
+        tier: expert
+        help: one entry per model, named by whatever your runtime calls it
+
+  model:
+    fields:
+      description:
+        type: text
+        surface: S-GEN
+        tier: expert
+        help: what this model is, in one line
+      family:
+        type: text
+        surface: S-GEN
+        tier: expert
+        help: the family it belongs to, e.g. `qwen2.5`
+      tier:
+        type: one-of
+        choices: [small, mid, frontier]
+        surface: S-CAP
+        tier: expert
+        help: >
+          roughly how big it is. `small` runs on one machine, `frontier` is the
+          most capable and the most expensive.
+      also-known-as:
+        type: list of text
+        surface: S-CAP
+        tier: expert
+        help: >
+          every other name this same model answers to. The same model is called
+          different things by different runtimes, and one entry that lists them
+          all beats one entry per runtime.
+      served-by:
+        type: list of group:served-by
+        surface: S-CAP
+        tier: expert
+        help: which runtimes can actually run it, and whether they are on this machine
+      capabilities:
+        type: group:model-can
+        surface: S-CAP
+        tier: expert
+        help: what this model can do, and how much it can hold
+      reasoning:
+        type: group:figure
+        surface: S-CAP
+        tier: expert
+        help: >
+          how much thinking it is good for — `simple`, `steady`, `careful` or
+          `deep` — and where that came from. Write `unknown` if nobody has
+          placed it: a model nobody has placed still gets used, it is just
+          ranked last.
+      cost:
+        type: group:model-cost
+        surface: S-GOV
+        tier: expert
+        help: what it costs to run
+
+  served-by:
+    describe: something a way of serving a model can have
+    fields:
+      runtime:
+        type: text
+        required: yes
+        surface: S-CAP
+        tier: expert
+        help: the name of the thing that runs it, e.g. `ollama` or `vllm`
+      endpoint:
+        # Carries an address that can point outside the workspace. See
+        # `tool.url` for why this is data rather than a list in Rust.
+        reaches-outside: yes
+        type: text
+        surface: S-CAP
+        tier: expert
+        help: >
+          write `local` when the model runs on this machine. Anything else means
+          the call leaves the box — which a workspace with nothing in
+          `allow-egress:` will refuse to do.
+
+  model-can:
+    describe: something a model's abilities can include
+    fields:
+      computer-use:
+        # `needs: computer-use: yes` translated to a capability token no
+        # catalogue row could ever publish, because there was no field to write
+        # it in: measured, 0 of 13 rows passed, the refusal appended no fix, and
+        # `pact check` said nothing at all. D16 names computer use as one of the
+        # four v1 modalities and D17's escape hatch — a workspace adding its own
+        # row — could not reach it either.
+        type: yes-no
+        surface: S-CAP
+        tier: expert
+        help: whether it can drive a browser or a screen
+      tool-calling:
+        type: one-of
+        choices: [none, single, parallel]
+        surface: S-CAP
+        tier: expert
+        help: >
+          whether it can use tools, and how many at once. `parallel` means
+          several in one go, which many local models cannot do.
+      modality-in:
+        type: list of one-of
+        choices: [text, image, audio]
+        surface: S-CAP
+        tier: expert
+        help: what it can be shown
+      modality-out:
+        type: list of one-of
+        choices: [text, image, audio]
+        surface: S-CAP
+        tier: expert
+        help: what it can produce
+      context-window:
+        type: group:figure
+        surface: S-CAP
+        tier: expert
+        help: >
+          how much it can hold at once, in tokens, and where that number came
+          from. Write `unknown` if you cannot find out — a made-up number here
+          makes every tidying rule fire at the wrong moment.
+
+  figure:
+    describe: something a recorded figure can have
+    fields:
+      value:
+        type: text
+        required: yes
+        surface: S-CAP
+        tier: expert
+        help: the figure itself, or the word `unknown` if nobody can say
+      provenance:
+        type: group:provenance
+        surface: S-GOV
+        tier: expert
+        help: where this number came from
+
+  provenance:
+    describe: something a record of where a figure came from can have
+    fields:
+      source:
+        type: text
+        required: yes
+        surface: S-GOV
+        tier: expert
+        help: >
+          where you read it — a model card, a published config file, a
+          measurement you ran. One sentence somebody else could follow.
+      harness:
+        type: text
+        surface: S-GOV
+        tier: expert
+        help: how it was measured, if it was measured rather than published
+      contamination:
+        type: text
+        surface: S-GOV
+        tier: expert
+        help: anything known about the figure being unreliable
+      date:
+        type: text
+        surface: S-GOV
+        tier: expert
+        help: when the source published it
+      as-of:
+        type: text
+        surface: S-GOV
+        tier: expert
+        help: when you last checked it was still true
+      recorded-by:
+        type: text
+        surface: S-GOV
+        tier: expert
+        help: who wrote it down
+
+  model-cost:
+    describe: something a model's price can have
+    fields:
+      input-per-mtok:
+        type: text
+        surface: S-GOV
+        tier: expert
+        help: >
+          what a million tokens sent to it costs, e.g. `1.00 USD`. Write `0 USD`
+          for a model you run yourself, and `unknown` if you genuinely do not
+          know — a price nobody published is never treated as free.
+      output-per-mtok:
+        type: text
+        surface: S-GOV
+        tier: expert
+        help: what a million tokens back from it costs
+
+  # Capability requirements. These are a cheap PRE-FILTER over the model
+  # catalogue; the evals are the actual proof. Never the other way round.
+  needs:
+    fields:
+      reasoning:
+        type: one-of
+        choices: [simple, steady, careful, deep]
+        surface: S-CAP
+        tier: core
+        help: >
+          how much thinking the work needs — at least this much. A model whose
+          rung has not been measured still gets used; it is just ranked last.
+      tool-calling:
+        # `no` was missing while all three siblings are `yes-no`, so an author
+        # who wanted a model that need not call tools — the whole point of the
+        # field on a `policy-checker` that only reads a written procedure — had
+        # no line to write, and the refusal called their answer "some text",
+        # which is not what `no` is.
+        type: one-of
+        choices: [no, yes, parallel]
+        surface: S-CAP
+        tier: core
+        help: >
+          whether it has to be able to call tools. `no` means it does not need
+          to at all, which widens the models you can use; `yes` means in any
+          way; `parallel` means several at once, which rules out many local
+          models.
+      images:
+        type: yes-no
+        surface: S-CAP
+        tier: core
+        help: whether it has to be able to look at pictures
+      audio:
+        type: yes-no
+        surface: S-CAP
+        tier: core
+        help: whether it has to be able to hear or speak
+      computer-use:
+        type: yes-no
+        surface: S-CAP
+        tier: core
+        help: whether it has to be able to drive a browser or a screen
+      context-at-least:
+        # Was `type: text`, so `context-at-least: banana` loaded clean and
+        # reached the resolver verbatim, where it was compared against a real
+        # context window. Every other quantity in PACT has a type.
+        type: size
+        surface: S-CAP
+        tier: core
+        help: >
+          how much it has to be able to read at once — `32k`, `128k`, `1m`, or
+          the number itself
+      because:
+        type: text
+        required: yes
+        surface: S-GEN
+        tier: core
+        help: >
+          why this agent needs these things. One sentence. It is printed under
+          every rejection, so write it for whoever reads the failure.
+      scores:
+        # AC-3.2's predicate. The conjunction is the MAP — every line here has
+        # to hold — and the comparison is the value: `> 80`, `>= 80`, `< 5`,
+        # `<= 5`, `= 80`, with a trailing `%` scaling by a hundred. So
+        # `MMLU > 80 && SWE-Verified > 40` is two lines, and there is no `&&` for
+        # an author to learn.
+        #
+        # That is a decision and not a shortfall. An expression language is a
+        # language: it has precedence, it has parentheses, and the one thing a
+        # non-coder must never have to learn is a syntax where `a && b || c`
+        # means something they did not intend. Two lines that both have to be
+        # true is the same predicate without the parser.
+        type: map of threshold
+        surface: S-CAP
+        tier: expert
+        help: >
+          minimum published benchmark scores, one line each, all of which have
+          to hold — for example `MMLU: "> 80"` and `SWE-Verified: "> 40"`
+          together. Write the comparison: `> 80`, `>= 80`, `< 5`, `<= 5` or
+          `= 80`, and a bare number means `> that`. Expert tier on purpose: a
+          catalogue with no `benchmarks:` block publishes none of these, so this
+          can only empty the candidate set until somebody records the figures
+          their own machine measured.
+
+  # ── LIMITS: the termination algebra ─────────────────────────────────────────
+  # Service levels, spend caps, and every way a run is allowed to end.
+  #
+  # Eve bounds a run in exactly ONE way: a token budget on the session. It has no
+  # step limit, no turn limit, no wall-clock limit and no spend cap anywhere, and
+  # `stopWhen: isStepCount(1)` is the only stop condition in the package. A
+  # confused agent therefore loops until it has spent 40M tokens, and the only
+  # thing that notices is the bill.
+  #
+  # Here every ceiling is a row in one table, all enforced the same way, all
+  # reported by the name the author typed. `when-it-runs-out` says what "stops"
+  # means; a ceiling set without it is REFUSED rather than guessed at, because
+  # stopping silently, asking a person, and answering as if finished are three
+  # different governance decisions and none of them is a default.
+  #
+  # ONE action, not one per ceiling. What to do when the budget is gone is a
+  # property of the WORK, not of which meter happened to empty first: an agent
+  # that must not answer half-informed must not do it whether it ran out of
+  # steps or of money. Five separate actions would be five chances to write a
+  # governance rule that contradicts itself, and the run already reports which
+  # ceiling it was, so nothing is lost by sharing the decision.
+  #
+  # There is no FOURTH action. `park` — stop now, carry on later, tell nobody —
+  # was considered and refused. `ask-a-person` already parks: reaching a ceiling
+  # with it writes the whole run down and stops it, costing nothing while it
+  # waits. `park` would be that same mechanism with the person taken out, which
+  # is `same-setting-twice` appearing in the specification the rule is written
+  # in. And taking the person out takes the way back in with it — a stopped run
+  # starts again on a yes and on nothing else, so a park nobody was told about
+  # has no exit at all. Eve has exactly that shape, and it means a run waiting on
+  # an approver who left the company waits forever. Argued in full in
+  # docs/50-NOT-COPIED.md §2.1.
+  #
+  # `stop-after: {tool-calls, turns}` is GONE. `turns` and `steps-at-most` were
+  # two names for one counter — the exact `same-setting-twice` mistake this
+  # validator exists to catch, sitting in the specification itself — and `turn`
+  # already means something else in the event lattice, where a turn CONTAINS
+  # steps. `tool-calls` moved up as `tool-calls-at-most`, so the ceilings are one
+  # flat family that reads the same way and grows by one line.
+  limits:
+    fields:
+      feel:
+        type: one-of
+        choices: [voice, interactive, conversational, background, batch]
+        surface: S-GOV
+        tier: core
+        help: >
+          what kind of waiting is acceptable. This one word supplies
+          `first-reply-within:` and `finishes-within:` when you have not written
+          them, so most agents need only this line. Anything you write yourself
+          wins.
+      finishes-within:
+        type: duration
+        surface: S-GOV
+        tier: core
+        needs-also: [when-it-runs-out]
+        help: >
+          how long the whole thing may take. This is the promise you are making
+          to whoever waits, and it is also a ceiling: write no `runs-for-at-most`
+          and the run is stopped here, so a promise is never left unenforced.
+      cost-per-request-under:
+        type: money
+        surface: S-GOV
+        tier: core
+        needs-also: [when-it-runs-out]
+        help: >
+          the most one request may cost, before it is stopped. One request, not
+          one step and not one agent: what this agent spends and what its team
+          spends come out of the same figure, however many times it asks them
+          and however deep the team goes. It is also the pot `teamwork:` divides.
+      first-reply-within:
+        type: duration
+        surface: S-GOV
+        tier: expert
+        help: how long before the first words come back
+      per-word-under:
+        type: duration
+        surface: S-GOV
+        tier: expert
+        help: how long between words once it has started
+      steps-at-most:
+        type: integer
+        at-least: 1
+        surface: S-GOV
+        tier: core
+        needs-also: [when-it-runs-out]
+        help: >
+          how many thinking steps before it must stop. Eve has no such limit at
+          all, so a confused agent can loop until it exhausts a token budget.
+      tool-calls-at-most:
+        type: integer
+        at-least: 1
+        surface: S-GOV
+        tier: core
+        needs-also: [when-it-runs-out]
+        help: >
+          how many tool calls one run may make. Counted apart from steps because
+          one step can ask for several tools at once, so ten steps is not ten
+          calls.
+      runs-for-at-most:
+        type: duration
+        surface: S-GOV
+        tier: core
+        needs-also: [when-it-runs-out]
+        help: >
+          wall-clock time before it must stop, however much budget is left. Time
+          spent waiting for a person does not count against it — nobody should
+          fail a deadline because the approver went to lunch.
+      tokens-at-most:
+        type: integer
+        at-least: 1
+        surface: S-GOV
+        tier: core
+        needs-also: [when-it-runs-out]
+        help: >
+          how much text one run may read and write, counted the way the model
+          counts it. This is the only ceiling that still bites when there is no
+          price list: a model running on your own machine costs nothing per
+          word, so a money cap cannot bound it and this can.
+      when-it-runs-out:
+        type: one-of
+        choices: [stop-and-say-so, ask-a-person, answer-with-what-it-has]
+        needed-when:
+          asks: ask-a-person
+        surface: S-GOV
+        tier: core
+        help: >
+          what to do on reaching any ceiling above. Stopping silently, asking a
+          person, and answering as if finished are three different things, so
+          this is never implied: set a ceiling and you have to say this too.
+      asks:
+        type: text
+        names: questions
+        surface: S-EXEC
+        tier: core
+        # "the line above" is a direction to somebody READING this setting. The
+        # refusal quotes it from the other direction — it is already saying which
+        # line, so the sentence came out *"'when-it-runs-out' says
+        # 'ask-a-person', and 'asks' is not set — so nothing says which question
+        # to put to them when the line above says ask-a-person"*, handing the
+        # author back the words they had just typed. `summary:` is the name
+        # without the pointer.
+        summary: which question to put to them
+        help: >
+          which question to put to them when the line above says ask-a-person,
+          by name. Without this there is nothing to ask: Eve fills that hole by
+          reusing its approve/deny widget for a question that is really "keep
+          going?", and that is the hole this closes.
+      measured-at:
+        type: one-of
+        choices: [p50, p90, p95, p99, mean, max]
+        surface: S-GOV
+        tier: expert
+        help: whether these are typical or worst-case numbers
+
+  # How the model is asked to behave. Closed on purpose: every key here works
+  # on every provider, and PACT publishes one default per key so two adapters
+  # cannot disagree about what "no setting" means.
+  settings:
+    fields:
+      max-tokens:
+        type: integer
+        surface: S-CTRL
+        tier: core
+        help: >
+          the longest answer it may give. Left out, PACT uses what the model
+          says it can do — which is what stops the same tree truncating on one
+          framework and not another.
+      thinking:
+        type: one-of
+        choices: [none, low, medium, high]
+        surface: S-CTRL
+        tier: core
+        help: how hard to think before answering, where the model supports it
+      temperature:
+        type: number
+        surface: S-CTRL
+        tier: expert
+        help: how much variation to allow
+      top-p:
+        type: number
+        surface: S-CTRL
+        tier: expert
+        help: an alternative to temperature; set one or the other, not both
+      top-k:
+        type: integer
+        surface: S-CTRL
+        tier: expert
+        help: an alternative to temperature
+      stop-sequences:
+        type: list of text
+        surface: S-CTRL
+        tier: expert
+        help: text that ends the answer when it appears
+      seed:
+        type: integer
+        surface: S-CTRL
+        tier: expert
+        help: makes repeated runs more alike, where the model supports it
+      presence-penalty:
+        type: number
+        surface: S-CTRL
+        tier: expert
+        help: discourage repeating a topic
+      frequency-penalty:
+        type: number
+        surface: S-CTRL
+        tier: expert
+        help: discourage repeating a word
+      tool-choice:
+        type: text
+        surface: S-CTRL
+        tier: expert
+        help: 'auto, required, none, or one tool name'
+      parallel-tool-calls:
+        type: yes-no
+        surface: S-CTRL
+        tier: expert
+        help: whether it may ask for several tools at once
+      service-tier:
+        type: text
+        surface: S-CTRL
+        tier: expert
+        help: which service class to request from the provider
+
+  # A server, sandbox or store the system connects to. An mcp-server carries a
+  # reference to an endpoint and a reference to a credential — never a command,
+  # never arguments, never a credential value. Honouring a command here would
+  # make reviewing an untrusted workspace an act of running its code.
+  resource:
+    fields:
+      available-when:
+        # G12. Eve computes this and cannot express it: `agent` is offered only
+        # in the root session, `load_skill` only when the agent declares skills,
+        # `connection_search` only when it declares connections, and
+        # `ask_question` only when the session can reach a person
+        # (docs/concepts/default-harness.md). Four hardcoded conditions inside
+        # the harness, none of them writable, and its own docs say the set
+        # "depends on the agent and session".
+        #
+        # A CLOSED list, not an expression. An expression language here would be
+        # a second way to say what `when-this` already says, and it would let an
+        # author write a condition `pact check` cannot decide — at which point
+        # "this capability can never be offered" stops being catchable.
+        type: one-of
+        choices:
+          - always
+          - this-agent-has-helpers
+          - this-agent-has-procedures
+          - this-agent-has-connections
+          - a-person-can-be-asked
+        # R6-shaped: WHICH other part of the tree satisfies a condition is the
+        # half the schema could not state, so `crates/pact-loader/src/available.rs`
+        # kept it in a hand-written table of three rows — and two of them named a
+        # field the `agent` group does not have. MEASURED: a tool with
+        # `this-agent-has-procedures` warned "'desk' declares no `skills:`", and
+        # typing the fix it offered gave `error: 'skills' is not something an
+        # agent can have`. A warning whose fix is an error is worse than no
+        # warning at all (R24). The iteration beside it read `("skills","knows")`
+        # and no agent has `knows:`, so a skill's condition was never checked;
+        # `a-person-can-be-asked` had no row and was skipped in silence.
+        #
+        # Written here it is checked in BOTH directions: every key must be one of
+        # the choices above, and every target must be a field an `agent` really
+        # has or a collection it can really reach. A resource is reached only
+        # through a tool's `connect:` and a question only through `limits.asks:`,
+        # which is why this says what must be REACHABLE rather than what must be
+        # written on the agent — the latter cannot express either one.
+        satisfied-by:
+          this-agent-has-helpers: team
+          this-agent-has-procedures: skills
+          this-agent-has-connections: resources
+          a-person-can-be-asked: questions
+        surface: S-ROUTE
+        tier: expert
+        help: >
+          when this is offered to the model at all. Leave it out and it is
+          always offered. Use it for something that only makes sense once the
+          agent has something else — a tool for handing work to a teammate is
+          noise for an agent with no teammates, and a model offered a tool that
+          cannot work will eventually call it.
+      resource-kind:
+        type: one-of
+        # Narrowed to the one choice that leads anywhere. `sandbox`,
+        # `content-store` and `memory` had no field in this kind that only they
+        # would use — `endpoint:`, `auth:` and `asks-to-connect:` are all
+        # MCP-shaped — so they were three ways to write a required field wrong,
+        # and the argument the `tool` group's own note makes one kind over (R60)
+        # applies unchanged: a choice that leads nowhere is the "loads and does
+        # nothing" failure. Each returns with the fields it needs.
+        choices: [mcp-server]
+        required: yes
+        surface: S-CAP
+        tier: core
+        help: what kind of thing this is
+      endpoint:
+        # Carries an address that can point outside the workspace. See
+        # `tool.url` for why this is data rather than a list in Rust.
+        reaches-outside: yes
+        type: text
+        surface: S-CAP
+        tier: core
+        help: >
+          a name your platform team publishes. Ask them which ones this
+          machine already knows about — it is their list, not a file in here.
+      auth:
+        # Was `map of text` with no key constraint, so `auth: {bearer-token:
+        # sk-live-2f9c41ab77d3e015aa9e}` loaded clean — a secret pasted into a
+        # spec file, in the one field whose own help says a spec file may not
+        # contain one, ever. A closed group with one required field is what makes
+        # the sentence true: `bearer-token:` is now refused by name.
+        type: group:credential-reference
+        surface: S-CAP
+        tier: core
+        help: >
+          where the credential is kept — a reference your platform team
+          publishes. Never the credential itself: a spec file may not contain
+          one, ever.
+      asks-to-connect:
+        type: text
+        names: questions
+        surface: S-EXEC
+        tier: core
+        help: >
+          which question to put to a person when this connection has not been
+          allowed yet, by name. The run stops and waits for the answer rather
+          than failing, so nobody has to start again. Eve does this too, as a
+          fifth kind of pause with its own bookkeeping; here it is the same
+          waiting the run already does for every other reason.
+      description:
+        type: text
+        surface: S-GEN
+        tier: core
+        help: what this is, in one line
+
+  # A written procedure an agent follows — a folder with a `SKILL.md` in it, and
+  # whatever reference material and scripts that procedure needs beside it.
+  #
+  # It was the one thing `uses:` can name that had no kind: `workspace.skills`
+  # was `map of anything`, so renaming `use-when:` to `use-wen:` loaded clean and
+  # the skill silently lost the line that decides when it is picked.
+  # ── KNOWLEDGE ───────────────────────────────────────────────────────────────
+  # Documents an agent looks something up in, rather than a procedure it reads
+  # end to end.
+  #
+  # A7: the commonest enterprise shape could not be written at all. PACT does not
+  # retrieve, embed, index or chunk — a runtime that does all four already
+  # exists. This kind declares what that runtime needs to know and governs the
+  # part a reviewer has to be able to read: the §4 declared-and-delegated pattern
+  # (`docs/50-NOT-COPIED.md` §4), the same one `port.through:` and the durable
+  # store use.
+  #
+  # A SEPARATE KIND and not a `skill`, and the plumbing argument for that is
+  # false — a skill already carries `description`, `available-when:`,
+  # `use-when:`, `costs-about:` and a digested `references/` folder, and is
+  # already named by `uses:`. The argument that wins is about REVIEWING: somebody
+  # who has read a skill has read every word the model will see, and
+  # `passages-at-most: 5` means nobody knows at check time which five. A skill is
+  # determinate and this is not, and that is a difference a reviewer has to be
+  # told about rather than one PACT can hide by reusing a word.
+  knowledge:
+    describe: set of documents
+    fields:
+      description:
+        type: text
+        required: yes
+        surface: S-GEN
+        tier: core
+        help: >
+          what this set of documents is, in one line. If it is one procedure and
+          it always applies, write a skill instead: a skill is read end to end,
+          this is looked things up in.
+      documents:
+        # NOT a glob, and this is the change that made the construct shippable.
+        # There is no path type in this language and no glob anywhere in it, and
+        # the file ORDER a glob returns is load-bearing for a digest the loader
+        # promises is reproducible on any machine. MEASURED with a glob:
+        # `documents: /etc/passwd` and `documents: ../../../../etc/**` both
+        # printed "OK — loaded cleanly", and so did a glob matching zero files.
+        #
+        # The folder convention already ships: `skills/<name>/references/` is
+        # digested, typed and sized by the payload walker, so this is that list
+        # plus one entry. It cannot climb out of the workspace, its order is the
+        # walker's, and deleting a document moves the digest.
+        type: anything
+        surface: S-CAP
+        tier: core
+        help: >
+          the documents themselves, in a `documents/` folder beside this file.
+          Kept as files rather than as settings, so a table stays a table. A set
+          of documents with nothing in it is refused: nothing would come back and
+          the agent would answer from nothing.
+      looked-up-by:
+        # Plain words for what the literature calls dense retrieval, BM25 and
+        # hybrid. `connections` (graph RAG) is absent because it names a
+        # structure a folder of documents does not carry, and `the-agent-decides`
+        # (agentic RAG) because it reads to a support lead as the
+        # leave-it-to-the-system option — the one you pick when you do not know —
+        # while selecting the most expensive and least predictable strategy.
+        # ABSENCE is the leave-it-alone option, the way it is for
+        # `available-when:`.
+        #
+        # `meaning` needs an embedder, which is a model outside this box, so this
+        # field is the FIFTH binding of `embedder` in `allow-egress:` — and the
+        # only one with a producer. `allow-egress: []` with `looked-up-by:
+        # meaning` is refused rather than quietly calling a hosted embedder on
+        # every question a customer asks.
+        type: one-of
+        choices: [meaning, words, meaning-and-words]
+        surface: S-CTRL
+        tier: expert
+        help: >
+          how the runtime finds the right passages. `words` matches the words you
+          typed, which is what you want for clause numbers, product codes and
+          policy references. `meaning` matches what the question is about, and
+          needs `embedder` in `allow-egress:` because that is a model outside
+          this box. Leave it out and the runtime picks.
+      split-by:
+        type: one-of
+        choices: [paragraph, heading, page, whole-file]
+        surface: S-CTRL
+        tier: expert
+        help: >
+          how a long document is broken up before anything is looked up in it.
+          Leave it out and the runtime picks, which is the usual answer.
+      passages-at-most:
+        # S-GOV, not S-EXEC. MEASURED: all six other `<thing>-at-most` fields in
+        # this file are S-GOV and none is S-EXEC — a passage count grants no
+        # authority, and the security argument is already carried by S-GOV, which
+        # is CLASS-4 and GOVERNED just the same. The durable argument is the
+        # other one: the number is declared in the folder rather than set in the
+        # host, so a reviewer can read it.
+        type: integer
+        at-least: 1
+        surface: S-GOV
+        tier: core
+        help: >
+          how many pieces of document come back for one question. More is not
+          better: every extra passage is more text a poisoned document could be
+          hiding in. Leave it out and the runtime picks.
+      must-cite:
+        # The whole of what a support lead is trying to buy, and the ONE spelling
+        # of it. It is not decoration: an entry the run could not consult reports
+        # on `unretrieved`, and `must-cite: yes` on such an entry FAILS THE TURN —
+        # otherwise the agent answers from what the model already knew and cites
+        # a document it never opened, which is the worst outcome available and
+        # the one that looks most like success.
+        type: yes-no
+        surface: S-GOV
+        tier: core
+        help: >
+          whether an answer has to say which document it came from. `yes` means
+          an answer with no source is not an answer: if the documents could not
+          be read at all, the turn fails and says so rather than answering from
+          memory.
+      use-when:
+        type: text
+        surface: S-ROUTE
+        tier: core
+        help: the situations this is the right thing to look in
+      do-not-use-when:
+        type: text
+        surface: S-ROUTE
+        tier: core
+        help: the situations it looks right and is not
+      if-unsure:
+        type: text
+        surface: S-ROUTE
+        tier: core
+        help: what to do when it is not clear whether this applies
+
+  skill:
+    fields:
+      available-when:
+        # G12. Eve computes this and cannot express it: `agent` is offered only
+        # in the root session, `load_skill` only when the agent declares skills,
+        # `connection_search` only when it declares connections, and
+        # `ask_question` only when the session can reach a person
+        # (docs/concepts/default-harness.md). Four hardcoded conditions inside
+        # the harness, none of them writable, and its own docs say the set
+        # "depends on the agent and session".
+        #
+        # A CLOSED list, not an expression. An expression language here would be
+        # a second way to say what `when-this` already says, and it would let an
+        # author write a condition `pact check` cannot decide — at which point
+        # "this capability can never be offered" stops being catchable.
+        type: one-of
+        choices:
+          - always
+          - this-agent-has-helpers
+          - this-agent-has-procedures
+          - this-agent-has-connections
+          - a-person-can-be-asked
+        # R6-shaped: WHICH other part of the tree satisfies a condition is the
+        # half the schema could not state, so `crates/pact-loader/src/available.rs`
+        # kept it in a hand-written table of three rows — and two of them named a
+        # field the `agent` group does not have. MEASURED: a tool with
+        # `this-agent-has-procedures` warned "'desk' declares no `skills:`", and
+        # typing the fix it offered gave `error: 'skills' is not something an
+        # agent can have`. A warning whose fix is an error is worse than no
+        # warning at all (R24). The iteration beside it read `("skills","knows")`
+        # and no agent has `knows:`, so a skill's condition was never checked;
+        # `a-person-can-be-asked` had no row and was skipped in silence.
+        #
+        # Written here it is checked in BOTH directions: every key must be one of
+        # the choices above, and every target must be a field an `agent` really
+        # has or a collection it can really reach. A resource is reached only
+        # through a tool's `connect:` and a question only through `limits.asks:`,
+        # which is why this says what must be REACHABLE rather than what must be
+        # written on the agent — the latter cannot express either one.
+        satisfied-by:
+          this-agent-has-helpers: team
+          this-agent-has-procedures: skills
+          this-agent-has-connections: resources
+          a-person-can-be-asked: questions
+        surface: S-ROUTE
+        tier: expert
+        help: >
+          when this is offered to the model at all. Leave it out and it is
+          always offered. Use it for something that only makes sense once the
+          agent has something else — a tool for handing work to a teammate is
+          noise for an agent with no teammates, and a model offered a tool that
+          cannot work will eventually call it.
+      name:
+        type: text
+        surface: S-GEN
+        tier: core
+        help: >
+          what to call this procedure. Leave it out and the folder name is used.
+      description:
+        type: text
+        required: yes
+        surface: S-ROUTE
+        tier: core
+        help: >
+          what this procedure covers, in one line. This is what the agent reads
+          when deciding whether to open it, so write it as the answer to "is
+          this the document I need?"
+      use-when:
+        type: text
+        surface: S-ROUTE
+        tier: core
+        help: the situations this is the right thing to read
+      do-not-use-when:
+        type: text
+        surface: S-ROUTE
+        tier: core
+        help: the situations it looks right and is not
+      if-unsure:
+        type: text
+        surface: S-ROUTE
+        tier: core
+        help: what to do when it is not clear whether this applies
+      costs-about:
+        type: size
+        surface: S-GOV
+        tier: expert
+        help: >
+          roughly how much of the model's room this takes up when opened, so a
+          long procedure can be weighed against the conversation it has to fit
+          beside
+      content:
+        # A folder of prose is a way of writing this. See
+        # `agent.instructions` for what gating on the type alone forgave.
+        may-be-a-folder: yes
+        type: text
+        surface: S-GEN
+        tier: core
+        help: >
+          the procedure itself. This is the body of `SKILL.md` — you write it as
+          prose under the settings above, not as a `content:` line.
+      references:
+        type: anything
+        surface: S-GEN
+        tier: core
+        help: >
+          longer material this procedure points at, in a `references/` folder
+          beside it. Kept as files rather than settings, so a table stays a
+          table.
+      scripts:
+        type: anything
+        surface: S-GEN
+        tier: expert
+        help: >
+          programs this procedure tells a person or an agent to run, in a
+          `scripts/` folder beside it. PACT never runs them — it records that
+          they are there.
+      assets:
+        type: anything
+        surface: S-GEN
+        tier: expert
+        help: pictures and other files this procedure refers to, in an `assets/` folder
+
+  credential-reference:
+    describe: something a credential reference can have
+    fields:
+      by-reference:
+        type: text
+        required: yes
+        surface: S-CAP
+        tier: core
+        help: >
+          the name your platform team publishes for where this credential is
+          kept — for example `host/payments-credential`. Ask them; it is their
+          list, not a file in here.
+
+  tool:
+    fields:
+      available-when:
+        # G12. Eve computes this and cannot express it: `agent` is offered only
+        # in the root session, `load_skill` only when the agent declares skills,
+        # `connection_search` only when it declares connections, and
+        # `ask_question` only when the session can reach a person
+        # (docs/concepts/default-harness.md). Four hardcoded conditions inside
+        # the harness, none of them writable, and its own docs say the set
+        # "depends on the agent and session".
+        #
+        # A CLOSED list, not an expression. An expression language here would be
+        # a second way to say what `when-this` already says, and it would let an
+        # author write a condition `pact check` cannot decide — at which point
+        # "this capability can never be offered" stops being catchable.
+        type: one-of
+        choices:
+          - always
+          - this-agent-has-helpers
+          - this-agent-has-procedures
+          - this-agent-has-connections
+          - a-person-can-be-asked
+        # R6-shaped: WHICH other part of the tree satisfies a condition is the
+        # half the schema could not state, so `crates/pact-loader/src/available.rs`
+        # kept it in a hand-written table of three rows — and two of them named a
+        # field the `agent` group does not have. MEASURED: a tool with
+        # `this-agent-has-procedures` warned "'desk' declares no `skills:`", and
+        # typing the fix it offered gave `error: 'skills' is not something an
+        # agent can have`. A warning whose fix is an error is worse than no
+        # warning at all (R24). The iteration beside it read `("skills","knows")`
+        # and no agent has `knows:`, so a skill's condition was never checked;
+        # `a-person-can-be-asked` had no row and was skipped in silence.
+        #
+        # Written here it is checked in BOTH directions: every key must be one of
+        # the choices above, and every target must be a field an `agent` really
+        # has or a collection it can really reach. A resource is reached only
+        # through a tool's `connect:` and a question only through `limits.asks:`,
+        # which is why this says what must be REACHABLE rather than what must be
+        # written on the agent — the latter cannot express either one.
+        satisfied-by:
+          this-agent-has-helpers: team
+          this-agent-has-procedures: skills
+          this-agent-has-connections: resources
+          a-person-can-be-asked: questions
+        surface: S-ROUTE
+        tier: expert
+        help: >
+          when this is offered to the model at all. Leave it out and it is
+          always offered. Use it for something that only makes sense once the
+          agent has something else — a tool for handing work to a teammate is
+          noise for an agent with no teammates, and a model offered a tool that
+          cannot work will eventually call it.
+      description:
+        type: text
+        required: yes
+        surface: S-ROUTE
+        tier: core
+        help: what this tool is and when to use it
+      connect:
+        # Was `map of text` with no `names:`, so `mcp: paymnets-server` loaded
+        # clean and the whole `may-we-connect` wait — a human consent gate on
+        # money — silently disappeared off `pact waits`, which §9.4 G14 names as
+        # the list a runtime is obliged to walk. `tools/payments.yaml`'s own
+        # comment argues at length that this middle hop is load-bearing, and it
+        # was the unchecked one.
+        type: text
+        names: resources
+        surface: S-CAP
+        tier: core
+        help: >
+          which server this reaches, by name — one of the entries in
+          `resources`. A name that is not there is refused, and the message
+          names the ones that are. A tool reaches ONE place, so write this, or
+          `url:`, or `says:` — never two of them.
+      # `runs-as:` used to stand in front of the three lines below as a word
+      # naming which one applied — and it was read by NOTHING. Not the loader,
+      # not an adapter, not the worked example, which has never written it. Two
+      # of its four choices made it worse than idle: `prompt` and `built-in`
+      # named ways of running that nothing here carries out, so a tool written
+      # either way was offered to the model and came back `error: no tool named
+      # ...` on the first call, with no diagnostic at check time and nothing
+      # said on the run's own list of what it could not enforce. And the word
+      # was never a choice in the first place — which of `connect:`, `url:` and
+      # `says:` is written already says where the tool reaches, so the field
+      # could only ever agree with them or contradict them. It is gone (R60),
+      # its one live obligation is now on the field that really carries it
+      # (`url:` needs `method:`), and `reach.rs` refuses a tool that writes two
+      # of the three, or none.
+      url:
+        # B9. This field carries an address that can point outside the
+        # workspace, so it is one of the things `allow-egress: [tools]` governs.
+        # Data rather than a list in Rust, for the reason B15 gives: a table of
+        # field names nothing holds against the schema comes to name fields the
+        # schema does not have. An address the runtime resolves — written with
+        # no `scheme://` — is not outside the box and stays clean.
+        reaches-outside: yes
+        type: text
+        needs-also: [method]
+        surface: S-CAP
+        tier: core
+        help: >
+          the address this tool calls — a name your platform team publishes, the
+          same way an `endpoint:` is. Say beside it, in `method:`, which kind of
+          call to make. A tool reaches ONE place, so write this, or `connect:`,
+          or `says:` — never two of them.
+      method:
+        # The advice this used to end with — *"Write `post` if you are unsure"*
+        # — contradicted the fix the checker offers the moment `url:` started
+        # demanding this line: `needs-also:` writes the FIRST choice into the
+        # message, so one sentence said `method: get` and the next said to write
+        # `post`. Two answers to one question, in one screen, is how a non-coder
+        # stops believing either.
+        type: one-of
+        choices: [get, post, put, patch, delete]
+        surface: S-CAP
+        tier: core
+        help: >
+          which kind of call to make at the address in `url:` — `get` to look
+          something up, `post` to send something in. Whoever published the
+          address will say which one it expects.
+      says:
+        type: text
+        surface: S-GEN
+        tier: core
+        help: >
+          the wording sent to a model, for a tool that is a question put to one
+          rather than a call to a system. The tool's arguments are offered to it
+          by name. A tool reaches ONE place, so write this, or `connect:`, or
+          `url:` — never two of them.
+      actions:
+        type: map of group:action
+        surface: S-CAP
+        tier: core
+        help: >
+          the only actions this agent may call. Anything else the server
+          offers is refused.
+
+  action:
+    fields:
+      description:
+        type: text
+        surface: S-ROUTE
+        tier: core
+        help: what this action does
+      takes:
+        # There was nowhere at all to declare a tool's arguments, so every tool
+        # was offered to the model with `parameters: {}` — and `inspects:`,
+        # `bind:` and `same-request-key:` all named arguments nothing declared.
+        # "Add a tool" is the commonest authoring task there is and it was only
+        # completable for an MCP tool whose server happened to publish a schema.
+        type: map of answer-shape
+        shapes: *the-answer-shapes
+        surface: S-CAP
+        tier: core
+        help: >
+          what this action needs to be given, one line per argument — for
+          example `order-number: text` or `amount: money`. This is what the
+          model is shown, so the words here are the words it will use.
+      reads-only:
+        type: yes-no
+        surface: S-EXEC
+        tier: core
+        help: whether it only looks things up
+      needs-a-person:
+        # F17. Gating ONE action cost three files and thirteen lines — a
+        # question, a policy file, and a rule inside it — against the one file
+        # and two lines the same gate costs in Eve (`approval: 'always'` beside
+        # the tool), and there was no shorter spelling. Measured on a first-time
+        # author: four rounds of diagnostics, and four concepts to meet
+        # (question, policy, rule, `<tool>/<action>`) before the first gate held.
+        # That is the one place this format is harder to author in than the
+        # system it has to beat, which makes it a defect rather than a trade.
+        # This line is the whole gate.
+        #
+        # It is a SHORTHAND and not a second mechanism. It desugars to exactly
+        # the rule an author would otherwise type — `when: [{tool:
+        # <tool>/<action>}]`, `question: pact:question/is-this-ok` — against a
+        # question PACT ships (`spec/questions/is-this-ok.yaml`) carrying the
+        # same `asked-of:`, `answer-within:` and `if-nobody-answers:` every
+        # written question carries. Nothing about the guarantee is weaker; only
+        # the typing. Two places read it and neither is a new code path:
+        # `pact-loader::approvals::desugared` on the checking side, which is what
+        # puts it on `pact waits`, and `questions.questions_for` on the executing
+        # side, which is what stops the call.
+        #
+        # A written rule about the same action WINS, and `pact check` says so
+        # where the two overlap (`loader/asked-for-twice`). Eve has the opposite
+        # polarity — its per-tool `approval` field and its policy both apply —
+        # and the consequence here would be worse than a duplicate prompt: a rule
+        # reading `more-than: 200 USD` beside an action marked
+        # `needs-a-person: yes` has to mean one of two different things, and
+        # picking one silently is the governance setting that quietly changed
+        # that T7 forbids.
+        type: yes-no
+        surface: S-EXEC
+        tier: core
+        help: >
+          whether somebody has to say yes before this action happens. Writing
+          `needs-a-person: yes` is the whole gate — you do not need anything
+          else. Every call to this action stops and waits, and the person is
+          shown which tool is about to do what, and the values it was called
+          with. They have thirty minutes. If nobody answers, the run stops and
+          says so: silence is never a yes. Whoever is running this agent is who
+          gets asked, because this line does not say who else could be.
+
+          Write a question in `questions/` and a rule in `policies/` instead
+          when you need any of these: a named team asked rather than whoever is
+          running it, longer or shorter than thirty minutes, asking only above a
+          figure, or asking for something a yes cannot carry — an amount, a
+          choice, a sentence. A rule about the same action wins over this line,
+          and you are told about it where you wrote them.
+      spends-money:
+        type: yes-no
+        needed-when:
+          same-request-key: 'yes'
+        surface: S-EXEC
+        tier: core
+        help: >
+          whether it moves money. Ticking this makes a same-request key
+          necessary, so the same refund cannot be paid twice — that half is
+          refused here when it is missing. The other half is asking somebody:
+          write `needs-a-person: yes` beside this line, or a rule in `policies/`
+          naming this action when a plain yes is not enough. With neither,
+          nothing asks anybody before the money moves.
+      same-request-key:
+        type: text
+        surface: S-EXEC
+        tier: core
+        help: which argument makes two calls "the same call", so it runs once
+      same-request-key-across:
+        # A5. A scope on the line above it, not a second setting:
+        # `at-most-once-across:` would have been a THIRD name for one act,
+        # beside `same-request-key:` and `Suspension.spent_keys`, and every
+        # ceiling in this format is already spelled `<thing>-at-most`.
+        #
+        # There is deliberately NO `needed-when:` here, and the reason is worth
+        # writing down because it was tried: `needs-also:` and `needed-when:`
+        # hold one field of a document against another field of the SAME group.
+        # `durability:` is a field of the WORKSPACE and this is a field of an
+        # ACTION, so the tie between them is not something a field can say about
+        # itself. MEASURED: with `needed-when: {durability: durable-execution}`
+        # written here, a tree carrying `same-request-key-across: the-workspace`
+        # and NO `durability:` line anywhere printed "OK — loaded cleanly", in
+        # both directions. An attribute that cannot fire is R24's defect wearing
+        # schema meta.
+        #
+        # Only `this-run` is enforced by the reference harness: `Ledger.spent` is
+        # a dict built fresh in `run()` and restored from the parked suspension,
+        # so it survives a park and nothing wider. The other two are §4 —
+        # declared here, kept by the store the host supplies.
+        #
+        # B13. This field is also the whole of what a contended `claim` on a
+        # shared board can say: `same-request-key: question-id` plus a scope
+        # wider than one run IS mutual exclusion. What a claim additionally needs
+        # — releasing it, seeing who holds it, expiring it — is a LEASE, and that
+        # is deferred with a fixture (`docs/50-NOT-COPIED.md` §6), because
+        # `Ledger` has no release and no introspection and inventing a lease
+        # design nobody has tested is worse than shipping without one.
+        type: one-of
+        choices: [this-run, the-team, the-workspace]
+        needs-also: [same-request-key]
+        surface: S-EXEC
+        tier: expert
+        help: >
+          how far "the same call" reaches. `this-run` is the default and stops
+          one run doing the same thing twice, including after it parks for an
+          approval. `the-team` and `the-workspace` need a system that keeps a
+          record outside this run — say so with `durability:` on the workspace —
+          and a run that cannot keep the scope you wrote tells you rather than
+          quietly narrowing it.
+      bind:
+        type: map of text
+        surface: S-EXEC
+        tier: core
+        help: >
+          arguments filled in by the surrounding system, not by the model.
+          Written `<argument>: run-inputs.<name>`, naming one of the agent's own
+          `run-inputs:`. The model cannot see them, name them, or change them.
+          This is how "whose order" stops being something the model decides.
+      inspects:
+        type: list of text
+        surface: S-EXEC
+        tier: core
+        help: >
+          the arguments an approval rule is allowed to look at — an amount, a
+          quantity. These are exactly the ones the model DOES choose, which is
+          the point of asking a person about them.
+
+  # A policy says WHEN a person is involved and WHAT must never leave. It no
+  # longer says what the person is asked or what they may answer — that is a
+  # `question`, below, so the same wording and the same answer shape can be
+  # reused by two rules instead of being written twice.
+  # `policy.rules` — the redaction half — is GONE from this kind. It was
+  # unreachable by construction: `agent.policy:` is one name, so an agent
+  # pointing at `approvals` could never also point at `redaction`, and nothing
+  # anywhere read `policy.rules` at all. Its contents were `jsonpath:` and
+  # `regex:` rows, which are code in a no-code format (D13/D14). Redaction is now
+  # its own kind, bound once for the whole workspace, written in the same closed
+  # sentences an interceptor uses.
+  policy:
+    fields:
+      applies-to:
+        # The same polarity fix `interceptor.applies-to` records, on the surface
+        # where the consequence is money rather than a leaked card number.
+        # Approval bound per agent and OPT-IN, so the shipped example's
+        # `fraud-checker` — which `uses: [zendesk]`, and `zendesk` exposes
+        # `reply`, which the policy gates — had zero gates: `pact waits` listed
+        # seven waits and every one of them said `"agent": "refund-desk"`.
+        # Adding one line to `agents/fraud-checker/agent.yaml` took it from 0 to
+        # 3, and `pact check` was silent either way.
+        type: one-of
+        choices: [the-agents-that-name-it, every-agent]
+        surface: S-EXEC
+        tier: core
+        help: >
+          who this covers. `every-agent` covers the whole workspace and cannot be
+          switched off by an agent, which is what you want for a rule about money
+          — the agent that forgets to name it is the one that spends without
+          asking. `the-agents-that-name-it` is the default and is for a rule
+          about one job.
+      ask-a-person:
+        type: list of group:question-rule
+        surface: S-EXEC
+        tier: core
+        help: when a person has to be asked before something happens
+
+  # `redaction` — the other half of what a policy used to hold — is no longer
+  # here. It moved down beside `interceptor`, because it now takes that kind's
+  # sentence vocabulary by alias and a YAML anchor has to be written before it is
+  # used. The same reason `watch` sits after `interceptor` and says so.
+
+  question-rule:
+    fields:
+      when:
+        # Was `list of anything`, on the one path where money moves. All four
+        # parts of the worked example's own >200 USD rule could be misspelt at
+        # once — `paymnets/issue-refund`, `ammount`, `more-then` — and `pact
+        # check` printed "OK — loaded cleanly". A 250 USD refund then went to a
+        # different question, with a different timeout and a different failure
+        # action, and a phantom tool appeared in the gate's key list.
+        #
+        # `atom:` is gone with it. Nothing ever read a key by that name — the
+        # shape is discriminated by which keys are present — and deleting it from
+        # all three rules of the worked example gave byte-identical gate output.
+        type: list of group:when-this
+        required: yes
+        surface: S-EXEC
+        tier: core
+        help: >
+          the situation that makes this worth asking about. One line per
+          situation, and two shapes exist: `{ tool: payments/issue-refund }`,
+          which means whenever that action is called at all; and
+          `{ tool: payments/issue-refund, arg: amount, more-than: 200 USD }`,
+          which means only when the model asked for more than that. The tool and
+          the action are both checked against `tools:`, so a misspelling is
+          refused here rather than silently gating nothing.
+      because:
+        type: text
+        required: yes
+        surface: S-GEN
+        tier: core
+        help: >
+          why a person is needed here. One sentence. It is shown to whoever is
+          asked, so write it for them.
+      question:
+        type: text
+        required: yes
+        names: questions
+        surface: S-EXEC
+        tier: core
+        help: >
+          which question to put to them, by name — one of the entries in
+          `questions`. The question carries the wording and the shape of the
+          answer, so two rules can share one without repeating either.
+
+  # One situation an approval rule watches for. The tool name carries the action
+  # after a `/`, and both halves are resolved — `crates/pact-loader/src/approvals.rs`
+  # splits it and holds the head against `tools:` and the tail against that
+  # tool's `actions:`, because a plain `names: tools` cannot reach inside a
+  # `<tool>/<action>` spelling.
+  when-this:
+    describe: something an approval rule can watch for
+    fields:
+      tool:
+        type: text
+        required: yes
+        surface: S-EXEC
+        tier: core
+        help: >
+          which action makes this rule apply, written `<tool>/<action>` — for
+          example `payments/issue-refund`. Both halves are checked, so a
+          misspelling is refused here instead of gating nothing.
+          A call that does not say which action it is leaves this rule unapplied
+          and the run says so. To ask about every call to a tool, write one rule
+          per action — that also stops the calls that name no action at all.
+      arg:
+        # A3. `needs-also:` fires on PRESENCE and names ONE field, so it could
+        # say "`arg:` needs `more-than:`" and could not say "and exactly one way
+        # of comparing it". MEASURED, with `needs-also: [more-than]` here:
+        # `{tool: t/go, arg: reason, is: fraud}` was refused with "'arg' is set,
+        # but 'more-than' is not" — a rule the author had written correctly, and
+        # the reason an approval gate could compare nothing except money.
+        type: text
+        needs-one-of: [more-than, is, is-one-of]
+        surface: S-EXEC
+        tier: core
+        help: >
+          which of that action's arguments to look at — one of the names under
+          its `inspects:`. Leave this out and the rule applies to every call.
+      more-than:
+        # `type: money` was right when money was the only thing a gate could
+        # compare, and wrong the moment it was not. MEASURED: a lead score gated
+        # with `more-than: 80` was told to "Write it like `0.05 USD`", and doing
+        # what that said printed "OK — loaded cleanly" and then `pact waits`
+        # showed a live thirty-minute human gate comparing a score to dollars.
+        #
+        # The shape cannot be stated HERE, because it is the shape of an argument
+        # declared in another document — the tool's `takes:`. So the schema is
+        # permissive and `crates/pact-loader/src/money.rs` holds the figure
+        # against what the argument actually is, which is the only place that
+        # knows both.
+        type: text
+        # The type became permissive so a score could be gated by a score. The
+        # OTHER thing `type: money` was doing — telling `currency.rs` to hold
+        # this against what the price list can price — is said here on its own,
+        # because losing it silently reopened `more-than: 200 JPY` gating at
+        # about 1.30 USD on a desk whose refunds run to hundreds.
+        may-be-money: yes
+        needs-also: [arg]
+        surface: S-EXEC
+        tier: core
+        help: >
+          the figure above which a person is asked — `200 USD` for an amount of
+          money, `80` for a score. Written the way that argument is declared in
+          the tool's `takes:`, and written with `arg:`, never on its own.
+      is:
+        # A3. The comparison an approval gate could not make. A tier, a country,
+        # a reason code: none of them is a number, and until `needs-one-of:`
+        # existed none of them could be written at all.
+        type: text
+        needs-also: [arg]
+        surface: S-EXEC
+        tier: core
+        help: >
+          the one value that makes this rule apply — for example
+          `is: enterprise` on a customer tier. For several values write
+          `is-one-of:` instead. Written with `arg:`, never on its own.
+      is-one-of:
+        type: list of text
+        needs-also: [arg]
+        surface: S-EXEC
+        tier: core
+        help: >
+          the values that make this rule apply, any one of them — for example
+          `is-one-of: [enterprise, government]`. Written with `arg:`, never on
+          its own.
+
+  # ── QUESTIONS ───────────────────────────────────────────────────────────────
+  # Something a person is asked, carrying the SHAPE of the answer it expects.
+  #
+  # Eve defines approval STRUCTURALLY: a request is exactly two options, named
+  # approve and deny. Anything else a person might be asked has to borrow that
+  # widget — which is why Eve's own session-token-limit prompt ships as an
+  # Approve/Stop pair rather than as the question it actually is ("this is
+  # getting long; keep going?"). A question needing a number, a choice of three,
+  # or a sentence has nowhere to go at all.
+  #
+  # Here approval is not a concept of its own. It is a question whose answer is
+  # one yes-or-no field, and the very same mechanism carries "how much should we
+  # refund?" without an escape hatch.
+  question:
+    fields:
+      description:
+        type: text
+        required: yes
+        surface: S-GEN
+        tier: core
+        help: what this question is for, in one line
+      says:
+        # Was `asks:`, which meant two different things in two places. Everywhere
+        # else in this file `asks:` is the NAME of a question; here it was the
+        # WORDING. Putting a name here — `asks: is-this-ok` inside
+        # `questions/is-this-ok.yaml` — loaded clean and showed the person the
+        # literal string `is-this-ok` before money moved. `says:` already means
+        # "the words to use" on a stage and on a scheduled port, so this makes
+        # one key mean one thing everywhere.
+        type: text
+        required: yes
+        surface: S-EXEC
+        tier: core
+        help: >
+          the words the person actually reads. Fixed wording that you wrote —
+          never a sentence the model builds, because this is the last hop into
+          the only human control in the system.
+      answer:
+        type: map of answer-shape
+        shapes: *the-answer-shapes
+        required: yes
+        surface: S-EXEC
+        tier: core
+        help: >
+          what a valid answer looks like, one line per thing you want back —
+          for example `approved: yes or no` or `amount: money`. The shapes are
+          `yes or no`, `text`, `money`, `number`, `whole number`, `images`,
+          `audio`, `file`, or `one of a, b, c` to choose between things you
+          name; anything else is refused here rather than at the moment a person
+          is waiting. An answer that does not fit is refused and nothing
+          happens. Two names mean something extra: `because` is the person's
+          reason, and `instead` replaces the action with what the person wrote.
+
+          ANY `yes or no` line here is the gate: answering it `no` stops the
+          thing from happening, whatever you called that line. Write `approved:`
+          when the question is an approval and something honest like
+          `keep-going:` when it is not; both stop on a no. A question with no
+          `yes or no` in it at all — *"how much should we refund?"* — is cleared
+          by being answered, because there is nothing further to say yes to.
+          (This used to follow the SPELLING: a gate called anything but
+          `approved` was granted by any reply at all, so renaming one word in
+          the consent question for the payment connection turned it into a
+          formality and `pact check` said nothing.)
+      shows:
+        type: list of text
+        surface: S-EXEC
+        tier: core
+        help: >
+          which values to put in front of the person — an amount, an order
+          number. They are shown as quoted data in their own box, never folded
+          into your wording, so text a customer supplied cannot read as an
+          instruction to the approver. Which names work depends on where the run
+          stopped. Waiting on an action: any value that action was called with.
+          Waiting because a limit was reached: `spent-so-far`, `steps-taken`,
+          `tool-calls-made`, `time-spent`, `tokens-used`, `which-limit`. Waiting
+          because the conversation got too long: `how-much-over`,
+          `what-was-tried`, `how-long-it-is`. Waiting because somebody on the
+          team could not answer: `who-could-not-answer`, `why-they-could-not`,
+          `who-did-answer`. Waiting at a step of your loop: `the-stage`,
+          `what-the-stage-said`. A name that does not fit where the run stopped
+          is simply not shown.
+      asked-of:
+        # Required. A question with nobody named produces a wait nobody can
+        # answer — it ran the deadline down and then did whatever
+        # `if-nobody-answers:` says, which is a 30-minute hang followed by an
+        # automatic decline, declared and unflagged. The neighbouring case
+        # (`escalate` with nobody to escalate to) was already refused; the base
+        # case was not.
+        type: list of text
+        required: yes
+        surface: S-EXEC
+        tier: core
+        help: >
+          who is asked. Naming nobody means nobody can answer, not that anybody
+          can, so this line is never left out — write the team or the person who
+          really decides.
+      answer-within:
+        type: duration
+        surface: S-GOV
+        tier: core
+        help: >
+          how long they have to answer. Once that time is up the next line
+          applies — somebody has to be watching the clock for that to happen,
+          and that is the job of whatever is running this agent, not of this
+          file. Leave it out and the wait has no end: it lasts until somebody
+          answers.
+      if-nobody-answers:
+        type: one-of
+        choices: [decline, escalate, stop-and-say-so]
+        required: yes
+        needed-when:
+          escalates-to: escalate
+        surface: S-EXEC
+        tier: core
+        help: >
+          what to do when the time runs out. Never approve — silence is not a
+          yes, and there is deliberately no wording here that would make it one.
+          Saying `escalate` needs an `escalates-to:` line beside it, or the
+          deadline arrives, nobody is named, and the wait dead-ends.
+      escalates-to:
+        type: list of text
+        surface: S-EXEC
+        tier: core
+        help: who it goes to next, when the line above says escalate
+
+  # How you know it works. This is the oracle for everything else — model
+  # swapping, learning, and portability all resolve against these checks.
+  evals:
+    fields:
+      description:
+        type: text
+        surface: S-GEN
+        tier: core
+        help: one line on what these checks cover
+      population:
+        type: one-of
+        choices: [authored-enumeration, promoted-traces, sampled-frame]
+        required: yes
+        surface: S-GOV
+        tier: core
+        help: >
+          where these cases came from. `authored-enumeration` means you wrote
+          down the situations you thought of — which is a fine place to start,
+          and it is what the score describes. Reports say so out loud.
+      must-pass:
+        type: percent
+        surface: S-GOV
+        tier: core
+        help: >
+          the share of examples that must come out right. Set it once, from
+          how many cases you plan to write; it must not move under you when you
+          add more.
+      rules:
+        # Was `list of anything`, so every one of the worked example's five rules
+        # was a shape the runner threw away — `rules_of()` kept only plain
+        # strings and all five were maps. An answer breaking the author's own
+        # `must-not-contain: ["refund by", "arrive on"]` graded PASS, and that
+        # empty list was what the model-portability figure and the learning gate
+        # were computed against. A closed group is what makes the vocabulary the
+        # example already uses the vocabulary the checker holds.
+        type: list of group:eval-rule
+        surface: S-GOV
+        tier: core
+        help: >
+          things that must be true of every answer. Five shapes exist and they
+          are the only ones: `must-say-one-of:`, `must-contain:`,
+          `must-not-contain:`, `must-call-before:` and `judged:`. Anything else
+          is refused by name rather than accepted and quietly ignored.
+      metrics:
+        # D19's fifth on-ramp — "expert upload: metrics and rubrics with the
+        # full capability surface DeepEval provides" — had no door. MEASURED:
+        # `grep -n metrics spec/schema.yaml` returned nothing, so writing
+        # `metrics: [{uri: deepeval:faithfulness, threshold: 0.8}]` here got
+        # *"'metrics' is not something evals can have"*, while
+        # `adapters/python/src/pact_adapters/providers.py` — whose own docstring
+        # says a metric is named by URI in YAML — was imported by nothing. A
+        # provider layer serving a field that did not exist.
+        #
+        # A LIST rather than a map, matching `rules:` above it: both are things
+        # that hold for every answer, and neither has a name an author would
+        # think to give it. The URI is the name.
+        type: list of group:metric
+        surface: S-GOV
+        tier: expert
+        help: >
+          ready-made scores to put every answer through, on top of `rules:`.
+          This is the door for somebody who already has a set of measures they
+          trust — write down each one and how high it has to score. A score this
+          machine cannot take is named on the report with a line to type, never
+          quietly skipped.
+      graded-by:
+        # Was `map of text` with no resolution at all, and the shipped example
+        # named `mistral-nemo-12b` — an id in no catalogue and no `served-by:`
+        # row, so the judge that grades every case had no local path (D17). Its
+        # two siblings that bind a model both carry `names: pact:models`; this is
+        # the third, and it is the one that sees every eval case.
+        type: text
+        names: pact:models
+        surface: S-GOV
+        tier: core
+        help: >
+          which model grades the judged rules, by name — one of the entries in
+          `models/catalog.yaml`. Point it at a different model from the one doing
+          the work: a model grading its own work marks its own homework, and
+          `pact check` says so. A model that only runs somewhere else is refused
+          here when `allow-egress:` in workspace.yaml does not list `llm`.
+      cases:
+        type: map of group:case
+        surface: S-GOV
+        tier: core
+        help: the worked examples
+
+  # One rule every answer has to satisfy. A closed set, because a rule nobody
+  # can carry out is a rule that loads and does nothing — the failure this whole
+  # file exists to end, sitting in the one mechanism that decides whether a
+  # money-moving agent is fit to ship.
+  eval-rule:
+    describe: something an eval rule can say
+    fields:
+      must-say-one-of:
+        type: list of text
+        surface: S-GOV
+        tier: core
+        help: >
+          the answer has to state one of these — for example
+          `[approved, declined]`. Wordings that mean the same verdict count.
+      must-contain:
+        type: list of text
+        surface: S-GOV
+        tier: core
+        help: every one of these has to appear in the answer
+      must-not-contain:
+        type: list of text
+        surface: S-GOV
+        tier: core
+        help: none of these may appear in the answer
+      must-call-before:
+        type: group:call-order
+        surface: S-GOV
+        tier: core
+        help: one action has to have been called before another one is
+      judged:
+        type: text
+        surface: S-GOV
+        tier: core
+        help: >
+          something only a reader can decide, in one sentence. It is put to the
+          model named in `graded-by:`. Whatever runs your agents has to have a
+          judge for this to be measured; a run says so when it could not.
+      because:
+        type: text
+        surface: S-GEN
+        tier: core
+        help: why this rule exists. One sentence, for whoever reads the failure.
+
+  # One ready-made score. D19's fifth on-ramp, and the only one of the five that
+  # is NOT sugar for the other four: `rules:` says what an answer has to SAY and
+  # this says what it has to SCORE. A rule is a yes or a no; a metric is a number
+  # against a bar, and no rule shape can say "at least four fifths of the way".
+  #
+  # Deliberately three fields and no more. `because:` is not here, and its
+  # absence is the point: a score explains itself with its own number and its own
+  # provider's words, where a rule needs a human sentence saying why it exists.
+  metric:
+    describe: something a ready-made score can have
+    fields:
+      uri:
+        type: text
+        required: yes
+        surface: S-GOV
+        tier: expert
+        help: >
+          which score to use, written as who provides it, a colon, then what it
+          measures — `deepeval:faithfulness`. Two providers ship: `deepeval:`
+          reaches every score that library has, and `pact:` is the small set
+          PACT takes on its own with no model and nothing installed. A name with
+          no colon in it is refused rather than guessed at, because guessing
+          which provider was meant is how a suite comes to measure something
+          nobody asked for.
+      threshold:
+        # `percent`, so `0.8` and `80%` are one setting with one range. It was
+        # tempting to make this `number`: DeepEval writes `0.8` and an expert
+        # arriving from there will type that. They can — `percent` takes it —
+        # and a support lead reading the same file sees `80%` and knows what it
+        # means, which `number` would never have given them.
+        type: percent
+        surface: S-GOV
+        tier: expert
+        help: >
+          how high that score has to be before an answer counts as passing,
+          written `0.8` or `80%`. Leave it out and the bar is half marks, which
+          is what these scores are normally set to.
+      with:
+        type: map of anything
+        surface: S-GOV
+        tier: expert
+        help: >
+          any settings that score takes, written exactly as its own
+          documentation names them. Nothing is renamed and nothing is filled in
+          for you — one of these scores looks at the last 3 turns by default and
+          another at the last 10, so a value quietly evened out here would change
+          the number without changing the file anybody reads.
+
+  call-order:
+    describe: something a call-order rule can have
+    fields:
+      call:
+        type: text
+        required: yes
+        surface: S-GOV
+        tier: core
+        help: the action that must not happen first, written `<tool>/<action>`
+      first:
+        type: text
+        required: yes
+        surface: S-GOV
+        tier: core
+        help: the action that has to have happened before it, written `<tool>/<action>`
+
+  case:
+    fields:
+      when:
+        type: text
+        required: yes
+        surface: S-GOV
+        tier: core
+        help: the situation, written as you would explain it to a colleague
+      with:
+        type: map of anything
+        surface: S-GOV
+        tier: core
+        help: anything that comes with it — a photo, an attachment
+      expect:
+        type: anything
+        surface: S-GOV
+        tier: core
+        help: what should come back
+      from-these-passages:
+        # A2. `providers.evaluate_metric` has taken a `retrieval_context`
+        # argument since it was written and its ONE caller never passed one, so
+        # `deepeval:faithfulness` was accepted by name and could never return a
+        # score — the reader-table defect running the other way: a parameter
+        # with no author.
+        #
+        # These are the passages you WROTE DOWN, so a grader can check the
+        # answer against the right ones whether or not this machine has an
+        # index. What the run actually retrieved is a different fact and is
+        # reported BY the run: three of the four retrieval metrics never look at
+        # the answer at all, so grading them against a constant you typed scores
+        # your own typing, identically whether the runtime fetched the right
+        # passage, the wrong one, or nothing.
+        #
+        # Named for what the author is writing, not for what DeepEval calls its
+        # argument — the adapter keeps `retrieval_context`, and this group's
+        # neighbours are `when:`, `expect:` and `because:`.
+        type: list of text
+        surface: S-GOV
+        tier: expert
+        help: >
+          the passages the answer was supposed to come from, one per line —
+          what a grader reads when it asks whether the answer is actually
+          grounded in them. Leave it out and the grader uses whatever the run
+          itself retrieved.
+      because:
+        type: text
+        surface: S-GOV
+        tier: core
+        help: why that is the right answer — this is what a grader reads
+      must-also:
+        # The same closed vocabulary `evals.rules` uses, for the same reason: as
+        # `list of anything` it dropped five of the worked example's seven
+        # entries on the floor, and three of the six cases graded against nothing
+        # but their `expect:` line.
+        type: list of group:eval-rule
+        surface: S-GOV
+        tier: core
+        help: >
+          extra things that have to be true for this case, written the same way
+          `rules:` is
+      split:
+        type: one-of
+        choices: [train, validation, held-out, calibration, quarantine]
+        surface: S-GOV
+        tier: expert
+        help: which job this case does. Leave it out and every case counts.
+
+  # What the system may change about itself, and what needs a person.
+  # The split is by blast radius (D23), not by confidence.
+  learning:
+    fields:
+      enabled:
+        # `auto-apply:` used to sit under this line — `yes-no`, `tier: expert`,
+        # carrying `needs-also: [may-improve-on-its-own]`. Two settings for ONE
+        # decision, six spellings for three real states, and they could disagree
+        # with each other in silence. MEASURED: `enabled: propose-only` beside
+        # `auto-apply: yes` printed *"OK — loaded cleanly"*, exit 0 — while
+        # `may_apply_without_a_person()` reads `enabled:` first and throws the
+        # other line away, so the author's `yes` decided nothing and nothing said
+        # so. The other direction was worse: `enabled: yes` with no `auto-apply:`
+        # line defaulted to no, so the word `yes` on the one setting that decides
+        # whether a system rewrites itself with nobody watching meant nothing at
+        # all. It is one setting now, and each choice is named for WHAT HAPPENS
+        # rather than for how keen it sounds — `yes` was the third state's whole
+        # description, and `yes` describes nothing.
+        #
+        # The `may-improve-on-its-own:` obligation moved here with it, onto the
+        # value that earns it. Hung off `auto-apply:` it fired on PRESENCE, so
+        # `auto-apply: no` — the line meaning *"nothing applies itself"* — also
+        # demanded a list of what may.
+        type: one-of
+        choices: [off, propose-only, applies-safe-changes-itself]
+        required: yes
+        needed-when:
+          may-improve-on-its-own: applies-safe-changes-itself
+        surface: S-GOV
+        tier: core
+        help: >
+          what this may do about getting better at its job, and it is the line
+          that decides whether the agent can change without a person. `off`
+          means it never suggests anything. `propose-only` is the normal answer
+          and the one to start with: it suggests improvements, every one of them
+          comes to your review, and nothing about the agent moves until somebody
+          says yes. `applies-safe-changes-itself` is the serious one — wording
+          changes go live with nobody reading them first and you find out
+          afterwards, from the record. Pick it only once you have enough example
+          cases that a score can tell a real improvement from a lucky run, and
+          write `may-improve-on-its-own:` beside it naming exactly what may
+          change that way.
+      may-improve-on-its-own:
+        # `policy-clauses` is gone from this list. It was a choice here AND a
+        # choice of `needs-a-person-to-approve:` below, while the help three
+        # lines down said it "always needs a person" — so the list offered the
+        # one value its own documentation said was never valid in it, and
+        # `may-improve-on-its-own: [..., policy-clauses]` with
+        # `needs-a-person-to-approve: []` loaded clean. Deleting it makes the
+        # sentence true rather than advisory.
+        type: list of one-of
+        choices: [phrasing, examples, skill-notes, when-skills-are-used]
+        surface: S-GOV
+        tier: core
+        # The first clause is what a missing-companion diagnostic quotes back —
+        # *"nothing says which safe changes it may make on its own"* — so it is
+        # written to be a name for the setting rather than an opening sentence
+        # about it. It used to start *"safe changes — these change how it words
+        # things"*, and the message read *"so nothing says safe changes — these
+        # change how it words things"*.
+        help: >
+          which safe changes it may make on its own. These change how it words
+          things, never what it may do. `when-skills-are-used` changes which
+          skill it picks, so it is off unless you ask for it. Written rules are
+          not here at all: changing one always needs a person, which is what
+          `needs-a-person-to-approve:` below is for.
+      needs-a-person-to-approve:
+        type: list of one-of
+        choices: [tools, permissions, team, limits, evals, policy-clauses]
+        surface: S-GOV
+        tier: core
+        help: changes to what it can DO, which always need review
+      keep-only-if:
+        type: one-of
+        choices: [a-person-approves-it, scores-higher-on-evals]
+        surface: S-GOV
+        tier: core
+        help: the condition an improvement must meet to be kept
+      review:
+        type: one-of
+        choices: [daily, weekly, monthly, manual]
+        surface: S-GOV
+        tier: core
+        help: >
+          how often proposed changes are shown to the team. Whatever runs your
+          agents has to put this on somebody's calendar — a `port` with
+          `kind: schedule` is how you write that down here. PACT records the
+          interval and does not keep it.
+          (The line used to promise that `pact check` told you if nothing ran
+          this. It did not: on a workspace shipping `review: weekly` it printed
+          one line and nothing else. Help text is the only documentation the
+          reader ever gets, so a promise nothing keeps is worse than no
+          promise.)
+      cycle-limits:
+        type: group:cycle-limits
+        surface: S-GOV
+        tier: core
+        help: >
+          how much improving it may do per cycle and per month. `per-cycle` and
+          `evals` are held by the thing that runs the cycle, before it spends
+          anything. `per-month` is recorded and NOT held — nothing here sees a
+          month — and every cycle says so in its own report rather than letting
+          you read an unenforced cap as an enforced one.
+      models:
+        # Was `map of anything`, which made it the FOURTH model binding and the
+        # only one outside every check there is: `agent.model`, `evals.graded-by`
+        # and `context-policy.summarised-by` all carry `names: pact:models` and
+        # all three are walked by the egress rule, while `models: {execution:
+        # {role: llm, model: claude-opus-5}}` under `allow-egress: []` printed
+        # "OK — loaded cleanly". `map of anything` also meant a misspelt key
+        # loaded clean, which is the exact reason `workspace.skills` stopped
+        # being one.
+        type: map of group:learning-model
+        surface: S-CAP
+        tier: expert
+        help: which model proposes improvements, kept separate from the one working
+      drift:
+        type: group:drift
+        surface: S-GOV
+        tier: expert
+        help: how far it may move from a reviewed baseline before a person looks
+
+  learning-model:
+    describe: something a model binding can have
+    fields:
+      role:
+        type: one-of
+        # B9. The six choices were all MODEL roles (R30's job), while the help
+        # promised the whole boundary. MEASURED under `allow-egress: []`: a tool
+        # with `url: https://vendor.example.com/upload`, `method: post` and an
+        # upload action printed "OK — loaded cleanly (19 settings)" — no resource
+        # file needed, which is why it is the door an attacker writes.
+        #
+        # `tools` is the seventh PART, not a seventh model role, and it is ONE
+        # setting rather than two: a sibling hostname allow-list would be R61
+        # (two settings for what must never leave a workspace) and R20 (a name
+        # only the host can resolve) at the same time.
+        #
+        # Which fields carry an outbound address is data — `reaches-outside:` —
+        # so the next one joins by existing rather than by being remembered.
+        choices: [llm, stt, tts, embedder, judge, reflector, tools]
+        required: yes
+        surface: S-CAP
+        tier: expert
+        help: >
+          what this model is for here — the same words `allow-egress:` uses, so
+          the two lines can be read against each other.
+      model:
+        type: text
+        names: pact:models
+        surface: S-CAP
+        tier: expert
+        help: >
+          which exact model, by the id `models/catalog.yaml` publishes. Leave it
+          out and PACT picks. One that only runs somewhere else is refused when
+          `allow-egress:` does not let a model leave the box.
+
+  cycle-limits:
+    describe: something a cycle limit can be
+    fields:
+      per-cycle:
+        type: integer
+        at-least: 1
+        surface: S-GOV
+        tier: core
+        help: how many improvements it may propose in one round
+      per-month:
+        type: money
+        surface: S-GOV
+        tier: core
+        help: how much improving itself may cost in a month
+      evals:
+        type: integer
+        at-least: 1
+        surface: S-GOV
+        tier: core
+        help: how many eval runs one round of improving may spend
+
+  drift:
+    describe: something a drift limit can be
+    fields:
+      at-most:
+        # Was a hardcoded 0.5 in `learning.py` with `learning.drift:` typed
+        # `map of anything` and read by nobody, so the one number governing how
+        # far a self-improving agent may walk from its reviewed baseline was in
+        # Python and not in the file the reviewer reads.
+        type: percent
+        surface: S-GOV
+        tier: core
+        help: >
+          how far the wording may move from the version a person last approved,
+          all changes added up, before a person has to look again. 50% is the
+          default. It is cumulative on purpose: a series of individually
+          reasonable edits is how an agent ends up somewhere nobody agreed to.
+
+  # ── PORTS ───────────────────────────────────────────────────────────────────
+  # A port is how the outside world reaches an agent, and how the agent reaches
+  # back. Eve ships eight bespoke channel implementations plus a separate
+  # schedule subsystem plus a subagent bridge; internally its own source already
+  # treats all three as the same kind of value (`SCHEDULE_ADAPTER` and
+  # `SUBAGENT_ADAPTER` are channel adapters). This is that identification, made
+  # explicit, so a ninth platform costs a `resources/` entry and not a subsystem.
+  #
+  # PACT DECLARES a port. The runtime CONNECTS it (D24). Nothing here knows what
+  # a Slack block looks like.
+  #
+  # There is no separate `schedule` kind any more, and there never should have
+  # been two. `kind: schedule` was already a choice here, and a port written that
+  # way could not be made to work — `every:` and `says:` were refused as "not
+  # something a port can have", and the same file with those two lines deleted
+  # loaded clean: a port declaring itself a timer that can never fire, accepted
+  # in silence. The three fields the clock needs now live here, and `kind:
+  # schedule` demands the one that makes it fire.
+  #
+  # And then the same silence turned up from the other side. `kind:` was
+  # `required: yes` with four choices and only one of them did anything:
+  # measured on a copy of the worked example, changing `ports/weekly-review.yaml`
+  # from `kind: schedule` to `kind: event` — leaving `every: Friday at 4pm`,
+  # `says:` and `if-still-running: skip` exactly where they were — printed
+  # *"OK — loaded cleanly (492 settings)"* and exited 0. So `kind:` is no longer
+  # required and no longer the only thing that can answer the question: a port
+  # carrying `every:` IS a timer, because nothing else has an `every:` line, and
+  # asking the author to say it twice is what let the two copies disagree.
+  # `kind:` stays writable, for the three arrivals nothing can tell apart and for
+  # anybody who prefers to say `schedule` out loud beside their `every:`. The
+  # clock's three settings on a port that is not the clock are refused where the
+  # author is, in `crates/pact-loader/src/ports.rs` — `needed-when:` runs one
+  # way only (this value makes that field necessary) and this is the other way
+  # round, which no field can say about itself.
+  port:
+    fields:
+      description:
+        type: text
+        required: yes
+        surface: S-GEN
+        tier: core
+        help: what this connection is for, in one line
+      kind:
+        # NOT required, for the reason `agent.name` is not: the document
+        # already answers it wherever it can. A port with an `every:` line is a
+        # timer — nothing else has one — so `kind: schedule` beside it was the
+        # author writing down a second time what they had written once, and two
+        # copies of one fact is how the two came to disagree in silence.
+        # Writing it is still allowed and still agrees.
+        type: one-of
+        choices: [conversation, schedule, inbound-call, event]
+        needed-when:
+          every: schedule
+        surface: S-TOPO
+        tier: core
+        help: >
+          how work arrives. `conversation` is a person talking to it,
+          `schedule` is the clock — write `every:` beside it saying when —
+          `inbound-call` is another system asking, `event` is something
+          happening elsewhere. You can leave this line out on a timer: an
+          `every:` line already says it is one. Everywhere else, write it, or
+          nothing knows how to open this connection.
+      every:
+        type: text
+        surface: S-TOPO
+        tier: core
+        # `kind: schedule` with no `every:` is refused, and the refusal quotes
+        # this setting back — *"so nothing says …"*. It quoted the first clause
+        # of the help below and read *"so nothing says when to run — plain words
+        # like `weekday mornings at 9`"*: an example dragged into a sentence
+        # about its absence. `summary:` is the name of the setting, which is what
+        # that sentence needs; `help:` stays the explanation.
+        summary: when the clock should start a run
+        help: >
+          when to run, on a port that is a timer — plain words like `weekday
+          mornings at 9`, or a cron line if you know them. This line is what
+          makes a port a timer, so it is the only one of these three you need:
+          with it, `kind:` can be left out. On a port that is anything else it
+          is refused, because there the clock never reads it.
+      says:
+        type: text
+        surface: S-GEN
+        tier: core
+        help: >
+          on a timer, what to ask the agent to do each time. Only a timer runs
+          by itself with nobody talking to it, so on any other port this is
+          wording nothing will ever read and it is refused.
+      if-still-running:
+        type: one-of
+        choices: [skip, queue, cancel-previous]
+        surface: S-CTRL
+        tier: core
+        help: >
+          on a timer, what to do when the last run has not finished. Eve has no
+          answer to this at all, so a slow job quietly overlaps itself. Only a
+          timer can start again while it is still going, so on any other port
+          this is refused.
+      through:
+        type: text
+        surface: S-CAP
+        tier: core
+        help: >
+          which connected system carries this, by name — the one your runtime
+          already has set up. Leave it out for the built-in web endpoint.
+      answers:
+        type: text
+        required: yes
+        names: agents
+        surface: S-TOPO
+        tier: core
+        help: which agent handles what arrives here
+      same-conversation-when:
+        type: list of text
+        surface: S-TOPO
+        tier: core
+        help: >
+          what makes two messages part of the same conversation — usually the
+          thread they are in. Get this wrong and every message starts over, or
+          unrelated people share one memory.
+      who-can-reach-it:
+        type: list of text
+        surface: S-EXEC
+        tier: core
+        help: >
+          who is allowed to start work here. Naming nobody means nobody, not
+          everybody.
+      remembers:
+        # Was `map of anything` / S-GEN, which put the INGRESS — the one place
+        # externally-supplied content lands — in the only blast-radius class the
+        # learning loop may still change without a person (§8.3 CLASS-1), and
+        # left it without the three controls the `state` group exists to force:
+        # `lasts:`, `forget-after:` and `never-from:`. It is the same word as
+        # `agent.remembers`, so it is now the same governance class.
+        type: map of group:state
+        surface: S-GOV
+        tier: expert
+        help: what this port keeps between messages, such as where it last replied
+
+  # ── LOOP ────────────────────────────────────────────────────────────────────
+  # How the agent thinks, as something you can read and change.
+  #
+  # Eve's loop is a constant: `stopWhen: isStepCount(1)` is the only stop
+  # condition in the whole framework, and whether to continue is one hardcoded
+  # boolean. You can change its tools and its wording, never its shape.
+  loop:
+    fields:
+      description:
+        type: text
+        surface: S-GEN
+        tier: core
+        help: what shape of thinking this is, in one line
+      based-on:
+        # `agent.loop:` twelve lines up already carried `or-one-of:` and caught
+        # this exact typo; the field its own help calls the one "most people only
+        # ever set" carried nothing, so `based-on: pact:loop/carefull` printed
+        # "loaded cleanly" and the run refused it later, in another language.
+        # `names: []` because a workspace loop name is refused here too —
+        # `Loop.from_library` only knows the two shipped shapes.
+        type: text
+        or-one-of: [pact:loop/standard, pact:loop/plan-then-do, pact:loop/react,
+                    pact:loop/reflexion, pact:loop/tree-of-thought,
+                    pact:loop/answer-more-than-once]
+        names: []
+        surface: S-CTRL
+        tier: core
+        help: >
+          a ready-made shape to start from: `pact:loop/standard` or
+          `pact:loop/plan-then-do`. Most people only ever set this. A name
+          outside those two is refused, and the message names both.
+      steps:
+        type: map of group:stage
+        surface: S-CTRL
+        tier: expert
+        help: the named stages this agent moves through
+      starts-at:
+        type: text
+        names: ^steps
+        surface: S-CTRL
+        tier: expert
+        help: which stage runs first
+
+  # Called `stage` because that is the word the author reads everywhere else —
+  # in this file's own help text, in `loops/careful.yaml`, and in every run-time
+  # message. It was called `phase` for one round, and the only thing that word
+  # ever reached was the diagnostic: `'thn' is not something a phase can have`,
+  # a name appearing nowhere the author had been.
+  stage:
+    fields:
+      does:
+        type: one-of
+        choices: [think, use-tools, check-its-work, ask-someone, answer]
+        required: yes
+        needed-when:
+          asks: ask-someone
+        surface: S-CTRL
+        tier: expert
+        help: >
+          what happens in this stage. `ask-someone` needs an `asks:` line beside
+          it naming the question, or the stage stops with wording and nothing
+          else — nobody named to answer, no deadline, no answer shape, which
+          from the outside is a hang.
+      says:
+        type: text
+        surface: S-GEN
+        tier: core
+        help: >
+          the extra instruction for this stage only, in your own words — for
+          example `Say what you plan to do. Do not do it yet.` Leave it out and
+          the stage's built-in wording is used. This is the one field here a
+          non-technical author is expected to touch, so it is core tier.
+      asks:
+        type: text
+        names: questions
+        surface: S-EXEC
+        tier: core
+        # `does: ask-someone` with no `asks:` is refused, and the refusal quotes
+        # this setting back. Reading the first clause of the help below, it read
+        # *"so nothing says for a stage that does `ask-someone`"* — the
+        # condition, restated, where the name of the missing setting belonged.
+        summary: which question to put to them
+        help: >
+          which question to put to them on a stage that does `ask-someone`, by
+          name — one of the entries in `questions`. Without it the stage stops
+          with wording and nothing else: nobody named to answer, no deadline,
+          and no answer shape, which from the outside is a hang.
+      then:
+        # Was `map of text`, which contradicted its own help text on the next
+        # line: the vocabulary is closed, so `then: {finished: re-read}` loaded
+        # clean and failed later, in the other language, in a branch that may be
+        # taken one run in fifty.
+        type: group:outcome
+        surface: S-CTRL
+        tier: expert
+        help: >
+          where to go next, by outcome. There are three outcomes and they are
+          the only ones: `used-a-tool`, `answered`, and `too-many-times` (which
+          only happens when `at-most` is reached). `done` is the finish line —
+          for example `used-a-tool: work`, `answered: done`.
+          `answered` with nowhere to go finishes the run. `too-many-times` with
+          nowhere to go goes wherever `answered:` goes, so a stage that has used
+          up its turns hands on rather than stopping — write `too-many-times:`
+          yourself if you want it to stop. `used-a-tool` with nowhere to go
+          stops the run and says which line to add.
+      may-use:
+        type: list of text
+        # An agent draws from `tools:` and `skills:` on its own `uses:` line, and
+        # from `agents:` through `team:`. A stage only ever NARROWS that, so it
+        # has to draw from all three — otherwise there is something the agent may
+        # use that no stage of its loop can mention, which is a hole and not a
+        # narrowing. Skills were that hole, on the one stage the worked example
+        # exists for: `re-read` reads a decision back against
+        # `skills/refund-policy/SKILL.md` and could not say so, and was told to
+        # write `tools/refund-policy.yaml` — a second copy of a document already
+        # in the tree, under a kind nothing reads it as.
+        names: [tools, skills, knowledge, agents]
+        surface: S-ROUTE
+        tier: expert
+        help: >
+          what this stage may reach: any of the tools, written procedures and
+          teammates the agent itself may use, and nothing else. Say nothing and a
+          `use-tools` stage gets all of them while every other stage gets none —
+          which is what makes a `think` stage think instead of reaching for the
+          first tool it recognises. Narrowing per stage is the cheapest accuracy
+          win on a smaller model: the stage that re-reads a refund decision can
+          name the written refund policy and not the payment tool.
+      at-most:
+        type: integer
+        at-least: 1
+        surface: S-GOV
+        tier: expert
+        help: >
+          how many times this stage may run. Reaching it produces the
+          `too-many-times` outcome, so you can send the agent somewhere sensible
+          — and if you write no `too-many-times:` line it goes wherever
+          `answered:` goes.
+
+  # The three ways a stage can end. A group rather than `map of text` so the
+  # closed vocabulary in the help above is the vocabulary the validator holds.
+  outcome:
+    describe: an outcome a stage can end in
+    fields:
+      used-a-tool:
+        type: text
+        names: ^steps
+        or-one-of: [done]
+        surface: S-CTRL
+        tier: expert
+        help: where to go when the stage called a tool
+      answered:
+        type: text
+        names: ^steps
+        or-one-of: [done]
+        surface: S-CTRL
+        tier: expert
+        help: where to go when the stage produced an answer
+      too-many-times:
+        type: text
+        names: ^steps
+        or-one-of: [done]
+        surface: S-CTRL
+        tier: expert
+        help: where to go when the stage has run its `at-most:` times
+
+  # ── CONTEXT POLICY ──────────────────────────────────────────────────────────
+  # What to do when the conversation outgrows what the model can hold.
+  #
+  # Every agent framework hits this; most answer it once, in code. Eve summarises
+  # with a fixed recipe, and each hardcoded piece of it is a field here instead:
+  #   * the list of things to try is `COMPACTION_HEURISTICS`, a private const
+  #     with exactly one entry (`harness/compaction.ts:122`) → `then:`
+  #   * the recent window is the number 10 (`execution/session.ts:6`) → `down-to:`
+  #   * thinking is stripped every time, with no way to keep it
+  #     (`harness/compaction.ts:399-411`) → a step you write, or nothing happens
+  #   * nothing can be marked must-keep, anywhere → `always-keep:`
+  #   * when it still does not fit, it sends it anyway and says nothing
+  #     (`harness/compaction.ts:241`) → `if-it-still-does-not-fit:`
+  # The two numbers Eve does expose are `thresholdPercent` and `model`; they are
+  # `when-full:` and `summarised-by:` below.
+  context-policy:
+    fields:
+      description:
+        type: text
+        surface: S-GEN
+        tier: core
+        help: what this is protecting, in one line
+      when-full:
+        type: percent
+        surface: S-CTRL
+        tier: core
+        help: >
+          how full to let the conversation get before tidying it, as a share of
+          what the model can hold. 90% is a sensible default.
+      always-keep:
+        type: list of text
+        surface: S-CTRL
+        tier: core
+        help: >
+          what must survive tidying no matter what — for example
+          `the refund policy`, `anything a person approved`. Nothing else in
+          this project can pin content, and losing an approval record is the
+          expensive kind of mistake.
+      then:
+        type: list of group:tidy-step
+        surface: S-CTRL
+        tier: expert
+        help: >
+          what to try, in order, until it fits. Each one is applied on top of
+          the one before, so a later step always sees the shortened version —
+          write them gentlest first.
+      summarised-by:
+        type: text
+        # Same resolution as `agent.model`, and it was needed here more: the
+        # shipped example wrote `summarised-by: models/summariser`, which looked
+        # like a path, was not a model id, named nothing in the workspace and
+        # could never have resolved to anything.
+        names: pact:models
+        surface: S-CAP
+        tier: expert
+        help: >
+          which model writes the summary, by name. Keep it separate from the one
+          doing the work: a weaker model summarising its own history compounds
+          its own mistakes. It is a real model call and it costs money — one per
+          tidy — so pick a small one, and note that a run says
+          `summarised-by-cost` when nothing could tell it what that call cost. A
+          model that only runs somewhere else is refused here when
+          `allow-egress:` in workspace.yaml does not list `llm`.
+      if-it-still-does-not-fit:
+        type: one-of
+        choices: [use-it-anyway, ask-a-person, stop]
+        needed-when:
+          asks: ask-a-person
+        surface: S-GOV
+        tier: core
+        help: >
+          what to do when every step above has run and the conversation is
+          still too long. `use-it-anyway` carries on and writes down that it
+          did; the other two refuse to send something the model cannot hold.
+      asks:
+        type: text
+        names: questions
+        surface: S-EXEC
+        tier: core
+        # Same setting, same sentence, same `summary:` — see `limits.asks`.
+        summary: which question to put to them
+        help: >
+          which question to put to them when the line above says ask-a-person,
+          by name. Every place in this file that can stop and ask has one of
+          these — including `does: ask-someone` on a stage: a run that stops
+          with nothing to ask is a run that hangs.
+
+  tidy-step:
+    fields:
+      what:
+        type: one-of
+        choices: [shorten-long-results, drop-parts, summarise-older, keep-recent-only]
+        required: yes
+        surface: S-CTRL
+        tier: expert
+        help: >
+          which tidying move this is. `summarise-older` folds older messages into
+          one; pictures and voice messages in them are kept beside the summary,
+          because the summarising model cannot read them and losing them is not
+          something you asked for. `drop-parts` is the only move that throws a
+          kind of content away, and it does it because you named it.
+      applies-to:
+        type: text
+        surface: S-CTRL
+        tier: expert
+        help: >
+          which part of the conversation it touches. For `drop-parts` name a
+          kind of content — `the model's own thinking`, `pictures`,
+          `tool results`. Thinking is KEPT unless a step here says to drop it;
+          most frameworks throw it away for you and never mention it.
+      down-to:
+        type: text
+        surface: S-CTRL
+        tier: expert
+        help: >
+          how much to leave. Three ways to say it: a size (`2000 characters`,
+          `4000 words`), a count (`the last 10 messages`), or a landmark
+          (`everything since the last approval`). A landmark is the safe one —
+          a count throws away the same amount whether messages are long or
+          short.
+
+  # ── INTERCEPTORS ────────────────────────────────────────────────────────────
+  # Something that can CHANGE what happens, not merely watch it.
+  #
+  # Eve has 28 lifecycle events and all of them are observe-only — its own source
+  # says so: "Handlers are observe-only. They cannot inject model context." So
+  # there is no way to redact a value before it reaches the model, or to stop a
+  # tool call on a condition the approval rules cannot express.
+  interceptor:
+    fields:
+      description:
+        type: text
+        required: yes
+        surface: S-GEN
+        tier: core
+        help: what this changes and why
+      when:
+        # The three closed lists ARE the vocabulary — nothing anywhere else
+        # holds a copy. For a round this was `type: text` with no constraint, so
+        # `pact check` said `when: banana` was fine and the refusal happened
+        # later, in another language, in a process the author never starts.
+        #
+        # A LIST, because one address was one moment and a rule that has to run
+        # at two had to be written twice. The worked example shipped the proof:
+        # `interceptors/redact-card-numbers.yaml` and
+        # `interceptors/redact-card-numbers-in-tool-calls.yaml` differed in
+        # exactly two lines — `description:` and `when:` — and carried the same
+        # `may:`, the same `applies-to:` and the same two sentences. Two copies
+        # of one rule is two places to add the next thing that must be hidden and
+        # two places for them to disagree, which is the argument this file makes
+        # everywhere else. Eve cannot express either shape: all 28 of its
+        # lifecycle events are observe-only.
+        #
+        # A bare address still loads, as the one-element list it means — every
+        # rule that names one moment stays exactly as it was written, and nobody
+        # has to learn a list to write their first interceptor.
+        type: list of event-address
+        parts: &the-address-vocabulary
+          part: [session, turn, step, action]
+          thing:
+            - message
+            - reasoning
+            - tool
+            - approval
+            - input
+            - compaction
+            - delegate
+            - model
+            - run
+            - stage
+            - limit
+          moment: [requested, before, started, after, completed, failed, cancelled]
+        # Well-formed is not the same as REACHED. `parts:` above will spell
+        # `session.tool.before` quite happily and no run ever arrives there, so a
+        # rule bound to it loads, is never run, and protects nothing — the "loads
+        # and does nothing" failure `type: event-address` was added to end,
+        # surviving one hop along. These are the moments a rule is handed the run
+        # and may change it, which is fewer than the moments a run HAS: an
+        # interceptor is offered five, a watch thirty. Two lists rather than one
+        # narrower `parts:`, because one list could only ever be right for one of
+        # the two fields that carry an address.
+        reaches:
+          - step.message.before      # before the customer's words reach the model
+          - step.message.after       # before a step's own words are written down
+          - turn.message.after       # before the reply goes back
+          - step.tool.before         # before a value is handed to a tool
+          # What came BACK. Every other moment here is "words are about to
+          # leave", so nothing saw a RESULT: a card number the agent typed was
+          # hidden and the same card number a tool returned was not, while
+          # `redaction.yaml`'s own promise is "what must never leave this
+          # workspace". A watch already binds here, which is how we know a run
+          # reaches it — the chain was simply never handed it.
+          - step.tool.completed      # after a tool has answered
+          - step.delegate.before     # before a teammate is asked
+        required: yes
+        surface: S-CTRL
+        tier: core
+        help: >
+          the moments it runs at. Write one on a line of its own with a `- ` in
+          front, as `<part>.<thing>.<moment>` — a card-number rule that has to
+          catch what the customer typed AND what the agent is about to hand to a
+          tool reads `- step.message.before` then `- step.tool.before`, and the
+          same rule runs at both. One moment on its own can stay on the `when:`
+          line with no dash, which is all most rules ever need. Each of the three
+          words comes from a fixed list, and a word outside it is refused naming
+          which of the three is wrong and what belongs there. Five moments hand a
+          rule the run and let it change what happens: `step.message.before`,
+          `step.message.after`, `turn.message.after`, `step.tool.before` and
+          `step.delegate.before`. A moment outside those is refused too, because
+          a rule bound where nothing hands it anything never fires. Each of your
+          sentences has to be carried out at at least one of the moments you
+          name, or the whole file is refused with the moments to type. A thing of
+          your own goes behind an `x-` prefix.
+      applies-to:
+        # The workspace/agent split, written on the RULE rather than as a second
+        # binding field. Redaction was opt-in per agent while watching — which
+        # can do nothing — was workspace-wide, so the worked example's two
+        # card-number rules covered one of its three agents and the other two
+        # read customer tickets unprotected. The polarity was backwards from the
+        # argument this file already makes for keeping `watch:` workspace-scoped.
+        type: one-of
+        choices: [the-agents-that-name-it, every-agent]
+        surface: S-EXEC
+        tier: core
+        help: >
+          who this covers. `the-agents-that-name-it` is the default and is what
+          you want for a rule about one job. `every-agent` covers the whole
+          workspace and cannot be switched off by an agent — which is what you
+          want for hiding card numbers, because the agent that forgets to list
+          it is the one that leaks.
+      runs-at:
+        # Order between two rules bound to the same moment was the FILENAME,
+        # sorted alphabetically — load-bearing and invisible. A rule that hides
+        # card numbers and a rule that stops a runaway refund ran in whichever
+        # order their files happened to sort in, so renaming a file changed what
+        # the model saw, and nothing in the tree said so.
+        #
+        # A number rather than a `before:`/`after:` pair naming other rules:
+        # a pair is a graph, and a graph of rules is a cycle waiting to be
+        # written and a diagnostic nobody wants to read. A number sorts, ties
+        # break by name as before, and the author can leave it out entirely —
+        # which is why it is not required and why every file written before this
+        # existed still means what it meant.
+        type: integer
+        # One, not nought: `runs-at: 0` reads as "before everything" and means
+        # the same as `runs-at: 1`, so allowing both gives two spellings of one
+        # position. Caught in the author's editor rather than in another
+        # language, in a process they never start.
+        at-least: 1
+        surface: S-CTRL
+        tier: expert
+        help: >
+          when this rule runs, if two rules watch the same moment: lower numbers
+          run first. Leave it out and it runs after the ones that name a number,
+          in alphabetical order by name. Only worth writing when one rule has to
+          see what another has already changed — a rule that hides card numbers
+          should run before one that counts what was said.
+      may:
+        type: list of one-of
+        choices: [hide-values, stop-the-run, send-elsewhere]
+        required: yes
+        needs-also: [rules]
+        surface: S-EXEC
+        tier: core
+        help: >
+          what it is allowed to do. Anything beyond this list is refused, so an
+          interceptor cannot quietly grow new powers. Two of them only work at
+          certain moments: `hide-values` needs a `when:` that carries values to
+          replace, and `send-elsewhere` works only at `step.tool.before` —
+          before a tool runs is the only moment at which the run can still go
+          somewhere else instead of running it. A rule that says one of those
+          anywhere else is refused when the file is read, naming the moment to
+          write instead.
+      rules:
+        type: list of text
+        # The sentences, as data beside the help text that describes them. Every
+        # one of them says which power it needs and which moments carry it out,
+        # so `pact check` refuses a rule nothing can carry out instead of
+        # accepting it and leaving the refusal to the thing that runs it.
+        #
+        # THE ANCHOR IS THE POINT. `redaction.hide` says the same act — hide this
+        # — and for a round it said it in its OWN closed list, so the two halves
+        # of one idea were missing what the other had. Measured, mirrored: `hide:
+        # [replace anything that looks like a card number with "[gone]"]` was
+        # refused, and `rules: [anything that looks like a card number]` was
+        # refused, and each of those sentences is the shipped spelling of the
+        # other file. That is D13's one-thing-one-name broken in the place it
+        # costs most: an author who learned to write a redaction had learned
+        # nothing about writing an interceptor, and the thing they were writing
+        # about was a leaked card number both times. One list, aliased, so the
+        # next sentence added here is added to both by construction.
+        forms: &the-hiding-sentences
+          declares: may
+          binds: when
+          # The four things a rule can be told to recognise, as DATA beside the
+          # sentences that use them. They lived only in `interceptors.RECOGNISES`
+          # for a round, so `replace anything that looks like a passport number`
+          # printed "loaded cleanly" here and was refused by name in Python —
+          # while this field's own help says such a sentence is "never accepted
+          # and quietly ignored".
+          recognises:
+            a thing: [card number, bank account, email address, phone number]
+          # And the holes that name something the workspace has. `<a tool>` used
+          # to be free text inside the sentence, so `if paymnets is called more
+          # than 1 time` loaded clean and the second refund went through — the
+          # file's own comment says it "used to be" exactly this failure and was
+          # fixed for the sentence vocabulary but not for the name inside it.
+          #
+          # `<stage>` is deliberately absent: an interceptor document does not
+          # know which agent will name it, so it does not know which loop's
+          # stages to hold it against. `Loop.check_against` does that before the
+          # first model call, which is the earliest anything can.
+          resolve:
+            a tool: tools
+          one-of:
+            - say: 'replace anything that looks like <a thing> with "<text?>"'
+              needs: hide-values
+              at:
+                - step.message.before
+                - step.message.after
+                - step.tool.before
+                # What a tool handed back. Hiding was one-directional until
+                # this line: the card number the agent typed was masked and the
+                # same card number a tool returned was not.
+                - step.tool.completed
+                - turn.message.after
+            # The one sentence in the list that is not a rule on its own: it
+            # reuses the words the sentence above it left behind, so written
+            # first it has nothing to be the same as and hides nothing at all.
+            #
+            # `continues:` says so as DATA, because until it existed the fact
+            # lived only in the adapter. Measured on a two-file workspace: an
+            # interceptor whose one rule was `do the same for anything that
+            # looks like a card number` printed `OK — … loaded cleanly (17
+            # settings)` and was then refused by `Chain.from_document` — the
+            # author's own tool passing a file the run rejects, which is the
+            # split this whole `forms:` block exists to close. Sharing the list
+            # with `redaction.hide` doubled the surface: the same sentence, in
+            # the same shape, in the other file.
+            #
+            # What it means is derived rather than listed: an earlier sentence
+            # in the same list that needs the SAME power and does not itself
+            # continue. A `do the same …` cannot carry on from `stop and say
+            # "…"`, and nothing has to write down that it cannot.
+            - say: do the same for anything that looks like <a thing>
+              needs: hide-values
+              continues: yes
+              at:
+                - step.message.before
+                - step.message.after
+                - step.tool.before
+                # What a tool handed back. Hiding was one-directional until
+                # this line: the card number the agent typed was masked and the
+                # same card number a tool returned was not.
+                - step.tool.completed
+                - turn.message.after
+            # The sentence `redaction.hide` had and this field did not. It is
+            # `replace ... with "..."` with the replacement left out, and what it
+            # leaves behind is `[removed]` — which is what a person writing a
+            # list of things that must never leave means, and is why they should
+            # not have to name a replacement to say it. A `hide:` list of three
+            # of these was the whole shipped redaction file, and writing the same
+            # three under `rules:` was refused.
+            - say: anything that looks like <a thing>
+              needs: hide-values
+              at:
+                - step.message.before
+                - step.message.after
+                - step.tool.before
+                # What a tool handed back. Hiding was one-directional until
+                # this line: the card number the agent typed was masked and the
+                # same card number a tool returned was not.
+                - step.tool.completed
+                - turn.message.after
+            - say: >-
+                if <a tool> is called more than <n> time[s] in one run, stop and
+                say "<why>"
+              needs: stop-the-run
+              at: [step.tool.before]
+            - say: >-
+                if <a tool> is called more than <n> time[s] in one run, go to
+                [the ]<stage>[ stage] instead
+              needs: send-elsewhere
+              at: [step.tool.before]
+            # A1. The first sentence in this list whose CONDITION reads the
+            # answer. Both stopping sentences above it count tool calls and are
+            # pinned to `step.tool.before`, so `may: [stop-the-run]` at
+            # `turn.message.after` loaded clean and could never fire — MEASURED,
+            # "OK — loaded cleanly (20 settings)". That is R24's defect surviving
+            # inside the list R24 was applied to, against §2 G5's own invariant
+            # that every power here has a sentence that reaches it.
+            #
+            # It is also the gap ten cold authors hit first and the format had
+            # no answer to: nothing constrained what the agent SAYS. Every
+            # ceiling, gate and redaction bounds what it DOES.
+            #
+            # A PLAIN WORD TEST, deliberately. It matches the words you write,
+            # folded to lower case, anywhere in the answer — the same match
+            # `must-not-contain:` makes on a graded case, from the same function
+            # (`interceptors.said_any`), so an author who has written one has
+            # written the other. It does not know what an answer MEANS. For that,
+            # write a `judged:` rule in `evals/` with a `graded-by:` model.
+            #
+            # `redaction.yaml` cannot write this and needs no rule saying so:
+            # `redaction.hide` carries `always-may: [hide-values]`, so a form
+            # needing `stop-the-run` is filtered out of what it may say.
+            - say: 'if the answer mentions <these words>, stop and say "<why>"'
+              needs: stop-the-run
+              at:
+                - step.message.after
+                - turn.message.after
+        surface: S-EXEC
+        tier: core
+        help: >
+          what it does, in plain sentences. Six sentences exist and they are
+          the only ones, because a sentence nobody can turn into behaviour is a
+          rule that loads and does nothing:
+          `anything that looks like a <thing>`, which hides it and leaves
+          `[removed]` in its place;
+          `replace anything that looks like a <thing> with "<text>"`, when you
+          want to choose the words left behind;
+          `do the same for anything that looks like a <thing>`, which reuses the
+          words above it — it is the one sentence that is not a rule on its own,
+          so it needs one of the two above it somewhere higher up the list, and
+          written first it is refused with those two offered;
+          `if <a tool> is called more than <n> times in one run, stop and say
+          "<why>"`; and
+          `if <a tool> is called more than <n> times in one run, go to the
+          <stage> stage instead`, which does not do that call and carries on at
+          that stage of the agent's loop rather than ending the run; and
+          `if the answer mentions "<word>", "<word>", stop and say "<why>"`,
+          which is the only one whose condition reads what the agent SAID rather
+          than what it did. What you put in `stop and say` becomes the reply the
+          customer reads, so write it as a sentence to them. It is a plain word
+          test, folded to lower case, and it does not know what an answer means:
+          `"diagnos"` catches `diagnosis` and `diagnosed` because it is a
+          prefix. For meaning, write a `judged:` rule in `evals/` with a
+          `graded-by:` model to read it.
+          The first five are the same sentences `hide:` in `redaction.yaml`
+          takes — one set of words for one act, so learning to write either one
+          teaches you the other. That file may only hide, so it takes the first
+          three; this one may do all six if it says so under `may:`.
+          The things that can be recognised are: card number, bank account,
+          email address, phone number. Anything else is refused by name, with
+          these forms listed — never accepted and quietly ignored.
+          Each sentence needs its own line under `may:`, and only that one: an
+          `anything that looks like ...`, `replace ...` or `do the same ...`
+          line needs `hide-values`, and it reaches the words in a message or the
+          values inside a tool call's arguments — including values nested inside
+          other values; a `stop and say ...` line needs `stop-the-run`; a `go to
+          the <stage> stage instead` line needs `send-elsewhere`.
+          The three hiding sentences work at `step.message.before`,
+          `step.message.after`, `turn.message.after` and `step.tool.before` —
+          the four moments something is carrying words or values. Both counting
+          sentences work only at `step.tool.before`, because that is the only
+          moment the run knows which tool is about to be called.
+
+  # ── REDACTION ───────────────────────────────────────────────────────────────
+  # What must never leave this workspace inside a promoted case or a report.
+  # One per workspace, written as `redaction.yaml` beside `workspace.yaml` —
+  # the Expansion Rule makes that file the workspace's `redaction:` field, the
+  # same way `learning.yaml` is its `learning:` field. There is no name to bind
+  # and no second set to leave dangling (R61).
+  #
+  # It sits HERE, after `interceptor`, and it used to sit up beside `policy`.
+  # It takes that kind's sentence vocabulary by alias, and `*the-hiding-sentences`
+  # is written on `interceptor.rules` — an alias has to come after its anchor, so
+  # this group has to come after that field. `watch` is below for the same
+  # reason and says so in the same words.
+  redaction:
+    fields:
+      description:
+        type: text
+        surface: S-GEN
+        tier: core
+        help: what this is protecting, in one line
+      hide:
+        type: list of text
+        # A redaction file that hides nothing is the "loads and does nothing"
+        # failure this specification refuses everywhere else, and it became
+        # reachable the moment the field stopped being a NAME: `redaction:`
+        # used to be text, so an empty binding was a missing name and was
+        # already refused. As a group, `redaction.yaml` carrying only a
+        # `description:` would satisfy every check there is — including
+        # `loader/improving-with-nothing-held-back`, which asks whether this
+        # workspace has a redaction at all before letting the improver talk to
+        # a model outside the box. Required, so that question has one answer.
+        required: yes
+        # THE SAME LIST `interceptor.rules` takes, by REFERENCE and not by copy —
+        # the same relationship `watch.when` has to `interceptor.when` one kind
+        # over, and for the same reason. This field had its own two sentences and
+        # `rules:` had its own four, and each was missing what the other had:
+        # `replace anything that looks like a card number with "[gone]"` — the
+        # line the shipped interceptor writes — was refused HERE, and `anything
+        # that looks like a card number` — the line this file's own worked
+        # example writes — was refused THERE. Two spellings of one act is D13's
+        # one-thing-one-name broken, and it broke it on the surface where the
+        # cost is a card number in somebody's transcript.
+        #
+        # `the <name> of a customer` is gone with the merge. Its `<name>` was
+        # unconstrained free text — the very hole the note below says was closed
+        # for `<a thing>` — and everything it could do that PACT can carry out,
+        # `anything that looks like <a thing>` already does. A second spelling
+        # for one act is what this merge exists to end; it is recorded in
+        # `docs/50-NOT-COPIED.md` §6 with the fixture that would bring it back.
+        #
+        # (The note that stays true either way: without a `recognises:` block the
+        # `<a thing>` hole was unconstrained, so `anything that looks like a
+        # passport number` printed "loaded cleanly" here and was refused by name
+        # one kind over. It was the hole that was unchecked, not the form.)
+        forms: *the-hiding-sentences
+        # A redaction has no `may:` line to read the powers off, and it should
+        # not: it does one thing. So the powers are stated here, and the
+        # difference is what a `stop and say "…"` line written in `redaction.yaml`
+        # meets — refused, naming the sentences this file can carry out, instead
+        # of loading beside real rules and counting nothing. Without this, the
+        # shared list would have handed `hide:` two sentences it cannot perform,
+        # which is the R42/R58 failure arriving through the fix for another one.
+        always-may: [hide-values]
+        surface: S-EXEC
+        tier: core
+        help: >
+          what must never leave, in plain sentences — one on each line with a
+          `- ` in front. Three sentences: `anything that looks like a card
+          number`, which takes it out and leaves `[removed]` in its place;
+          `replace anything that looks like a card number with "[gone]"` when
+          you want to choose the words left behind; and `do the same for
+          anything that looks like a bank account`, which reuses the words above
+          it — that last one is not a line on its own, so it needs one of the
+          other two somewhere above it, and written first it is refused with
+          those two offered. The things that can be recognised are card number,
+          bank account, email address and phone number.
+          These are the same sentences you write under `rules:` in an
+          interceptor — one set of words for one act, so learning either one
+          teaches you the other. The two sentences that count tool calls belong
+          only there, because this file may hide and may do nothing else; write
+          one here and it is refused, with the three above listed. A sentence
+          outside all five is refused by name rather than loaded and ignored.
+
+  # ── WATCH ───────────────────────────────────────────────────────────────────
+  # Something that only LOOKS. The other half of the same moments an interceptor
+  # binds to, and the safer half by a long way.
+  #
+  # It is a KIND OF ITS OWN and not an interceptor with an empty `may:`, and that
+  # is a decision about who is allowed to write one. Eve's 28 lifecycle events
+  # are all observe-only — its own source says "Handlers are observe-only. They
+  # cannot inject model context." — so watching is the only half it has, and
+  # even that costs a page of TypeScript. PACT has both halves, and keeping them
+  # two things is what lets this one be the beginner's: a watch has no `may:`
+  # list because there is nothing it may do, so there is nothing to review before
+  # somebody writes one. Folded into `interceptor`, a person who only wanted to
+  # know when something happened would have to read about hiding values, stopping
+  # the run and sending it somewhere else first — and turning a thing that looks
+  # into a thing that changes would be one word added to a list.
+  #
+  # A watch belongs to the WORKSPACE and not to one agent, for the same reason.
+  # An interceptor changes one agent's behaviour, so that agent names it; a watch
+  # changes nothing, so making somebody name it twice would buy nothing, and it
+  # would let an agent quietly stop being watched by deleting one line.
+  watch:
+    fields:
+      description:
+        type: text
+        required: yes
+        surface: S-GEN
+        tier: core
+        help: what you are keeping an eye on, and why
+      when:
+        # The SAME three closed lists `interceptor.when` uses, by REFERENCE and
+        # not by copy — the comment there says they ARE the vocabulary and that
+        # nothing anywhere else holds a copy, and a second copy here would be two
+        # places to add the next thing that happens and two places for them to
+        # disagree. `*the-address-vocabulary` is the anchor written on that
+        # field's `parts:` block, which is why this group has to come after it.
+        type: event-address
+        parts: *the-address-vocabulary
+        # Every moment a run really passes through — §7.13's table of thirty, and
+        # the list a watch may name. NOT shared with `interceptor.when` above:
+        # the vocabulary the two spell an address from is one list and is written
+        # once, but WHICH of the addresses it can spell each of them reaches is a
+        # different fact for each. A run has thirty moments; five of them hand a
+        # rule the run and let it change what happens.
+        #
+        # Here rather than only in the harness for the reason the vocabulary
+        # itself is here: `session.tool.completed` is three good words in the
+        # right order that nothing ever emits, and for a round `pact check`
+        # printed "loaded cleanly" for it while `Watches.from_document` refused
+        # the same file — so the author's own tool said the file was fine and the
+        # record was silently never written. One list, in the file that is data,
+        # read by both.
+        reaches:
+          - session.limit.failed
+          - session.run.started
+          - step.approval.completed
+          - step.approval.requested
+          - step.compaction.completed
+          - step.compaction.started
+          - step.delegate.cancelled
+          - step.delegate.completed
+          - step.delegate.failed
+          - step.delegate.requested
+          - step.delegate.started
+          - step.input.requested
+          - step.message.completed
+          - step.model.completed
+          - step.model.requested
+          - step.run.started
+          - step.stage.completed
+          - step.stage.started
+          - step.tool.cancelled
+          - step.tool.completed
+          - step.tool.started
+          - turn.approval.failed
+          - turn.delegate.completed
+          - turn.delegate.failed
+          - turn.limit.completed
+          - turn.message.completed
+          - turn.run.cancelled
+          - turn.run.completed
+          - turn.run.failed
+          - turn.run.started
+        # S-GOV, not S-CTRL like the interceptor's: this line decides what gets
+        # written down about a run, so a system improving itself must not be able
+        # to change it without a person looking (LOAD-13 — S-GOV is GOVERNED, so
+        # editing it is CLASS-4). An interceptor's `when:` changes behaviour and
+        # is reviewed as behaviour; this one changes the evidence.
+        required: yes
+        surface: S-GOV
+        tier: core
+        help: >
+          the moment to write down, written as `<part>.<thing>.<moment>` — for
+          example `step.tool.completed`, which is every time one of its tools has
+          finished. Each of the three words comes from a fixed list, and a word
+          outside it is refused when the file is checked, naming which of the
+          three is wrong and what belongs there. A combination that never happens
+          — `session.tool.completed`, say — is refused too, and told which
+          moments that thing really has, because a watch bound to a moment
+          nothing reaches writes nothing down and says nothing about it. A thing
+          of your own goes behind an `x-` prefix.
+      writes-to:
+        # Was `type: text`, so `writes-to: ../../escape.jsonl` printed "loaded
+        # cleanly" here and was refused later by `watches.py` — the field's own
+        # help promising a refusal that only the other language performed. The
+        # type carries the rule now, so no field that ever holds a file name can
+        # forget it.
+        type: file-name
+        required: yes
+        surface: S-GOV
+        tier: core
+        help: >
+          the name of the file to write it down in — for example
+          `tool-calls.jsonl`. One line each time it happens. Just a name, no
+          folders in it: the file is put in this workspace's own `.pact` area,
+          which is where PACT keeps things it produced rather than things you
+          wrote, so a record can never land on top of one of your files and
+          deleting the whole area is always safe. A name with a `/` in it, or one
+          that climbs out with `..`, is refused and told what to type instead.
+          Each line says WHAT happened, WHEN, and where in the run it was —
+          never the words a customer typed, the words the model wrote, or the
+          values handed to a tool. That is the whole reason writing one of these
+          needs nobody's permission: a watch cannot write down what an
+          interceptor was written to hide.
+
+  # ── STATE ───────────────────────────────────────────────────────────────────
+  # What the agent remembers, and for how long.
+  #
+  # Eve has one shape: durable, session-scoped, untyped, no expiry, no migration.
+  # Renaming it silently loses the data, and its own docs say not to use it for
+  # long-term memory — leaving that to be rebuilt by hand in every project.
+  state:
+    fields:
+      description:
+        type: text
+        required: yes
+        surface: S-GEN
+        tier: core
+        help: what is being remembered
+      lasts:
+        type: one-of
+        choices: [one-step, one-turn, one-conversation, forever]
+        required: yes
+        surface: S-GOV
+        tier: core
+        help: >
+          how long it survives. `forever` means across conversations, which is
+          the one thing that needs care: it is memory about a person.
+      shaped-like:
+        type: map of anything
+        surface: S-CAP
+        tier: expert
+        help: what it holds, so a change of shape is caught rather than corrupting
+      starts-as:
+        type: anything
+        surface: S-GEN
+        tier: expert
+        help: its value before anything has happened
+      forget-after:
+        type: duration
+        surface: S-GOV
+        tier: core
+        help: >
+          when to discard it. Required in practice for anything remembered
+          about a person.
+      never-from:
+        # CLOSED, and it was open text in an S-EXEC field — the one hole in a
+        # governance column that was never held against anything, so
+        # `never-from: the shoe size of a customer` loaded cleanly and refused
+        # nothing. R20's shape: a name only the host can resolve, in a line a
+        # reviewer reads as a boundary.
+        #
+        # Four sources, because four are the ways something gets into a run that
+        # is not the author: what a tool handed back, what a search retrieved,
+        # what the person on the other end typed, and what another agent said.
+        # A fifth is a line of YAML here rather than a recompile (F-1).
+        #
+        # `tool output` is spelled the same way `context_policy.py` spells its
+        # part-kind, on purpose: one set of words for one thing, so an author who
+        # has written a context policy has written this.
+        type: list of one-of
+        choices:
+          - tool output
+          - retrieval
+          - the customer
+          - a teammate
+        surface: S-EXEC
+        tier: core
+        help: >
+          sources that may never write here — tool output above all. Letting a
+          tool result become remembered instruction is how a single poisoned
+          page becomes permanent. PACT holds this line so a reviewer can read
+          it; the system that keeps the store is what refuses the write, the
+          same way it is what keeps the store at all
+          (docs/50-NOT-COPIED.md §4).
+      survives-shortening:
+        # The gap Eve's own docs revealed. Its compaction "resets read-before-write
+        # tracking (so a write afterward re-reads the file whose read evidence was
+        # summarized away) and re-injects the active todo list"
+        # (docs/concepts/default-harness.md). Both are the same shape: a FACT the
+        # run established, which the messages that established it no longer carry
+        # once those messages are summarised.
+        #
+        # `always-keep:` on a context policy pins MESSAGES. That is not this. A
+        # recorded approval can be pinned; "this file was read at revision 41"
+        # cannot, because it was never a message — it is something the run knows.
+        # Without this field a shortening silently destroys the evidence a
+        # `policy:` depends on, and the check that reads it then passes on
+        # nothing. That is worse than the check failing.
+        type: yes-no
+        surface: S-EXEC
+        tier: core
+        help: >
+          whether this is still known after the conversation is shortened. Say
+          yes for anything a rule later checks — that a person approved
+          something, that a file was read before it was written. Those are
+          facts the run established, not messages, so keeping the message is
+          not the same as keeping them.
+      stops-being-true-when:
+        # Deliberately a list of sentences over the same closed vocabulary the
+        # rest of the format uses, not a predicate language. A fact that never
+        # expires is a fact that will one day be wrong, and an author who has to
+        # invent an expression to say so will write nothing.
+        type: list of text
+        needs-also: [survives-shortening]
+        surface: S-EXEC
+        tier: core
+        help: >
+          what makes it stale — for example `the file changes` or `the turn
+          ends`. When one of these happens the fact is forgotten and anything
+          that relied on it is told, rather than the run carrying on as though
+          it were still true.
+
+  bundle:
+    describe: something a bundle can have
+    fields:
+      description:
+        type: text
+        required: yes
+        surface: S-GEN
+        tier: core
+        help: what this set of capabilities is for, in one line
+      version:
+        type: text
+        surface: S-META
+        tier: core
+        help: >
+          which version of it this workspace expects, so an upgrade that changes
+          behaviour is a line somebody edited rather than something that
+          happened
+      from:
+        type: text
+        required: yes
+        surface: S-CAP
+        tier: core
+        help: >
+          where the folder is — a path inside this workspace, or a name your
+          platform team publishes. Never a package to download and run: what a
+          bundle brings is definitions, and PACT reads them the same way it
+          reads yours.
+      brings:
+        # These are the workspace's OWN collection names, and they are held
+        # against them by test. They used to be a hand-written eight that agreed
+        # with a hand-written eight in `crates/pact-loader/src/bundles.rs` and
+        # with nothing else: both said `watches`, and the workspace field is
+        # `watch`. Two copies of one mistake read as confirmation.
+        #
+        # The consequence was not that `brings: [watches]` was refused — it was
+        # accepted, and `bundles.rs` then skipped in silence every kind NOT on the
+        # list. So `brings:` governed a spelling no tree can produce and was blind
+        # to `agents:`, `ports:`, `context-policies:`, `bundles:` and the real
+        # `watch:` — five of the twelve kinds a bundle can actually carry, and
+        # `agents:` is the one that matters most, since a bundle that quietly
+        # adds an agent adds something that can act.
+        type: list of one-of
+        choices:
+          - agents
+          - tools
+          - resources
+          - skills
+          - knowledge
+          - policies
+          - questions
+          - ports
+          - loops
+          - context-policies
+          - bundles
+          - interceptors
+          - watch
+        required: yes
+        surface: S-EXEC
+        tier: core
+        help: >
+          which kinds it is allowed to contribute. Anything it defines outside
+          this list is refused when the file is read, so a bundle cannot quietly
+          start supplying approval rules because a new version added some.
+      contributes:
+        # What the bundle actually holds, once its folder is in the tree. Open,
+        # because the whole point is that a bundle carries the same kinds a
+        # workspace does and PACT reads them the same way — the constraint is
+        # `brings:`, held in `bundles.rs`, not a second copy of the schema here.
+        type: map of anything
+        surface: S-CAP
+        tier: expert
+        help: >
+          what it defines, read exactly as if you had written it here. You do
+          not type this — it is what is in the bundle's own folder.
+
+  # ── TEAMWORK ────────────────────────────────────────────────────────────────
+  # How an agent waits for the people it asked for help, and how what it may
+  # spend is shared out between them.
+  #
+  # Eve takes three decisions here in code and lets an author say none of them:
+  # the parent is parked until EVERY delegated child resolves (an all-or-nothing
+  # barrier), the children are started one after another, and the token budget is
+  # split evenly. The cost is concrete — a five-way "whoever answers first" waits
+  # for the slowest of the five, and four fifths of the budget stays reserved for
+  # children whose answers are thrown away.
+  #
+  # All three are separate questions, so they are three separate lines here.
+  teamwork:
+    fields:
+      waits-for:
+        # NOT required. `agent.teamwork`'s own help says "Leave it out and it
+        # waits for all of them", and this line contradicted it: an author
+        # opening the file to change only the money split was told
+        # "Teamwork must have a 'waits-for'" and had to restate the default they
+        # already had.
+        #
+        # The two conditional companions were refused by `delegation.py` at run
+        # time and accepted here — `waits-for: enough-of-them` with no
+        # `enough-is:` is a barrier nobody can clear, and
+        # `whoever-answers-in-time` with no `gives-up-after:` is a run that waits
+        # forever.
+        type: one-of
+        choices:
+          [everyone, anyone, enough-of-them, the-first-good-answer, whoever-answers-in-time]
+        needed-when:
+          enough-is: enough-of-them
+          gives-up-after: whoever-answers-in-time
+        surface: S-TOPO
+        tier: core
+        help: >
+          how much of the team has to come back before this agent carries on.
+          Leave it out and it waits for all of them. `everyone` waits for all of
+          them. `anyone` takes the first reply of any kind, good or bad.
+          `enough-of-them` waits for the number you set below, so it needs an
+          `enough-is:` line. `the-first-good-answer` keeps waiting past the ones
+          that go wrong. `whoever-answers-in-time` takes what arrived before the
+          clock ran out, so it needs a `gives-up-after:` line.
+      enough-is:
+        type: integer
+        at-least: 1
+        surface: S-TOPO
+        tier: core
+        # `waits-for: enough-of-them` with no `enough-is:` is a barrier nobody
+        # can clear, so it is refused — and the refusal quoted the first clause
+        # of the help below, which read *"so nothing says with
+        # `enough-of-them`"*: the value that caused the refusal, handed back as
+        # if it were the answer to it.
+        summary: how many good answers count as enough
+        help: >
+          how many of the team have to come back with a good answer, with
+          `waits-for: enough-of-them`. Two out of three is the usual reason to
+          want this.
+      gives-up-after:
+        type: duration
+        surface: S-GOV
+        tier: core
+        # And the same sentence on the other wait: *"so nothing says with
+        # `whoever-answers-in-time`"*.
+        summary: how long to wait before carrying on
+        help: >
+          how long to wait for the rest of them, with `waits-for:
+          whoever-answers-in-time`. Whoever missed it is named in the answer
+          rather than quietly dropped.
+      starts:
+        type: one-of
+        choices: [all-at-once, one-after-another]
+        surface: S-CTRL
+        tier: core
+        help: >
+          whether the team works at the same time or takes turns. Turns are
+          slower, and are worth it only when a later member needs to read what
+          an earlier one said.
+      divides-the-budget:
+        type: one-of
+        choices: [evenly, by-share, as-needed]
+        surface: S-GOV
+        tier: core
+        help: >
+          how the money and thinking room this agent is allowed get shared out
+          among the team. `evenly` gives each the same. `by-share` uses the
+          shares below. `as-needed` sets nothing aside, so whoever is still
+          working may use what the others did not.
+      shares:
+        type: map of percent
+        surface: S-GOV
+        tier: core
+        help: >
+          with `by-share`, how much of the budget each member gets — written as
+          percentages, one line per member. Everyone under `team:` needs a line
+          here, or nothing will run. They may add up to 100% or less: less than
+          100% is allowed, and means the team may spend that much of the budget
+          and the rest is never spent.
+      if-someone-fails:
+        type: one-of
+        choices: [carry-on, stop-the-others, ask-a-person]
+        needed-when:
+          asks: ask-a-person
+        surface: S-EXEC
+        tier: core
+        help: >
+          what happens when one of them cannot answer. `carry-on` says so in
+          the answer and keeps the rest. `stop-the-others` gives up the whole
+          thing at once. `ask-a-person` stops and waits for someone to decide,
+          keeping the answers that did arrive.
+      asks:
+        type: text
+        names: questions
+        surface: S-EXEC
+        tier: core
+        # Same setting, same sentence, same `summary:` — see `limits.asks`.
+        summary: which question to put to them
+        help: >
+          which question to put to them when the line above says ask-a-person,
+          by name. The same line appears under `limits`, under a context policy
+          and on an `ask-someone` stage, because stopping to ask is one thing
+          wherever it happens.

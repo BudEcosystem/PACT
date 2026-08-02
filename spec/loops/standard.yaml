@@ -1,0 +1,25 @@
+# `pact:loop/standard` — the shape you get when you say nothing.
+#
+# This is the shape Eve hard-codes: `stopWhen: isStepCount(1)` is the only stop
+# condition in the whole framework and the continue-decision is one boolean, so
+# it can never be written down, read, reviewed or changed. Here it is four
+# lines of ordinary YAML that you can copy into your own `loops/` folder and
+# edit.
+#
+# Executing this file must produce exactly what the harness did before loops
+# existed — that is the regression that keeps "the loop is data" from being a
+# behaviour change dressed up as a feature.
+
+description: >
+  Work until the job is done: use a tool, look at what came back, and use
+  another one if it is still needed. Answer when there is nothing left to
+  check. This is what an agent does when nobody says otherwise.
+
+starts-at: work
+
+steps:
+  work:
+    does: use-tools
+    then:
+      used-a-tool: work
+      answered: done

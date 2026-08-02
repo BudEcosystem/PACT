@@ -1,0 +1,1082 @@
+                                                                       Learning from Disagreement:
+                                                  Clinician Overrides as Implicit Preference Signals
+                                                                for Clinical AI in Value-Based Care
+                                             Prabhjot Singh∗            Abhishek Gupta             Chris Betz   Abe Flansburg                  Brett Ives
+                                                                           Sudeep Lama                  Jung Hoon Son
+arXiv:2604.28010v2 [cs.LG] 15 May 2026
+
+
+
+
+                                                                                               Altitude
+
+
+
+                                                                                                Abstract
+                                                       We reframe clinician overrides of clinical AI recommendations as implicit preference data—
+                                                   the same signal structure exploited by reinforcement learning from human feedback (RLHF),
+                                                   but richer: the annotator is a domain expert, the alternatives carry real consequences, and
+                                                   downstream outcomes are observable. We present a formal framework extending standard pref-
+                                                   erence learning with three contributions: a five-category override taxonomy mapping override
+                                                   types to distinct model update targets; a preference formulation conditioned on patient state s,
+                                                   organizational context c, and clinician capability κ, where κ decomposes into execution capabil-
+                                                   ity (κexec ) and alignment capability (κalign ); and a dual learning architecture that jointly trains
+                                                   a reward model and a capability model via alternating optimization, preventing a failure mode
+                                                   we term suppression bias—the systematic suppression of correct-but-difficult recommendations
+                                                   when clinician capability falls below the execution threshold. We argue that chronic disease man-
+                                                   agement under outcome-based payment contracts produces override data with uniquely favorable
+                                                   properties—longitudinal density, concentrated decision space, outcome labels, and natural capa-
+                                                   bility variation—and that training environments combining longitudinal outcome measurement
+                                                   with aligned financial incentives are a necessary condition for learning a reward model aligned
+                                                   with patient trajectory rather than with encounter economics. This framework emerged from
+                                                   operational work to improve clinician capability in a live value-based care deployment.
+
+
+                                         1        Introduction
+                                         Clinical decision support systems are, by most measures, ignored. A systematic review of medication-
+                                         related CDS alerts found override rates ranging from 46% to 96% across studies [18]. This statistic
+                                         is universally cited as evidence of a problem: alert fatigue, poor specificity, workflow disruption.
+                                         The dominant interpretation is that overrides represent system failure—a gap between what the
+                                         CDS recommends and what the clinician does, where the gap itself is the thing to be minimized.
+                                             We argue this interpretation is exactly wrong. An override is not noise. It is a signal—one of
+                                         the richest, most contextually grounded signals available in clinical AI. When a clinician reviews an
+                                         AI-generated recommendation, weighs it against their knowledge of the patient and the therapeutic
+                                         goal, and chooses to act differently, they have produced a labeled preference pair: in this patient
+                                         state, under these conditions, I prefer action a′ over the system’s recommendation r. This is
+                                             ∗
+                                                 Corresponding author: prabhjot@joinaltitude.com
+
+
+
+                                                                                                    1
+precisely the structure exploited by RLHF to align language models with human judgment [6, 15]—
+except the annotator is a domain expert, the alternatives are clinical actions with real consequences,
+and the downstream outcomes are observable.
+
+1.1   Motivation: same patient, different environments, different signals
+Consider a 67-year-old patient with Stage C heart failure, managed by a primary care clinician.
+Guidelines recommend initiation of guideline-directed medical therapy (GDMT), including SGLT2
+inhibitors, which reduce HF hospitalization risk by approximately 26% [14, 16, 7]. An AI platform
+surfaces the recommendation: initiate SGLT2i. The clinician overrides it and refers to cardiology
+instead.
+    Under fee-for-service (FFS), this override is economically rational: the referral generates billable
+encounters, the PCP avoids perceived liability, and there is no penalty for the referral-to-therapy
+delay. Under an outcome-based payment arrangement (§4) where the organization is rewarded for
+time-to-outcome rather than encounter volume, the economics invert—the recommendation and the
+incentive align. A clinician who overrides here is not acting on payment structure but on something
+else.
+    That something else is frequently clinician capability. Consider three clinicians receiving the
+same SGLT2i recommendation:
+• Clinician A, an experienced internist, reviews the recommendation, confirms renal function and
+  potassium are in range, and accepts it. This is informed preference data.
+• Clinician B, a nurse practitioner two years out of training, recognizes SGLT2i is guideline-
+  recommended but has never initiated one independently. He overrides not because he disagrees
+  with the evidence but because he does not trust his own skill to execute it. He refers to cardiology
+  as a risk-avoidance default.
+• Clinician C, similarly early-career, accepts the recommendation—not after critical evaluation
+  but because she accepts most recommendations (95% acceptance rate). This looks like alignment
+  but is the absence of clinical judgment.
+    A naive preference learning system treats these three interactions identically: two acceptances
+and one rejection. It concludes two-of-three clinicians agree with SGLT2i; Clinician B’s override is
+an outlier to be down-weighted. In reality, only Clinician A’s response carries reliable preference
+information. Clinician B’s override is a signal about capability boundaries, not recommendation
+quality. Clinician C’s acceptance is nearly uninformative.
+    The preference function governing clinical overrides is therefore not merely conditioned on
+patient state s and contract context c. It is also conditioned on clinician capability κ—the clinician’s
+domain-specific skill for the action being recommended:
+
+                                           P (a′ ≻ r | s, c, κ)                                     (1)
+
+where κ is not a static attribute of the clinician but varies by clinical domain and evolves over time,
+potentially through interaction with the decision support system itself.
+    This introduces what we term the dual learning problem. Override data simultaneously trains
+two models: a reward model —what the right recommendation is for a given state and context—
+and a capability model —which clinicians can reliably evaluate which recommendations. Conflating
+them is dangerous. If 35 of 50 PCPs override SGLT2i initiation due to skill uncertainty, a naive
+preference model concludes SGLT2i is a poor recommendation and stops recommending it. The
+correct inference is the opposite: the recommendation is right, but the clinician population needs
+
+                                                    2
+support to execute it. The override pattern is a training signal for the capability model, not the
+reward model.
+
+1.2   Chronic care changes the signal structure
+The CDS override literature is dominated by acute, episodic settings: medication alerts at pre-
+scribing, DDI warnings at order entry, sepsis scores in the ICU. In these settings, the override is
+a one-shot event—a binary accept/reject with thin context, no follow-up, and no capability signal
+because the interaction does not recur.
+    Chronic disease management under a subset of VBC that emphasizes goal achievement—
+outcome-based payoff structures of the kind detailed in §4—is structurally different. A clinician
+managing a 200-patient panel across hypertension, HF, diabetes, and CKD generates hundreds
+of accept/modify/reject decisions per week on the same population, repeatedly, over months and
+years. Four properties make this override signal qualitatively different: longitudinal density (thou-
+sands of interactions per clinician per quarter); outcome observability (the platform sees what
+happens after both accepted and overridden recommendations); contract-conditioned preferences
+(the same clinician rationally prefers different actions for the same patient state depending on c);
+and capability-conditioned signal quality (heterogeneous clinician populations make κ identifiable).
+We develop these properties formally in Section 4.
+
+1.3   Contributions
+1. Reframing. The standard framing—overrides as compliance failures to be minimized—is coun-
+   terproductive. In domains with expert, outcome-consequential annotators, the override is the
+   most valuable data point the system produces.
+2. Taxonomy. A five-category taxonomy distinguishing context, judgment, workflow, protocol,
+   and—new to this framework—capability overrides, each mapping to a distinct update target.
+3. Formal preference framework. Bradley-Terry extended with patient state s, contract context
+   c, and clinician capability κ conditioning. The modify action provides strictly more information
+   than the binary comparisons used in standard RLHF.
+4. Dual learning problem. A formalization showing that override data must jointly train a
+   reward model and a capability model via alternating optimization. We characterize suppression
+   bias—the systematic suppression of correct-but-difficult recommendations—as the failure mode
+   of naive approaches, and show the alternating optimization is the structural remedy.
+5. Architectural blueprint. The system components required to close the learning loop in a
+   clinical AI platform, producing a compounding data flywheel.
+
+1.4   Provenance and scope
+This framework did not arise from theoretical synthesis followed by application. It emerged from
+operational work to improve clinician capability in a live deployment under outcome-based payment
+contracts, where early efforts to refine recommendation quality from clinician feedback ran into the
+precise pathologies the framework now formalizes: overrides treated as noise rather than signal;
+clinician heterogeneity collapsed into average effects; recommendations that gradually disappeared
+because the population overriding them lacked the capability to execute them; and outcome data
+attributed naively to actions in ways that would not survive a causal-inference review. The formal
+structure presented here—the (s, c, κ) conditioning, the dual learning loop, the override taxonomy,
+
+                                                 3
+the failure modes in §3.6—was developed to organize and constrain that empirical work. Validation
+of specific framework predictions is underway and will be reported separately.
+    The remainder of the paper is organized as follows. Section 2 positions this work against
+CDS override analysis, preference-based RL, and RL in healthcare. Section 3 presents the formal
+framework. Section 4 characterizes the properties of override data in VBC chronic care. Section 5
+describes the system architecture. Section 6 discusses implications for clinical AI design and the
+broader preference learning literature. Section 7 addresses limitations and research directions.
+
+
+2     Related Work
+Our framework sits at the intersection of three research communities that have operated largely in-
+dependently: clinical decision support and override analysis, preference-based reinforcement learn-
+ing, and reinforcement learning applied to healthcare. Each has developed relevant but incomplete
+tools for the problem we address. Table 1 summarizes the positioning.
+
+2.1   Clinical decision support and override analysis
+The study of clinician overrides has a two-decade history rooted in medication safety. Override
+rates for drug safety alerts in CPOE systems range from 49% to 96% [26], with similar 46%–96%
+ranges reported in more recent systematic reviews [18]. Subsequent work has identified workload
+and repeated exposure as drivers of alert fatigue [1], shown that interface design modulates override
+rates [11], and catalogued structured override reasons [27]. Predictive models of override behavior
+[13, 24] and retrospective appropriateness review [18, 20] are designed to suppress or audit overrides,
+not to learn from them.
+    This literature treats override as evaluation metric, not training signal, and is overwhelmingly
+focused on acute, one-shot interactions. The chronic disease management context we address
+is structurally different: a clinician managing a 200-patient HF panel receives daily prioritized
+recommendations that recur, evolve with patient state, and produce observable outcomes over
+weeks to months. The override pattern is not a sparse event log but a dense time series indexed by
+patient, clinician, domain, and contract. No existing CDS override work treats this as preference
+data amenable to reward model training.
+    The closest empirical work is Sivaraman et al. [22], who identified four behavioral patterns—
+ignore, rely, consider, and negotiate—in ICU clinicians interacting with AI sepsis recommendations.
+The negotiate pattern is a direct empirical observation of the modify action in our framework, but
+they studied it in a single-encounter experimental setting and did not propose a learning framework.
+We provide the formal machinery to extract and learn from exactly the negotiation patterns they
+observed.
+
+2.2   Preference-based reinforcement learning and RLHF
+Christiano et al. [6] established the two-stage framework of preference learning followed by policy
+optimization, subsequently applied to LLM alignment by Ouyang et al. [15] and Bai et al. [3]. The
+standard preference model uses the Bradley-Terry formulation [4]. Direct Preference Optimization
+[19] eliminates the explicit reward model via reparameterization; Inverse Preference Learning [8]
+extends this to sequential settings. Hu et al. [10] addresses regularization artifacts in DPO-style
+objectives.
+    This literature has begun to address annotator heterogeneity via multi-annotator reward mod-
+els and per-annotator noise parameters, but these approaches model heterogeneity as variation in
+
+
+                                                  4
+ Property                 CDS Override        AI Clinician / IRL     Standard RLHF       This Paper
+ Treatment of behavior    Eval. metric        Policy to outperform   Preference annot.   Preference annot.
+ Override = ?             System failure      N/A                    Pairwise comp.      Structured signal
+ Annotator capability?    No                  No                     No (uniform)        Yes (κ)
+ Economic context?        No                  No                     No                  Yes (c)
+ Observed alternatives?   No                  Yes (off-policy)       No (binary)         Yes (modify)
+ Dual learning?           No                  No                     No                  Yes
+ Direction of inference   Alert → clinician   Clinician → optimal    Human → reward      Override → reward +κ
+
+             Table 1: Comparison of approaches to learning from clinician behavior.
+
+
+preference, not variation in competence to evaluate. An annotator who prefers formal over casual
+tone is providing legitimate preference signal; a novice NP who overrides SGLT2i due to unfamil-
+iarity and an experienced internist who overrides it because potassium is 5.6 are not expressing
+different preferences—they are providing signals of different epistemic quality. This distinction does
+not exist in current RLHF. Our (s, c, κ) formulation is, to our knowledge, the first to disentangle
+annotator competence from annotator preference in the reward learning loop.
+    A second gap concerns economic conditioning. In existing RLHF work, preferences depend
+only on the intrinsic quality of alternatives. In clinical decision-making under VBC, the right
+action depends on the contract structure under which the clinician operates: a cardiology referral
+is preferred under FFS and overridden under VBC for the same patient. This conditioning has no
+analog in the current preference learning literature but is the defining feature of clinical decision-
+making in the value-based care era.
+
+2.3   Reinforcement learning in healthcare
+A separate literature applies RL directly to clinical treatment optimization, learning policies from
+observational data. Komorowski et al. [12] developed the AI Clinician for sepsis using MIMIC-III;
+subsequent inverse RL work [23] identifies suboptimal clinician decisions by comparing individual
+behavior to aggregate consensus. This literature positions the AI as teacher: it learns the right
+policy from data, and clinician deviation from that policy is evidence of clinician error.
+    Our framework inverts this. We learn from clinician overrides of AI recommendations to im-
+prove the recommendation system—clinician as teacher, AI as student. The distinction is not
+merely directional: it reflects a fundamentally different model of the human-AI relationship, and
+a different goal. The goal is not clinician compliance but recommendation alignment—the point
+at which overrides decrease because the recommendations have incorporated the judgment that
+previously motivated them. The work most closely related is Wu et al. [28], which constrains the
+RL action space using clinician expertise, but this operates at the policy-constraint level rather
+than updating the reward model from override signal.
+
+2.4   The gap
+We take the preference learning machinery from RLHF, extend it with capability and contract
+conditioning (κ and c), and apply it to the override signal the CDS literature has documented but
+never formalized as a learning signal. We inherit the longitudinal, outcome-labeled structure from
+RL-in-healthcare but reverse the direction of inference: we learn from clinician corrections of the
+AI rather than from clinician behavior as training data for the AI.
+
+
+
+                                                    5
+3     The Override as Preference Signal: A Formal Framework
+This section formalizes the argument developed in Section 1. We define the clinical recommendation
+interaction (§3.1), propose a taxonomy of override types (§3.2), derive the preference learning
+formulation (§3.3), characterize the information content of the modify action (§3.4), and formalize
+the dual learning problem (§3.5).
+
+3.1   The clinical recommendation interaction
+We model the interaction between a clinical AI and a clinician as a repeated game over a patient
+population. At each time step t, the system observes patient state st ∈ S and generates recom-
+mendation rt ∈ A. The clinician k, with capability profile κk ∈ K, observes rt in the context of st
+and contract environment c ∈ C, then selects:
+
+                                  δt ∈ {accept, modify(a′ ), reject}
+
+where accept executes rt as recommended (at = rt ); modify(a′ ) executes a different but related
+action; reject takes an alternative action that may or may not be directly related.
+    Each interaction produces a structured record:
+
+                                   It = (st , rt , δt , at , k, c, ot+∆ )                           (2)
+
+where ot+∆ is the observed patient outcome at follow-up horizon ∆ (e.g., BP at 30 days, hospital-
+ization within 90 days, BNP trend at 60 days). The outcome is not available at decision time but
+is observed retrospectively, and its inclusion is what makes VBC chronic care uniquely suited to
+outcome-labeled preference learning (§4).
+    Over time, a platform with K clinicians, N patients, and T time steps accumulates a dataset
+D = {It } indexed along four dimensions: patient trajectory, clinician identity k, clinical domain
+d, and contract context c. This multi-indexed structure enables the disaggregation central to our
+framework.
+
+3.2   A taxonomy of override types
+Not all overrides carry the same learning signal. We propose five categories based on the source of
+the discrepancy, each mapping to a distinct model update target, summarized in Table 2.
+    Override type is not directly observed—clinicians do not label overrides as capability-driven
+versus judgment-driven. Type assignment must be inferred from override patterns; we discuss the
+inference approach in §3.5.
+
+3.3   The preference learning formulation
+We extend the Bradley-Terry model [4] with three conditioning variables: patient state s, contract
+context c, and clinician capability κ. We treat clinician feedback as informative variation rather
+than noise to be suppressed; this aligns with recent calls in the broader preference learning literature
+for treating annotator disagreement as signal [17].
+    Capability variable: formal definition. The capability variable κ is introduced informally
+in §1 and operationalized below as a per-clinician, per-domain, time-varying scalar:
+
+                                              κdk (t) ∈ [0, 1]                                      (3)
+
+
+
+                                                     6
+Type                Source of discrepancy                 Update target                   Example
+
+I. Context          Clinician has private patient         State representation            Patient reports
+                    information not in st                 expand S                        medication
+                                                                                          non-adherence not in
+                                                                                          chart
+
+II. Judgment        Same information as system;           Reward model Rθ                 Experienced internist
+                    genuine clinical disagreement         direct RLHF-analog signal       rejects SGLT2i: K+
+                                                                                          = 5.6
+
+III. Workflow       Agreement in principle;               Neither                         No time to counsel in
+                    different action due to time,         filter from preference          visit; will address
+                    staffing, or tool constraints         dataset                         next week
+
+IV. Protocol        Institutional protocol or             Contract/context                Clinic protocol
+                    standing order supersedes             expand c to encode protocol     requires cardiology
+                    recommendation                                                        sign-off on GDMT
+
+V. Capability       Clinician lacks                       Capability model κφ             NP has never
+                    domain-specific skill or              may trigger scaffolding         initiated SGLT2i;
+                    confidence to execute                                                 refers to avoid risk
+
+
+Table 2: The five-category override taxonomy. Each override type reflects a distinct source
+of discrepancy between the system’s recommendation and the clinician’s action, and each maps to
+a different component of the dual learning architecture. Types I, II, and V are the most informa-
+tive for model updating; Type III is filtered out as noise; Type IV expands the contract/context
+representation.
+
+where k indexes clinicians, d indexes clinical domains (e.g., HF medication management, CKD pro-
+gression monitoring), and t indexes time. This is the object that enters the preference weighting
+                                                                                               align
+β(κ) in Eq. 6 below. We later (§3.5) propose a conceptual decomposition κdk = (κexec   k (d), κk     (d))
+that distinguishes execution capability from alignment capability. We treat this decomposition
+as a refinement of the scalar definition for interpretation and supervisor-facing analysis; integrat-
+ing the 2-tuple into the preference weighting (e.g., as β(κexec , κalign ) with separate temperature
+contributions) is left to future work. All loss functions in §3.5 use the scalar κdk (t).
+    Latent reward function. Let R∗ (s, a, c) be the true value of taking action a in state s under
+contract context c. Conditioning on c is a deliberate departure from the clinical RL literature, where
+reward is typically defined independent of payment model. In VBC, the right action incorporates
+both clinical value and economic context.
+    Preference model. For recommendation r with observed alternative a′ :
+
+                  P (δ = accept | s, c, κ) = σ(β(κ) · [R∗ (s, r, c) − R∗ (s, adefault , c)])                     (4)
+                       P (a′ ≻ r | s, c, κ) = σ β(κ) · R∗ (s, a′ , c) − R∗ (s, r, c)
+                                                                                    
+                                                                                                                 (5)
+
+where σ(·) is the logistic function and β(κ) is a capability-dependent temperature that modulates
+signal quality.
+    The innovation is β(κ). Standard RLHF uses a scalar inverse temperature for noise level. We
+replace it with a function of clinician capability:
+
+                                           β(κdk ) = β0 + β1 · κdk                                               (6)
+
+where κdk ∈ [0, 1] is clinician k’s estimated capability in domain d, β0 > 0 is a baseline (even
+
+                                                      7
+low-capability clinicians provide some signal), and β1 > 0 controls additional weight for high-
+capability clinicians. We adopt the linear form for tractability; monotone-bounded alternatives
+(e.g., β0 + β1 · σ(κ)) are viable and should be compared empirically.
+    The effect is intuitive: overrides from high-κ clinicians drive large reward model updates; over-
+rides from low-κ clinicians are down-weighted. This prevents suppression bias (§3.5).
+    Contract-conditioned reward. The parameterized reward model Rθ (s, a, c) takes encoded
+patient state, action, and contract context as inputs; its critical feature is that the same action a
+can have different reward values under different contract contexts c.
+
+3.4   The information advantage of the modify action
+Standard RLHF operates on pairwise comparisons: a single bit of ordinal ranking between two
+system-generated alternatives. The clinical override interaction provides three response types with
+different information content:
+    Accept. The clinician endorses rt . Information content depends on κ.
+    Reject (with alternative a′ observed). A complete preference pair a′ ≻ rt . More informa-
+tive than standard RLHF because the preferred alternative was generated by the clinician, not the
+system—it may lie outside the system’s recommendation distribution.
+    Modify. The richest signal: (1) a preference pair a′ ≻ rt ; (2) a proximity signal—a′ is close to
+rt in action space, indicating the recommendation was approximately correct; and (3) a gradient
+direction—the difference vector a′ − rt points in the direction of improvement. Modify pairs from
+high-κ clinicians are the most informative class of override and should be prioritized accordingly in
+the β(κ)-weighted training objective.
+
+3.5   The dual learning problem
+Override data simultaneously trains two models, and these learning problems must be separated
+to avoid systematic bias.
+    Reward model. Rθ (s, a, c) learns the latent clinical-economic value of actions in context:
+                                   X
+                          LR (θ) =    β(κdktt ) · log P (δt | st , rt , at , c; Rθ )            (7)
+                                    It ∈D
+
+
+where β(κdktt ) down-weights low-capability clinician contributions.
+   Capability model. κφ (k, d, t) learns each clinician’s domain-specific competence:
+                                    X
+                           Lκ (φ) =      log P (δt | st , rt , κφ (kt , dt , t); Rθ∗ )           (8)
+                                    It ∈D
+
+where Rθ∗ is the current fixed reward model. The capability model asks: given that we know the
+correct reward, how well does this clinician’s behavior correspond to it in this domain?
+    Joint optimization. The two models are coupled, solved by alternating:
+1. E-step (capability estimation). Fix Rθ . Estimate κφ (k, d, t) by measuring how well Rθ predicts
+   the clinician’s override behavior in domain d. High prediction accuracy implies high κ; low
+   accuracy implies low κ.
+2. M-step (reward update). Fix κφ . Update Rθ using the κ-weighted preference likelihood LR (θ).
+3. Iterate. As Rθ improves, residuals for low-κ clinicians shift, updating κφ , which changes weight-
+   ing in the next Rθ update.
+
+
+                                                 8
+As Rθ converges to R∗ , κφ converges to the true capability distribution—residual overrides not
+explained by the converged reward model are, by definition, driven by non-reward factors (primarily
+capability).
+    The circularity concern and outcome anchoring. Eqs. 7–8 share the term P (δt | ·),
+which makes the dual learning loop structurally coupled: the reward model learns to predict the
+preferences of clinicians whose preferences were used to estimate the reward model. Without an
+external anchor, Rθ could converge to any internally consistent fixed point—including one that sys-
+tematically reflects clinician collective bias rather than patient benefit. We address this by treating
+outcome observations ot+∆ as an anchor outside the dual learning loop rather than inside the
+loss functions. Specifically, the converged Rθ is validated against outcome-labeled preference pairs
+(§4.3) on a held-out validation set: a converged model whose preferred actions correlate with worse
+downstream outcomes is rejected and the alternating optimization is reinitialized with stronger
+capability priors. This separates the inner-loop preference learning (which uses clinician judgment
+as the supervision signal) from the outer-loop validation (which uses patient outcomes as the super-
+vision signal), avoiding the contamination that would arise from optimizing a single objective that
+mixes both. We acknowledge that this design relies on the causal validity of outcome attribution,
+which is not automatic; the methodology required to make this anchor robust is discussed in §4.3.
+    Suppression bias. Consider the naive (uncorrected) model with β(κ) = β0 for all clinicians.
+Suppose true reward favors a∗ (e.g., SGLT2i initiation), but 70% of clinicians override a∗ due to
+low capability (κ ≈ 0.2 for HF management). The naive model receives a majority override signal
+against a∗ and learns Rθ (s, a∗ , c) < Rθ (s, areferral , c)—it concludes cardiology referral is better. The
+κ-corrected model down-weights these low-capability overrides and assigns dominant weight to the
+30% of high-capability clinicians who accept a∗ , correctly learning Rθ (s, a∗ , c) > Rθ (s, areferral , c).
+    We term this failure mode suppression bias: the systematic suppression of correct-but-difficult
+recommendations in environments where mean clinician capability for the relevant domain is below
+the execution threshold. Figure 1 illustrates the mechanism. Suppression bias is most danger-
+ous precisely where clinical AI has the most potential value—complex therapeutic initiations that
+guidelines recommend but many clinicians lack confidence to execute without support.
+    Dynamic capability. κdk (t) is not fixed; it evolves as the clinician gains experience. We
+decompose:                                                            
+                                                              align
+                                        κdk = κexec
+                                                  k    (d),  κk     (d)                                   (9)
+
+where κexec is execution capability (can the clinician safely perform the action in domain d?) and
+κalign is alignment capability (does the clinician’s default practice orient toward optimal patient out-
+comes rather than locally rational FFS behavior?). This creates a second-order learning loop: the
+system learns which recommendations to make (reward model), which clinicians can execute them
+(capability model), and which support interventions accelerate clinician capability development.
+    Identifiability. The dual learning problem is identifiable only when the clinician population
+has heterogeneous capability. If all clinicians on a platform had identical capability profiles, every
+override would look the same and the capability model would be unidentifiable. The staffing
+heterogeneity of VBC chronic care—physicians with 10+ years of chronic disease management,
+mid- and early-career NPs, care managers with focused scopes—provides this variation organically.
+On a platform with 50 clinicians managing HF, the override rate for SGLT2i might be 15% among
+experienced internists, 55% among mid-career NPs, and 80% among early-career NPs. The naive
+model treats the pooled 55% as evidence of moderate miscalibration. The dual learning framework
+decomposes this: the 15% high-κ rate is the reward-relevant signal (the recommendation is correct
+for ∼85% of firing states); the gradient from 15% to 80% as κ decreases is the capability-relevant
+signal. This decomposition is only possible because clinician capability is heterogeneous.
+
+                                                     9
+                A. Ground truth                   B. Naive model                      C. κ-corrected
+              Latent reward R∗ (s, a, c)         β(κ) = β0 (uniform)                   β(κ) = β0 + β1 κ
+          ∗                                Rθ                                  Rθ
+      R
+                                                  ◀ ranking flipped ▶
+                 high
+                                                                 elevated           recovered
+
+
+
+                                low                                                               correct
+
+                                                suppressed
+
+
+
+
+                   a∗                               a∗                                  a∗
+                              areferral                           areferral                        areferral
+               (SGLT2i)                          (SGLT2i)                            (SGLT2i)
+
+
+
+
+                                            Observed override pattern               Same data, κ-weighted
+               50 clinicians observe
+               same patient state s
+                                           35 low-κ              15 high-κ    down-weighted      dominant
+                 Truth: initiate a∗        override               accept       (low weight)     (high weight)
+
+
+
+
+                                           Naive model reads majority:            High-κ signal dominates:
+                                            a∗ learned as suboptimal                a∗ learned as correct
+
+
+Figure 1: Suppression bias and its correction. Panel A shows the true latent reward R∗
+favoring action a∗ (e.g., PCP-level SGLT2i initiation) over cardiology referral. Panel B: with
+uniform preference weighting β(κ) = β0 , a population of 50 clinicians in which 70% have low
+capability for the domain (κ ≈ 0.2) produces a majority override signal against a∗ . The naive
+reward model learns the inverted ranking and suppresses the correct recommendation. Panel C:
+with capability-conditioned weighting β(κ) = β0 + β1 κ, overrides from high-capability clinicians
+dominate the reward update; the model recovers the correct ordering from the same underlying
+data.
+
+3.6       Failure modes beyond suppression bias
+Suppression bias is the failure mode the framework is designed to prevent, but it is not the only
+one. We name four additional failure modes that any deployed implementation must explicitly
+monitor; the dual learning architecture does not automatically prevent any of them.
+   Amplification bias. If high-κ clinicians share a correlated bias—practice-pattern lock-in, re-
+gional training norms, organizational culture—the β(κ) weighting amplifies that shared bias rather
+than averaging it away. The framework treats high-capability clinicians as the gold-standard su-
+pervision signal; if that signal is itself systematically miscalibrated relative to patient benefit, the
+reward model converges to the shared miscalibration faster than it would under uniform weighting.
+Detection requires comparing Rθ against external benchmarks (guidelines, multi-site comparison,
+outcome anchors from §4.3) rather than internal consistency alone.
+   Automation bias. Clinician C in §1 (95% acceptance rate, no critical evaluation) is the case
+where uniform acceptance contains nearly zero preference signal but is treated as endorsement by
+
+
+                                                            10
+the reward model. The capability model can in principle detect this—a clinician whose acceptances
+do not correlate with outcome quality has low κalign —but only if outcome data has accumulated.
+In the cold-start period, automation-bias acceptances are weighted equivalently to informed ac-
+ceptances, which biases early reward updates toward whatever the system currently recommends.
+The mitigation is conservative initial β scaling and explicit detection of clinician-level acceptance
+entropy.
+    The no-self-correction problem. A subtle and consequential failure mode arises when the
+system stops surfacing a recommendation because the reward model has down-weighted it: subse-
+quent overrides cannot occur because the recommendation is no longer presented, and the model has
+no path to discover it was wrong. Concretely: imagine a VBC organization in which clinicians have
+been organizationally trained to under-refer to cardiology; their override pattern down-weights car-
+diology referral recommendations; the system surfaces cardiology referrals less frequently; the small
+subpopulation of patients who genuinely need referral is not flagged; their adverse outcomes regis-
+ter as undifferentiated decompensations rather than as evidence the recommendation was correctly
+suppressed. This is a stacking failure—contract incentive shapes clinician behavior, κ-weighting re-
+inforces that behavior in the reward model, and reduced surfacing eliminates the override data that
+would correct it. High-precision/low-recall scenarios of this type are particularly dangerous because
+the reward model is internally consistent, override rates are low, and the capability model shows
+convergence—all three conventional health-metrics indicate success while the system is failing on
+a clinically important subset. Detection requires periodic surfacing of low-prior recommendations
+against held-out validation cases, audit against guideline-based benchmarks, and explicit moni-
+toring of recommendations the system has stopped making rather than only recommendations it
+currently makes.
+    Degraded outcome observability. The outcome anchor in §3.5 assumes outcomes are ob-
+servable. In practice, attributed patients receive care out-of-network, switch insurers mid-year, or
+experience outcomes (functional decline, quality-of-life change) that are not captured in claims or
+EHR data. Outcome observability is highest for hospitalization and mortality, lowest for ambu-
+latory deterioration and patient-reported symptoms. Reward model validation against degraded
+outcome labels under-detects exactly the failure modes that motivate the framework—slow-rolling
+clinical decline that VBC contracts are designed to prevent. Production deployment must explicitly
+characterize outcome capture rates by patient subgroup and adjust the validation procedure for
+outcome missingness.
+    These failure modes are not exhaustive; we expect others to emerge with deployment experience.
+The framework is robust to suppression bias by construction but neutral or vulnerable on the rest.
+Treating “the dual learning architecture” as the full safety story would be a mistake.
+
+
+4    Properties of Override Data in VBC Chronic Care
+The framework in Section 3 is domain-general, but not all domains produce override data with
+properties needed for it to yield useful models. This section argues chronic disease management
+under value-based care contracts produces override data with four properties that make it uniquely
+well-suited to preference learning—properties absent or attenuated in acute CDS, absent entirely
+in standard RLHF, and present only partially in RL-in-healthcare. We first clarify the value-based
+care construct we invoke.
+    Note on the contract construct. The phrase “value-based care” covers a wide range of
+arrangements in practice, from those primarily focused on diagnosis coding accuracy (HCC capture,
+RAF optimization) to those that place financial weight on clinical management. The framework’s
+
+
+                                                 11
+requirements are not satisfied by all of these uniformly. What the framework requires from the
+contract environment is an aligned incentive geometry: a payment structure that rewards earlier,
+correct, definitive clinical action rather than continuous billable activity, and that produces a clean
+outcome label tied to the action.
+    The CMS ACCESS model is the clearest current instance. Its outcome-based payoff structure
+measures each attributed patient at baseline and again at a threshold for each chronic condition
+(e.g., HbA1c control, blood pressure control), with payment contingent on whether the threshold
+was achieved within a defined annual window. Three properties of this geometry matter for the
+framework. First, the payoff is discrete: a patient either reached the threshold or did not, producing
+a binary ground-truth label per patient-year that is far less susceptible to EHR measurement noise
+than continuous longitudinal metrics. Second, the payoff rewards time-to-outcome: a patient who
+reaches threshold in month two and remains there has the same payoff as one who reaches threshold
+in month eleven, but the former requires substantially less clinical effort over the remaining ten
+months—creating a direct incentive for earlier and more definitive intervention rather than ongoing
+management activity. Third, the payoff is annual rather than per-encounter, breaking the FFS
+coupling between clinical effort and revenue.
+    Conventional VBC contracts—capitated arrangements, shared savings with quality gates, risk-
+bearing ACO participation—can encode aspects of this geometry and have the potential to satisfy
+the framework’s requirements, but they do so unevenly: many in practice retain coding-driven
+revenue components, encounter-volume incentives, or quality measures that reward documentation
+over outcome. Throughout this paper, when we appeal to “outcome-based payment” we mean the
+ACCESS-like payoff geometry as the structurally cleanest case; when we use “VBC,” we mean the
+broader class of contracts that approximate this geometry to varying degrees. What matters for
+the framework is the incentive geometry, not the specific contract instrument.
+
+4.1   Longitudinal density
+A clinician managing a 200-patient chronic cardiometabolic panel receives ∼2–3 actionable recom-
+mendations per patient per week, producing ∼400–600 recommendation interactions per clinician
+per week. Over a six-month window, a single clinician generates ∼10,000–15,000 override interac-
+tions, each a structured (s, r, δ, a, k, c) tuple. For a 50-clinician platform, this is 500,000–750,000
+records in six months—a preference dataset comparable in scale to large RLHF annotation cam-
+paigns, generated as a byproduct of clinical workflow rather than through dedicated annotation la-
+bor. These figures are illustrative operating estimates derived from observed deployment patterns;
+empirical interaction density depends on the recommendation system’s architecture (rule-based,
+LLM-based, or hybrid), the platform’s surfacing thresholds, and panel composition. We use them
+to characterize the order of magnitude rather than to make a quantitative empirical claim.
+     The density is not merely volumetric. The repeated-measures structure—same clinician, same
+domain, same patient state, multiple time points—is what makes the dual learning problem iden-
+tifiable. The same clinician’s response to the same recommendation type across different patients
+reveals how patient-specific factors modulate the override. Cross-condition responses (SGLT2i initi-
+ation vs. beta-blocker titration vs. diuretic adjustment within HF management) reveal the structure
+of their capability profile. Acute CDS lacks this repetition; standard RLHF lacks the patient-state
+conditioning, contract context, and within-annotator temporal structure.
+
+
+
+
+                                                  12
+4.2   Decision space concentration
+VBC chronic care generates override data concentrated on a dramatically smaller, higher-impact
+decision space than FFS. The payment model itself acts as a filter.
+    For a stylized 500-patient chronic disease panel: FFS generates ∼8,000–15,000 discrete clin-
+ical decisions per year, many routine refills, documentation-driven coding, or low-signal encoun-
+ters. VBC concentrates on ∼1,200–2,000 trajectory-changing decisions per year, clustered into
+five categories: medication titration, escalation thresholds, care gap closures, monitoring protocol
+changes, and acute event responses. This is 5–7× fewer decisions, but the reduction is selective—
+eliminating low-signal decisions while preserving the high-impact ones. The effective preference
+density (trajectory-changing decisions per interaction, weighted by signal quality) is approximately
+an order of magnitude greater in VBC than in FFS.
+    This concentration compounds. As the reward model improves on the curated decision subspace,
+override rates on well-calibrated decision types decline, causing remaining overrides to concentrate
+on genuine blind spots—decisions where clinician private information or contextual judgment adds
+real value. The preference signal per override grows more informative, accelerating reward model
+convergence precisely where it is needed most. FFS has no equivalent focusing mechanism: the
+incentive structure continues to generate high volumes of low-signal decisions regardless of model
+quality.
+
+4.3   Outcome observability
+In standard RLHF, the preference signal is all there is—when an annotator selects A over B, there
+is no subsequent outcome revealing whether A was objectively better. The RLHF literature has
+extensively debated whether human preferences are a reliable proxy for true quality, with concerns
+about annotator bias, Goodhart’s law, and reward hacking [5].
+    Clinical overrides in VBC have a natural resolution: the outcome ot+∆ is an objective, externally
+observable signal that validates or invalidates the preference implied by the override. If a clinician
+overrides SGLT2i initiation and refers to cardiology, and the patient is hospitalized during the
+referral-to-therapy delay, the outcome provides direct evidence about the quality of the override.
+If a different patient receives PCP-initiated SGLT2i and BNP decreases 40% over 60 days with no
+adverse events, the outcome validates the acceptance.
+    This creates outcome-labeled preference pairs: preference pairs (a′ ≻ r | s, c) subsequently anno-
+tated with outcome observations for both the chosen and (through similar patients) counterfactual
+actions. For HF: time-to-GDMT, time-to-outcome, hospitalization within 90/180 days, pathway
+cost, and adverse events are all directly observable. The reward model can be trained on the
+clinician’s preference (via Bradley-Terry likelihood) and validated against downstream outcome,
+providing an external check on calibration. This signal structure is richer than any available in
+standard RLHF and provides ground truth for evaluating the dual learning problem—if the model
+has correctly classified an override as Type V (capability-driven) rather than Type II (judgment-
+driven), outcomes should confirm the override led to worse results.
+    Causal attribution is necessary, not automatic. The outcome anchoring claim above relies
+on attributing observed outcomes to specific clinical actions, which is a causal claim that observa-
+tional data does not automatically support. The hospitalization that follows a cardiology referral
+may have occurred regardless of therapy initiation timing; the BNP improvement that follows
+SGLT2i initiation may reflect concurrent diuretic adjustment or natural disease variation. Naive
+comparisons between accepted and overridden recommendation pathways are subject to confound-
+ing by unmeasured patient severity, selection on clinician judgment, and time-varying treatment
+
+
+                                                 13
+patterns. The framework therefore requires causal inference methodology as a co-resident discipline
+rather than an optional refinement: propensity score matching and inverse probability weighting to
+balance covariates between accepted and overridden pathways [2], g-methods (parametric g-formula,
+marginal structural models) for time-varying confounding common in chronic disease management
+[21, 9], and the comparative effectiveness research and pharmacoepidemiology toolkits that have
+matured around exactly this problem of inferring treatment effects from observational clinical data
+[25]. We do not develop these methods here; we name them as the necessary discipline whose ab-
+sence in the ML engineering pipeline would produce confidently biased reward signal. The outcome
+anchor in §3.5 is robust only to the extent that this machinery is applied; clinical AI teams building
+reward models on outcome-labeled data without causal inference expertise should expect to recover
+associational patterns that may differ systematically from the causal effects the framework requires.
+
+4.4   Organizational context and the alignment dimension of capability
+The contract context c is a property of the organizational environment, not a per-patient variable
+that clinicians consciously evaluate at each decision point. A clinician seeing two sequential Stage
+C HF patients—one attributed to FFS, one to VBC—will almost certainly treat them identically.
+Clinicians do not switch practice styles patient-by-patient based on insurance type. The contract
+signal operates through three slower organizational channels:
+    Organizational design. VBC-native organizations build the infrastructure for PCP-level
+GDMT initiation: formulary access, titration protocols, monitoring workflows, pharmacist sup-
+port. FFS-dominant organizations typically have not built this infrastructure—the referral path-
+way exists because no alternative was ever constructed. Override pattern differences reflect what
+is operationally possible, not what the clinician consciously chooses in the moment.
+    Clinician development and practice norms. Clinicians trained in environments with
+aligned outcome incentives develop different skill profiles. A PCP with five years in such an orga-
+nization has, through accumulated experience and ambient measurement of time-to-outcome and
+avoidable utilization, internalized a proactive, longitudinal approach to therapy initiation. They
+are comfortable initiating GDMT because their environment demanded they learn it. An equiva-
+lently trained PCP in an FFS-dominant organization may never have been asked to initiate GDMT
+independently. This is as much a κ effect as a c effect.
+    This means c and κ are not fully independent conditioning variables. The identification strategy
+for separating their effects relies on cross-organizational comparison rather than within-clinician
+variation: observing the same recommendation for the same patient state across organizations with
+different contract structures and different (but overlapping) capability distributions.
+    The alignment dimension. The coupling of c and κ motivates the decomposition in Eq. 9.
+Consider the high-κexec clinician in an FFS organization—board-certified, experienced, clinically
+knowledgeable, but refers Stage C HF to cardiology not because they lack the ability to initiate
+SGLT2i but because their organizational environment has trained them to do so. Their execution
+capability is high; their alignment capability is low. The reward model’s job is not to learn that
+“SGLT2i initiation is better under VBC” (trivially unhelpful) but to learn that PCP-level initiation
+is the clinically correct action for the state, and that organizational environments that build the
+infrastructure and clinician alignment to execute it produce better trajectories. An AI system
+trained on override data from an environment without aligned outcome incentives learns a reward
+model that is internally consistent with that environment’s practice patterns but misaligned with
+patient outcomes—learning suppression bias by design rather than by accident.
+
+
+
+
+                                                 14
+4.5   The compounding signal
+In most preference learning settings, the value of each preference pair is approximately constant—
+the 10,000th pairwise comparison is roughly as informative as the first. In VBC chronic care,
+informational value increases over time through four compounding effects:
+• Frontier concentration. As the reward model improves, overrides decrease on well-calibrated
+  states and concentrate on genuine blind spots—higher marginal informational value per override.
+• Evolving capability. As clinicians gain experience with the platform’s scaffolding, κ increases.
+  Overrides at month 6 are more likely to reflect genuine judgment than at month 1, without any
+  change to the learning algorithm.
+• Accumulating outcome labels. Outcome labels arrive retrospectively (30/60/90-day lags). The
+  month-12 dataset contains 2× the interactions of month 6 and outcome labels for the full month-
+  1-to-6 period, enabling retrospective validation.
+• Cross-condition transfer. As κdk profiles build across domains, rising capability in one domain
+  (hypertension management) updates priors on related domains (HF management), accelerating
+  convergence.
+These effects combine into a data flywheel: override data becomes more informative, which acceler-
+ates reward and capability model convergence, which further concentrates overrides at the frontier
+and accelerates clinician development. A system that instruments override capture from day one
+accumulates a compounding learning advantage—a twelve-month head start is not a twelve-month
+data gap but a twelve-month compounding gap, because early data’s value has been amplified
+through the flywheel.
+
+
+5     System Architecture for Override Intelligence
+The framework in Sections 3–4 defines what should be learned. This section describes the system
+components required to capture, classify, and learn from override interactions. We present the
+architecture as a blueprint at a level sufficient for implementation by a clinical AI engineering
+team; the most consequential design decision is one easily overlooked: instrumentation must be
+designed into the recommendation interaction from the first patient, not retrofitted.
+
+5.1   Structured override capture
+The foundation is an instrumented interaction producing the record It defined in §3.1. When the
+platform surfaces a recommendation, the response pathway must branch into structured options:
+accept (records δt = accept, at = rt ); modify (captures both rt and the modification a′ as structured
+data—for medications, the modified drug, dose, route, frequency); reject (captures δt = reject and,
+where possible, the alternative at ).
+    Three design constraints: minimize capture friction—in a chronic care platform processing
+dozens of recommendations per hour, even 10 seconds of structured input creates intolerable friction;
+rely on one- or two-click structured responses. Capture the alternative, not just the rejection—a
+rejection without observed alternative produces a half-formed preference pair; the architecture must
+link rejected recommendations to the clinician’s subsequent action on the same patient. Maintain
+outcome linkage—the outcome ot+∆ arrives retrospectively; a durable linkage between It and the
+patient’s longitudinal stream must allow outcome observations to be appended as they become
+available.
+
+
+                                                 15
+5.2   Override classification
+The classifier assigns each override to a taxonomy category from §3.2. Since clinicians do not self-
+label, classification is inferred from four observable signal sources: the structure of the alternative
+(modifications preserving medication class suggest Type I or II; wholesale pathway substitutions
+suggest Type IV or V); the clinician’s override history (consistent domain-specific overrides suggest
+Type V; case-specific overrides suggest I or II); cross-clinician comparison (if 85% of high-κ clini-
+cians accept what this clinician rejects, the rejection is more likely capability-driven); and structured
+override reasons where the capture interface collects them (“patient preference,” “not comfortable
+initiating,” “institutional protocol”)—a direct if noisy label.
+    In practice, overrides rarely map cleanly to a single category. The classifier should output a
+probability distribution over types P (τi | It ) for τi ∈ {I, II, III, IV, V}, propagating uncertainty
+into dual model training.
+    The three-way dependence. Introducing the classifier τψ creates a three-way coupling: τψ
+depends on Rθ and κφ outputs (cross-clinician comparison signals require both); Rθ depends on τψ
+via the type-weighted preference loss (§5.3); and κφ depends on both. This is materially different
+from the two-model alternating optimization in §3.5; convergence properties of three-way coupled
+optimization are weaker and not guaranteed by the analysis there. We treat the classifier as a
+slow-moving outer loop updated less frequently than the inner Rθ /κφ alternation, and we initialize
+τψ from structured override reasons and clinician self-report where available, bootstrapping with
+hand-labeled examples for the cold-start period (§5.4). Empirical convergence properties of the
+three-way coupled system are not established here; this is a research direction rather than a settled
+result.
+
+5.3   Preference pair construction
+Classified interactions are assembled into preference pairs: accept pairs (rt , adefault )—the recom-
+mendation preferred over the default absent intervention; reject pairs (a′ , rt ) with a′ ≻ rt —the
+most directly analogous to RLHF data; and modify pairs (a′ , rt ) with the proximity and gradient
+signals from §3.4.
+    Each pair is weighted by two factors. Capability weight β(κdk ): high-κ clinician pairs receive
+higher weight in the reward objective. Classification weight: Type II pairs receive full weight;
+Type V pairs receive reduced weight for reward model training but full weight for capability model
+training; Type III pairs receive zero weight in both. As outcome observations ot+∆ become available,
+they are appended. Concordance rate by override type—whether the accepted/preferred action led
+to better outcomes—is a key diagnostic metric.
+
+5.4   Dual model training
+The preference pairs feed into the alternating optimization from §3.5.
+    Reward model architecture. Rθ (s, a, c) takes as input encoded patient state ϕ(s) (structured
+clinical variables and, where available, unstructured signals from clinical notes via LLM-based
+extraction), encoded action ψ(a), and encoded organizational context γ(c) (payer type, contract
+structure, quality measure targets, organizational capability indicators). Trained via the κ-weighted
+preference likelihood LR (θ). Batch training (periodic retraining) is more stable than online updates
+and appropriate for early-stage deployment.
+    Capability model architecture. κφ (k, d, t) outputs a scalar capability estimate per clinician-
+domain-time triple. Inputs: override history in d, outcome history in d, and temporal features (time
+
+
+
+                                                   16
+since first interaction, cumulative volume). Updated in the E-step by measuring residuals between
+Rθ∗ ’s predicted preferences and observed behavior.
+    Training cadence. Weekly capability updates (as override interactions accumulate), monthly
+reward updates (as outcome labels become available), with a full joint re-estimation quarterly.
+    Cold start. A new platform has no override history. During the 4–8 week cold-start, rec-
+ommendations are generated by a guideline-based prior and overrides are equally weighted. κ is
+initialized from proxy signals—credentials, years of experience, specialty training—as deliberately
+diffuse priors rapidly updated as interaction data accumulates.
+
+5.5   The closed loop
+Trained models feed back into the recommendation system, closing the learning loop and producing
+the flywheel in §4.5.
+     Reward model → recommendation engine. The updated Rθ (s, a, c) directly improves
+recommendation ranking: the system evaluates reward for each candidate action and surfaces the
+highest-reward as the primary recommendation.
+     Capability model → scaffolding engine. κφ (k, d, t) triggers adaptive support. For low
+  exec
+κ : contraindication checklists, dose titration protocols, monitoring schedules, real-time lab value
+checks alongside the recommendation (Clinician B receives the SGLT2i recommendation augmented
+with: “eGFR 58—above threshold, K+ 4.2—within range, no current ACEi interaction—safe to
+initiate. Recommended titration: 10mg daily × 2 weeks, recheck renal panel at day 14”). For low
+κalign : evidence framing connecting the recommendation to the VBC contract’s outcome targets.
+Scaffolding adapts as κ evolves—successful execution with support raises κ and decreases scaffolding
+in subsequent interactions.
+     Capability model → supervisor dashboard. An aggregate view of clinician capability by
+domain: which clinicians have gaps in which domains, whether gaps are narrowing, which scaffolding
+interventions accelerate development. This transforms override intelligence from a model training
+signal into a workforce development tool.
+     Override rate as convergence metric. Rather than tracking a single aggregate rate, track
+κ-stratified rates: high-κ override rate (reflects reward model calibration—target: decreasing);
+low-κ override rate (reflects capability gaps—target: decreasing with scaffolding); override rate
+gap (size of the capability gap per domain—target: narrowing). When the high- and low-κ rates
+converge toward the same low value, the system has reached a state where recommendations are
+well-calibrated and the clinician population can execute them—the dual learning problem is ap-
+proximately solved for that domain. The rate of convergence quantifies the speed at which the AI
+platform is simultaneously improving its recommendations and the clinical workforce that acts on
+them.
+
+
+6     Implications
+For clinical AI system design. Clinical AI systems generating recommendations to clinicians
+should be instrumented for structured override capture from first deployment. The interaction
+record It defined in §3.1 is the minimal data structure for a learning system—systems tracking only
+aggregate acceptance rates, or recording overrides as unstructured free text, are discarding their
+most valuable training signal. This is a design decision that must be made at the architectural level
+before the first patient: retrofitting structured capture into a system built with a binary interaction
+model is substantially harder than designing it in from the start.
+
+
+                                                  17
+    The taxonomy in §3.2 is practical, not just theoretical. Rather than tracking one override rate
+and interpreting high rates as system failure, teams should decompose by type: a high Type II
+rate among experienced clinicians signals a genuine recommendation quality problem; a high Type
+V rate signals a scaffolding gap; a high Type III rate signals an operational feasibility problem.
+Each requires a different response. The suppression bias failure mode (§3.5) is the specific risk to
+design against: any system that updates from clinician feedback without accounting for capability
+will, over time, suppress its most valuable recommendations. The dual learning architecture is the
+structural remedy; a minimum viable mitigation is to weight override signals by a capability proxy
+(experience, credentials, historical domain performance) and monitor whether recommendation
+content shifts toward lower-complexity actions over time.
+    For the RLHF research community. Our framework introduces three concepts that gener-
+alize beyond clinical AI. Capability-conditioned preferences: the insight that annotator competence
+κ should modulate preference weight applies wherever annotators have heterogeneous expertise. In
+code generation, a senior engineer’s preference between two completions is more informative than
+a junior developer’s; in legal review, an experienced attorney’s preference is more informative than
+a paralegal’s. The specific failure mode—suppression bias, where correct-but-difficult outputs are
+suppressed because low-capability annotators systematically disprefer them—is likely present in
+existing large-scale RLHF deployments but undiagnosed because annotator capability is not mod-
+eled. Context-conditioned reward functions: the contract conditioning c generalizes to any setting
+where the right output depends on the context in which the annotator operates, not just the in-
+trinsic quality of the output—content moderation under different platform policies, translation for
+different target audiences. The three-valued response structure: the accept/modify/reject interac-
+tion yields strictly more information than pairwise comparison, with the modify action providing a
+proximity signal and gradient direction binary comparisons cannot. Developing preference learning
+algorithms that exploit this structure is an open and, we believe, valuable direction.
+
+
+7     Limitations and Research Directions
+7.1   Limitations
+Generalization from a single deployment. The empirical work that motivated this frame-
+work was conducted on a single platform; generalization across deployment contexts, condition
+portfolios, and contract structures is open. The framework’s structure may not survive contact
+with deployment data in other settings: taxonomy categories may overlap in practice in ways that
+resist clean classification, capability-conditioned weighting may interact with classifier uncertainty
+in ways the current formulation does not anticipate, and the failure modes in §3.6—particularly
+the no-self-correction problem—are by their nature difficult to detect from inside the system that
+produces them.
+    Partial confounding of c and κ. As discussed in §4.4, organizational context c and clin-
+ician capability κ are partially coupled—VBC organizations systematically produce different κ
+distributions than FFS organizations. Separating their effects requires a platform operating across
+organizations with heterogeneous contract structures and overlapping capability distributions. In
+single-organization deployments, c is effectively constant and the dual learning problem reduces to
+reward-vs-capability decomposition without contract conditioning.
+    Risk of learning clinician biases. The framework learns from clinician preferences, which
+may encode demographic, geographic, or socioeconomic biases producing systematically different
+override patterns for patients of different backgrounds in ways that are not clinically justified. A
+high-κ clinician’s override of a recommendation for a minority patient, if treated as high-confidence
+
+                                                 18
+preference signal, could train the reward model to recommend differently for minority patients
+even when the clinical indication is identical. The framework does not currently include a fairness
+constraint; incorporating demographic parity or equalized opportunity constraints into the reward
+objective is necessary before deployment at scale.
+    Taxonomy assignment uncertainty. Classification operates on inferred rather than observed
+labels. Probabilistic assignment mitigates hard misclassification risk, but in low-data regimes (early
+deployment, rare domains) the classifier may have high uncertainty, leading to noisy κ estimates
+and degraded updates.
+    Temporal dynamics of κ. The framework models κdk (t) as smoothly evolving, but real capa-
+bility development may be discontinuous—focused training programs may produce step changes,
+burnout or role change may produce step decreases. The current formulation does not explicitly
+model these, which may produce lagged κ estimates that temporarily misweight signal.
+    Contract drift. VBC payment models evolve: HEDIS measures are added, removed, or rede-
+fined; risk adjustment methodology changes; benchmark periods shift. When the contract context
+c changes meaningfully, the reward model’s contract-conditioning becomes stale and the framework
+requires either retraining on contract-segmented data or an explicit drift-detection mechanism
+that triggers partial reinitialization without invalidating accumulated override data. Designing
+such a mechanism—and characterizing how much accumulated data remains valid across contract
+transitions—is a deployment-critical research direction we do not address here.
+
+7.2   Research directions
+Latent patient state. The patient state s is treated here as observed. In practice, the system’s
+representation is an approximation that may miss critical variables—Type I context overrides are
+a direct consequence of state representation incompleteness. A natural extension jointly models
+patient state as a latent variable with hidden states updated from clinical observations, using
+context overrides as a signal for state space expansion.
+    Outcome metric formalization. The outcome observation ot+∆ is defined generically here.
+Formalizing time-to-outcome—the elapsed time from intervention to target clinical state—as a
+primary outcome metric is a natural specialization for chronic care platforms: time-to-outcome is
+the outcome most directly responsive to the override patterns this framework captures.
+    Fairness and bias mitigation. Beyond the fairness limitation noted above, future work should
+develop bias detection methods identifying when override patterns vary by patient demographics in
+clinically unjustified ways, and evaluate whether κ-weighting inadvertently amplifies or attenuates
+biases present in high-κ clinicians’ practice patterns.
+    Generalization beyond healthcare. The dual learning problem is domain-general. De-
+veloping methods to estimate annotator capability from preference data alone (without external
+capability labels), and evaluating whether κ-weighted training improves reward model quality in
+non-clinical domains (code generation, content moderation, legal review), is a promising direction.
+
+
+8     Conclusion
+Clinical AI systems generate millions of recommendations. Clinicians override many of them. The
+field has treated these overrides as failures to be minimized. We have argued that this interpretation
+discards the most valuable signal clinical AI can access.
+    A clinician who overrides an AI recommendation produces a labeled preference pair: a struc-
+tured, contextual, expert judgment about what the right action is for this patient, in this state,
+under this contract, given this clinician’s knowledge and capability. This is precisely the signal
+
+                                                 19
+RLHF uses to align language models with human values—but richer, because the annotator is a
+domain expert, the alternatives have real consequences, and downstream outcomes are observable.
+    We have presented a formal framework: an override taxonomy mapping types to distinct model
+update targets, a preference learning formulation conditioned on patient state, organizational con-
+text, and clinician capability, and a dual learning architecture that simultaneously improves recom-
+mendation quality and characterizes the clinician population’s capability profile. The framework
+identifies suppression bias as the specific failure mode naive approaches exhibit and provides the
+architectural remedy. We have argued that what makes the override signal aligned with patient
+trajectory is not value-based care in the abstract, but a specific incentive geometry: outcome-based
+payoff structures that reward earlier, correct, definitive intervention—of which the CMS ACCESS
+model is the clearest current instance.
+    Two practical implications follow. First, clinical AI platforms that aim to learn from clinician
+feedback at scale must build the care infrastructure required to produce structured override data
+themselves: instrumented recommendation interactions, longitudinal outcome linkage, capability-
+conditioned analytics. This is a substantial engineering investment, but it is also the only path to
+the supervision signal the framework requires; the data does not exist as a byproduct of conventional
+EHR deployment. Second, and equally important, the broader policy environment shapes whether
+the supervision signal is worth learning from. Clinical AI platforms operating under outcome-based
+payoff structures accumulate aligned reward signal; platforms operating under FFS or coding-
+dominant contracts accumulate misaligned signal regardless of how sophisticated their learning
+machinery is. This means that AI developers, payers, and policymakers share a stake in expanding
+ACCESS-like incentive geometries: not only because such structures improve clinical outcomes
+directly, but because they are the operational substrate on which clinical AI can learn to improve
+outcomes further.
+    The override signal is generated only through live clinical operation at scale, under the right
+incentive structure. It is the only training signal in clinical AI that gets better the more you use it.
+
+
+References
+ [1] Ancker, J.S. et al. Effects of workload, work complexity, and repeated alerts on alert fatigue in
+     a clinical decision support system. BMC Medical Informatics and Decision Making, 17(1):36,
+     2017.
+
+ [2] Austin, P. C. An introduction to propensity score methods for reducing the effects of con-
+     founding in observational studies. Multivariate Behavioral Research, 46(3):399–424, 2011.
+
+ [3] Bai, Y. et al. Training a helpful and harmless assistant with reinforcement learning from human
+     feedback. arXiv:2204.05862, 2022.
+
+ [4] Bradley, R. A. and Terry, M. E. Rank analysis of incomplete block designs: I. The method of
+     paired comparisons. Biometrika, 39(3/4):324–345, 1952.
+
+ [5] Casper, S. et al. Open problems and fundamental limitations of reinforcement learning from
+     human feedback. arXiv:2307.15217, 2023.
+
+ [6] Christiano, P. F. et al. Deep reinforcement learning from human preferences. In NeurIPS, 2017.
+
+ [7] Heidenreich, P. A. et al. 2022 AHA/ACC/HFSA Guideline for the Management of Heart
+     Failure. Circulation, 145(18):e895–e1032, 2022.
+
+
+                                                  20
+ [8] Hejna, J. and Sadigh, D. Inverse preference learning: Preference-based RL without a reward
+     function. In NeurIPS, 2023.
+
+ [9] Hernán, M. A. and Robins, J. M. Causal Inference: What If. Boca Raton: Chapman &
+     Hall/CRC, 2020.
+
+[10] Hu, X. et al. Explicit preference optimization: No need for an implicit reward model. In ICML,
+     2025.
+
+[11] Hussain, M. I., Reynolds, T. L., and Zheng, K. Medication safety alert fatigue may be reduced
+     via interaction design and clinical role tailoring. JAMIA, 26(10):1141–1149, 2019.
+
+[12] Komorowski, M. et al. The artificial intelligence clinician learns optimal treatment strategies
+     for sepsis in intensive care. Nature Medicine, 24:1716–1720, 2018.
+
+[13] McCoy, A. B. et al. A framework for evaluating the appropriateness of clinical decision support
+     alerts and responses. JAMIA, 19(3):346–352, 2012.
+
+[14] McMurray, J. J. V. et al. Dapagliflozin in patients with heart failure and reduced ejection
+     fraction. NEJM, 381(21):1995–2008, 2019.
+
+[15] Ouyang, L. et al. Training language models to follow instructions with human feedback. In
+     NeurIPS, 2022.
+
+[16] Packer, M. et al. Cardiovascular and renal outcomes with empagliflozin in heart failure. NEJM,
+     383(15):1413–1424, 2020.
+
+[17] Plank, B. The “problem” of human label variation: On ground truth in data, modeling and
+     evaluation. arXiv:2211.02570, 2022.
+
+[18] Poly, T. N. et al. Appropriateness of overridden alerts in computerized physician order entry:
+     Systematic review. JMIR Medical Informatics, 8(7):e15653, 2020.
+
+[19] Rafailov, R. et al. Direct preference optimization: Your language model is secretly a reward
+     model. In NeurIPS, 2023.
+
+[20] Rehr, C. A., Wong, A., Seger, D. L., and Bates, D. W. Determining inappropriate medica-
+     tion alerts from “inaccurate warning” overrides in the intensive care unit. Applied Clinical
+     Informatics, 9(2):268–274, 2018.
+
+[21] Robins, J. M., Hernán, M. A., and Brumback, B. Marginal structural models and causal
+     inference in epidemiology. Epidemiology, 11(5):550–560, 2000.
+
+[22] Sivaraman, V. et al. Ignore, trust, or negotiate: Understanding clinician acceptance of AI-based
+     treatment recommendations in health care. In CHI, 2023.
+
+[23] Bovenzi, I., Carmel, A., Hu, M., Hurwitz, R., McBride, F., Benac, L., Tello Ayala, J. R.,
+     and Doshi-Velez, F. Pruning the path to optimal care: Identifying systematically subopti-
+     mal medical decision-making with inverse reinforcement learning. AMIA Annual Symposium
+     Proceedings, 2024:202–211, 2024.
+
+[24] Cho, I., Slight, S. P., Nanji, K. C., Seger, D. L., Maniam, N., Fiskio, J. M., Dykes, P. C.,
+     and Bates, D. W. The effect of provider characteristics on the responses to medication-related
+     decision support alerts. International Journal of Medical Informatics, 84(9):630–639, 2015.
+
+                                                 21
+[25] Stuart, E. A. Matching methods for causal inference: A review and a look forward. Statistical
+     Science, 25(1):1–21, 2010.
+
+[26] van der Sijs, H. et al. Overriding of drug safety alerts in computerized physician order entry.
+     JAMIA, 13(2):138–147, 2006.
+
+[27] Wright, A. et al. Structured override reasons for drug-drug interaction alerts in electronic
+     health records. JAMIA, 26(10):934–942, 2019.
+
+[28] Wu, X. et al. A value-based deep reinforcement learning model with human expertise in optimal
+     treatment of sepsis. npj Digital Medicine, 6:15, 2023.
+
+
+
+
+                                                22
+

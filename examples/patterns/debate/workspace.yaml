@@ -1,0 +1,21 @@
+# DEBATE — two sides argue, then something that is not either of them decides.
+#
+# The pattern needs BOTH halves of PACT's coordination vocabulary and is here
+# to show that they compose. `teamwork:` says who is asked and how the answers
+# are waited for; the `loop:` says the arguing happens more than once, with a
+# judging stage in between that is not one of the arguers.
+#
+# When to reach for it: a question with a real case on both sides, where a
+# single agent asked to "consider both" writes one paragraph for the position it
+# already holds and one dutiful paragraph against. Splitting the roles across
+# agents is what stops that, because neither one is allowed to concede.
+#
+# What it costs: the most expensive shape here. Two agents, two rounds, plus a
+# judging call between them and one to write the verdict — six model calls for a
+# question one agent would answer in one. Do not reach for it by default.
+#
+# What goes wrong: rounds without a bound. `at-most: 2` on the weighing stage is
+# what ends it — two sides given an unbounded loop will restate themselves
+# indefinitely, and each restatement costs money and reads like progress.
+name: Debate
+description: Two sides argue their case over bounded rounds; a judge that argued for neither decides.

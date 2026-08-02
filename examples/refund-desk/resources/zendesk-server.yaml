@@ -1,0 +1,4 @@
+resource-kind: mcp-server
+endpoint: host/zendesk-mcp
+auth: { by-reference: host/zendesk-credential }
+description: Our customer support system, as the platform team publishes it.

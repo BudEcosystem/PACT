@@ -1,0 +1,58 @@
+# `pact:loop/react` — say what you are about to do, then do one thing.
+#
+# `standard` calls a tool, looks at the result, and calls another. The
+# reasoning happens, but it happens inside the same turn as the call and
+# nothing is written down — so a run that went wrong is a list of tool calls
+# with no record of what the agent believed at each step.
+#
+# This shape puts one `think` stage in front of every action, and its `says:`
+# asks for exactly three things: what is known, what is missing, and the ONE
+# next step. Not a plan for the whole job — that is `plan-then-do`, and the
+# difference is real: a plan written before anything is looked up is a guess,
+# while this is written after each result comes back.
+#
+# What it costs: one extra model call per action. On a six-call job that is six
+# extra calls, which is the trade — you are buying a readable trace and paying
+# for it per step. `at-most: 6` on the thinking stage is what stops that being
+# unbounded; when it is spent the run goes to `reply` and answers with what it
+# has rather than thinking forever.
+#
+# Copy this file into your own `loops/` folder and change it. Nothing in here
+# is privileged — it is read by the same code that reads a shape you write.
+
+description: >
+  Say what you know, what is missing, and the one thing you will do next —
+  then do that one thing, and say it again. The reasoning is written down at
+  every step instead of happening inside the tool call.
+
+starts-at: reason
+
+steps:
+  reason:
+    does: think
+    says: >
+      Say what you have found out so far, what you still do not know, and the
+      one thing you will do next. One step only — not a plan for the rest of
+      the job.
+    # Six rounds of reason-then-act. A seventh is a run that is not converging,
+    # and the honest response is to answer with what it has rather than to keep
+    # paying for turns. Raise this if your work genuinely needs more.
+    at-most: 6
+    then:
+      # A stage with no tools can still ask for one; the ask is refused and
+      # reported, and the honest next move is the stage where tools exist.
+      used-a-tool: act
+      answered: act
+      too-many-times: reply
+
+  act:
+    does: use-tools
+    then:
+      # Back to thinking after every tool call — that is the whole shape.
+      used-a-tool: reason
+      answered: reply
+
+  reply:
+    does: answer
+    then:
+      answered: done

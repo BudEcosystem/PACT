@@ -1,0 +1,27 @@
+# What a person is asked when the valuer cannot value something.
+#
+# Every line here is a decision the shape above cannot make for you: who is
+# asked, how long they have, and what happens when nobody answers. A park
+# missing any of the three is a hang.
+description: The valuer could not value this item. What is it worth?
+
+# The words the person reads, fixed rather than composed by a model. This is the
+# last hop into the only human control in the system, so it is not a place for
+# generated wording.
+says: >
+  We could not work out what this item is worth, so this claim is waiting on
+  you. What is it worth, and what are you going by?
+
+# There is deliberately NO `yes or no` line here. Any such line would be a gate —
+# answering it `no` stops the thing happening — and this is not an approval, it
+# is a figure we are missing. A question with nothing to say yes to is cleared
+# by being answered, which is what this one wants.
+answer:
+  amount: money
+  because: text
+
+asked-of: claims-team
+answer-within: 4h
+# Not "approve". A deadline that quietly approves a claim nobody valued is the
+# expensive mistake this whole shape exists to prevent.
+if-nobody-answers: stop-and-say-so

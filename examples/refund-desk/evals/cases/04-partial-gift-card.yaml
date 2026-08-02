@@ -1,0 +1,9 @@
+when: |
+  A customer paid 60 USD for a kettle, 20 USD of it on a gift card. It arrived
+  faulty after 10 days. They want their money back.
+expect:
+  decision: approved
+because: Faulty within 30 days, so a full refund — split back across both payment methods.
+must-also:
+  - must-contain: ["gift card"]
+    because: a refund split across two payment methods has to say so

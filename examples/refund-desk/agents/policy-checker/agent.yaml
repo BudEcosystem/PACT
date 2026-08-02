@@ -1,0 +1,7 @@
+name: Policy Checker
+description: Says whether our refund policy allows this request.
+uses:
+  - refund-policy
+answers-with:
+  allowed: yes or no
+  clause: text

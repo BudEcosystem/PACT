@@ -1,0 +1,24 @@
+# What must never leave this workspace inside a promoted case or a report.
+#
+# It used to live in `policies/redaction.yaml` under `policy.rules:`, where it
+# was unreachable by construction — `agent.policy:` names ONE policy, so an
+# agent pointing at `approvals` could never also point at this — and where its
+# contents were a `jsonpath:` and a `regex:`, which is code in a format whose
+# whole point is that a support lead can write it. Bound once for the workspace
+# now, in the same sentences an interceptor uses, for the same reason `watch:`
+# is workspace-scoped: what may not leave is a fact about the system, and an
+# agent that can opt out by deleting a line is the agent that leaks.
+#
+# This file IS the workspace's `redaction:` setting — it sits beside
+# `workspace.yaml` and nothing anywhere points at it, exactly the way
+# `learning.yaml` sits there and nothing points at that. It used to be
+# `redactions/customer-data.yaml` with a `redaction: customer-data` line in
+# `workspace.yaml` naming it: one idea written twice, where a second file in
+# that folder could not be bound at all and the advice offered for it was to
+# type a line that switched this one off. (R61)
+description: What may never leave this workspace in a case or a report.
+
+hide:
+  - anything that looks like a card number
+  - anything that looks like a bank account
+  - anything that looks like an email address

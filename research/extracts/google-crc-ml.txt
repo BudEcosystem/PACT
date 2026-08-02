@@ -1,0 +1,744 @@
+        Resolving Code Review Comments with Machine Learning
+    Alexander Frömmgen, Jacob Austin, Peter Choy, Nimesh Ghelani, Lera Kharatyan, Gabriela Surita,
+       Elena Khrapko, Pascal Lamblin, Pierre-Antoine Manzagol, Marcus Revaj, Maxim Tabachnyk,
+              Daniel Tarlow, Kevin Villela, Daniel Zheng, Satish Chandra, Petros Maniatis
+                                                                                       Google
+
+ABSTRACT                                                                                    expansion, asking for small refactoring to make the code more
+Code reviews are a critical part of the software development pro-                           readable or efficient, or engaging in a dialog with the reviewer to
+cess, taking a significant amount of the code authors’ and the code                         resolve more involved and ambiguous feedback. Code review is
+reviewers’ time. As part of this process, the reviewer inspects the                         primarily intended as a tool for high code quality, but it is also
+proposed code and asks the author for code changes through com-                             commonly used as an educational tool, as well as a knowledge-
+ments written in natural language. At Google, we see millions of                            spreading tool [16, 19]. As such, it is highly regarded in the Google
+reviewer comments per year, and authors require an average of                               software-engineering culture as a valuable process to support, with
+∼60 minutes active shepherding time between sending changes for                             both time and effort.
+review and finally submitting the change. In our measurements,                                  However, even in cases where only a single reviewing iteration
+the required active work time that the code author must devote to                           is needed, there is a cost involved: the code author must understand
+address reviewer comments grows almost linearly with the number                             the reviewer’s recommendation, look up needed information such
+of comments. However, with machine learning (ML), we have an                                as APIs and local code conventions, and type out the edit; any inter-
+opportunity to automate and streamline the code-review process,                             ruption or “context switching” to another task dilutes the relevant
+e.g., by proposing code changes based on a comment’s text.                                  context, and might require the code author to “page it all back in
+   We describe our application of recent advances in large sequence                         again” to complete the resolution of code comments in the future.
+models in a real-world setting to automatically resolve code-review                         It is therefore important to improve the ability of reviewers to give
+comments in the day-to-day development workflow at Google. We                               more actionable, precise suggestions, and to improve the ability of
+present the evolution of this feature from an asynchronous gener-                           code authors to address such suggestions effectively. Addressing
+ation of suggested edits after the reviewer sends feedback, to an                           this need translates directly into increased productivity. Machine
+interactive experience that suggests code edits to the reviewer at                          learning poses an emergent opportunity in this endeavor.
+review time. In deployment, code-change authors at Google address                               Much research effort has been expended recently on building
+7.5% of all reviewer comments by applying an ML-suggested edit.                             machine learning models that “solve” software-engineering tasks,
+The impact of this will be to reduce the time spent on code reviews                         including code review (e.g., CodeReviewer [10]). Typically such
+by hundreds of thousands of engineer hours annually at Google                               results are predicated on the fast and impressive improvement
+scale. Unsolicited, very positive feedback highlights that the impact                       of ML models of code [2, 4, 9, 18, 24], but are usually anchored
+of ML-suggested code edits increases Googlers’ productivity and                             on “lab” results: measurements of success metrics over evaluation
+allows them to focus on more creative and complex tasks.                                    benchmarks, with limited exposure to production use.
+                                                                                                This paper describes our efforts bringing such research results
+ACM Reference Format:
+                                                                                            to bear on an actual, rigorous, real-world code-review setting. We
+Alexander Frömmgen, Jacob Austin, Peter Choy, Nimesh Ghelani, Lera
+                                                                                            built an ML-based assistant that resolves code-review comments left
+Kharatyan, Gabriela Surita, Elena Khrapko, Pascal Lamblin, Pierre-Antoine
+Manzagol, Marcus Revaj, Maxim Tabachnyk, Daniel Tarlow, Kevin Villela,                      by human reviewers. The specific assistance involves suggesting a
+Daniel Zheng, Satish Chandra, Petros Maniatis. 2024. Resolving Code Review                  code edit that addresses the reviewer’s comment. We built, tuned,
+Comments with Machine Learning. In 46th International Conference on                         and deployed that assistant, and it has been in production use at
+Software Engineering: Software Engineering in Practice (ICSE-SEIP ’24), April               Google for several months.
+14–20, 2024, Lisbon, Portugal. ACM, New York, NY, USA, 12 pages. https:                         In this work, we side-step the question of the “best” ML archi-
+//doi.org/10.1145/3639477.3639746                                                           tecture or foundation model, and turn instead to the problem of
+                                                                                            building an actual tool, used by thousands of Google engineers ev-
+1     INTRODUCTION                                                                          ery day, and realizing its promise of strong impact on productivity.
+Google developers spend a substantial amount of time “shepherd-                                 Our contributions include:
+ing” code changes through the code-review process: addressing
+simple review comments such as typo fixes and documentation
+                                                                                                • The careful curation of a training dataset drawn from tens
+Permission to make digital or hard copies of part or all of this work for personal or             of millions of code reviews that, joined with other software-
+classroom use is granted without fee provided that copies are not made or distributed             engineering data collected at Google, led to an internal machine-
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for third-party components of this work must be honored.            learning model specializing in resolving code-review com-
+For all other uses, contact the owner/author(s).                                                  ments (§3).
+ICSE-SEIP ’24, April 14–20, 2024, Lisbon, Portugal                                              • Lessons learned about tuning this model, associated datasets,
+© 2024 Copyright held by the owner/author(s).
+ACM ISBN 979-8-4007-0501-4/24/04.                                                                 and the resulting assistant design to improve prediction qual-
+https://doi.org/10.1145/3639477.3639746                                                           ity (§4).
+    Alexander Frömmgen, Jacob Austin, Peter Choy, Nimesh Ghelani, Lera Kharatyan, Gabriela Surita, Elena Khrapko, Pascal Lamblin, Pierre-Antoine Manzagol, Marcus Revaj,
+ICSE-SEIP ’24, April 14–20, 2024, Lisbon, Portugal                         Maxim Tabachnyk, Daniel Tarlow, Kevin Villela, Daniel Zheng, Satish Chandra, Petros Maniatis
+
+
+     • Lessons learned about the user-interface experience of the
+       assistant that best supports our developers’ productivity (§5).
+     • Qualitative and quantitative results about the positive impact
+       of our deployed assistant (§6) in a real production environ-
+       ment, strongly demonstrating the feasibility and utility of
+       the effort.
+   After several months of deployment, our code-review comment-
+resolution assistant is addressing roughly 7.5% of comments pro-
+duced by code reviewers in their day-to-day work. Although we
+can share only some of the methodological details of our system,
+we hope that our experiences described here can inform other
+practitioners seeking to deploy ML assistance to real software-
+engineering practice.
+   The rest of the paper is organized as follows. §2 overviews the
+software-engineering landscape at Google where our assistant oper-
+ates. §3 describes the design and implementation for the comment-
+resolution assistant. §4 presents our efforts toward higher model
+quality, and is followed by our efforts towards better usability in §5.
+§6 shares results from our initial deployment, and §7 outlines some
+recent related work at the intersection of code-review assistance
+with machine learning.
+                                                                                       Figure 1: An example of a review comment in Critique. The
+                                                                                       reviewer asked for a defensive coding practice. The author
+2    BACKGROUND: THE GOOGLE                                                            addressed the comment by updating their changelist with a
+     CODE-REVIEW WORKFLOW                                                              new review snapshot. The update is shown via colors: green
+We begin with a brief review of Google’s software development                          for added text and red for removed. The author responded
+process, especially with respect to code editing and code review,                      to the comment with “Done.” and marked it “Resolved”.
+which are particularly relevant to this work.
+    Google stores its code in Piper [14], a monolithic source-code
+repository (also known as a monorepo). Code is updated via change-                     review snapshot and requests another look from the reviewer. See
+lists (CLs) using Critique, Google’s code-review system [25, Chap-                     Figure 1 for an example.
+ter 19]. A changelist is a transactional update of one or more                             If the reviewer is satisfied, marking all their prior comments as
+files (including potential additions of new files or deletions of pre-                 resolved, they declare the code review complete by responding with
+existing files), corresponding to a particular purpose (described in                   “LGTM” (i.e., “looks good to me”); if some old comments remain
+the changelist description). A changelist is committed only after a                    unresolved, or new comments pop up, the process continues, poten-
+review conducted by at least one peer, producing a new revision for                    tially in multiple rounds. Some changelists may be abandoned after
+each file included.                                                                    zero or more review rounds, because the review process revealed
+    Code reviews involve design and functional vetting (i.e., does                     the change was not advisable, or because they are replaced by other,
+this changelist move the codebase towards the goals stated in some                     perhaps smaller, changelists.
+design document?), engineering checks (e.g., are the tests covering                        Editing is performed in copy-on-write workspaces in a system
+enough desirable and undesirable behaviors?), as well as a stylistic                   called Clients-in-the-Cloud (or CitC for short) [14]. During work in
+code-quality sign-off from a process called readability review [25,                    progress, changes to files from Piper are represented as successive
+Chapter 3], whose purpose is to propagate best practices, share                        file snapshots, which may be bundled as a changelist, reviewed,
+tips, and adhere to a consistent style guide [25, Chapter 8]. A conse-                 and possibly approved for inclusion to the Piper repository. CitC
+quence of this broad use of code review is that review comments can                    records all updates to files, even those that do not result in a change-
+be as simple as “typo!” or as involved as a detailed question about                    list’s review snapshots: every file save, including automatic editor
+the introduced change that requires complex program analysis to                        saves—typically done every 30 seconds—produces a new CitC snap-
+answer (e.g., “does this field ever become null?”).                                    shot. Therefore, CitC snapshots provide a finer granularity of file
+    The developer addresses review comments by responding to                           evolution than review snapshots or Piper revisions.
+them (e.g., to request clarification, or to argue that the comment                         This workflow is similar to other source-control systems. For
+is inapplicable), by editing the code to implement an explicit, un-                    example, a changelist is akin to a GitHub pull request (PR), and
+contested suggestion (e.g., fixing the typo, and responding to the                     review snapshots are reminiscent of git commits on a pull request.
+comment with “Done.”) or even to implement an implied suggestion
+(e.g., responding to “does this field ever become null?” by checking
+                                                                                       3     LEARNING TO RESOLVE CODE-REVIEW
+if indeed this is possible, and if so, updating the code to check for                        COMMENTS
+that condition, which was the implied suggestion). After address-                      We now turn to our efforts using ML to produce a code-review
+ing comments in one review round, the code author creates a new                        assistant. §3.1 describes the vision guiding our path, §3.2 explains
+Resolving Code Review Comments with Machine Learning                                                       ICSE-SEIP ’24, April 14–20, 2024, Lisbon, Portugal
+
+
+the ML architecture and training process for this assistant, and §3.3                              Input Representation:
+                                                                        // [*] Task: Please fix the code-review comments.
+describes how the assistant is deployed.                                  bool has_seen_debug_evaluate_context = false;
+                                                                          *index = kNotFound;
+                                                                          *attributes = ABSENT;
+3.1    The Vision of ML-Assisted Comment                                  *init_flag = kCreatedInitialized;
+                                                                          *variable_mode = VariableMode::kVar;
+       Resolution                                                       * // [*] check if is_sloppy_function_name is nullptr before assigning it
+Given the existing code-review workflow (§2), we set out to build an      *is_sloppy_function_name = false;
+
+ML-based software-engineering assistant that improves changelist          if (v8_flags.trace_contexts) {
+                                                                            PrintF("Context::Lookup(");
+velocity. Among the many opportunities for ML assistance, we focus          name->ShortPrint();
+on automated resolution of code-review comments. Specifically, we                             Example Edit Representation:
+target an assistant that suggests an edit to resolve a given comment.     bool has_seen_debug_evaluate_context = false;
+                                                                          *index = kNotFound;
+                                                                          *attributes = ABSENT;
+                                                                          *init_flag = kCreatedInitialized;
+                                                                          *variable_mode = VariableMode::kVar;
+                                                                        - *is_sloppy_function_name = false;
+                                                                        + if (is_sloppy_function_name != nullptr) {
+                                                                        +   *is_sloppy_function_name = false;
+                                                                        + }
+
+                                                                          if (v8_flags.trace_contexts) {
+Figure 2: Critique notifies the author that there is an ML-                 PrintF("Context::Lookup(");
+                                                                            name->ShortPrint();
+suggested edit available.
+
+                                                                        Figure 4: Example representation of the review comment
+   Figure 2 shows an example, drawn from the same scenario as           from Figure 1. At the top, the input representation of the
+with Figure 1. The assistant suggests an edit to address the re-        review snapshot and the comment inlined. At the bottom,
+viewer’s comment and notifies the author. If the author decides to      the target edit for this particular comment resolution.
+preview the suggested edit, they can click on “Show ML-edit”, see
+the edit as a diff, and possibly apply that edit (Figure 3).
+
+                                                                        using a traditional Transformer [23] architecture based on T5 [15]
+                                                                        (using the T5X [17] framework).
+                                                                           More specifically, the input to this ML model is the review snap-
+                                                                        shot at which the reviewer attached one or more comments. We
+                                                                        “inline” each comment, by disguising it as a line comment in code,
+                                                                        following the conventions of the programming language in which
+                                                                        the example is written (e.g., using // for C++ or # for Python).
+                                                                        We insert this artificial line comment at the first line where the
+                                                                        reviewer attached their review comment. We do not consider com-
+                                                                        ments attached to an entire file (without specifying a location), or
+                                                                        an entire changelist (without specifying a file). The predictive target
+                                                                        of this model is the edit that addresses the comment; we use an
+                                                                        edit representation akin to diff patches. Figure 4 shows a training
+Figure 3: Critique shows the author an ML-suggested edit,
+                                                                        example drawn from Figure 1.
+which can then optionally be approved and instantly ap-
+                                                                           This representation can be applied to tasks other than review
+plied directly to the changelist.
+                                                                        comment resolution, for example, addressing a compiler error,
+                                                                        where instead of annotating the input with a comment text dis-
+   In addition to choosing to apply an ML edit or to ignore it, the     guised as a line comment, we can annotate it with a compiler error
+author also has the option to give specific feedback on the predic-     (also disguised as a line comment). Similarly, the “inlining” of anno-
+tion with the thumbs-up/thumbs-down buttons. Applying an edit           tations as line comments can be used to predict such annotations
+and clicking thumbs up for it are not equivalent; in some cases, a      in different tasks, e.g., predicting a likely static-analysis error by
+suggested edit may inspire a fix, but not be directly applied (but      predicting the diff that would have inserted the annotation as a
+the author may click the thumbs-up button for it). Similarly, the       line comment. To differentiate among such tasks, we use a special
+thumbs-down button might indicate a more intentional negative           code comment describing the task in natural language at the top of
+feedback on the suggested edit, compared to clicking nothing at all     the example. In the figure, the task prompt is “Please fix the code-
+(which might be a result of losing focus, switching to another task,    review comments.” Finally, to fit a represented example within the
+and otherwise forgetting to click “Apply”).                             model context window, we prune lines of the input, preferring to
+                                                                        prune lines that are the farthest away from any inlined annotation.
+3.2    Modeling                                                            In this fashion, we build a multi-task model for review comment
+We cast the problem of code-review comment resolution as a text-        resolution and other associated software-engineering tasks, using
+to-text machine-learning task. We target a text-to-text formulation,    the DIDACT framework [12]. The tasks used to train this model,
+    Alexander Frömmgen, Jacob Austin, Peter Choy, Nimesh Ghelani, Lera Kharatyan, Gabriela Surita, Elena Khrapko, Pascal Lamblin, Pierre-Antoine Manzagol, Marcus Revaj,
+ICSE-SEIP ’24, April 14–20, 2024, Lisbon, Portugal                         Maxim Tabachnyk, Daniel Tarlow, Kevin Villela, Daniel Zheng, Satish Chandra, Petros Maniatis
+
+
+in addition to code-review comment resolution, include edit pre-
+diction (file snapshot to subsequent file snapshot in CitC), variable
+renaming, code-review comment prediction (predict the comment
+location and content from the review snapshot), build-error repair,
+etc., as well as the standard pre-training task for T5, span denoising
+(i.e., mask out a sequence of tokens and have the model predict
+them from context). The training corpus consists of over 3 billion
+examples, of which code review contributes about 60 million exam-
+ples. We used a more “liberal” set of code-review examples during
+pre-training, including automated comments, and whole-file or
+whole-changelist comments. The samples used for fine-tuning and
+offline evaluation were solely human-generated line comments.
+    The model was trained using the standard cross-entropy loss,
+typical for such models, and tuned to maximize the exact sequence-
+match metric, that is, predicting the exact target for each example.
+    When used for inference, the model is tuned to attain a given
+desirable precision (i.e., number of correct predictions divided by all                Figure 5: The journey of a comment to an ML-suggested edit
+predictions). Specifically, every prediction of edits by the model is                  applied to a code file.
+accompanied by a probability of that prediction; higher probability
+indicates higher confidence by the model in its prediction. To tune
+the model, we evaluate its predictions over a held-out validation
+                                                                                       the code-review frontend and the integrated development environ-
+dataset (say a few months of held-out code reviews not used during
+                                                                                       ment (IDE), expose the suggested edits to the user and log user
+training). We choose a probability threshold such that the predic-
+                                                                                       interactions such as preview and apply events. Figure 5 illustrates
+tions with probability above that threshold achieve some desirable
+                                                                                       the journey of a comment through the system. A dedicated pipeline
+precision, e.g., 70%. The more aggressive this threshold is (i.e., the
+                                                                                       collects these logs and generates aggregate insights.
+higher the target predictive precision), the fewer predictions are
+above threshold and, subsequently, the fewer predictions are shown
+to users. For some target precision 𝑋 , we measure the recall@X of                     4     THE QUEST FOR HIGHER MODEL QUALITY
+the model, by counting the number of correct predictions divided                       The assistant produced in §3 went through a number of improve-
+by all examples.                                                                       ment iterations, with the goal to improve quality. Quality is mea-
+                                                                                       sured in two ways. First, we use offline evaluation, by computing the
+3.3     From ML Model to a Comment-Resolution                                          recall@X metric described above over a held-out test dataset. Sec-
+        Assistant                                                                      ond, we use user feedback, by measuring the number of code-review
+                                                                                       comments produced during day-to-day business, the number of
+We focused on the overall user experience and developer efficiency
+                                                                                       predictions the model made, the number of those predictions that
+in prototyping and deploying an assistant based on the model [5].
+                                                                                       were previewed, and of those how many were applied, or received
+We explored different user-experience alternatives through a series
+                                                                                       thumbs up/thumbs down. All types of such evaluation are meant
+of user studies and refined the feature assistant on insights from
+                                                                                       to detect an increase in developer productivity, but act as easier-to-
+an internal beta (see §4 and §5). At a high level, we:
+                                                                                       measure proxies of that measure.
+   (1) Listen for incoming code-review comments produced by                               Offline evaluation is desirable because it does not inconvenience
+       reviewers.                                                                      users, and can be done rapidly, with high frequency as the assistant
+   (2) Ignore comments produced by automated tools, comments                           is updated. On the other hand, offline evaluation is representative
+       not referring to a specific line, comments on unsupported                       of a test dataset, which is drawn from code reviews that did not
+       file types, informational comments that the reviewer already                    benefit from ML assistance, and were performed in an earlier time
+       marked as “Resolved”, and comments that already have a                          period (e.g., when reviewing guidelines may have been different);
+       suggested edit produced manually by the reviewer.                               offline evaluation seeks to reproduce exactly what was observed.
+   (3) Generate the model input in the same format as used for                         In contrast, online evaluation represents the current deployment
+       training (§3.2).                                                                environment, and involves the human user, collecting an assessment
+   (4) Query the model and generate the suggested code edit.                           of the prediction, even if it is different from what a human developer
+   (5) If the model is confident in the prediction (initially, targeting               might have produced. Out of all the user-feedback metrics, the most
+       higher than 70% precision) and a few additional heuristics                      important is acceptance rate, the fraction of code-review comments
+       are satisfied, post the suggested edit to downstream systems.                   that were addressed by an applied ML-suggested edit; other user-
+   To generate the code edit, each input is pre-processed into a                       feedback metrics are typically used as measurable proxies for other
+textual model input using the source code, review comments, and                        qualities of the model’s performance.
+other changelist metadata. The model then predicts the necessary                          Refinements of the assistant were conducted first to improve
+changes to be applied to the input and rebased to the initial source                   offline evaluation performance. Then a beta tool was deployed to a
+code, perhaps resolving conflicts. The downstream systems, namely                      small group of (friendly) users, and the assistant (both the model
+Resolving Code Review Comments with Machine Learning                                                  ICSE-SEIP ’24, April 14–20, 2024, Lisbon, Portugal
+
+
+and the tool) was improved to increase both offline evaluation per-         Reduce precision. Initial feedback from the V1 beta users of the
+formance and user feedback metrics. Finally, the first milestone         assistant indicated that a minimum precision of 70% was too con-
+version, V1, was deployed to 50% of the Google population, and           servative. Reducing the minimum precision to 50% increased the
+a careful A/B test was conducted to assess the user feedback on          absolute recall value (which is unsurprising), without reducing user
+the resulting tool. After careful analysis, an improved milestone        satisfaction (e.g., the rate of suggestions that were accepted, as well
+version, V2, followed the first deployment, went through an exten-       as thumbs-up ratings).
+sive beta phase, and is now deployed to the full 100% of the Google
+                                                                            Hyperparameters. We carefully explored the hyperparameters of
+population.
+                                                                         the fine-tuned model, further improving recall@50.
+   We describe some dimensions of model-quality refinements be-
+low, and defer user-interface refinements for §5. Figure 6 illustrates      Language Tuning. We noticed that minimum-precision thresh-
+improvements to recall@X metrics.                                        olds for different languages vary, leading to reduced performance
+                                                                         when using a single threshold for all predictions. We introduced per-
+                                                                         language minimum-precision threshold tuning, and that increased
+                                                                         the aggregate recall@50 metric.
+                                                                            Reviewer Preview. When reviewers were given the ability to ap-
+                                                                         prove or reject suggested edits (§5), we were able to reduce the
+                                                                         target precision further to 40%, which increased recall@40 even
+                                                                         further, while still improving downstream acceptance.
+
+                                                                         4.2    Data Improvements
+                                                                            Single-comment. Reviewers often provide more than one com-
+                                                                         ment during a review. Consequently training examples may include
+                                                                         multiple comments, all of which are addressed in a single entangled
+                                                                         edit. Initial prototype explorations with users showed that devel-
+                                                                         opers prefer an edit attributable to a single comment, rather than
+                                                                         an undifferentiated set of edits addressing multiple comments at
+                                                                         the same time. We therefore predict a single suggested edit for a
+                                                                         comment, ignoring all other comments in the file. We found that
+                                                                         reducing the training data to examples with a single review com-
+                                                                         ment does not improve model quality. However, we found that
+                                                                         limiting our offline evaluation dataset to single-comment edits rep-
+                                                                         resented our production scenario better, and led to more confident,
+Figure 6: Illustration of model-quality improvements that                higher-precision predictions.
+affect recall@X.
+                                                                            Train on “Done.” Some review comments are accepted and ad-
+                                                                         dressed immediately (and receive a formulaic “Done.” response,
+   Note that this is not meant to be a full ablation study of the        produced with a single button click). Other comments may lead to a
+different design decisions made at every evolutionary step, but          discussion, and in some cases rejection of the reviewer’s suggestion.
+merely a narrative of the various considerations in developing           We found that by filtering the training examples to comments that
+the assistant. A careful A/B study of each design update is, by ne-      are immediately accepted and have a single “Done.” response, we
+cessity, time consuming—e.g., every effect must be isolated from         improved model recall by more than 20%.
+other confounders, enough data volume is required to draw statis-
+tically significant conclusions, etc.—and was incompatible with our         Synthetic tasks. The fine-tuned model sees comment-to-edit ex-
+product-driven focus to deliver a useful assistant to our internal       amples drawn from Google’s history of code reviews. We further
+users in all due haste.                                                  augment the dataset with some synthetic tasks that disguise other
+                                                                         code-editing activities as code review, to provide the model with
+4.1    Model Tuning                                                      additional edit opportunities: 1) A code-infilling task, in which a
+                                                                         function, a function body, a part of a function body, or a unit test are
+   Fine-tuning. The foundation DIDACT model we trained origi-
+                                                                         removed, and a code-review comment is introduced in their place
+nally was targeting several software-engineering tasks. Fine-tuning
+                                                                         prompting the model to implement the missing code, sometimes
+that model on comment resolution exclusively (that is, further train-
+                                                                         by reusing the pre-existing documentation string as part of that
+ing on only comment-resolution examples) improved performance.
+                                                                         prompt. 2) A build-repair task, in which a file snapshot on which
+   Size tuning. We experimented with various model sizes, trading        the compiler failed to compile, is cast as a code-review comment of
+off computational resources with model performance and latency.          the sort “Please fix the broken build below.” There already is such a
+By increasing our model size (number of learnable parameters) by         build-repair task in the DIDACT pre-training mixture, and this syn-
+2×, we improved recall by 25%. Further model-size increases did          thetic task casts the same examples in this alternative prompting
+not improve offline performance.                                         format, and the target edit is the one that fixes the compiler error.
+    Alexander Frömmgen, Jacob Austin, Peter Choy, Nimesh Ghelani, Lera Kharatyan, Gabriela Surita, Elena Khrapko, Pascal Lamblin, Pierre-Antoine Manzagol, Marcus Revaj,
+ICSE-SEIP ’24, April 14–20, 2024, Lisbon, Portugal                         Maxim Tabachnyk, Daniel Tarlow, Kevin Villela, Daniel Zheng, Satish Chandra, Petros Maniatis
+
+
+3) A set of comment resolutions in which the developer rewrote the                        We sourced these examples manually 1) from the held out splits
+predicted suggestion, collected from the production system. This is                    (validation and test) of the training data, 2) from accepted suggested
+a form of incidental instruction tuning.                                               edits in production, 3) from provided manual rewrites by users, and
+                                                                                       4) by explicitly generating examples that fulfill a desired property.
+4.3     Prediction Post-Processing                                                     We explored additional sources such as suggested edits that have
+We manually sampled suggested edits and used thumbs-down clicks                        been previewed by the user but not applied. We found these very
+from beta users to identify recurring failure patterns. We imple-                      noisy and not suitable for our goal.
+mented serving-time heuristic filters to reduce the number of shown                       Anecdotally, as the model quality improved, during evaluations
+incorrect predictions. With these changes, we traded reduced quan-                     on the curated datasets, we sometimes identified model sugges-
+tity of shown suggested edits for higher quality of user experience                    tions that improved upon our previous ground truth! We often kept
+and an increase in the observed acceptance rate in production.                         multiple correct alternatives, to simplify the job of the human rater.
+Specifically:                                                                             All in all, the curated dataset served as a qualitative, diverse
+                                                                                       regression test for desirable properties of the assistant, as a way
+  Filter out: Spread-out Edits. Filtering suggested edits that are                     to formalize launch blockers (e.g., delete-only edits) and updated
+more than 5 lines away from the comment reduces the rate of                            priorities in the complexity of intended resolutions, and as a way
+thumbs down clicks for previewed edits from 8.5% to 6.7%.                              to capture behaviors that did not have sufficient frequency in our
+   Filter out: Promises to do it Later. The model sometimes resolves                   training/evaluation data splits to appear naturally in our held-out
+a comment by adding a promise to do it later in a “to do” code                         test split, especially for cases where the distribution changed over
+comment! When the assistant suggested such edits, users marked                         time, altering what “ground truth” was.
+them with a thumbs down, so we do not surface such predictions                            By necessity, such a curated dataset has a limited useful lifetime
+to users.                                                                              and must be updated. For example, what is considered a “moonshot”
+                                                                                       becomes feasible when model quality improves dramatically.
+   Filter out: Delete Code In Scope. The model addresses a few com-
+ments incorrectly by deleting large blocks of code where the re-                       5     THE QUEST FOR HIGHER USABILITY
+viewer’s comment was attached. Although sometimes such massive
+                                                                                       Even a high-quality ML model for code-review comment resolu-
+deletions are indeed the intended resolution, we decided to drop all
+                                                                                       tion can be wasted if not presented to users in an effective, usable
+such delete-only predictions, to protect user trust.
+                                                                                       manner. We next describe the evolution of our assistant, and the
+4.4     A Curated Qualitative Evaluation Dataset                                       pitfalls we uncovered that, when mitigated, improved its usability.
+                                                                                       As before, acceptance rate (i.e., the fraction of comments resolved
+A valuable tool in improving assistant quality was a manually-                         by an accepted ML suggestion) is an important metric of usability,
+curated, qualitative evaluation dataset, in addition to the existing,                  but a core auxiliary metric is also discoverability: the fraction of
+held-out quantitative validation and test data splits from the train-                  surfaced suggestions that were previewed by system users.
+ing dataset. Such curation is motivated by the need to track per-                         Note that sometimes usability gaps (e.g., low discoverability)
+formance in example categories that are not frequent in our other                      might require modelling improvements (e.g., a different data repre-
+training and evaluation datasets. We also targeted a small dataset                     sentation), although this was not necessary in the versions of our
+size (on the order of 100 examples), so that a single person can                       assistant described in this article.
+inspect the full set of predictions and ground truth side-by-side,
+without fatigue, and in enough detail to rate predictions as correct,
+incorrect, or “close”.
+   We curated examples with the following criteria:
+     • A few simple examples that allow us to detect regressions.
+     • A few difficult examples, already within the capabilities of
+       the current model, also used to detect regressions.
+     • A few examples that require changes spread across multiple
+       clusters within the file.
+     • A few examples that are sensitive to the file position where
+       the review comment is attached.
+                                                                                       Figure 7: The initial Critique integration for the code author
+     • A balanced mix of examples that focus on code refactoring
+                                                                                       that shows Auto-generated suggested edits in a distinct anno-
+       and code generation.
+                                                                                       tation attached to the same text range where the reviewer
+     • A few examples that we considered feasible, but that the
+                                                                                       comment was attached.
+       model failed to resolve.
+     • A few examples that we considered feasible, but that led the
+       model to generate only deletions.                                                  Pitfall: decoupled comment and suggested edit. Our first integra-
+     • A few “moonshot” examples that we considered infeasible                         tion of the ML model in the Critique UI was by running a separate,
+       for the model, to assess performance headroom and failure                       asynchronous analyzer that queried the model and produced the
+       commonalities (e.g., to ensure that the model has low confi-                    suggested edit as an independent code finding, in a separate anno-
+       dence for out-of-distribution comments).                                        tation (see Figure 7). This resulted in duplication of information,
+Resolving Code Review Comments with Machine Learning                                              ICSE-SEIP ’24, April 14–20, 2024, Lisbon, Portugal
+
+
+wasted precious UI real-estate, and confused the prevailing visual      Pitfall: decoupled reviewer from ML assistant. The most frequent
+language of review comments. Our V1 beta evaluation showed that      negative feedback during the beta of the V1 assistant was from
+only 20% of suggested edits were previewed by developers through     reviewers who were uncomfortable having an ML model “interpret”
+a click on the "Show fix" button. A UI update that combined the      their comment into a suggested edit, and would prefer to preview
+two sources of information, by placing a “Show ML edit” in the       the suggestion before providing it to the code author; the pedagog-
+same box where the reviewer comment appears (Figure 2) improved      ical function of code review was of primary concern here, since
+discoverability considerably (up to about 30% at V1 launch).         code review is often how new engineers are trained on local con-
+                                                                     ventions and programming discipline. This led to a UI revision in
+                                                                     V2, in which the reviewer is shown the ML-suggested edit (Figure 8)
+                                                                     as they type their comment. The reviewer can decide to reject the
+                                                                     suggested edit (in which case the author will only see the reviewer’s
+                                                                     comment). If the reviewer takes no action, the author sees the com-
+                                                                     ment along with the suggestion, as well as an additional annotation
+                                                                     of the suggested edit denoting that is has been “Reviewed” (Fig-
+                                                                     ure 9). We noticed initially that reviewers only approved about half
+                                                                     of the ML-suggested edits to their own comments, which suggests
+                                                                     that the quality of suggested edits reaching code authors increased
+                                                                     as a result of this pre-approval. Furthermore, since the reviewer
+                                                                     can reject obviously incorrect suggested edits, we could be even
+                                                                     more aggressive with ML confidence thresholds, dropping the V2
+                                                                     minimum precision to 40% from 50% and, therefore increasing the
+                                                                     number of comments that received ML suggestions.
+
+                                                                        Pitfall: slow-to-predict edits. Reviewer-previewed suggested edits
+                                                                     are valuable to code authors (see above); however, reviewers are
+                                                                     typically pressed for time, and may move on quickly from comment
+Figure 8: As the reviewer started typing the comment, the            to comment. In an attempt to reduce back-end prediction load, and
+suggestion was shown. Note that unlike the more descrip-             to avoid showing reviewers suggested edits before they have typed
+tive text of Figure 2, the reviewer had not yet had a chance to      enough of their comment, we set the triggering delay between
+specify the details (e.g., “before assigning”) or even designat-     when the reviewer starts typing a comment and when a prediction
+ing the particular variable in question. The location of the         is requested to 1500ms. Between this triggering delay, and the
+comment and the mention of “check” and “null” were suffi-            additive prediction latency of the model, many predictions “missed”
+cient to trigger the assistant to suggest the intended edit. It      the reviewer, who had already moved on. When we further reduced
+should be noted though that earlier, as the comment is being         the triggering delay to 500ms, and improved the prediction latency
+typed, the assistant will suggest a rename or other unrelated        through considerable engineering effort, the number of suggested
+assignments. The reviewer has the option to continue typing          edits previewed by reviewers increased by 12%, and the acceptance
+until they complete their comment (and possibly discard the          rate of ML-suggested edits by authors improved by 18%. We found
+suggested edit if it is inapplicable), stop when they see what       the 2x increase in back-end load that resulted from this triggering
+they intended, or complete and elucidate the comment even            change well-justified by the improvement in acceptance rates.
+after the right suggestion is predicted by the assistant.
+                                                                        Pitfall: click to view. Since code shepherding (i.e., editing the
+                                                                     changelist in light of the reviewer comments) takes a significant
+                                                                     fraction of developers’ time—one study at Google measured the
+                                                                     median to be around 60 minutes [7]—efficiency in addressing com-
+                                                                     ments is important. We found that ML-suggested edit discoverabil-
+                                                                     ity for the changelist author improved when we started showing
+                                                                     the suggested edit immediately next to the reviewer comment (Fig-
+                                                                     ure 9), rather than requiring a click of the “Show ML edit” button
+                                                                     (Figure 2).
+
+                                                                        Pitfall: code review is serialized. Our original design of the UI as-
+                                                                     sumed that the changelist author and reviewers operate in lock step:
+                                                                     one stops when the other starts working on the changelist. This
+                                                                     is not, however, how code review operates in practice. Sometimes
+                                                                     the changelist is edited by the author as the reviewer is review-
+Figure 9: The author is shown an ML-suggested edit that the          ing, or perhaps the reviewer thinks of a new comment after they
+reviewer previewed and approved.                                     have passed the bulk of their review to the author, and sometimes
+                                                                     the reviewer attaches a comment to an older review snapshot of
+    Alexander Frömmgen, Jacob Austin, Peter Choy, Nimesh Ghelani, Lera Kharatyan, Gabriela Surita, Elena Khrapko, Pascal Lamblin, Pierre-Antoine Manzagol, Marcus Revaj,
+ICSE-SEIP ’24, April 14–20, 2024, Lisbon, Portugal                         Maxim Tabachnyk, Daniel Tarlow, Kevin Villela, Daniel Zheng, Satish Chandra, Petros Maniatis
+
+
+
+
+Figure 10: Three-way merge window pops up in the IDE when the author attempts to accept an ML-suggested edit in an
+incompatible code state.
+
+
+the changelist. All in all, this means that sometimes even an ML-                      6.1      Quantitative Results
+suggested edit that the author wishes to accept is incompatible with                   In the previous sections, we described how we iterated on model
+the current state of the code. We found that by detecting those cases,                 quality and usability, and reported relevant metric improvements
+and opening a three-way merge window (Figure 10) for the author                        for these iterations.
+to resolve any merge conflicts, the number of accepted suggested                          However, ultimately a primary goal for any assistance tool is
+edits increased.                                                                       to increase productivity. One metric we use to gauge the positive
+                                                                                       impact of our assistant on productivity is acceptance rate, the frac-
+                                                                                       tion of all code-review comments that are resolved by the assistant;
+   Pitfall: meticulous user feedback is plentiful. Our original hope                   this measures, out of all (non-automated) comments left by human
+was to study thumbs up/thumbs down user feedback as an addi-                           reviewers, what fraction received an ML-suggested edit that the
+tional model signal producing improved predictions. Unfortunately,                     author accepted and applied directly to their changelist.
+developers do not often provide positive feedback explicitly: we                          Table 1 shows results from the assistant’s deployment, starting
+noticed that most accepted suggested edits were not accompanied                        with the first milestone version (V1), which lacked reviewer preview
+by a thumbs-up click, and there were few thumbs-up clicks for                          and required a click to view suggested edits. The bottom V1 row
+not-applied edits. Thankfully, in this case, applied edits constitute                  shows that out of all code-review comments, 4.9% were resolved by
+strong, indirect positive feedback. For negative feedback, we found                    an ML-suggested edit (with a 75–25 split between Critique and the
+a mix of “comment is not useful” and “suggested edit is not useful”                    IDE). Weekly aggregate acceptance rates over the 3-month deploy-
+clicks, which made the data very noisy, since the design of our                        ment to 50% of Google engineers range between 3.9% and 5.5%. As
+feedback mechanism left room for ambiguous responses. In the end,                      has been previously published, tens of millions of code-review com-
+we found the actual numbers of thumbs up/thumbs down relatively                        ments are left by Google developers every year [19], which means
+uniformative. However, a developer dissatisfied with the assistant’s                   that an almost 5% ML-assisted comment resolution is a considerable
+prediction has the option to open a bug report for the assistant,                      contribution to Google’s total engineering productivity.
+which collects automatically the changelist context, the reviewer                         The table also breaks down the fraction of comments that go
+comment, and the incorrect ML-suggested edit, as well as an op-                        through all the way to ML-assisted resolution. Around 34% receive
+tional explanation why this suggested edit is wrong. We received                       predictions given the tuned model—note that this is a model tuned
+numerous such bug reports, which did help us and contributed to                        for 50% minimum precision. Of those predictions, A little fewer than
+our curated evaluation dataset.                                                        a third are previewed by the author; for the rest, the author chose
+                                                                                       to push back (e.g., question the reviewer’s comment), or perhaps
+                                                                                       thought the comment would be easy enough to address without
+                                                                                       even previewing the suggestion. Most of the previews were done
+6    SYSTEM IMPACT                                                                     in Critique and far fewer in the IDE (roughly a 5-to-1 ratio), which
+                                                                                       can be explained by Critique being the first-pass UI for receiving
+We now turn to evaluations, both qualitative and quantitative, of
+                                                                                       reviewer comments, only switching to the IDE when the review is
+our code-review comment-resolution assistant in practice.
+Resolving Code Review Comments with Machine Learning                                                                   ICSE-SEIP ’24, April 14–20, 2024, Lisbon, Portugal
+
+
+                                                                    (%) of                 more reviewer control; we observe that reviewers do some “prompt
+                                                       (%) of
+       Version                   Stage                             previous                engineering” on their comment text, to get the desired suggested
+                                                        total
+                                                                     step                  edit. The higher yield also demonstrates the benefits of higher dis-
+                       Incoming comments                 100.0         100.0               coverability, and the assurance that a human reviewer has rejected
+                      Confident predictions               34.3             34.3            inapplicable ML-suggested edits before the author receives them.
+           V1         Previewed by author                 10.7             31.3
+                       Applied by author                   4.9             45.6
+                                                                                           6.2    Qualitative Results
+                      Confident predictions               49.0             49.0
+                      Accepted by reviewer                33.1             63.6            In this section, we look at some selected examples of detailed
+           V2                                                                              rewrites produced by the assistant. We observe ML-suggested edits
+                      Previewed by authora                10.7             34.5
+                        Applied by author                  7.5             69.5            addressing a wide range of reviewer comments in production, in-
+                                                                                           cluding simple localized refactoring, changes that are spread across
+ a The concept of author preview is less significant in V2. The author automatically
+                                                                                           dozens of lines of code, use of standard libraries accompanied by
+sees a small preview and can “click-to-view” full suggested edits. This full view either
+shows the “Apply“ button or informs about an edit that requires a three-way merge.         imports, unit-test generation, etc.
+Almost all not-applied previews in V2 denote an edit that required a three-way merge           Figure 11 illustrates a refactoring edit that hoists some string
+                                    to be applied.                                         literals strewn throughout the code into separate constants. The
+Table 1: Comment attrition on the way to ML-assisted reso-                                 rewrite also moves some formatting code into the constant defi-
+lution. “V1” is the first milestone version (click-to-view sug-                            nitions, which addresses the reviewer’s suggestion, but solves the
+gested edits, no reviewer preview). “V2” is the second mile-                               problem in a more comprehensive way than what was proposed. It
+stone version (reviewer preview, always show suggested ed-                                 is interesting that the assistant is collaborating with the reviewer
+its to authors).                                                                           here: the reviewer suggests one way to address the issue and the
+                                                                                           assistant expands it into an even better rewrite.
+                                                                                               The second example in Figure 12 addresses a fairly open-ended
+                                                                                           comment by the reviewer with a comprehensive code rewrite, in-
+received while other coding is in progress, or the edit requires a                         troducing the idiomatic Python enum primitive, and importing the
+3-way merge to be applied. Finally, out of all previewed suggested                         relevant standard library in the process. Although the reviewer
+edits, over 45% are accepted by the author and applied to code.                            was ambivalent about the right way to address their concern, the
+   The more recent V2 milestone version (reviewer preview, no                              suggested edit demonstrates the detailed alternative for the author,
+click to view edit) showed promising results during its beta de-                           leaving it up to them to make a choice (in this case, although the
+ployment to a smaller fraction of Google engineers over 8 weeks,                           suggestion addressed the reviewer’s suggestion, the author chose
+and was recently deployed to the full population replacing the V1                          not to apply the edit).
+version globally. Table 1, under the V2 rows, shows that out of all                            In the final example in Figure 13, the model generates a new unit
+code-review comments in this population, 7.5% were resolved by                             test to address the reviewer’s suggestion. It mimics the pre-existing
+an ML-suggested edit (with a 76–24 split between Critique and                              test pattern (from the location of the comment), while changing the
+the IDE). Weekly aggregate acceptance rates since full deployment                          expected semantics as described in the reviewer’s comment. Addi-
+started ranged between 5.4% and 7.5% with a standard deviation of                          tionally, the model suggests an apt test name, reflecting intended
+about 0.9 percentage points. This acceptance rate is considerably                          test semantics. Although different assistants might be required to
+higher than that of the V1 assistant; acceptance rate reached as                           handle more ambiguous and comprehensive test improvements, we
+much as 9.4% during the V2 beta, but stabilized around 7.5% after                          have found that simple unit tests can be usefully suggested by the
+deployment covered the full developer population. Different pro-                           comment-resolution assistant.
+gramming languages see different acceptance rates. Among the                                   Early feedback about the assistant in internal message boards is
+popular languages, acceptance rate is 9.5% for Java, 7.5% for C++,                         enthusiastic, including characterizations such as “sorcery!”, “magic!”,
+and 7.1% for Python, and these numbers vary similarly to the above                         “impressive”. Although the new version V2, in which suggested ed-
+aggregate from week to week. We have no conclusive explanation                             its are presented as the reviewer is typing a comment, has only
+why Python acceptance rate is lower than, say, Java, except that                           been deployed to 100% of the population for a relatively limited
+different popular languages are used for different purposes (e.g.,                         time, we have received delighted reports demonstrating that just
+building back-end services versus ML training scripts) and receive                         the location and the initial sentiment of the reviewer’s comment can
+comments of different types.                                                               lead to helpful suggested edits, for both parties involved. In one ex-
+   Also looking at the breakdown (for the V2 table rows), around                           ample, the reviewer had barely typed “I believe the recommended
+half of all eligible comments receive predictions—note that this                           way [cursor]” with respect to four lines of code, and the model
+model is tuned for 40% minimum precision, since a reviewer will                            already suggested the refactoring that the reviewer intended, with
+have a chance to reject the suggestion. Of those predictions, over                         no further prompting. In a similar cluster of examples, reviewers
+63% are accepted by the reviewer and attached to the comment to                            who remember there is a library for what they are about to suggest
+be sent to the author. 34% of those suggested edits are previewed                          but do not recall the exact library or API will start writing the com-
+by the author, and of those previewed, 70% are accepted and ap-                            ment, e.g., “there is a library for [cursor]” and the suggested edit
+plied to code. The higher “yield” of suggested edits as we proceed                         actually reminds them of the relevant library and the associated
+through the stages of the V2 assistant demonstrates the benefits of                        rewrite. In both cases the reviewer preview helps reviewers save
+    Alexander Frömmgen, Jacob Austin, Peter Choy, Nimesh Ghelani, Lera Kharatyan, Gabriela Surita, Elena Khrapko, Pascal Lamblin, Pierre-Antoine Manzagol, Marcus Revaj,
+ICSE-SEIP ’24, April 14–20, 2024, Lisbon, Portugal                         Maxim Tabachnyk, Daniel Tarlow, Kevin Villela, Daniel Zheng, Satish Chandra, Petros Maniatis
+
+
+
+
+                                                                                       Figure 12: Example: replace a Boolean label with an enumer-
+                                                                                       ation, also including relevant imports. Note the conversa-
+                                                                                       tional language used by the reviewer.
+
+
+                                                                                       7     RELATED WORK
+                                                                                       There is quite a bit of recent work on predicting code review com-
+                                                                                       ments from code / code changes, but relatively less work on gener-
+     Figure 11: Example: replace values with constants.                                ating code edits to address comments, or experiences about such
+                                                                                       deployed systems.
+                                                                                          CodeReviewer [10] is perhaps the closest recent result to our
+                                                                                       assistant. It seeks to automate the identification of lines that merit
+                                                                                       a comment, the generation of that comment, and a suggested refac-
+time reviewing, since it makes their comment concrete and avoids                       toring to address the issue. It is trained on 8M GitHub pull requests
+lookups, and it also saves the author’s time, since the suggestion is                  to further pre-train and fine-tune a code Large Language Model.
+actionable and pre-vetted by the reviewer.                                             The reported results focus on the model itself and ablative stud-
+   The extensive use of the tool in the past year within the company                   ies, showing promising benchmark evaluations. Our approach is
+has demonstrated non-trivial, detailed, comprehensive suggested                        similar in principle, with some differences. First, our focus in this
+edits that have surprised and delighted developers.                                    paper is on deploying an assistant based on a comment-resolution
+Resolving Code Review Comments with Machine Learning                                                      ICSE-SEIP ’24, April 14–20, 2024, Lisbon, Portugal
+
+
+                                                                         in part, motivates our focus on comment resolution rather than
+                                                                         comment generation—but that direction of assistive code review
+                                                                         shows some promise (e.g., AUGER found that 29% of automatic
+                                                                         review comments are still considered useful, in their human study).
+                                                                         LLaMa-Reviewer [11] is a very recent addition in this space, using
+                                                                         the LLaMa large language model [21] to formulate a number of
+                                                                         code-review related tasks, with a focus on parameter-efficient tun-
+                                                                         ing, and showing impressive performance on the CodeReviewer and
+                                                                         AUGER datasets, especially with respect to comment generation.
+                                                                            Resolving tool-generated comments or annotations using ML is
+                                                                         an active sub-topic of program-repair research (e.g., DeepFix [6]), in-
+                                                                         cluding our own prior work on build repair [13, 20] and Getafix [1].
+                                                                         Most of this work considers only stylized error messages generated
+                                                                         by linters, static analyzers, or compilers. The kinds of code trans-
+                                                                         formations expected in such cases are considerably narrower. By
+                                                                         contrast, this paper aims to produce code transformations where
+                                                                         the intent is expressed in natural language.
+
+                                                                         8    CONCLUSION AND NEXT STEPS
+                                                                         In this article, we introduced an ML-assistance feature to reduce
+                                                                         the time spent on resolving code-review comments at Google. At
+                                                                         the moment, the assistant is deployed to all Google engineers and
+                                                                         7.5% of all code-review comments are addressed with applied ML-
+                                                                         suggested edits.
+                                                                            We are working on improvements throughout the whole stack,
+                                                                         but also creating APIs to integrate this in-situ modification of code
+                                                                         to address review comments in other tools and modalities.
+                                                                            Beyond code review, we are continuing along the same line
+                                                                         of work to bring ML assistance to various stages of the software
+Figure 13: Example: generate a new unit test that flips a
+                                                                         engineer’s journey, from design and implementation all the way to
+command-line flag from false to true, and adapts the test
+                                                                         deployment, maintenance, bug finding, and repair.
+expectations.
+
+                                                                         ACKNOWLEDGMENTS
+ML model, and realizing its productivity impact. Second, we train        This is the work of many people in Google Core Systems & Expe-
+on a more homogeneous distribution of code-review examples:              riences team, Google Research, and DeepMind. We would like to
+code review is a fundamental aspect of the Google engineering            thank all of our team members for their key contributions and useful
+culture, yielding a high volume of high-quality training data about      advice, including Alberto Elizondo, Ambar Murillo, Amit Patel, Bal-
+a more uniform codebase. Third, DIDACT [12], our underlying ML           lie Sandhu, Boris Bokowski, Brett Wiltshire, Chenjie Gu, Chris Gor-
+framework, trains on a broader set of data sources and tasks (code,      golewski, David Choi, David Tattersall, Dima Sutygin, Emily John-
+fine-grained code edits, code review, build repair, refactoring oper-    ston, Fredde Ribeiro, Henryk Michalewski, Hermann Loose, Jessica
+ations). PLUR [3] was our earlier research effort towards training       Ko, Jiquan Ngiam, Jonas Mattes, Juanjo Carin, Kathy Nix, Katja Gru-
+multi-task models of diverse code activities. Finally, since this work   enwedel, Kensen Shi, Kristóf Molnár, Kyle Lippincott, Laurent Le
+is evaluated on end-user acceptance, rather than strictly on off-line    Brun, Luis C. Cobo, Luka Kalinovcic, Madhura Dudhgaonkar, Marc
+accuracy results, accuracy metrics are not directly comparable; in-      Brockschmidt, Marc Rasi, Marcus Revaj, Mariana Stariolo, Matt Fra-
+formationally, our recall@50 is over 66%, which is a competitive         zier, Franjo Ivančić, Małgorzata Salawa, Manushree Vijayvergiya,
+metric to the CodeReviewer metrics on its evaluation datasets.           Marko Ivanković, Markus Kusano, Mehdi Ghissassi, Michael Sloan,
+    Much ML research has focused on predicting code edits from           Mingpan Guo, Niranjan Tulpule, Ole Rehmsen, Paige Bailey, Peter
+some natural-language or semi-structured prompt, with applica-           Josling, Raphael von der Gruen, Rodrigo Damazio Bovendorp, Sara
+tions to code review. Some notable examples include CoditT5 [27]         Qu, Sara Toth, Sara Wiltberger, Sascha Varkevisser, Savinee Dancs,
+and Graph2Edit [26]. In contrast, generative-ML research has sought      Stephanie Tang, Stoyan Nikolov, Tobias Welp, Vahid Meimand,
+to summarize problems in code, producing comments that could             Vaibhav Tulsyan, Yujia Li, and Zoubin Ghahramani.
+be used for code review. For example, Tufano et al. [22] and the
+more recent AUGER [8] both produce natural-language text about
+a code context and some review range and tags drawn from that
+                                                                         REFERENCES
+                                                                          [1] Johannes Bader, Andrew Scott, Michael Pradel, and Satish Chandra. Getafix:
+code context. Such prior work shows that automatic review com-                Learning to fix bugs automatically. Proc. ACM Program. Lang., 3(OOPSLA), oct
+ments tend to be less helpful than user review comments—which,                2019.
+    Alexander Frömmgen, Jacob Austin, Peter Choy, Nimesh Ghelani, Lera Kharatyan, Gabriela Surita, Elena Khrapko, Pascal Lamblin, Pierre-Antoine Manzagol, Marcus Revaj,
+ICSE-SEIP ’24, April 14–20, 2024, Lisbon, Portugal                         Maxim Tabachnyk, Daniel Tarlow, Kevin Villela, Daniel Zheng, Satish Chandra, Petros Maniatis
+
+
+ [2] Mark Chen, Jerry Tworek, Heewoo Jun, Qiming Yuan, Henrique Ponde                          ACM Joint Meeting on European Software Engineering Conference and Symposium
+     de Oliveira Pinto, Jared Kaplan, Harrison Edwards, Yuri Burda, Nicholas Joseph,           on the Foundations of Software Engineering, ESEC/FSE 2019, page 925–936, New
+     Greg Brockman, Alex Ray, Raul Puri, Gretchen Krueger, Michael Petrov, Heidy               York, NY, USA, 2019. Association for Computing Machinery.
+     Khlaaf, Girish Sastry, Pamela Mishkin, Brooke Chan, Scott Gray, Nick Ryder,          [14] Rachel Potvin and Josh Levenberg. Why Google stores billions of lines of code
+     Mikhail Pavlov, Alethea Power, Lukasz Kaiser, Mohammad Bavarian, Clemens                  in a single repository. Commun. ACM, 59(7):78–87, June 2016.
+     Winter, Philippe Tillet, Felipe Petroski Such, Dave Cummings, Matthias Plappert,     [15] Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang,
+     Fotios Chantzis, Elizabeth Barnes, Ariel Herbert-Voss, William Hebgen Guss,               Michael Matena, Yanqi Zhou, Wei Li, and Peter J. Liu. Exploring the limits
+     Alex Nichol, Alex Paino, Nikolas Tezak, Jie Tang, Igor Babuschkin, Suchir Balaji,         of transfer learning with a unified text-to-text transformer. Journal of Machine
+     Shantanu Jain, William Saunders, Christopher Hesse, Andrew N. Carr, Jan Leike,            Learning Research, 21(140):1–67, 2020.
+     Joshua Achiam, Vedant Misra, Evan Morikawa, Alec Radford, Matthew Knight,            [16] Peter C. Rigby and Christian Bird. Convergent contemporary software peer
+     Miles Brundage, Mira Murati, Katie Mayer, Peter Welinder, Bob McGrew, Dario               review practices. In Proceedings of the 2013 9th Joint Meeting on Foundations of
+     Amodei, Sam McCandlish, Ilya Sutskever, and Wojciech Zaremba. Evaluating                  Software Engineering, ESEC/FSE 2013, page 202–212, New York, NY, USA, 2013.
+     large language models trained on code. CoRR, abs/2107.03374, 2021.                        Association for Computing Machinery.
+ [3] Zimin Chen, Vincent J Hellendoorn, Petros Maniatis, Pascal Lamblin, Pierre-          [17] Adam Roberts, Hyung Won Chung, Gaurav Mishra, Anselm Levskaya, James
+     Antoine Manzagol, Danny Tarlow, and Subhodeep Moitra. PLUR: A Unifying,                   Bradbury, Daniel Andor, Sharan Narang, Brian Lester, Colin Gaffney, Afroz Mo-
+     Graph-Based View of Program Learning, Understanding, and Repair. In Thirty-               hiuddin, Curtis Hawthorne, Aitor Lewkowycz, Alex Salcianu, Marc van Zee,
+     fifth Conference on Neural Information Processing Systems (NeurIPS 2021), 2021.           Jacob Austin, Sebastian Goodman, Livio Baldini Soares, Haitang Hu, Sasha
+ [4] Aakanksha Chowdhery, Sharan Narang, Jacob Devlin, Maarten Bosma, Gaurav                   Tsvyashchenko, Aakanksha Chowdhery, Jasmijn Bastings, Jannis Bulian, Xavier
+     Mishra, Adam Roberts, Paul Barham, Hyung Won Chung, Charles Sutton, Sebas-                Garcia, Jianmo Ni, Andrew Chen, Kathleen Kenealy, Kehang Han, Michelle Cas-
+     tian Gehrmann, Parker Schuh, Kensen Shi, Sasha Tsvyashchenko, Joshua Maynez,              bon, Jonathan H. Clark, Stephan Lee, Dan Garrette, James Lee-Thorp, Colin Raffel,
+     Abhishek Rao, Parker Barnes, Yi Tay, Noam Shazeer, Vinodkumar Prabhakaran,                Noam Shazeer, Marvin Ritter, Maarten Bosma, Alexandre Passos, Jeremy Maitin-
+     Emily Reif, Nan Du, Ben Hutchinson, Reiner Pope, James Bradbury, Jacob Austin,            Shepard, Noah Fiedel, Mark Omernick, Brennan Saeta, Ryan Sepassi, Alexander
+     Michael Isard, Guy Gur-Ari, Pengcheng Yin, Toju Duke, Anselm Levskaya, Sanjay             Spiridonov, Joshua Newlan, and Andrea Gesmundo. Scaling up models and data
+     Ghemawat, Sunipa Dev, Henryk Michalewski, Xavier Garcia, Vedant Misra, Kevin              with t5x and seqio. Journal of Machine Learning Research, 24(377):1–8, 2023.
+     Robinson, Liam Fedus, Denny Zhou, Daphne Ippolito, David Luan, Hyeontaek             [18] Baptiste Rozière, Jonas Gehring, Fabian Gloeckle, Sten Sootla, Itai Gat, Xi-
+     Lim, Barret Zoph, Alexander Spiridonov, Ryan Sepassi, David Dohan, Shivani                aoqing Ellen Tan, Yossi Adi, Jingyu Liu, Tal Remez, Jérémy Rapin, Artyom
+     Agrawal, Mark Omernick, Andrew M. Dai, Thanumalayan Sankaranarayana                       Kozhevnikov, Ivan Evtimov, Joanna Bitton, Manish Bhatt, Cristian Canton Ferrer,
+     Pillai, Marie Pellat, Aitor Lewkowycz, Erica Moreira, Rewon Child, Oleksandr              Aaron Grattafiori, Wenhan Xiong, Alexandre Défossez, Jade Copet, Faisal Azhar,
+     Polozov, Katherine Lee, Zongwei Zhou, Xuezhi Wang, Brennan Saeta, Mark Diaz,              Hugo Touvron, Louis Martin, Nicolas Usunier, Thomas Scialom, and Gabriel
+     Orhan Firat, Michele Catasta, Jason Wei, Kathy Meier-Hellstern, Douglas Eck,              Synnaeve. Code Llama: Open foundation models for code, 2023.
+     Jeff Dean, Slav Petrov, and Noah Fiedel. PaLM: Scaling language modeling with        [19] Caitlin Sadowski, Emma Söderberg, Luke Church, Michal Sipko, and Alberto Bac-
+     Pathways. Journal of Machine Learning Research, 24(240):1–113, 2023.                      chelli. Modern code review: A case study at Google. In International Conference
+ [5] Alexander Frömmgen and Lera Kharatyan. Resolving code review comments                     on Software Engineering, Software Engineering in Practice track (ICSE SEIP), 2018.
+     with ML. Google Research AI Blog, May 2023. https://blog.research.google/2023/       [20] Daniel Tarlow, Subhodeep Moitra, Andrew Rice, Zimin Chen, Pierre-Antoine
+     05/resolving-code-review-comments-with-ml.html.                                           Manzagol, Charles Sutton, and Edward Aftandilian. Learning to fix build errors
+ [6] Rahul Gupta, Soham Pal, Aditya Kanade, and Shirish Shevade. DeepFix: Fixing               with Graph2Diff neural networks. In Proceedings of the IEEE/ACM 42nd Inter-
+     common C language errors by deep learning. In Thirty-First AAAI Conference on             national Conference on Software Engineering Workshops, ICSEW’20, page 19–20,
+     Artificial Intelligence, 2017.                                                            New York, NY, USA, 2020. Association for Computing Machinery.
+ [7] Ciera Jaspan, Matthew Jorde, Carolyn Denomme Egelman, Collin Green, Ben              [21] Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Martinet, Marie-Anne
+     Holtz, Edward K. Smith, Maggie Morrow Hodges, Andrea Marie Knight Dolan,                  Lachaux, Timothée Lacroix, Baptiste Rozière, Naman Goyal, Eric Hambro, Faisal
+     Elizabeth Kammer, Jillian Dicker, Caitlin Harrison Sadowski, James Lin, Lan               Azhar, et al. LLaMa: Open and efficient foundation language models. arXiv
+     Cheng, Mark Canning, and Emerson Murphy-Hill. Enabling the study of software              preprint arXiv:2302.13971, 2023.
+     development behavior with cross-tool logs. IEEE Software, Special Issue on           [22] Rosalia Tufano, Luca Pascarella, Michele Tufano, Denys Poshyvanykz, and
+     Behavioral Science of Software Engineering, 2020.                                         Gabriele Bavota. Towards automating code review activities. In 2021 IEEE/ACM
+ [8] Lingwei Li, Li Yang, Huaxi Jiang, Jun Yan, Tiejian Luo, Zihan Hua, Geng Liang, and        43rd International Conference on Software Engineering (ICSE), pages 163–174. IEEE,
+     Chun Zuo. AUGER: automatically generating review comments with pre-training               2021.
+     models. In Proceedings of the 30th ACM Joint European Software Engineering           [23] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones,
+     Conference and Symposium on the Foundations of Software Engineering, pages                Aidan N. Gomez, Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. In
+     1009–1021, 2022.                                                                          Proceedings of the 31st International Conference on Neural Information Processing
+ [9] Raymond Li, Loubna Ben allal, Yangtian Zi, Niklas Muennighoff, Denis Kocetkov,            Systems, NIPS’17, page 6000–6010, Red Hook, NY, USA, 2017. Curran Associates
+     Chenghao Mou, Marc Marone, Christopher Akiki, Jia LI, Jenny Chim, Qian                    Inc.
+     Liu, Evgenii Zheltonozhskii, Terry Yue Zhuo, Thomas Wang, Olivier Dehaene,           [24] Yue Wang, Weishi Wang, Shafiq Joty, and Steven C.H. Hoi. CodeT5: Identifier-
+     Joel Lamy-Poirier, Joao Monteiro, Nicolas Gontier, Ming-Ho Yee, Logesh Kumar              aware unified pre-trained encoder-decoder models for code understanding and
+     Umapathi, Jian Zhu, Ben Lipkin, Muhtasham Oblokulov, Zhiruo Wang, Rudra                   generation. In Proceedings of the 2021 Conference on Empirical Methods in Natu-
+     Murthy, Jason T Stillerman, Siva Sankalp Patel, Dmitry Abulkhanov, Marco Zocca,           ral Language Processing, pages 8696–8708, Online and Punta Cana, Dominican
+     Manan Dey, Zhihan Zhang, Urvashi Bhattacharyya, Wenhao Yu, Sasha Luccioni,                Republic, November 2021. Association for Computational Linguistics.
+     Paulo Villegas, Fedor Zhdanov, Tony Lee, Nadav Timor, Jennifer Ding, Claire S        [25] Titus Winters, Tom Manshreck, and Hyrum Wright. Software Engineering at
+     Schlesinger, Hailey Schoelkopf, Jan Ebert, Tri Dao, Mayank Mishra, Alex Gu,               Google. O’Reilly Media, Inc., 2020. Available at https://abseil.io/resources/swe-
+     Carolyn Jane Anderson, Brendan Dolan-Gavitt, Danish Contractor, Siva Reddy,               book.
+     Daniel Fried, Dzmitry Bahdanau, Yacine Jernite, Carlos Muñoz Ferrandis, Sean         [26] Ziyu Yao, Frank F. Xu, Pengcheng Yin, Huan Sun, and Graham Neubig. Learning
+     Hughes, Thomas Wolf, Arjun Guha, Leandro Von Werra, and Harm de Vries.                    structural edits via incremental tree transformations. In International Conference
+     StarCoder: may the source be with you! Transactions on Machine Learning                   on Learning Representations, 2021.
+     Research, 2023. Reproducibility Certification.                                       [27] Jiyang Zhang, Sheena Panthaplackel, Pengyu Nie, Junyi Jessy Li, and Milos
+[10] Zhiyu Li, Shuai Lu, Daya Guo, Nan Duan, Shailesh Jannu, Grant Jenks, Deep                 Gligoric. CoditT5: Pretraining for source code and natural language editing. In
+     Majumder, Jared Green, Alexey Svyatkovskiy, Shengyu Fu, and Neel Sundaresan.              Proceedings of the 37th IEEE/ACM International Conference on Automated Software
+     Automating code review activities by large-scale pre-training. In Proceedings of          Engineering, ASE ’22, New York, NY, USA, 2023. Association for Computing
+     the 30th ACM Joint European Software Engineering Conference and Symposium on              Machinery.
+     the Foundations of Software Engineering, ESEC/FSE 2022, page 1035–1047, New
+     York, NY, USA, 2022. Association for Computing Machinery.
+[11] Junyi Lu, Lei Yu, Xiaojia Li, Li Yang, and Chun Zuo. LLaMA-Reviewer: Advancing
+     code review automation with large language models through parameter-efficient
+     fine-tuning. In 34th IEEE International Symposium on Software Reliability Engi-
+     neering (ISSRE 2023), 2023.
+[12] Petros Maniatis and Daniel Tarlow. Large sequence models for software develop-
+     ment activities. Google Research AI Blog, May 2023. https://blog.research.google/
+     2023/05/large-sequence-models-for-software.html.
+[13] Ali Mesbah, Andrew Rice, Emily Johnston, Nick Glorioso, and Edward Aftandilian.
+     DeepDelta: Learning to repair compilation errors. In Proceedings of the 2019 27th
+

@@ -1,0 +1,73 @@
+# `careful` — read the decision back against the policy before the customer
+# sees it.
+#
+# A refund desk gets two things wrong, and both come from the same place. It
+# refunds something the written policy says it should not, or it tells someone
+# no when the policy says yes. Either way the decision and the reason were
+# written in the same breath as the last thing that was looked up, and nobody
+# read them back.
+#
+# So this shape puts a stage in between. After the looking-up and before the
+# customer hears anything, the agent stops and does one job: say which rule in
+# the refund policy allows this decision, or which rule it breaks. If the
+# ticket did not say when the item was delivered, it can go and read the ticket
+# again — but it cannot reach the payment system from there. The stage whose
+# whole purpose is doubt must not be the stage that can spend the money.
+#
+# It costs two more turns of the model on every request — one to do the
+# checking and one to write the reply, which is no longer the same breath as
+# the checking. That is the trade, measured rather than guessed, and it is
+# written down here so you can decide it rather than discover it. If you decide
+# against it, delete the `re-read` stage and point `gather` straight at
+# `reply`; that is the whole edit.
+#
+# Nothing in this file is privileged. It is read by the same code that reads
+# the shapes PACT ships in `spec/loops/`.
+
+description: >
+  Look things up, then read the decision back against the written refund
+  policy before the customer sees it.
+
+starts-at: gather
+
+steps:
+  # Read the ticket, find the order, ask the specialists. Ordinary work: this
+  # stage names no tools, so it gets everything the agent has.
+  gather:
+    does: use-tools
+    then:
+      used-a-tool: gather
+      answered: re-read
+
+  re-read:
+    does: check-its-work
+    # `payments` is deliberately not on this list. Everything the agent has is
+    # available in `gather`; here only reading the ticket again is, so a stage
+    # that exists to doubt a refund cannot issue one while it doubts.
+    #
+    # `refund-policy` is a SKILL and not a tool, so naming it here says "read the
+    # written policy" and adds nothing this stage may call. That is what makes
+    # `says:` below performable: a stage told to check its decision rule by rule
+    # against a document it was never shown was being asked to remember one.
+    may-use:
+      - zendesk
+      - refund-policy
+    says: >
+      Check the decision you just made against the refund policy, rule by
+      rule. Say which rule allows it, or which rule it breaks. If the ticket
+      does not say when the item was delivered, read the ticket again.
+    # Two passes is a check; a third is an argument with itself. Once the two
+    # are used up this stage is not entered again — the run goes wherever a
+    # finished check goes, which is the `answered:` line below.
+    at-most: 2
+    then:
+      used-a-tool: re-read
+      answered: reply
+
+  # The customer reads this one. It is a separate stage because the words that
+  # come out of a check are a critique — "rule 2 applies, the item was
+  # faulty" — and nobody wants to receive that as a reply.
+  reply:
+    does: answer
+    then:
+      answered: done

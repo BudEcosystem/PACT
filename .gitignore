@@ -1,0 +1,32 @@
+/target
+/.pact
+# Any workspace's own derived area, not only this repository's. A `watch/`
+# document writes its record to `<workspace>/.pact/watch/`, so running the
+# worked example leaves one under `examples/refund-desk/`. D2 says deleting a
+# `.pact/` must be harmless; committing one would make that untrue.
+.pact/
+/research/repos
+/research/papers/*.pdf
+# The TypeScript port's installed dependencies and its build cache. `tsc` is a
+# devDependency so `scripts/test-all.sh` can type-check the second port at all;
+# what it installs is not source.
+/adapters/typescript/node_modules
+
+# mkdocs output. `site-docs/` is the source; `site/` is generated.
+/site
+
+# Python build and tool caches. The repo has no commits yet, so without these
+# the first `git add` would capture every one of them.
+__pycache__/
+.pytest_cache/
+.venv/
+.deepeval/
+*.log
+
+# Claude Code's own session directory — agent definitions, workflow scripts and
+# a scheduler lock. Tooling used to WORK on PACT, not part of PACT.
+/.claude
+
+# One-off HTML reports generated while reviewing. `docs/` is where a finding
+# that matters is written down; a rendered copy of one is not source.
+/site-report

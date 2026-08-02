@@ -1,0 +1,30 @@
+# How this agent waits for policy-checker and fraud-checker, and how what it
+# may spend is shared between them.
+#
+# Every line here is a decision Eve takes for you and never asks about.
+
+# The instructions say to decline when the two disagree, so both answers are
+# needed. Nothing useful can be decided from one of them.
+waits-for: everyone
+
+# They look at different things and never read each other's work, so making
+# them queue would only make the customer wait longer.
+starts: all-at-once
+
+# Checking a four-clause policy against a ticket is more work than looking for
+# a suspicious pattern, so the money follows the work rather than the headcount.
+divides-the-budget: by-share
+shares:
+  policy-checker: 60%
+  fraud-checker: 40%
+
+# Approving a refund without the fraud check is exactly the mistake that costs
+# money, so nobody carries on without one. A person decides instead.
+if-someone-fails: ask-a-person
+
+# And this is what they are asked. Its own question, not the one the approvals
+# policy uses: `is-this-ok` shows the amount and the order number of the CALL
+# being approved, and a teammate who could not answer is not a call — so both
+# lines were dropped in silence and the person was shown the wording and nothing
+# else. `pact check` refuses that now, per park.
+asks: carry-on-without-a-check

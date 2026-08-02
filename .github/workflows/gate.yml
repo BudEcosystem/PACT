@@ -1,0 +1,79 @@
+# The gate, run by something other than a person remembering.
+#
+# Register row C7: *"the suite is green because it is run by hand"*. Everything
+# below already existed — `scripts/test-all.sh` is the one command, and it has
+# been the one command for a long time. What did not exist was anything that ran
+# it on a change nobody thought to check.
+#
+# **It runs the script, it does not re-list the steps.** A workflow that spells
+# out `cargo test`, then `clippy`, then `pytest` is a second copy of the gate,
+# and the two come to disagree — the copy in CI drifts from the copy a
+# contributor runs, and the interesting failures are the ones only one of them
+# catches. One command, in both places.
+#
+# **Offline (D17).** Nothing here reaches a model. The suite binds models from
+# `models/catalog.yaml`, which is on disk, and every test that would need weights
+# skips itself with the line to type. The only network is fetching toolchains and
+# dependencies, which is a build-time fact and not a runtime one.
+
+name: gate
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  # So a dependency that changed under us is found by the calendar rather than by
+  # somebody's next commit. The suite is deterministic, so a scheduled red build
+  # means the world moved, not that the code did.
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  everything:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        # `rust-toolchain.toml` is in the tree, so the version is the repository's
+        # decision and not this file's. A workflow pinning its own would be a
+        # second place the toolchain is chosen from.
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: The TypeScript port's dev dependencies
+        # Without these, `test-all.sh` SKIPS the type check — deliberately, so a
+        # contributor without node still gets a useful run. In CI a skip is a
+        # hole, so they are installed and the skip never fires.
+        working-directory: adapters/typescript
+        run: npm ci || npm install
+
+      - name: Everything
+        run: ./scripts/test-all.sh
+
+      - name: The documentation says what the code does
+        # `mkdocs build --strict` fails on a broken link or a missing page, and
+        # the suite separately holds the site's NUMBERS against the tree. Both
+        # matter: this catches a page that does not build, that one catches a page
+        # that builds and lies.
+        run: |
+          uv tool install --with mkdocs-material mkdocs
+          mkdocs build --strict

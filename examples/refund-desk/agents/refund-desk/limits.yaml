@@ -1,0 +1,31 @@
+# How fast, how cheap, and how long this is allowed to run.
+#
+# Every ceiling here is enforced — the run stops when it reaches one — and the
+# run says which one it was, so "ran out of budget" never arrives looking like
+# "finished". `finishes-within` is both the promise and, with no
+# `runs-for-at-most` written, the wall-clock stop, so the promise cannot sit
+# there unenforced.
+
+feel: interactive
+finishes-within: 30s
+cost-per-request-under: 0.05 USD
+steps-at-most: 12
+tool-calls-at-most: 40
+
+# Running out of budget is not an approval, so it is not asked as one. The
+# question named here is a plain "keep going?" — see /questions/keep-going.yaml.
+when-it-runs-out: ask-a-person
+asks: keep-going
+
+# There is deliberately no `tokens-at-most:` in this file, and the gap is worth
+# a sentence because it looks like an omission. A token ceiling this desk could
+# live with would have to sit above the biggest conversation it can hold — and a
+# conversation that big is, on any model anybody charges for, already past the
+# 0.05 USD line above. So the two cannot both bind: whichever is written lower
+# ends every run and the other is decoration. Measured rather than assumed —
+# `tokens-at-most: 200000` here stops the Anthropic arm of
+# `test_summarising_is_what_lets_the_shipped_ladder_finish_and_not_park` before
+# its context ladder runs at all, which is the same collision that test's own
+# `spend_cap` argument already documents for money. A workspace running a model
+# on its own machine, where there is no price and the money cap therefore bounds
+# nothing, is where the token ceiling is the one to write.

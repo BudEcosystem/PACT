@@ -1,0 +1,9 @@
+# What the AI model behind this agent has to be capable of.
+# If a model can't do these things, it won't be used.
+
+reasoning: careful        # simple | steady | careful | deep
+tool-calling: yes         # it has to be able to use zendesk and payments
+images: yes               # customers attach photos of damaged items
+context-at-least: 32k
+
+because: it weighs a four-clause policy against a photo and a ticket history
