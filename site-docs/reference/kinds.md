@@ -14,7 +14,7 @@ write: most workspaces use a dozen.
 | Kind | Fields | Core fields |
 |---|---:|---|
 | `action` | 9 | `description`, `takes`, `reads-only`, `needs-a-person`, `spends-money` |
-| `agent` | 22 | `name`, `description`, `instructions`, `team`, `teamwork` |
+| `agent` | 23 | `name`, `description`, `instructions`, `team`, `teamwork` |
 | `loop` | 4 | `description`, `based-on` |
 | `knowledge` | 9 | `description`, `documents`, `passages-at-most`, `must-cite`, `use-when` |
 | `skill` | 11 | `name`, `description`, `use-when`, `do-not-use-when`, `if-unsure` |
@@ -41,7 +41,7 @@ write: most workspaces use a dozen.
 | `call-order` | 2 | `call`, `first` |
 | `catalog` | 3 | — |
 | `figure` | 2 | — |
-| `limits` | 12 | `feel`, `finishes-within`, `cost-per-request-under`, `steps-at-most`, `tool-calls-at-most` |
+| `limits` | 13 | `feel`, `finishes-within`, `cost-per-request-under`, `steps-at-most`, `tool-calls-at-most` |
 | `model` | 8 | — |
 | `model-can` | 5 | — |
 | `model-cost` | 2 | — |

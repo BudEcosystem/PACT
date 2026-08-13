@@ -1,1590 +1,1899 @@
 # PACT research stream: `semantics-others`
 
 **Deep SOURCE audit of AutoGen, OpenAI Agents SDK (Python), Claude Agent SDK (Python),
-Anthropic SDK (Python), and the Vercel AI SDK — across nine semantic dimensions,
-plus a divergence matrix against Pydantic AI and LangGraph, plus the harness-lowering
-seam per SDK.**
+Anthropic SDK (Python) and the Vercel AI SDK across nine semantic dimensions; the
+divergence matrix a single IR must reconcile; and the exact harness-lowering seam
+in each SDK.**
 
-Date: 2026-07-26. Author: research subagent. Status: evidence-linked draft for
-`10-RESEARCH-*`.
+Date: 2026-08-07. Status: evidence-linked, re-verified against source.
+Supersedes the 2026-07-26 draft of this note — **every claim below was re-read from
+source in this pass**, not inherited. Where the earlier draft was right I say so and
+give the citation; where this pass found something the earlier draft did not have,
+it is marked **[NEW]**.
 
 ---
 
-## 0. Method, scope, and provenance
+## 0. Method, scope and provenance
 
 ### 0.1 What was read
 
 Source only, from the local corpus at
-`/home/bud/ditto/agent-inter-op/research/repos/frameworks/`. Every claim below cites
-`file:line` against these exact checkouts. Where I read a docstring rather than
-executable code, I say so — docstrings are still *source*, but they are a weaker
-witness than the code path, and I mark the difference.
+`/home/bud/ditto/agent-inter-op/research/repos/frameworks/`. Every claim cites
+`file:line` against these exact checkouts. Paths in citations are relative to each
+repo root unless otherwise stated.
 
-| Repo | Commit | Date | Version read |
+| Repo | Commit | Commit date | Version read |
 |---|---|---|---|
-| `autogen` | `027ecf0` | 2026-04-06 | `autogen-core` / `autogen-agentchat` 0.4.x line |
-| `openai-agents-python` | `c1b4237` | 2026-07-25 | `0.18.3` (`pyproject.toml:` version) |
-| `claude-agent-sdk-python` | `f8b9ec9` | 2026-07-25 | `0.2.128`; bundles CLI `2.1.220` |
-| `anthropic-sdk-python` | `60c64fb` | 2026-07-24 | `0.120.0` |
+| `autogen` | `027ecf0` | 2026-04-06 | `autogen-core` / `autogen-agentchat` **0.7.5** |
+| `openai-agents-python` | `c1b4237` | 2026-07-25 | **0.18.3** (`pyproject.toml`) |
+| `claude-agent-sdk-python` | `f8b9ec9` | 2026-07-25 | **0.2.128** (`pyproject.toml`) |
+| `anthropic-sdk-python` | `60c64fb` | 2026-07-24 | **0.120.0** (`pyproject.toml`) |
 | `vercel-ai` | `eb16508` | 2026-07-25 | `ai@7.0.37`, `@ai-sdk/harness@1.0.43` |
 | `pydantic-ai` (cross-check) | `ed0f40c` | 2026-07-25 | — |
 | `langgraph` (cross-check) | `30c4d58` | 2026-07-25 | — |
 
+The checkouts are byte-identical to the 2026-07-26 pass, so nothing here is
+"the framework changed". Differences from the earlier draft are differences of
+*reading*.
+
 ### 0.2 The nine dimensions
 
-loop · state · tools · structured output · streaming · HITL · memory · multi-agent ·
-model binding. Plus a tenth question the brief asks explicitly: **what is the exact
-lowest-level API in each SDK that PACT can drive as a pure model/tool transport?**
+loop · state · tools · structured output · streaming · HITL · memory ·
+multi-agent · model binding. Plus the tenth question the brief asks explicitly:
+**what is the exact lowest-level API in each SDK that PACT can drive as a pure
+model/tool transport?**
 
 ### 0.3 Reading convention
 
-- **[V]** = verified by reading the executing code path.
-- **[D]** = verified from a source docstring/type annotation only (no execution path read).
-- **[I]** = my inference from the two above. Always marked.
+- **[V]** verified by reading the executing code path.
+- **[D]** verified from a source docstring or type annotation only.
+- **[I]** my inference. Always marked. Never load-bearing on its own.
+
+### 0.4 The one-line answer to the brief
+
+Four of the five frameworks have a clean harness-lowering seam. **The Claude Agent
+SDK has none, and that is a blocking finding** (§3.10). The single largest
+semantic divergence in the set is not tools or streaming — it is that **three of
+the five frameworks default to a loop that never shows the model its own tool
+results** (§7.1), which means PACT cannot inherit any framework's default and must
+declare its own.
 
 ---
 
-## 1. AutoGen (`microsoft/autogen`)
+## 1. AutoGen (`microsoft/autogen`, 0.7.5)
 
-### 1.0 Framing finding: the repo is in maintenance mode
+### 1.0 Framing: the repo is frozen
 
-`README.md:14` carries a `status-maintenance mode` badge, and `README.md:19-24` states:
+`README.md:14` carries a `status-maintenance mode` badge linking to
+`github.com/microsoft/agent-framework`. `README.md:19-24`:
 
-> `> **⚠️ Maintenance Mode**`
-> `> AutoGen is now in maintenance mode. It will not receive new features or enhancements and is community managed going forward.`
-> `> New users should start with [Microsoft Agent Framework]...`
+> **⚠️ Maintenance Mode**
+> AutoGen is now in maintenance mode. It will not receive new features or
+> enhancements and is community managed going forward.
+> New users should start with [Microsoft Agent Framework]…
 
-`README.md:216` further restricts contributions to "bug fixes, security patches, and
-documentation improvements." The most recent commit on the checkout (`027ecf0`,
-2026-04-06) is literally *"Update maintenance mode banner in readme (#7521)"* — i.e.
-the repo has been frozen for ~3.5 months while the other four moved daily.
+The HEAD commit (`027ecf0`, 2026-04-06) is *"Update maintenance mode banner in
+readme (#7521)"* — the repo has been frozen ~4 months while the other four moved
+daily. **[V]**
 
-**[V]** This is a first-order input to PACT's adapter roadmap: AutoGen is a *legacy
-import target*, not a live export target. See §7.1.
+**Consequence for PACT.** AutoGen is a **legacy import target**, not a live export
+target. The adapter roadmap should treat it as an on-ramp (D10 #3, "migration
+tool") and should *not* spend fidelity budget chasing native lowering.
 
-### 1.1 Loop
+### 1.1 Loop — the sharpest divergence in the whole study
 
-AutoGen has **two** loops at two layers, and they are not the same abstraction.
+AutoGen has two loops at two layers and they are not the same abstraction.
 
 **Layer 1 — `autogen-core` actor runtime.** `AgentRuntime`
-(`python/packages/autogen-core/src/autogen_core/_agent_runtime.py:22,50`) exposes
-`send_message` (direct, RPC-shaped) and `publish_message` (pub/sub over topics). There
-is no "agent loop" here at all — it is a message-passing substrate with subscriptions
-(`add_subscription`, `:268`). Loop semantics are whatever the agent's message handlers
-do.
+(`python/packages/autogen-core/src/autogen_core/_agent_runtime.py`) exposes
+`send_message` (RPC-shaped) and `publish_message` (pub/sub over topics). There is
+no agent loop here at all; loop semantics are whatever a message handler does.
 
-**Layer 2 — `autogen-agentchat` `AssistantAgent`.** This is the ReAct-ish agent, and
-its default is *not* a ReAct loop:
+**Layer 2 — `autogen-agentchat` `AssistantAgent`.** The default is **not** a ReAct
+loop:
 
-- `agents/_assistant_agent.py:739` — `max_tool_iterations: int = 1`.
+- `agents/_assistant_agent.py:739` — `max_tool_iterations: int = 1` (constructor).
+- `agents/_assistant_agent.py:85` — same default on the serialisable config:
+  `max_tool_iterations: int = Field(default=1, ge=1)`.
 - `agents/_assistant_agent.py:1149` — `for loop_iteration in range(max_tool_iterations):`
-- `agents/_assistant_agent.py:1252-1256` — on the last iteration it `break`s to the
-  summary/reflection step rather than calling the model again.
-- `agents/_assistant_agent.py:1305-1317` — after the loop it either runs
+- `agents/_assistant_agent.py:1151-1175` — if the model returned a plain string, yield
+  the response and `return`. This is the only "model decided it was done" exit.
+- `agents/_assistant_agent.py:1258-1259` — on the last iteration, `break` out to the
+  summary/reflection step **without another model call**.
+- `agents/_assistant_agent.py:1302-1324` — after the loop, either
   `_reflect_on_tool_use_flow` (one more model call) or `_summarize_tool_use`
-  (**no** model call — the tool result string becomes the agent's answer).
-- `agents/_assistant_agent.py:738` — `reflect_on_tool_use: bool | None = None`, and per
-  `:143-144` **[D]** it defaults to `False` unless `output_content_type` is set.
+  (**no** model call; the formatted tool-result string becomes the agent's answer).
+- `agents/_assistant_agent.py:842-848` — `reflect_on_tool_use` defaults to `True`
+  **only if** `output_content_type` is set, else `False`.
 
-**[V]** So the *default* AutoGen agent is: one model call → execute tools → return the
-formatted tool result as the response, **without the model ever seeing the tool
-output**. Every other framework in this study defaults to "loop until the model stops
-calling tools." This is the single largest loop-semantics divergence in the set.
+**[V] So the default AutoGen agent is: one model call → execute tools → return the
+tool result string as the final answer, with the model never seeing the tool
+output.** This is a genuinely different agent than every reader expects.
 
-Termination at the team layer is a composable predicate algebra:
-`base/_termination.py:15` `TerminationCondition`, with `__and__`/`__or__` at `:79,:83`,
-and 12 concrete conditions in `conditions/_terminations.py` (`StopMessageTermination`,
-`MaxMessageTermination`, `TextMentionTermination`, `FunctionalTermination`,
-`TokenUsageTermination`, `HandoffTermination`, `TimeoutTermination`,
-`ExternalTermination`, `SourceMatchTermination`, `TextMessageTermination`,
-`FunctionCallTermination`, plus And/Or). **[V]** This is the *best* declarative
-stop-condition vocabulary of the seven frameworks and is a good source for PACT's
-`loop.halt` predicate set.
+Two more loop properties worth recording:
+
+- **Tool calls execute in parallel, unconditionally.**
+  `agents/_assistant_agent.py:1200` — `results = await asyncio.gather(*[...])`.
+  There is no sequential mode and no concurrency limit. **[V]**
+- **Handoff short-circuits the loop.** `agents/_assistant_agent.py:1245-1254` — after
+  tool execution, a handoff check runs and `return`s immediately.
+
+**Termination at the team layer** is the best declarative surface AutoGen has:
+`base/_termination.py` defines `TerminationCondition` with `__and__`/`__or__`, and
+`conditions/_terminations.py` ships 12 serialisable conditions —
+`StopMessageTermination:24`, `MaxMessageTermination:62`, `TextMentionTermination:111`,
+`FunctionalTermination:158`, `TokenUsageTermination:235`, `HandoffTermination:313`,
+`TimeoutTermination:358`, `ExternalTermination:404`, `SourceMatchTermination:463`,
+`TextMessageTermination:513`, `FunctionCallTermination:559`, plus And/Or. **[V]**
+Each has a `*Config` pydantic model and is a `Component`, so it round-trips —
+except `FunctionalTermination:158`, which has no `Config` class and therefore does
+not serialise.
+
+**PACT takeaway.** The termination-condition algebra is worth *stealing wholesale*
+for the loop IR's `halt:` field. It is the only place in the corpus where loop
+termination is already a composable, serialisable predicate rather than an integer.
 
 ### 1.2 State
 
-- Per-agent: `base/_chat_agent.py:82,87` — `save_state()`/`load_state()` returning
-  `Mapping[str, Any]`.
-- Typed state models: `state/_states.py` — `AssistantAgentState`, `TeamState`,
-  `BaseGroupChatManagerState` (`message_thread`, `current_turn`),
-  `RoundRobinManagerState.next_speaker_index`, `SelectorManagerState.previous_speaker`,
-  `SwarmManagerState.current_speaker`, `MagenticOneOrchestratorState`
-  (`task/facts/plan/n_rounds/n_stalls`), `SocietyOfMindAgentState`. Each carries
-  `type` + `version: str = "1.0.0"` (`state/_states.py:6-10`).
-- **Blocking limitation:** `teams/_group_chat/_base_group_chat.py:773-776`:
-  > `.. caution:: When calling save_state on a team while it is running, the state may
-  > not be consistent and may result in an unexpected state. It is recommended to call
-  > this method when the team is not running or after it is stopped.`
+`agents/_assistant_agent.py:1630-1639`:
 
-  and `load_state` refuses outright while running
-  (`_base_group_chat.py:808-809` — `raise RuntimeError("The team cannot be loaded while it is running.")`).
+```python
+async def save_state(self) -> Mapping[str, Any]:
+    model_context_state = await self._model_context.save_state()
+    return AssistantAgentState(llm_context=model_context_state).model_dump()
+```
 
-**[V]** AutoGen therefore has **no mid-run checkpoint**. `pause()`/`resume()` exist
-(`_base_group_chat.py:657,703`) but they are in-process signals, not durable snapshots.
-PACT's `AC-2.6` (kill-and-resume to the same terminal state) cannot be satisfied by
-native lowering onto AutoGen.
+**[V] `save_state` persists the model context (the message list) and nothing else.**
+Not the loop iteration counter, not pending tool calls, not partial tool results.
+`load_state:1635-1639` restores only that.
 
-### 1.3 Tools
+**Consequence:** AutoGen **cannot satisfy AC-2.6** (kill-and-resume mid-tool-call).
+A run interrupted between "model requested tool" and "tool returned" resumes as if
+the tool had never been requested. This is not a gap in the adapter — it is a gap
+in AutoGen. Any AutoGen adapter must declare `durable_resume: unsupported` in its
+capability lattice.
 
-- Core tool ABC in `autogen_core/tools`; `ChatCompletionClient.create` takes
-  `tools: Sequence[Tool | ToolSchema]` (`models/_model_client.py:216`).
-- `Workbench` abstraction wraps tool collections (used by `AssistantAgent._call_llm`).
-- **Tool results are strings.** `models/_types.py:56-69`:
+### 1.3 Tools — and a real lossy step inside AutoGen
+
+Tools are exposed through a `Workbench`
+(`autogen-core/src/autogen_core/tools/_workbench.py:78`), an ABC with
+`list_tools() -> List[ToolSchema]` (`:96`) and `call_tool(...) -> ToolResult` (`:107`).
+
+`ToolResult` (`_workbench.py:39-52`) carries `result: List[ResultContent]`, where
+`ResultContent = TextResultContent | ImageResultContent` (`_workbench.py:14-36`).
+**So the Workbench layer supports image tool results.**
+
+But `AssistantAgent._execute_tool_call` flattens it:
+
+- `agents/_assistant_agent.py:1609` — `content=tool_result.to_text()`
+- `_workbench.py:55` — `def to_text(self, replace_image: str | None = None) -> str:`
+- `_workbench.py:70-74` —
   ```python
-  class FunctionExecutionResult(BaseModel):
-      content: str
-      name: str
-      call_id: str
-      is_error: bool | None = None
+  elif isinstance(content, ImageResultContent):
+      if replace_image is not None:
+          parts.append(replace_image)
+      else:
+          parts.append(f"[Image: {content.content.to_base64()}]")
   ```
-  **[V]** There is no image/file/structured tool-result channel. MCP tool results
-  carrying `image` or `audio` content blocks, Anthropic `tool_result` blocks containing
-  images, OpenAI Agents' `ToolOutputImage`/`ToolOutputFileContent`, and Vercel's
-  `ToolResultOutput` `content` variant with `type: 'file'` are all **inexpressible**.
-- Parallel tool execution: `agents/_assistant_agent.py:1200-1211` — `asyncio.gather`
-  over all calls, unbounded. No concurrency cap knob. **[V]**
+
+**[V] A tool that returns an image is delivered to the model as the literal string
+`"[Image: <base64…>]"`.** It is never an image content block. `AssistantAgent`
+never passes `replace_image`, so the base64 blob goes into the prompt as text.
+
+This is because the model-message type cannot hold it either:
+`autogen-core/src/autogen_core/models/_types.py:59` — `FunctionExecutionResult.content: str`.
+
+**Consequence: AutoGen's general agent path cannot do computer use or any
+screenshot-returning tool** (D16). AutoGen *does* ship a vision web agent
+(`autogen-ext/.../agents/web_surfer/_multimodal_web_surfer.py`), but it is a bespoke
+`BaseChatAgent` that handles images itself and bypasses `AssistantAgent` entirely.
+**[V]** The capability exists in the framework; it does not exist on the portable path.
 
 ### 1.4 Structured output
 
-`ChatCompletionClient.create(json_output: Optional[bool | type[BaseModel]])`
-(`models/_model_client.py:217`). At the agent layer, `output_content_type` produces a
-`StructuredMessage[T]` (`messages.py:178`) and forces `reflect_on_tool_use=True`
-(`agents/_assistant_agent.py:143` **[D]**).
+`output_content_type: type[BaseModel] | None`, validated at
+`agents/_assistant_agent.py:1153-1154` via `output_content_type.model_validate_json(...)`.
+Delivery is via the model client's `json_output` parameter
+(`models/_model_client.py:218`), which is `Optional[bool | type[BaseModel]]` —
+a *tri-state*: `None` (off), `bool` (JSON mode), or a model class (structured
+output). **[V]**
 
-Capability declaration: `ModelInfo` (`models/_model_client.py:164-182`) distinguishes
-`json_output` ("JSON mode", `:174-176`) from `structured_output` ("This is different to json_output", `:179-180`), plus
-`vision`, `function_calling`, `family`, `multiple_system_messages`. `validate_model_info`
-(`:185`) hard-requires `vision/function_calling/json_output/family`.
-
-**[V]** `ModelInfo` is the closest thing in the corpus to PACT's capability vocabulary,
-and it is *declared per client instance*, not looked up from a catalogue — i.e. AutoGen
-already accepts that capability is a first-class, author-declared property. Useful
-precedent for `contract.capabilities`.
+Setting `output_content_type` also flips `reflect_on_tool_use` to `True`
+(`:842-844`), silently changing loop semantics. **[V]** A structured-output agent
+and a plain agent in AutoGen do not run the same loop.
 
 ### 1.5 Streaming
 
-`ChatCompletionClient.create_stream(...) -> AsyncGenerator[Union[str, CreateResult], None]`
-(`models/_model_client.py:242,254`): **plain `str` chunks, terminated by one
-`CreateResult`.**
+Two levels, and the lower one is impoverished.
 
-**[V]** There is *no* structured delta stream at the model seam: no tool-call argument
-deltas, no reasoning deltas, no content-block start/end, no ids. The agent layer
-re-wraps text chunks as `ModelClientStreamingChunkEvent` (`messages.py:529`) and emits
-coarse-grained events for everything else: `ToolCallRequestEvent` (`:445`),
-`ToolCallExecutionEvent` (`:490`), `ThoughtEvent` (`:545`), `MemoryQueryEvent` (`:517`),
-`UserInputRequestedEvent` (`:502`), `SelectSpeakerEvent` (`:559`).
+**Model level.** `models/_model_client.py:241-251`:
 
-Consequence: **you cannot stream tool arguments incrementally through AutoGen**, and a
-PACT IR that models `tool-input-delta` (Vercel) or `response.function_call_arguments.delta`
-(OpenAI) has no AutoGen projection. Harness lowering can bypass this only if it also
-bypasses `ChatCompletionClient` — which is the transport. Marked `degraded` at best.
+```python
+def create_stream(...) -> AsyncGenerator[Union[str, CreateResult], None]
+```
 
-### 1.6 HITL
+**[V] The abstract model stream yields bare `str` text chunks and terminates with a
+`CreateResult`.** There is no typed event, no tool-call-argument delta, no
+start/end lifecycle, no id. Confirmed against the concrete OpenAI client:
+`autogen-ext/src/autogen_ext/models/openai/_openai_client.py` yields only
+`reasoning_content` (`:962`, `:968`), `choice.delta.content` (`:974`) and the final
+`result` (`:1080`).
 
-`UserProxyAgent` (`agents/_user_proxy_agent.py:37`) takes `input_func: InputFuncType`
-(`:16-18`, sync `Callable[[str], str]` or async `Callable[[str, CancellationToken|None], Awaitable[str]]`)
-and **blocks inside the run** waiting for it (`_get_input`, `:186`).
+**Agent level.** `on_messages_stream` yields typed `BaseAgentEvent` objects
+(`ToolCallRequestEvent:1183`, `ToolCallExecutionEvent:1235`, `ThoughtEvent:1286`)
+and finally a `Response`. Richer, but agent-shaped, not model-shaped.
 
-Two hard consequences:
-1. `_to_config` explicitly cannot serialize the callback —
-   `agents/_user_proxy_agent.py:244-245`:
-   ```python
-   # TODO: Add ability to serialie input_func
-   return UserProxyAgentConfig(name=self.name, description=self.description, input_func=None)
-   ```
-   Round-tripping a HITL agent through AutoGen's own config format **silently loses the
-   human**. **[V]**
-2. Combined with §1.2, an approval gate cannot be represented as a durable suspend/resume.
-   AutoGen HITL is a live callback only.
+**Consequence:** a PACT harness driving `ChatCompletionClient.create_stream` cannot
+stream tool-call arguments as they are generated. Any PACT feature that depends on
+partial tool arguments (progressive UI, `onInputDelta`-style hooks, early
+validation) must be declared `unsupported` on the AutoGen adapter.
 
-There is `_intervention.py` in core (interception handlers on the runtime), which can
-drop/modify messages, but it is likewise a live in-process callback, not a resumable state.
+### 1.6 HITL — and a serialisation hole
+
+`UserProxyAgent` takes an `input_func` callback
+(`agents/_user_proxy_agent.py:169`) and awaits it inline (`:191-197`,
+`:226`). It is a **blocking callback**, not an interrupt-and-resume.
+
+And it does not survive serialisation:
+
+- `agents/_user_proxy_agent.py:244-245` —
+  ```python
+  # TODO: Add ability to serialie input_func
+  return UserProxyAgentConfig(name=self.name, description=self.description, input_func=None)
+  ```
+- `agents/_user_proxy_agent.py:249` — `_from_config` reconstructs with `input_func=None`.
+
+**[V] A `UserProxyAgent` round-tripped through AutoGen's own declarative config
+loses its human.** It silently degrades to the default console `input()`.
+
+This matters beyond AutoGen: it is the clearest existing proof that *"declarative
+config" without a declarative HITL model is a lie*, and it is exactly the failure
+PACT must avoid — HITL has to be a **declared channel with a typed contract**, not
+a function pointer.
 
 ### 1.7 Memory
 
-`autogen_core/memory/_base_memory.py:60` — `Memory` ABC with `update_context`,
-`query`, `add`, `clear`, `close`. `MemoryContent` (`:26`) is typed by `MemoryMimeType`
-(`:13`). Separately, context-window management is `ChatCompletionContext`
-(`model_context/_chat_completion_context.py:10`) with concrete
-`Unbounded` / `Buffered` / `HeadAndTail` / `TokenLimited` variants, each with
-`save_state`/`load_state` (`:66,69`).
+`autogen-core/src/autogen_core/memory/_base_memory.py:60` — `Memory` ABC with three
+abstract operations: `update_context(...)` (`:77-78`), `query(...)` (`:93-94`),
+`add(...)` (`:113-114`).
 
-**[V]** AutoGen is the only framework in this set that cleanly *separates* long-term
-memory (`Memory`) from context-window policy (`ChatCompletionContext`). PACT should copy
-this split: `memory:` (retrieval) and `context:` (windowing/compaction) are different
-fields with different lifecycles.
+`update_context` is the distinctive one: memory **mutates the model context in
+place before the model call**. This is a *context-injection* memory model, not a
+retrieval-tool model. **[V]**
 
-### 1.8 Multi-agent
+`MemoryMimeType` (`:13-20`) covers `TEXT`, `JSON`, `MARKDOWN`, `IMAGE`, `BINARY` —
+**AutoGen's memory is more modality-capable than its tool results** (§1.3), which
+is internally inconsistent.
 
-Five built-in topologies in `teams/__init__.py`:
-`RoundRobinGroupChat`, `SelectorGroupChat` (LLM picks next speaker),
-`Swarm` (handoff-driven), `MagenticOneGroupChat` (ledger/plan orchestrator),
-`GraphFlow` + `DiGraph`/`DiGraphBuilder`/`DiGraphNode`/`DiGraphEdge`.
+### 1.8 Multi-agent — the richest in the set
 
-`DiGraphEdge` (`teams/_group_chat/_graph/_digraph_group_chat.py:25`) is the most
-declarative topology object in the corpus:
-- `condition: Union[str, Callable[[BaseChatMessage], bool], None]` (`:39`) — string ⇒
-  substring match on last message; callable ⇒ arbitrary predicate.
-- `activation_group: str` (`:48`) and `activation_condition: Literal["all","any"]` (`:58`)
-  — i.e. join semantics for fan-in.
+Four team types, all under `teams/_group_chat/`:
 
-**Silent-loss precedent (important for AC-7.1).**
-`_digraph_group_chat.py:69-76`:
-```python
-def _validate_condition(self) -> "DiGraphEdge":
-    # Store callable in a separate field and set condition to None for serialization
-    if callable(self.condition):
-        self.condition_function = self.condition
-        # For serialization purposes, we'll set the condition to None
-        object.__setattr__(self, "condition", None)
-```
-with `condition_function: ... = Field(default=None, exclude=True)` (`:47`).
-**[V]** A callable edge condition is *silently dropped* on serialize — the exported graph
-is a different graph, with no warning. This is exactly the failure mode PACT's `T7` is
-designed against, and it is a real, citable instance in a shipped framework.
+- `_round_robin_group_chat.py` — fixed rotation.
+- `_selector_group_chat.py` — LLM picks the next speaker.
+  `SelectorGroupChatManager.__init__:66-98` takes `model_client`, `selector_prompt`,
+  `allow_repeated_speaker`, `selector_func`, `max_selector_attempts`,
+  `candidate_func`, `model_client_streaming`. `selector_func`/`candidate_func` are
+  Python callables (`:163-186`) — **not serialisable**.
+- `_swarm_group_chat.py` — handoff-driven. `select_speaker:82-98` walks the thread
+  backwards for the most recent `HandoffMessage` and routes to `message.target`.
+- `_graph/_digraph_group_chat.py` — `GraphFlow`, a real DAG-with-cycles executor.
 
-Handoff semantics: `AssistantAgent` docstring `agents/_assistant_agent.py:171` **[D]** —
-"If multiple handoffs are detected, only the first handoff is executed." Enforced at
-`_check_and_handle_handoff` (`:1245-1253`), which `return`s immediately after the first.
+`GraphFlow` is the most PACT-relevant construct in AutoGen:
+
+- `DiGraphEdge` (`_digraph_group_chat.py:25-98`) has
+  `condition: Union[str, Callable[[BaseChatMessage], bool], None]` (`:39`).
+- `:47` — `condition_function: Callable[...] | None = Field(default=None, exclude=True)`,
+  and `:69-79` moves a callable condition out of `condition` into
+  `condition_function` **specifically so the model serialises**. A callable edge
+  condition is silently dropped from the serialised graph. **[V]**
+- `:48` `activation_group: str`, `:58` `activation_condition: Literal["all","any"]`,
+  `:112` node-level `activation: Literal["all","any"]` — join semantics as data.
+- `:151` cycle validation requires every cycle to contain at least one conditional
+  edge.
+
+**PACT takeaway.** AutoGen independently arrived at exactly the join-semantics
+vocabulary PACT's topology IR needs (`all`/`any` activation, activation groups,
+conditional edges, cycle-must-have-an-exit). Adopt the vocabulary; do **not** adopt
+the callable escape, which is precisely the thing that breaks portability.
+
+**Handoff conflict resolution is lossy.** `_check_and_handle_handoff:1347-1362` —
+if the model emits multiple handoff calls, only the first is executed and a
+`warnings.warn` is issued advising "Disable parallel tool calls in the model client
+to avoid this warning." **[V]** PACT must *decide* this semantics rather than
+inherit it (see §7.8).
 
 ### 1.9 Model binding
 
-`ChatCompletionClient` is a `ComponentBase` — bound by construction, serialized via
-`ComponentModel` (`_component_config.py:18-39`): `{provider, component_type, version,
-component_version, description, label, config}`.
+`ChatCompletionClient` is a `ComponentBase`, so a model client serialises to a
+`ComponentModel` (`_component_config.py:18-39`: `provider`, `component_type`,
+`version`, `component_version`, `description`, `label`, `config`).
 
-`provider` is a **Python import path**, computed from the class
-(`_component_config.py:157` `_type_to_provider_str(self.__class__)`), and `load_component`
-does `importlib.import_module(module_path)` + `getattr` (`:272-273`), gated by an
-allow-list of namespaces (`:258-269`, default `autogen_core|autogen_agentchat|autogen_ext|
-autogen_studio|autogenstudio`, extensible via `AUTOGEN_ALLOWED_PROVIDER_NAMESPACES`).
-`dump_component` raises on local classes (`:165-166`).
+Capability declaration is `ModelInfo` (`models/_model_client.py:164-182`), a
+TypedDict with exactly six keys: `vision`, `function_calling`, `json_output`,
+`family`, `structured_output`, `multiple_system_messages`. `validate_model_info:185-207`
+enforces the first four and warns on `structured_output`.
 
-**[V]** AutoGen's declarative format is therefore *a serialisation of a Python object
-graph*, exactly as `00-THESIS.md §1.3` characterises framework-native YAML. Import into
-PACT is a translation, never an embed (consistent with D15).
+`ModelFamily` (`models/_model_client.py:16-95`) is a **hardcoded enum of ~30 named
+model families** plus `"unknown"`, with `is_claude`/`is_gemini`/`is_openai`/
+`is_llama`/`is_mistral` predicates. **[V]**
 
-### 1.10 Harness-lowering seam — AutoGen
+**PACT takeaway (negative).** This is the anti-pattern D8 and O3.2 exist to avoid:
+capability as a six-key boolean bag, and model identity as a hardcoded enum that
+must be edited to add a model. It is also *evidence that the six keys are not
+enough* — there is no `audio`, no `computer_use`, no context length, no cost, no
+benchmark, no provenance. PACT's catalogue must be data, not an enum.
 
-**Seam: `autogen_core.models.ChatCompletionClient`**
-(`python/packages/autogen-core/src/autogen_core/models/_model_client.py:209`), specifically
-`create()` (`:212`) and `create_stream()` (`:242`).
+### 1.10 Harness-lowering seam — **CLEAN**
 
-- Input: `Sequence[LLMMessage]` where `LLMMessage = SystemMessage | UserMessage |
-  AssistantMessage | FunctionExecutionResultMessage` (`models/_types.py:80`).
-- Tools: `Sequence[Tool | ToolSchema]`, `tool_choice: Tool | "auto"|"required"|"none"`.
-- Structured: `json_output: bool | type[BaseModel]`.
-- Capability self-report: `model_info` (`:292`), `count_tokens`/`remaining_tokens`
-  (`:281,284`).
+```
+autogen_core.models.ChatCompletionClient.create(
+    messages: Sequence[LLMMessage],
+    *, tools: Sequence[Tool | ToolSchema] = [],
+    tool_choice: Tool | Literal["auto","required","none"] = "auto",
+    json_output: Optional[bool | type[BaseModel]] = None,
+    extra_create_args: Mapping[str, Any] = {},
+    cancellation_token: Optional[CancellationToken] = None,
+) -> CreateResult
+```
+`autogen-core/src/autogen_core/models/_model_client.py:211-239`, streaming twin at
+`:241-269`.
 
-**Verdict: the seam exists and is clean, but it is lossy in three ways PACT must
-account for.**
-1. `AssistantMessage.content: Union[str, List[FunctionCall]]` (`_types.py:43`) — text and
-   tool calls **cannot coexist** in one assistant message. Anthropic and OpenAI both emit
-   interleaved text+tool_use. AutoGen's escape hatch is the side-channel
-   `thought: str | None` (`_types.py:47`), documented as "additional text content besides
-   function calls." Round-tripping interleaved content through AutoGen re-orders it.
-2. `UserMessage.content: Union[str, List[Union[str, Image]]]` (`_types.py:32`) — text and
-   image only. **No audio, no video, no document/PDF part.** D16's audio and document
-   modalities are inexpressible at this seam.
-3. `create_stream` yields bare `str` (§1.5) — no structured deltas.
+This is a **pure model transport**: messages + tools + tool_choice in, content or
+function calls out. No agent concepts leak in. It is the cleanest seam of the five
+by that criterion.
 
-So: AutoGen harness lowering is **possible but `degraded`** on modality (2/4 of D16),
-on interleaving, and on stream granularity. PACT must declare these in the capability
-lattice rather than pretend.
+**But it is a lossy transport**, and the losses are structural, not incidental:
+
+| Loss | Evidence |
+|---|---|
+| Assistant turn cannot hold text **and** tool calls | `models/_types.py:44` `content: Union[str, List[FunctionCall]]`; the `thought` field at `:47` exists to work around it |
+| Tool results are text-only | `models/_types.py:59` `FunctionExecutionResult.content: str` |
+| User content is text + images only — no audio, no video, no documents | `models/_types.py:32` `content: Union[str, List[Union[str, Image]]]` |
+| Images are PNG/JPEG only | `_image.py:51` `re.match(r"data:image/(?:png\|jpeg);base64,", uri)` |
+| Streaming has no tool-call deltas | `models/_model_client.py:251` yields `Union[str, CreateResult]` |
+
+**Verdict: harness lowering onto AutoGen works for text+tools and for vision *input*,
+and is `unsupported` for audio, documents, computer use, and partial-tool-argument
+streaming.** Those must be lattice entries, not surprises.
 
 ---
 
-## 2. OpenAI Agents SDK — Python (`openai/openai-agents-python` 0.18.3)
+## 2. OpenAI Agents SDK — Python (0.18.3)
 
 ### 2.1 Loop
 
-Entry: `Runner.run` → `AgentRunner.run` (`src/agents/run.py:455`). The loop is
-`while True:` at `run.py:789`, with `current_turn += 1` at `:1100` and
-`MaxTurnsExceeded` at `:1101-1125` (interestingly, `max_turns` exceeded is *recoverable*
-via `error_handlers` — `resolve_run_error_handler_result` at `:1117`, which can
-synthesize a final output instead of raising).
+`run.py:789` — `while True:` inside `AgentRunner._run_...`. Turn accounting at
+`run.py:1100-1125`: `current_turn += 1`, and if `max_turns is not None and
+current_turn > max_turns`, raise `MaxTurnsExceeded`. The default is
+`DEFAULT_MAX_TURNS` (`run.py:210`), defined as **10** at `run_config.py:43`.
 
-Each turn produces a `SingleStepResult` whose `next_step` is a 4-way sum
-(`run_internal/run_steps.py:156-175`):
+The loop is a proper **state machine over four next-steps**
+(`run_internal/run_steps.py:155-175`):
+
+- `NextStepHandoff(new_agent)` — swap the running agent.
+- `NextStepFinalOutput(output)` — done.
+- `NextStepRunAgain()` — call the model again.
+- `NextStepInterruption(interruptions: list[ToolApprovalItem])` — **pause**.
+
+**[V] This is the only one of the five frameworks whose loop is an explicit,
+named, serialisable step algebra.** It is the closest existing thing to PACT's
+`perceive/plan/act/observe/halt` loop IR, and PACT's four core step kinds should be
+checked against these four for coverage.
+
+Loop exit is also author-controllable without code:
+`agent.py:347-348` — `tool_use_behavior: Literal["run_llm_again","stop_on_first_tool"]
+| StopAtTools | ToolsToFinalOutputFunction`, where `StopAtTools` is
+`{"stop_at_tool_names": [...]}` (`agent.py:134-135`). Three of the four forms are
+declarative. **[V]**
+
+### 2.2 State — **the strongest serialisable-state story in the corpus** [NEW]
+
+`run_state.py` is **3,819 lines** dedicated to one thing: a JSON-serialisable
+snapshot of a run.
+
+- `run_state.py:153` — `CURRENT_SCHEMA_VERSION = "1.13"`.
+- `run_state.py:155-176` — `SCHEMA_VERSION_SUMMARIES`, a mandatory one-line changelog
+  per version, enforced by module-level `raise AssertionError` at `:179-191` if a
+  version lacks a summary.
+- `run_state.py:146-152` — the written schema policy, including
+  *"Forward compatibility is intentionally fail-fast (older SDKs reject newer or
+  unsupported versions)."*
+- `run_state.py:212-311` — 25 persisted fields, including `_current_turn`,
+  `_model_responses`, `_generated_items`, `_session_items`, `_current_step`,
+  `_last_processed_response`, `_tool_use_tracker_snapshot`, `_trace_state`,
+  `_sandbox`.
+- `run_state.py:728` `to_json`, `:1105` `from_string`, `:1146` `from_json`.
+
+**[V] This directly validates three PACT design choices**, and one of them is
+a choice PACT has not yet made explicitly:
+
+1. **Versioned run state with a mandatory human-readable changelog** and
+   **fail-fast forward incompatibility**. E-2 says "unknown features are rejected
+   loudly by old adapters, never ignored" — OpenAI shipped exactly that discipline
+   for state, with a machine-enforced changelog. PACT should copy the enforcement
+   mechanism (`:179-191`), not just the policy.
+2. **The pause boundary is the interruption, and it is part of the state**
+   (`_current_step: NextStepInterruption | None`, `:286`).
+3. **[NEW] Agent definitions are deliberately *not* in the snapshot.**
+   `run_state.py:2714` — `agent_map = _build_agent_map(initial_agent)`; `:2724` —
+   `raise UserError(f"Agent {current_agent_name} not found in agent map")`.
+   Deserialisation requires a *live* starting agent object; only names are stored.
+
+Point 3 is the important one for PACT. It means the durable artifact splits cleanly
+into **(definitions | run state)** — and PACT already owns definitions
+deterministically (the tree → IR). So PACT's resume contract should be:
+*the lockfile digest identifies the definitions; the run snapshot references it by
+digest and stores only run-scoped data.* That is strictly better than what any
+framework does, and it costs nothing because the framework already refuses to
+serialise definitions.
+
+Context serialisation is explicitly best-effort (`run_state.py:219-224`):
+mapping contexts round-trip; custom contexts need a serializer/deserializer; when
+neither is available the snapshot is still written but emits warnings. **[D]** PACT
+should not permit that third case — under T7 it is silent loss.
+
+### 2.3 Tools — 13 kinds, and a hosted/local split that constrains harness lowering
+
+`tool.py:1455-1469`:
 
 ```
-NextStepHandoff(new_agent) | NextStepFinalOutput(output) | NextStepRunAgain() | NextStepInterruption(interruptions)
+Tool = FunctionTool | FileSearchTool | WebSearchTool | ComputerTool[Any]
+     | HostedMCPTool | CustomTool | ShellTool | ApplyPatchTool | LocalShellTool
+     | ImageGenerationTool | CodeInterpreterTool | ToolSearchTool
+     | ProgrammaticToolCallingTool
 ```
 
-Loop-exit policy is `Agent.tool_use_behavior` (`agent.py:347-366`), resolved in
-`run_internal/turn_resolution.py:678-697`:
-- `"run_llm_again"` (default) — tool results go back to the model.
-- `"stop_on_first_tool"` — first tool output *is* the final output.
-- `StopAtTools{stop_at_tool_names}` — stop when a named tool is called.
-- `ToolsToFinalOutputFunction` — arbitrary callable returning `ToolsToFinalOutputResult`
-  (`agent.py:74-80`).
+`ProcessedResponse` (`run_internal/run_steps.py:117-131`) buckets a model response
+into `handoffs`, `functions`, `computer_actions`, `local_shell_calls`,
+`shell_calls`, `apply_patch_calls`, `custom_tool_calls`, `mcp_approval_requests`,
+`function_tools_not_found`, `interruptions`.
 
-`reset_tool_choice: bool = True` (`agent.py:369`) — after a tool call the SDK resets
-`tool_choice` to prevent infinite forced-tool loops. **[V]** This is an *implicit loop
-mutation* nobody else does; PACT must model it explicitly or the port changes behaviour.
+**The load-bearing comment is at `run_internal/run_steps.py:135`:**
 
-Guardrails are part of the loop, not decoration: input guardrails run only on turn ≤ 1
-(`run.py:1221`), and can run in parallel with the first model call
-(`run.py:1270` — `parallel_results, turn_result = await asyncio.gather(run_input_guardrails(...), model_task)`),
-with cancellation of the model task on tripwire (`run.py:1283-1286`).
+> `# Handoffs, functions and computer actions need local processing`
+> `# Hosted tools have already run, so there's nothing to do.`
 
-### 2.2 State
+**[V] Hosted tools (`WebSearchTool`, `FileSearchTool`, `CodeInterpreterTool`,
+`ImageGenerationTool`, `HostedMCPTool`) execute server-side inside the model
+provider and are already complete when the response arrives.**
 
-`RunState` (`src/agents/run_state.py:212`) is a **serialisable, versioned run snapshot**:
-- `CURRENT_SCHEMA_VERSION = "1.13"` (`run_state.py:153`), with a
-  `SCHEMA_VERSION_SUMMARIES` table asserted complete at import time (`:179-190`).
-- `to_json()` emits `"$schemaVersion"` (`:787`); `to_string()`/`from_string()` at
-  `:1047,1105`; version rejection at `:2694-2710` with a feature-specific gate
-  ("Programmatic Tool Calling requires schema version …").
-- The run entry point accepts it directly: `AgentRunner.run(input: str | list[TResponseInputItem] | RunState[TContext])`
-  (`run.py:458`), branching on `isinstance(input, RunState)` at `:474`.
+**This is a first-order constraint on T3/D12.** Harness lowering says "PACT owns
+loop semantics; frameworks are transports." That is true *only for
+client-executed tools*. For a hosted tool, the provider has already run a
+mini-loop (call → execute → incorporate) that PACT never sees and cannot
+intercept, gate, approve, budget, or trace at the step level.
 
-**[V]** This is the strongest *portable-ish* resume story of the five: a single JSON blob,
-schema-versioned, accepted as run input. But it is an **opaque SDK-internal snapshot** —
-3,819 lines of serialisation logic — not a message list. It cannot be authored, diffed, or
-regenerated from PACT's IR; PACT can only pass it through.
+PACT must therefore introduce a **tool execution-locus** attribute —
+`execution: client | provider | remote` — as a first-class, *required* field in the
+tool IR, and the conformance suite must report loop-ownership per tool, not per
+agent. An agent whose tools are all provider-executed is not meaningfully "run by
+PACT's loop" no matter what the adapter claims.
 
-There is a second, orthogonal state channel: OpenAI **server-managed conversation**
-(`conversation_id` / `previous_response_id` / `auto_previous_response_id`), tracked by
-`OpenAIServerConversationTracker` (`run.py:1195-1206`). When enabled, local session
-persistence is disabled (`run.py:1211` — `session_persistence_enabled = session is not None
-and server_conversation_tracker is None`). **[V]** So OpenAI Agents has *three* mutually
-constraining history models (local `Session`, server conversation, `RunState`), validated
-against each other by `validate_session_conversation_settings` (`run.py:487,517`).
+**Tool results are content-typed** (`tool.py:193-268`):
+`ToolOutputText` (`:193`), `ToolOutputImage` (`:207`, with `image_url` or `file_id`
+plus `detail`), `ToolOutputFileContent` (`:236`, with `file_data`/`file_url`/`file_id`
+plus `filename`). **[V]** Strictly richer than AutoGen (§1.3).
 
-### 2.3 Tools
+### 2.4 Structured output — two portability traps
 
-`tool.py` defines an unusually large closed set of tool kinds:
-`FunctionTool` (`:384`), `FileSearchTool` (`:692`), `WebSearchTool` (`:718`),
-`ComputerTool` (`:761`), `HostedMCPTool` (`:1006`), `CodeInterpreterTool` (`:1037`),
-`ImageGenerationTool` (`:1059`), `LocalShellTool` (`:1086`), `ShellTool` (`:1282`),
-`ApplyPatchTool` (`:1337`), `CustomTool`, `ProgrammaticToolCallingTool`.
+`agent_output.py:53` `AgentOutputSchema`, with `strict_json_schema: bool = True`
+by default (`:76`, `__init__` signature at `:78`).
 
-`FunctionTool` fields worth copying into PACT (`tool.py:389-470`):
-- `params_json_schema` + `strict_json_schema: bool = True`
-- `is_enabled: bool | Callable[[RunContextWrapper, AgentBase], MaybeAwaitable[bool]]` (`:415`)
-  — **dynamic per-run tool exposure**, which is precisely the "curated exposed set"
-  strategy lever `00-THESIS.md §7.2` names.
-- `tool_input_guardrails` / `tool_output_guardrails` (`:423,426`)
-- `needs_approval: bool | Callable[[ctx, params, call_id], Awaitable[bool]]` (`:429`)
-- `timeout_seconds` + `timeout_behavior: "error_as_result"|"raise_exception"` (`:441,444`)
-- `defer_loading: bool` (`:453`) — hide the definition until tool-search loads it
-  (context-budget lever)
-- `output_json_schema` (`:464`) — declared tool *output* schema
-- `allowed_callers` (`:461`) — which caller may invoke this tool
+**Trap 1 — non-object outputs are silently wrapped.**
+`agent_output.py:14` — `_WRAPPER_DICT_KEY = "response"`; `:66-68` — `_is_wrapped`
+*"Whether the output type is wrapped in a dictionary. This is generally done if the
+base output type cannot be represented as a JSON Schema object."* So an author
+declaring `output_type=list[str]` gets a wire schema of
+`{"response": [...]}`. **[V]** A PACT contract that declares an array output will
+produce a *different observable JSON shape* on this adapter than on one that
+supports root-level arrays.
 
-`ShellTool` has a full sandbox/network policy vocabulary
-(`ShellToolContainerNetworkPolicyAllowlist` `:1146`, `...Disabled` `:1154`,
-`ShellToolLocalEnvironment` `:1166`, `ShellToolContainerAutoEnvironment` `:1173`) and
-skills (`ShellToolLocalSkill` `:1101`, `ShellToolSkillReference` `:1109`,
-`ShellToolInlineSkill` `:1125`).
+**Trap 2 — strict mode rewrites the author's schema.** `strict_schema.py`:
 
-Concurrency: tools run via `asyncio.gather` (`run_internal/tool_execution.py:1828,1944`)
-with an optional cap `RunConfig.tool_execution.max_function_tool_concurrency`
-(`run_config.py:109`, applied at `tool_execution.py:1507`). **[V]** OpenAI Agents is the
-only one of the five with a *declarative* tool-concurrency cap.
+- `:88-89` — `if typ == "object" and "additionalProperties" not in json_schema:
+  json_schema["additionalProperties"] = False`
+- `:92-99` — if `additionalProperties` is present and not `False`, `raise UserError`.
+- `:109` — `json_schema["required"] = list(properties.keys())` — **every property
+  becomes required**, so optional fields are not expressible.
+- `:135` — *"oneOf is not supported by OpenAI's structured outputs in nested contexts"*.
 
-### 2.4 Structured output
+**[V] An output schema that is perfectly legal in PACT and in Pydantic AI can be
+rejected outright, or silently have all its optional fields made required, on this
+adapter.** This is a schema-portability problem, not a model-portability problem,
+and it is invisible unless PACT checks for it.
 
-`Agent.output_type: type[Any] | AgentOutputSchemaBase | None` (`agent.py:334`).
-`AgentOutputSchemaBase` (`agent_output.py:16`) is an ABC with `is_plain_text`,
-`name`, `json_schema`, `is_strict_json_schema`, `validate_json`.
+### 2.5 Streaming — deliberately un-normalised
 
-**[V]** Structured output is a property of the **agent's final output only** — there is no
-per-step or per-branch output schema, and no notion of "structured output mode"
-(tool-based vs native vs prompted). Compare Pydantic AI, which makes the *mode* explicit
-(§6.4). Validation occurs when the run resolves a final output; the loop does not
-re-prompt on validation failure at this layer.
+`stream_events.py:61`:
 
-### 2.5 Streaming
+```python
+StreamEvent = RawResponsesStreamEvent | RunItemStreamEvent | AgentUpdatedStreamEvent
+```
 
-`StreamEvent = RawResponsesStreamEvent | RunItemStreamEvent | AgentUpdatedStreamEvent`
-(`stream_events.py:61`).
+- `RawResponsesStreamEvent` (`:11-21`) — *"these are 'raw' events, i.e. they are
+  directly passed through from the LLM"*, typed `TResponseStreamEvent`, which
+  `items.py:82` aliases to `openai.types.responses.ResponseStreamEvent`.
+- `RunItemStreamEvent` (`:24-47`) — 10 semantic names, including
+  `"handoff_occured"` with a source comment at `:31-32`:
+  *"This is misspelled, but we can't change it because that would be a breaking change"*.
+- `AgentUpdatedStreamEvent` (`:52-58`).
 
-- `RawResponsesStreamEvent.data: TResponseStreamEvent` (`stream_events.py:16`), and
-  `TResponseStreamEvent = ResponseStreamEvent` from `openai.types.responses`
-  (`items.py:82`). **The raw stream is the OpenAI Responses API wire format, verbatim.**
-- `RunItemStreamEvent.name` is a closed 10-member literal (`stream_events.py:29-42`):
-  `message_output_created, handoff_requested, handoff_occured` *(sic — the misspelling is
-  frozen for compatibility, per the inline comment at `:32`)*, `tool_called`,
-  `tool_search_called`, `tool_search_output_created`, `tool_output`,
-  `reasoning_item_created`, `mcp_approval_requested`, `mcp_approval_response`,
-  `mcp_list_tools`.
-- `AgentUpdatedStreamEvent.new_agent` (`:55`) — handoff visible in the stream.
+**[V] The SDK's streaming surface is the OpenAI Responses wire format plus a thin
+semantic layer.** There is no provider-neutral event vocabulary. A non-OpenAI model
+plugged in here must *emit OpenAI Responses stream events*.
 
-**[V]** This is a *two-layer* stream: a provider-shaped raw layer plus an SDK-shaped
-semantic layer. PACT's stream IR must be the semantic layer, with the raw layer carried
-as an opaque `x-` passthrough — otherwise the IR inherits the OpenAI Responses wire
-format, which is exactly the coupling `NG5` forbids.
+### 2.6 HITL — approval as an interruption, resumed from a snapshot
 
-### 2.6 HITL
+`NextStepInterruption` (`run_internal/run_steps.py:171-175`) carries
+`interruptions: list[ToolApprovalItem]`. `RunState.get_interruptions()`
+(`run_state.py:356-363`), `RunState.approve(approval_item, always_approve=False)`
+(`:365`), `RunState.reject(...)` (`:371`). Schema `1.6` note (`run_state.py:163`):
+*"Persists explicit approval rejection messages across resume flows."*
 
-Best-in-class among the five, and structurally distinct from everyone else:
-- `FunctionTool.needs_approval` (`tool.py:429`), plus `ShellTool.needs_approval` (`:1287`)
-  and `ApplyPatchTool.needs_approval` (`:1342`).
-- When approval is required the turn resolves to `NextStepInterruption(interruptions:
-  list[ToolApprovalItem])` (`run_steps.py:171-176`), the run *returns* with
-  `RunResult.interruptions`, and the caller resolves them on the state:
-  `RunState.approve(approval_item, always_approve=False)` (`run_state.py:365`) and
-  `RunState.reject(...)` (`run_state.py:371`).
-- Resume = `Runner.run(agent, run_state)`.
-- `RunConfig.tool_execution.pre_approval_tool_input_guardrails` (`run_config.py:116`)
-  controls whether input guardrails run *before* the approval pause.
+**[V] This is durable, out-of-process HITL**: serialise → human decides
+asynchronously → deserialise → resume. It is the model PACT should adopt.
 
-**[V]** Approval state lives in `RunState`, not in the message list. That is a genuine
-semantic difference from Vercel (§5.6), and the two cannot be trivially unified.
+### 2.7 Memory — sessions as a four-method protocol
 
-### 2.7 Memory
+`memory/session.py:14` — `Session` `Protocol` with `get_items(limit)` (`:24`),
+`add_items(items)` (`:36`), `pop_item()` (`:44`), `clear_session()` (`:52`).
+`SessionABC:57` is the ABC twin. Implementations: `sqlite_session.py`,
+`openai_conversations_session.py`, `openai_responses_compaction_session.py`.
 
-`Session` protocol (`memory/session.py:14`): `get_items(limit)`, `add_items`, `pop_item`,
-`clear_session`, plus `session_id` and `session_settings`. Implementations:
-`SQLiteSession` (`memory/sqlite_session.py`), `OpenAIConversationsSession`
-(server-side), `OpenAIResponsesCompactionSession`.
+**[V] This is conversation *history*, not semantic memory.** There is no
+`query`/`search` operation and no relevance concept — the opposite of AutoGen's
+`Memory.query` (§1.7). Two frameworks, two irreconcilable meanings of the word
+"memory". See §7.7.
 
-Compaction is an *optional protocol extension*:
-`OpenAIResponsesCompactionAwareSession.run_compaction(args)` (`memory/session.py:132-137`)
-with `OpenAIResponsesCompactionArgs{response_id, compaction_mode:
-"previous_response_id"|"input"|"auto", store, force}` (`:107-128`), detected structurally
-by `is_openai_responses_compaction_aware_session` (`:140`).
+### 2.8 Multi-agent — handoffs + agents-as-tools
 
-**[V]** Session is *transcript storage only*. There is no retrieval memory, no semantic
-memory, no memory kinds. Any "memory" beyond conversation history must be a tool.
+`agent.py:305` — `handoffs: list[Agent[Any] | Handoff[TContext, Any]]`. A handoff
+*replaces* the running agent (`NextStepHandoff.new_agent`), so control does not
+return. Plus `agent.as_tool(...)` (`agent.py:558-559` shows its
+`is_enabled`/`on_stream` parameters), which *does* return.
 
-### 2.8 Multi-agent
+Guardrails are a separate, four-way policy surface: `input_guardrails` and
+`output_guardrails` on the agent (`agent.py:324-329`), plus
+`tool_input_guardrail_results` and `tool_output_guardrail_results` threaded through
+`SingleStepResult` (`run_internal/run_steps.py:196-200`).
 
-Two mechanisms, deliberately distinguished (`agent.py:575-580` **[D]**):
-1. **Handoff** — `Handoff` (`handoffs/__init__.py:98`) is materialised as a *tool* with
-   `tool_name`, `tool_description`, `input_json_schema`, `on_invoke_handoff`. Control
-   transfers; the next agent receives the conversation history, subject to
-   `HandoffInputFilter: Callable[[HandoffInputData], MaybeAwaitable[HandoffInputData]]`
-   (`handoffs/__init__.py:90`). `HandoffInputData` (`:42-88`) carries `input_history`,
-   `pre_handoff_items`, `new_items`, `run_context`, `input_items`.
-   There is also `RunConfig.nest_handoff_history: bool` (`run_config.py:326`) and
-   `handoff_history_mapper` (`:335`) — i.e. handoffs can *rewrite history* into a nested
-   summary. **[V]** This is a topology feature disguised as a history filter, and a real
-   IR hazard: `SingleStepResult.original_input` is documented as "May be mutated by
-   handoff input filters" (`run_steps.py:179-182`).
-2. **Agent-as-tool** — `Agent.as_tool(...)` (`agent.py:550`) returns a `FunctionTool`,
-   with `custom_output_extractor`, `on_stream` (nested run streaming),
-   `run_config`, `max_turns`, `hooks`, `session`, `needs_approval`, `parameters`
-   (structured tool input), `input_builder`, `include_input_schema`.
-
-**[V]** There is no supervisor/graph/team object. Topology is expressed *only* as
-handoff edges + agent-as-tool nesting. Debate, blackboard, market/auction (AC-5.1) have
-no native form.
+**[V] Four guardrail attachment points (agent-in, agent-out, tool-in, tool-out) is
+the finest-grained policy surface in the set.** PACT's policy IR needs all four
+attachment points or it cannot import this losslessly (P-3).
 
 ### 2.9 Model binding
 
-- `Agent.model: str | Model | None` (`agent.py:311`); `RunConfig.model` (`run_config.py:305`)
-  overrides.
-- `RunConfig.model_provider: ModelProvider = field(default_factory=MultiProvider)`
-  (`run_config.py:310`).
-- `MultiProvider` routes on a name **prefix** (`models/multi_provider.py:61-72`):
-  `openai/` (or bare) → `OpenAIProvider`; `litellm/` → LitellmProvider;
-  `any-llm/` → AnyLLMProvider. Custom prefixes via `MultiProviderMap.add_provider` (`:42`).
-  `MultiProviderOpenAIPrefixMode = Literal["alias","model_id"]` (`:13`) exists purely to
-  disambiguate `openai/gpt-4.1` (route-vs-literal).
+`models/interface.py` — `Model` ABC (`get_response`, `stream_response`) and
+`ModelProvider` ABC (`get_model(model_name) -> Model`). `agent.py:311` —
+`model: str | Model | None`; `agent.py:318` — `model_settings: ModelSettings`.
+`models/multi_provider.py` routes prefixed names.
 
-**[V]** Prefix-routed model strings are the closest analogue to a PACT model URI. Worth
-noting that PACT's `model:` field must be *unambiguous* about this alias-vs-literal
-question, which the SDK had to retrofit an enum for.
+There is no capability declaration on `Model` at all — no `ModelInfo` equivalent.
+Capability mismatches surface as runtime API errors. **[V]**
 
-### 2.10 Harness-lowering seam — OpenAI Agents
+### 2.10 Harness-lowering seam — **USABLE BUT LEAKY**
 
-**Seam: `agents.models.interface.Model`** (`src/agents/models/interface.py:37`):
-
-```python
-async def get_response(self, system_instructions, input, model_settings, tools,
-                       output_schema, handoffs, tracing, *, previous_response_id,
-                       conversation_id, prompt) -> ModelResponse            # :61
-def stream_response(...) -> AsyncIterator[TResponseStreamEvent]              # :96
 ```
-plus `ModelProvider.get_model(model_name) -> Model` (`:138`).
+agents.models.interface.Model.get_response(
+    system_instructions: str | None,
+    input: str | list[TResponseInputItem],
+    model_settings: ModelSettings,
+    tools: list[Tool],
+    output_schema: AgentOutputSchemaBase | None,
+    handoffs: list[Handoff],
+    tracing: ModelTracing,
+    *, previous_response_id, conversation_id, prompt,
+) -> ModelResponse
+```
+`models/interface.py` (`get_response`, `stream_response` immediately below).
 
-Concrete implementations to imitate: `OpenAIResponsesModel`
-(`models/openai_responses.py:409`), `OpenAIChatCompletionsModel`
-(`models/openai_chatcompletions.py:51`), with the message translation in
-`models/chatcmpl_converter.py` (910 lines).
+Two leaks, both consequential:
 
-**Verdict: a real seam, with one important caveat.** It is *not* a pure model transport:
-`get_response` accepts SDK-native `Tool`, `Handoff`, and `AgentOutputSchemaBase` objects,
-and it speaks the **OpenAI Responses item format** on both sides
-(`TResponseInputItem = ResponseInputItemParam`, `TResponseOutputItem = ResponseOutputItem`,
-`TResponseStreamEvent = ResponseStreamEvent` — `items.py:76,79,82`).
+1. **`handoffs: list[Handoff]` is a parameter of the *model* call.** An agent-level
+   orchestration concept is baked into the transport signature. PACT driving this
+   seam must either pass `[]` (losing native handoff rendering, which on OpenAI
+   models is emitted as tool definitions) or synthesise `Handoff` objects for its
+   own topology — i.e. the seam is not topology-neutral.
+2. **The wire format is OpenAI Responses.** `items.py:76,79,82` alias
+   `TResponseInputItem`/`TResponseOutputItem`/`TResponseStreamEvent` to
+   `openai.types.responses.*`. PACT's canonical message IR must be *translated into
+   OpenAI Responses items* for this adapter, and the fidelity of that translation is
+   the fidelity of the adapter.
 
-Two implications:
-1. To use openai-agents purely as a transport, PACT must **emit OpenAI Responses items**.
-   That is a translation cost, not a blocker.
-2. `handoffs` are passed *to the model* as a first-class argument, i.e. the SDK expects
-   handoff-as-tool synthesis to happen below the seam. PACT harness lowering should pass
-   `handoffs=[]` and synthesize handoff tools itself, so PACT owns the routing semantics
-   (D12). **[I]** — I did not find a code path that forbids this, but I also did not test it.
-
-There is also a *lower* seam if the model layer is too coupled: the SDK's dependency
-`openai` client itself. But then you are no longer using openai-agents at all, which
-would violate the point of the adapter.
+**Verdict: harness lowering works, but this adapter costs a full message-format
+translation layer that the AutoGen and Vercel adapters do not.** Budget for it.
 
 ---
 
-## 3. Claude Agent SDK — Python (`anthropics/claude-agent-sdk-python` 0.2.128)
+## 3. Claude Agent SDK — Python (0.2.128)
 
-### 3.0 Framing finding: this SDK is a CLI client, not an agent framework
+### 3.0 Framing: this is a CLI client, not an agent framework
 
-`_internal/transport/subprocess_cli.py:463`:
-```python
-cmd = [self._cli_path, "--output-format", "stream-json", "--verbose"]
-```
-`:663` adds `--input-format stream-json`. `_find_cli` (`:150`) searches `shutil.which("claude")`
-(`:159`) and a fixed list of install paths (`:194-199`), preferring a **bundled binary**
-`_bundled/claude` (`:236-247`). `_cli_version.py:3` — `__cli_version__ = "2.1.220"`.
+Total source: 11,298 lines across 24 files. The largest are `types.py` (2,230),
+`_internal/sessions.py` (1,925), `_internal/transport/subprocess_cli.py` (1,069)
+and `_internal/query.py` (1,034). There is no model client, no message-construction
+layer, no loop.
 
-**[V] The agent loop, the built-in tools (Bash/Read/Edit/…), context compaction, subagent
-spawning, permission evaluation, and model calling all live inside the closed-source
-`claude` binary.** The Python package is a control-protocol client.
+`_internal/transport/subprocess_cli.py:459-663` builds a command line:
+
+- `:463` — `cmd = [self._cli_path, "--output-format", "stream-json", "--verbose"]`
+- `:663` — `cmd.extend(["--input-format", "stream-json"])`
+- and ~40 flags in between: `--system-prompt` (`:466,468`), `--tools` (`:483,485,488`),
+  `--allowedTools` (`:495`), `--max-turns` (`:498`), `--max-budget-usd` (`:501`),
+  `--disallowedTools` (`:504`), `--model` (`:510`), `--permission-mode` (`:524`),
+  `--resume` (`:536`), `--mcp-config` (`:579`), `--json-schema` (`:659`).
+
+The `Transport` ABC (`_internal/transport/__init__.py`) is `connect` / `write(data: str)` /
+`read_messages() -> AsyncIterator[dict]` / `close` / `is_ready` / `end_input`.
+Its own docstring: *"This is a low-level transport interface that handles raw I/O
+with the Claude process or service."*
+
+**[V] The lowest abstraction the SDK exposes is "write a JSON line to a
+subprocess".** The agent loop lives inside the `claude` CLI binary, which is not in
+this repo and is not open source.
 
 ### 3.1 Loop
 
-Not observable in this repo. Loop configuration is expressed as CLI options:
-`ClaudeAgentOptions.max_turns` (`types.py:1834`), `max_budget_usd` (`:1840`),
-`permission_mode` (`:1810`), `thinking` (`:2048`), `effort` (`:2061`),
-`task_budget` (`:2119`). Loop *outcome* is reported via
-`ResultMessage.terminal_reason` (`types.py:1249-1257`) with values like `"completed"`,
-`"max_turns"`, `"aborted_streaming"`, `"aborted_tools"`, and `num_turns` (`:1232`).
-
-**[V]** PACT cannot own the loop here (D12 violated by construction).
+Not present in the SDK. Controlled only by flags: `--max-turns`
+(`subprocess_cli.py:498`), `--max-budget-usd` (`:501`), `--task-budget` (`:507`),
+`--effort` (`:648`), `--thinking` / `--max-thinking-tokens` (`:632-641`).
 
 ### 3.2 State
 
-Sessions are the state model, and they are *files on disk plus an optional mirror*:
-- `resume: str | None` (session id), `continue_conversation`, `fork_session`,
-  `session_id` (`types.py:1820-1832`).
-- `session_store: SessionStore | None` (`types.py:2092`) — "every transcript line written
-  locally is also passed to `session_store.append()`, and `resume` can materialize from
-  the store when the local file is absent." With `session_store_flush:
-  "batched"|"eager"` (`:2100`) and `load_timeout_ms: int = 60_000` (`:2110`).
-- Session manipulation helpers exported at `__init__.py:29-52`: `fork_session`,
-  `rename_session`, `tag_session`, `delete_session`, `import_session_to_store`,
-  `list_sessions`, `get_session_messages`, `get_subagent_messages`, `list_subagents`,
-  `fold_session_summary`, plus `InMemorySessionStore` and a
-  `testing/session_store_conformance.py` suite.
-- `enable_file_checkpointing: bool` (`types.py:2084`) + `ClaudeSDKClient.rewind_files`
-  (`client.py:374`) — **filesystem** rollback to a user message, not conversation rollback.
+Session-oriented and CLI-owned: `--continue` (`:527`), `--resume=<id>` (`:536`),
+`--session-id=` (`:542`), `--fork-session` (`:591`), `--session-mirror` (`:594`).
+`_internal/session_resume.py` (536 lines) and `_internal/sessions.py` (1,925 lines)
+manage local mirrors of the CLI's transcript.
 
-**[V]** This is the only SDK of the five with first-class *session forking* and a
-pluggable durable transcript store with a published conformance suite. That is a strong
-model for PACT's run ledger, and worth mining independently of the adapter question.
+**[V]** Resume works, but the resumable unit is *the CLI's session*, opaque to the
+SDK. There is no step-level state object comparable to `RunState`.
 
 ### 3.3 Tools
 
-Three disjoint tool populations:
-1. **Built-in CLI tools** — selected by name: `tools: list[str] | ToolsPreset | None`
-   (`types.py:1763`), narrowed by `allowed_tools` (`:1774`) / `disallowed_tools` (`:1847`).
-   Their implementations are in the binary.
-2. **MCP servers** — `mcp_servers: dict[str, McpServerConfig] | str | Path`
-   (`types.py:1796`) where `McpServerConfig = McpStdio|McpSSE|McpHttp|McpSdkServerConfig`
-   (`types.py:637`).
-3. **In-process SDK tools** — `@tool(name, description, input_schema, annotations)`
-   (`__init__.py:171`) + `create_sdk_mcp_server(...)` → `McpSdkServerConfig(type="sdk",
-   name=..., instance=server)` (`__init__.py:525`). These are **MCP tools in-process**;
-   the model sees them under MCP naming.
+Three sources: CLI built-ins selected by `--tools`/`--allowedTools`/`--disallowedTools`;
+MCP servers via `--mcp-config` (`:579`); and in-process SDK tools —
+`SdkMcpTool` (`__init__.py:161`), the `@tool` decorator (`:171`), and
+`create_sdk_mcp_server(name, version, tools)` (`:312`), which returns
+`McpSdkServerConfig(type="sdk", name=name, instance=server)` (`:525`).
 
-Tool handler contract (`__init__.py:213-216` **[D]**): async, single dict arg, returns
-`{"content": [...], "is_error"?: bool}` — i.e. MCP `CallToolResult` shape, so image/audio
-tool results *are* expressible here (unlike AutoGen).
+**[V] In-process tools are exposed to the CLI as an MCP server.** So even
+locally-defined Python tools travel over MCP. That is architecturally clean and
+maps directly onto PACT's MCP-first tool edge (D14) — but it also means PACT
+cannot intercept a tool call before MCP dispatch.
 
 ### 3.4 Structured output
 
-`ClaudeAgentOptions.output_format: dict[str, Any] | None` (`types.py:2076`) —
-"Matches the Messages API structure, e.g. `{"type": "json_schema", "schema": {...}}`".
-Result surfaces as `ResultMessage.structured_output: Any` (`types.py:1237`).
-
-**[V]** Schema-only, no Python type binding, no validation in the SDK, no repair loop.
+`ClaudeAgentOptions.output_format` (`types.py:2077-2081`), shape
+`{"type": "json_schema", "schema": {...}}`, lowered to `--json-schema <json>`
+(`subprocess_cli.py:650-659`). `types.py:1239` — `structured_output: Any = None` on
+the result message. **[V]** Same wire shape as the Anthropic beta
+`BetaJSONOutputFormatParam` (§4.4) — a real point of convergence.
 
 ### 3.5 Streaming
 
-Default granularity is **whole messages**: `AssistantMessage`, `UserMessage`,
-`SystemMessage`, `ResultMessage` (`types.py:1351-1358`).
-Token-level streaming is opt-in: `include_partial_messages: bool = False`
-(`types.py:1963`), which emits `StreamEvent{uuid, session_id, event: dict[str, Any],
-parent_tool_use_id}` (`types.py:1261-1266`) where `event` is documented as
-"The raw Anthropic API stream event" (`:1265`).
+`include_partial_messages: bool = False` (`types.py:1963`) → `--include-partial-messages`
+(`subprocess_cli.py:582`); `--include-hook-events` (`:585`) surfaces hook events as
+`HookEventMessage` (`types.py:1318`). Messages arrive as parsed JSON dicts from the
+subprocess and are converted in `_internal/message_parser.py` (363 lines). **[V]**
 
-Also `include_hook_events: bool` (`types.py:1969`) surfacing `HookEventMessage` (`:1318`).
+### 3.6 HITL — the richest *policy* model, the weakest *loop* control
 
-**[V]** Streaming here is *raw provider events wrapped in an envelope* — no SDK-level
-semantic delta vocabulary. Same shape as OpenAI Agents' raw layer, without the semantic
-layer.
+`can_use_tool: CanUseTool | None` (`types.py:1929`), signature
+`(str, dict[str, Any], ToolPermissionContext) -> Awaitable[PermissionResult]`
+(`types.py:254-256`). Results:
 
-### 3.6 HITL
+- `PermissionResultAllow` (`:235-240`, `updated_input` at `:239`) — with `updated_input: dict | None` and
+  `updated_permissions: list[PermissionUpdate] | None`. **The callback can rewrite
+  the tool's arguments.**
+- `PermissionResultDeny` (`:244-249`) — with `interrupt: bool = False`.
 
-Three distinct mechanisms, all live callbacks over the control protocol:
-1. `can_use_tool: CanUseTool | None` (`types.py:1929`) — invoked only when the CLI's
-   permission rules evaluate to *ask*. Explicitly documented as **not** invoked when
-   `allowed_tools`/`permission_mode`/settings already allow the call (`:1933-1936`), and a
-   `CanUseToolShadowedWarning` is raised when the configuration visibly shadows it (`:1937`).
-2. `hooks: dict[HookEvent, list[HookMatcher]]` (`types.py:1947`) — `PreToolUse`,
-   `PostToolUse`, `PostToolUseFailure`, `PreCompact`, `Notification`, `PermissionRequest`,
-   `Stop`, … Critically, `types.py:1953-1957` **[D]**: "multiple matchers registered on the
-   same event are dispatched **concurrently** by the CLI — … Design each hook to be
-   independent; do not rely on one completing before another starts." **[V]** Hook
-   *ordering is not defined*. PACT's guardrail/hook IR assumes ordering; that assumption
-   does not survive here.
-3. `PreToolUse` returning `permissionDecision: "defer"` → run stops and
-   `ResultMessage.deferred_tool_use: DeferredToolUse{id, name, input}`
-   (`types.py:1187-1197,1242`). This is the only *suspend-and-report* path, and it is
-   coarse (one deferred call, whole-run stop).
+`PermissionUpdate` (`types.py:122`) supports `addRules`, `replaceRules`,
+`removeRules`, `setMode`, `addDirectories`, `removeDirectories`, with
+`PermissionBehavior = "allow" | "deny" | "ask"` (`types.py:110`) and destinations
+`userSettings | projectSettings | localSettings | session` (`types.py:106`).
+**[V]** This is a full
+runtime-mutable permission system — nothing else in the corpus has one.
 
-Runtime controls on the live client: `interrupt()` (`client.py:317`),
-`set_permission_mode(mode)` (`:323`), `set_model(model)` (`:350`),
-`stop_task(task_id)` (`:454`).
+Ten hook events (`types.py:260-273`): `PreToolUse`, `PostToolUse`,
+`PostToolUseFailure`, `UserPromptSubmit`, `Stop`, `SubagentStop`, `PreCompact`,
+`Notification`, `SubagentStart`, `PermissionRequest`.
+
+**And a documented footgun**: `types.py:1696-1750` — `_warn_if_can_use_tool_shadowed`
+warns that `can_use_tool` *will not be invoked* when `permission_mode` is
+`bypassPermissions`, or for tools pre-approved by `allowed_tools` or by settings
+files. **[V]** The human gate is silently bypassable by configuration. PACT's
+approval-gate IR must make precedence explicit and must fail closed (T7).
+
+Both `can_use_tool` and `hooks` are **synchronous in-process callbacks**, so like
+AutoGen (§1.6) this is blocking HITL, not durable HITL.
 
 ### 3.7 Memory
 
-- Session transcripts (§3.2) are the conversation memory.
-- `AgentDefinition.memory: Literal["user","project","local"] | None` (`types.py:95`) —
-  a scope selector for the CLI's own memory (CLAUDE.md-family), not a store interface.
-- Context accounting is queryable: `get_context_usage()` (`client.py:510`) →
-  `ContextUsageResponse` / `ContextUsageCategory`.
-- Compaction is a *hook event* (`PreCompactHookInput`), not a configurable policy.
-
-**[V]** No pluggable memory backend, no retrieval interface.
+`AgentDefinition.memory: Literal["user","project","local"] | None` (`types.py:95`)
+— a location selector, not a memory API. CLI-owned. **[V]**
 
 ### 3.8 Multi-agent
 
-`agents: dict[str, AgentDefinition] | None` (`types.py:1981`), where `AgentDefinition`
-(`types.py:84-102`) is:
-```
-description, prompt, tools?, disallowedTools?, model?, skills?, memory?,
-mcpServers?, initialPrompt?, maxTurns?, background?, effort?, permissionMode?
-```
-Subagents are invoked by the model through the built-in Agent/Task tool; the SDK can read
-their transcripts (`get_subagent_messages`, `list_subagents` — `__init__.py:46,51`).
-`task_progress` / `task_notification` message subtypes and `stop_task` (`client.py:454`)
-give background-task control.
+`ClaudeAgentOptions.agents: dict[str, AgentDefinition] | None` (`types.py:1981`).
+`AgentDefinition` (`types.py:84-102`) is itself a small declarative agent spec:
+`description`, `prompt`, `tools`, `disallowedTools`, `model`, `skills`, `memory`,
+`mcpServers`, `initialPrompt`, `maxTurns`, `background`, `effort`, `permissionMode`.
 
-**[V]** Topology is **supervisor-with-subagents, depth-1, model-driven**. There is no
-edge/graph vocabulary, no explicit routing, no swarm, no debate.
+**[V] This is a genuine competitor-adjacent declarative agent format**, and it is
+worth naming alongside Pydantic AI's `AgentSpec` and Oracle's Open Agent Spec in
+`00-THESIS.md` §1.3. What it *lacks* is exactly PACT's thesis: no evals, no SLOs,
+no capability requirements, no variants, no topology, no I/O schema, and no way to
+express anything other than "the parent model may invoke this subagent via the Task
+tool."
+
+Subagent invocation is model-driven only; there is no supervisor, no graph, no
+handoff. Attribution across parallel subagents is via `agent_id` on tool-lifecycle
+hooks (`types.py:283-300`, `_SubagentContextMixin`).
 
 ### 3.9 Model binding
 
-`ClaudeAgentOptions.model: str | None` (`types.py:1854`) — model *alias or id* string.
-`fallback_model: str | None` (`:1860`). Per-subagent `AgentDefinition.model` accepts
-`"sonnet"|"opus"|"haiku"|"inherit"` or a full id (`types.py:92-93`).
-Runtime switch: `ClaudeSDKClient.set_model()` (`client.py:350`).
+`--model` (`subprocess_cli.py:510`) and `--fallback-model` (`:513`). Model aliases
+`"sonnet" | "opus" | "haiku" | "inherit"` or a full ID (`types.py:92-93` — the source
+comment and field on `AgentDefinition.model`). Anthropic models only. No capability declaration. **[V]**
 
-**[V]** No model object, no base-URL parameter, no provider abstraction. Redirection is
-only possible out-of-band through `env: dict[str,str]` (`types.py:1903`) — i.e. setting
-`ANTHROPIC_BASE_URL`-style variables on the subprocess. **[I]** I did not find any code
-in this repo that reads such a variable; it would be consumed by the binary.
+### 3.10 Harness-lowering seam — **NONE. BLOCKING.**
 
-### 3.10 Harness-lowering seam — Claude Agent SDK: **NONE. This is a blocking finding.**
+There is no API in this SDK that accepts a message list and returns a model
+response. The entry points are `query(prompt=...)` (`query.py:11-16`) and
+`ClaudeSDKClient`. `query`'s prompt parameter is `str | AsyncIterable[dict]` where
+each dict is documented (`query.py:46-53`) as:
 
-There is exactly one abstraction below the client: `Transport`
-(`_internal/transport/__init__.py:9`) with `connect()`, `write(data: str)`,
-`read_messages() -> AsyncIterator[dict]`, `close()`, `is_ready()`. Its own docstring
-(`:11-14`) says:
+```python
+{"type": "user", "message": {"role": "user", "content": "..."},
+ "parent_tool_use_id": None, "session_id": "..."}
+```
 
-> `WARNING: This internal API is exposed for custom transport implementations (e.g.
-> remote Claude Code connections). The Claude Code team may change or remove this
-> abstract class in any future release.`
+**[V] Only *user* messages can be injected.** PACT cannot replay an assistant turn
+or a tool result into the conversation, so it cannot drive the loop step-by-step
+even by degenerate means (the `max_turns=1` + replay trick that works on Vercel and
+Anthropic). The decision *"call the model again"* is made inside a closed-source
+binary.
 
-Implementing `Transport` does **not** give you a model/tool transport — it makes you
-responsible for *speaking the Claude Code control protocol*: `SDKControlRequest`
-subtypes `initialize`, `interrupt`, `can_use_tool`, `hook_callback`, `mcp_message`,
-`set_permission_mode`, `rewind_files`, `mcp_reconnect`, `mcp_toggle`, `stop_task`
-(`types.py:2130-2226`), plus the full `stream-json` message grammar. In other words:
-**to harness-lower onto this SDK you would have to reimplement Claude Code.**
+**What PACT *can* control:** tool availability (`--tools`/`--allowedTools`),
+tool-call approval and argument rewriting (`can_use_tool`), observation
+(10 hook events), termination bounds (`--max-turns`, `--max-budget-usd`), the
+system prompt, structured output, and the model. That is a large and useful
+surface — but it is *policy over someone else's loop*, which is precisely what D12
+says PACT must not depend on.
 
-Consequences for PACT:
-1. `AC-2.2` / `P-2` ("every adapter implements harness lowering") **cannot be satisfied**
-   for `claude-agent-sdk` as such.
-2. `D17` (fully air-gapped) is at best conditional: the pipeline depends on a bundled
-   proprietary binary (`_bundled/claude`, version pinned at `_cli_version.py:3`) plus an
-   Anthropic-API-compatible endpoint.
-3. `D15` ("translate or nothing — no opaque wrapping") is directly in tension with
-   targeting this SDK at all: any adapter here is, by construction, opaque wrapping of a
-   binary.
+**Independent corroboration.** [NEW] Vercel reached the same conclusion in shipping
+code. `packages/harness/src/v1/harness-v1.ts:8-19` describes `HarnessV1` as
+*"the integration point for one third-party coding-agent runtime (Claude Code,
+Codex, …)"*, and `packages/harness-claude-code/` implements it by spawning the CLI
+in a sandbox and talking to it over a WebSocket bridge (`package.json` dependency
+`"ws": "^8.21.0"`; `src/claude-code-harness.ts` spawn path exercised throughout
+`src/claude-code-harness.test.ts:128-136`). **A competitor with every incentive to
+integrate Claude Code natively concluded it can only be wrapped.**
 
-**Recommended resolution (see §7.2): retarget the "Anthropic" adapter from
-`claude-agent-sdk` to `anthropic-sdk-python`, which does expose a real seam (§4.10), and
-reclassify `claude-agent-sdk` as a *session-level host*, not a lowering target.**
+**The decision this forces.** D15 forbids opaque wrapping; D12 requires PACT to own
+loop semantics. Both cannot hold for this target. The three honest options:
 
-Vercel independently reached the same conclusion and named the category — see §5.10.
+- **(a) Drop the Claude Agent SDK as an adapter target**, and reach Claude models
+  through the Anthropic SDK instead (§4.10), which has a perfect seam. G1 names
+  "Anthropic Claude Agent SDK" as a target substrate, so this is a **change to G1**
+  and needs an explicit decision.
+- **(b) Keep it as an *import-only* target.** `AgentDefinition` (§3.8) and the
+  CLI flag surface translate into PACT IR cleanly; PACT then *executes* on the
+  Anthropic SDK. This satisfies D15 (translate, don't wrap) and D10 #3.
+- **(c) Carve a named exception to D15** for "runtime-hosted agents", exported as
+  an A2A endpoint rather than a lowering target — i.e. treat Claude Code as a
+  *remote agent PACT can call*, not an agent PACT can *be*.
+
+**Recommendation: (b) as the default, with (c) available as an explicit,
+lockfile-recorded escape.** (b) preserves both decisions intact. (c) is honest but
+must never be silent — it is exactly the `allowLoss` shape T7 already defines.
 
 ---
 
-## 4. Anthropic SDK — Python (`anthropics/anthropic-sdk-python` 0.120.0)
+## 4. Anthropic SDK — Python (0.120.0)
 
-This is a provider SDK, but 0.120.0 ships three distinct agentic layers, and they have
-*different* semantics. All three matter.
+### 4.0 Framing: no longer "just an HTTP client" [NEW]
 
-### 4.1 Loop
+`src/anthropic/lib/tools/` is 4,995 lines and contains a real agentic loop
+(`_beta_runner.py`, 713), a server-driven session tool worker
+(`_beta_session_runner.py`, 991), a memory tool (`_beta_builtin_memory_tool.py`, 910),
+an agent toolset (`agent_toolset.py`, 842), MCP support (`mcp.py`, 448) and skills
+(`_skills.py`, 249). The earlier characterisation of this SDK as a pure transport
+understates it.
 
-**(a) Messages tool runner** — `client.beta.messages.tool_runner(...)`
-(`src/anthropic/resources/beta/messages/messages.py:1433` sync / `:3450` async).
-The loop is `BaseSyncToolRunner.__run__` (`lib/tools/_beta_runner.py:272`):
+### 4.1 Loop — `BetaToolRunner`
+
+`lib/tools/_beta_runner.py:272-304`:
 
 ```python
-while not self._should_stop():                    # :272
-    with self._handle_request() as item: ...      # one messages.parse / messages.stream
-    self._iteration_count += 1                    # :285
-    if message.stop_reason == "refusal": return   # :290-292
-    if not self._check_and_compact():             # :295
-        response = self.generate_tool_call_response()
-        if response is None: return               # :297-299  (no tool_use ⇒ done)
-        if not self._messages_modified:
-            self.append_messages(message, response)
+def __run__(self) -> Iterator[RunnerItemT]:
+    while not self._should_stop():
+        with self._handle_request() as item:
+            yield item
+            message = self._get_last_message()
+            ...
+        self._iteration_count += 1
+        if message.stop_reason == "refusal":
+            return
+        if not self._check_and_compact():
+            response = self.generate_tool_call_response()
+            if response is None:
+                return
+            if not self._messages_modified:
+                self.append_messages(message, response)
+        self._messages_modified = False
+        self._cached_tool_call_response = None
 ```
-`_should_stop` is *only* `max_iterations` (`:125-129`); there is no stop-condition
-vocabulary.
 
-Notable: a **refusal stop_reason is terminal** and its `tool_use` blocks are deliberately
-*not* executed (`:288-292`, with the rationale in the comment: "executing their tool_use
-blocks would fire side effects the model never confirmed"). **[V]** No other framework in
-this set models refusal as a distinct terminal condition. PACT's loop IR should.
+Termination: no `tool_use` blocks (`:296-298`), `max_iterations` reached
+(`:125-128`), or `stop_reason == "refusal"` (`:289-291`, with a source comment
+explaining that executing a refused turn's tool calls *"would fire side effects the
+model never confirmed"*). **[V]**
 
-**(b) Managed-agents session runner** — `SessionToolRunner`
-(`lib/tools/_beta_session_runner.py:353`). Here the loop runs **server-side**; the client
-subscribes to the session event stream, dispatches `agent.tool_use` /
-`agent.custom_tool_use` events against a local registry, posts back
-`user.tool_result` / `user.custom_tool_result`, and stops after `max_idle` seconds of
-`stop_reason == "end_turn"` (`:917` `_idle_watchdog`). Module docstring `:1-15`.
+Three properties that diverge from the others:
 
-**(c) Managed Agents resource** — `client.beta.agents.create(...)` with
-`AgentCreateParams` (`types/beta/agent_create_params.py:23`), a *server-hosted agent
-definition*. See §4.8.
+- **`max_iterations: int | None = None` — the default is unbounded**
+  (`_beta_runner.py:74`, `:92`). No default turn cap at all.
+- **Tools execute sequentially**: `_generate_tool_call_response:342` —
+  `for tool_use in tool_use_blocks:` … `:364` `result = tool.call(tool_use.input)`.
+  Contrast AutoGen's unconditional `asyncio.gather` (§1.1). **[V]**
+- **Tool exceptions never propagate.** `:366-384` — both `ToolError` and bare
+  `Exception` are converted to `{"type":"tool_result", ..., "is_error": True}`.
+  The model always sees the failure; the caller never does.
+
+**The loop is externally steerable** — `set_messages_params` (`:96-109`) and
+`append_messages` (`:111-123`) mutate the next request between iterations, and
+`__next__`/`__anext__` (`:175`, `:464`) let a caller drive it one step at a time.
+**[V]** This is a genuine *middle* lowering option: not native, not full harness.
 
 ### 4.2 State
 
-- Messages runner: state is **the message list**, held in `self._params["messages"]`,
-  mutable from outside via `append_messages` (`_beta_runner.py:111`) and
-  `set_messages_params` (`:96`, accepts a mutator function). Fully transparent, fully
-  serialisable, no opaque snapshot.
-- Session runner: state is server-side; the client `_reconcile`s against the events-list
-  endpoint on reconnect (`_beta_session_runner.py:553`).
-- Context management is declared, not implemented client-side:
-  `context_management: BetaContextManagementConfigParam` and
-  `compaction_control: CompactionControl` (`lib/tools/_beta_compaction_control.py`),
-  with `_check_and_compact` at `_beta_runner.py:188` (sync) / `:477` (async).
+No run-state object. State is the `messages` list in `self._params`
+(`_beta_runner.py:78-81`), which is plain JSON-serialisable API params.
 
-**[V]** The Messages tool runner has the **most portable state model of all seven
-frameworks**: nothing exists outside the message array. This is the model PACT should
-adopt as its canonical run state, with adapters projecting into their own snapshots.
+**[I] This is actually the best durability substrate of the five**, because there
+is nothing framework-specific to serialise — the conversation *is* the API request.
+PACT can snapshot and resume by persisting its own IR and re-deriving the params.
+Marked as inference because I did not find a resume helper in source; the claim is
+about what is *possible*, not what ships.
+
+Server-side compaction exists as `edits=[{'type': 'compact_20260112'}]`
+(`_beta_runner.py:161-168`, in the deprecation warning for the older client-side
+`compaction_control`).
 
 ### 4.3 Tools
 
-- `beta_tool(func)` / `@beta_tool` and async variants (`lib/tools/_beta_functions.py`),
-  producing `BetaRunnableTool` / `BetaAsyncRunnableTool`.
-- Raw `BetaToolUnionParam` definitions can be mixed in; an unmatched tool name produces a
-  `UserWarning` and an `is_error` tool_result telling you to handle it manually
-  (`_beta_runner.py:355-366`). **[V]** The runner degrades loudly, not silently — good
-  precedent.
-- Mid-conversation tool mutation: `BetaRequestToolAdditionBlockParam` /
-  `BetaRequestToolRemovalBlockParam` are content blocks
-  (`types/beta/beta_content_block_param.py:57-58`), and the runner computes the live set
-  via `_available_tool_names` (`_beta_runner.py:130-140`), noting that removal is "only a
-  hint to the model." **[V]** Dynamic tool exposure is expressed *in the transcript* here,
-  not as a callback. That is an important third option alongside OpenAI's `is_enabled`
-  callback and Vercel's `activeTools`.
-- MCP: `lib/tools/mcp.py` (client-side) and `mcp_servers: Iterable[BetaRequestMCPServerURLDefinitionParam]`
-  (server-side connector) in the `tool_runner` signature.
-- Reference "agent toolset": `beta_agent_toolset_20260401` → bash/read/write/edit/glob/grep
-  (`lib/tools/agent_toolset.py:1-32`), with an explicit trust model: file tools confine to
-  `workdir` symlink-aware; `bash` is unrestricted and "should run inside" a sandbox (`:30-32`).
-  Also an explicit resource-leak warning: the Messages tool runner never calls `close`, so
-  handing it the stateful `bash` tool "leaks the bash subprocess (one orphaned shell per
-  run)" (`agent_toolset.py:20-28`). **[V]**
+`tool_registry(tools)` (`_beta_runner.py:77`), dispatch in `_tool_dispatch.py`.
+Tools are `BetaRunnableTool` / `BetaAsyncRunnableTool` (`_beta_functions.py`).
+Mid-conversation `tool_removal` / `tool_addition` blocks are honoured via
+`_available_tool_names()` (`_beta_runner.py:130-138`), whose docstring is precise
+and worth quoting:
 
-**Tool concurrency: strictly sequential.** `_generate_tool_call_response` iterates
-`for tool_use in tool_use_blocks:` at `_beta_runner.py:342` (sync) and `:651` (async) — the
-async path `await`s each tool in turn, with no `gather`. **[V]** A model that emits four
-parallel tool calls has them executed serially. This is a *measurable* latency divergence
-from OpenAI Agents (`asyncio.gather`, `tool_execution.py:1828`) and Vercel
-(`Promise.all`, `generate-text.ts:1515`).
+> *"Removal is only a hint to the model, which can still emit a `tool_use` for a
+> withdrawn tool; a name absent from this set routes that call down the same
+> unknown-tool path as a tool that was never declared."*
+
+**[V] Dynamic tool exposure is a declared concept here.** PACT's "tool exposure set"
+strategy variable (§7.2 of the thesis) has a real precedent, and the precedent is
+explicit that removal is advisory — PACT must specify the same thing rather than
+implying tools can be revoked.
+
+**Tool results are richly typed.** `types/beta/beta_tool_result_block_param.py`:
+
+```python
+Content = Union[BetaTextBlockParam, BetaImageBlockParam,
+                BetaSearchResultBlockParam, BetaRequestDocumentBlockParam,
+                BetaToolReferenceBlockParam]
+```
+
+**[V]** Text, image, search-result, document, tool-reference. Tied with Vercel for
+the richest tool-result content model, and far ahead of AutoGen's `str`.
 
 ### 4.4 Structured output
 
-`output_format: Optional[type[ResponseFormatT]]` on `tool_runner` and `messages.parse`,
-lowered to `output_config.format = BetaJSONOutputFormatParam{type:"json_schema", schema}`
-(`types/beta/beta_json_output_format_param.py:11-15`,
-`types/beta/beta_output_config_param.py:18-22`). Parsing happens in
-`lib/_parse/_response.py:16-34` — `parse_text` uses a pydantic `TypeAdapter` and attaches
-`parsed_output` onto text blocks.
+`output_format: Optional[BetaJSONOutputFormatParam]`
+(`types/beta/message_create_params.py:199`), where
+`BetaJSONOutputFormatParam` is `{schema: Dict[str, object], type: Literal["json_schema"]}`
+(`types/beta/beta_json_output_format_param.py`).
 
-`BetaOutputConfigParam` also carries `effort: "low"|"medium"|"high"|"xhigh"|"max"` and
-`task_budget` — i.e. **output config and reasoning-effort/budget share one object**.
-**[I]** PACT should keep them separate; conflating them is a provider artifact.
+The typed helper layer adds `ParseMessageCreateParamsBase.output_format: type[ResponseFormatT]`
+(`types/beta/message_create_params.py:391-392`) and surfaces
+`ParsedBetaMessage.parsed_output` (`types/beta/parsed_beta_message.py:74`) and
+`ParsedBetaTextBlock.parsed_output` (`:36-37`).
+
+**[V] There is no `response_format` anywhere in `src/anthropic/`** — a repo-wide
+grep returns nothing. The OpenAI-shaped name does not exist here; the shape is
+`output_format` + `json_schema`. **PACT's IR must not name this field after either
+vendor.**
+
+Note `message_create_params.py:164` — the *"appended-assistant form is not
+available for requests with `output_format` set"*, i.e. structured output disables
+assistant-prefill. **[D]** A real cross-feature interaction PACT should record.
 
 ### 4.5 Streaming
 
-`lib/streaming/_beta_types.py` defines a semantic event layer on top of raw SSE:
-`ParsedBetaTextEvent` (`:21`), `BetaCitationEvent` (`:34`), `BetaThinkingEvent` (`:44`),
-`BetaSignatureEvent` (`:54`), `BetaInputJsonEvent` (`:61`), `BetaCompactionEvent` (`:78`),
-plus parsed `content_block_stop` / `message_stop` (`:88,94`).
+`lib/streaming/_beta_messages.py:343-428` accumulates the Anthropic event stream:
+`message_start` (`:343`), `message_delta` (`:345`), `message_stop` (`:347`),
+`content_block_start` (`:351`), `content_block_delta` (`:353`),
+`content_block_stop` (`:421`). Delta subtypes handled: `text_delta` (`:358`),
+`input_json_delta` (`:367`, for `tool_use` and `mcp_tool_use`), citations (`:378`),
+`thinking` (`:388`), `signature` (`:398`), `compaction_delta` (`:407`).
 
-**[V]** Tool-input streaming exists (`BetaInputJsonEvent`), citations stream as first-class
-events, and *compaction is a stream event* — a lifecycle signal no other SDK surfaces
-in-band.
+**Content blocks are addressed by integer `event.index`** (`:356`, `:422`).
+**[V]** Vercel addresses by string `id`; OpenAI Responses uses
+`item_id` + `output_index` + `content_index`. Three incompatible addressing schemes
+for the same concept — see §7.5.
 
-### 4.6 HITL
+### 4.6 HITL — exists, but only server-side [NEW]
 
-- **Messages tool runner: none.** The loop executes every tool call it can resolve. Any
-  approval gate must be implemented by the caller inside the tool function or by driving
-  the iterator manually (`generate_tool_call_response()` is public — `_beta_runner.py:316`
-  — so a caller *can* interpose). **[V]** But there is no declarative approval concept.
-- **Session runner: server-mediated.** A call whose `evaluated_permission` is `ask` is
-  held until a `user.tool_confirmation` event arrives — executed on `allow`, never on
-  `deny` (`_beta_session_runner.py:8-11` **[D]**; enforced at `_note_confirmation` `:722`,
-  `_apply_verdict` `:734`, `_resolve_denied` `:756`).
+`lib/tools/_beta_runner.py` has **no** approval or permission concept — grep for
+`approval|permission|confirm` in `lib/tools/*.py` returns hits only in
+`_beta_session_runner.py` and unrelated filesystem-permission comments.
+
+`_beta_session_runner.py:1-16` (module docstring):
+
+> *"`SessionToolRunner` attaches to a managed-agents session's event stream …
+> dispatches every `agent.tool_use` and `agent.custom_tool_use` event against a
+> local tool registry, posts the matching result event back … A call the server
+> gated behind user confirmation (`evaluated_permission` `ask`, e.g. an
+> `always_ask` tool) is held until its `user.tool_confirmation` event arrives —
+> executed on `allow`, never executed on `deny`."*
+
+And `:85-86`:
+
+> *"`agent.mcp_tool_use` is intentionally absent — MCP tools run server-side and
+> the runner never sees a result to post for them."*
+
+**[V] In the managed-agents mode the loop runs on Anthropic's servers and the SDK
+is a local tool *worker*.** This is a full inversion of harness lowering, and it is
+**incompatible with D17 (air-gapped)**. PACT must bind to `messages.create`/
+`tool_runner`, never to sessions, and the adapter must refuse managed-agents
+configuration in air-gapped profiles rather than degrade to it.
 
 ### 4.7 Memory
 
-- `anthropic/tools/memory.py` + `lib/tools/_beta_builtin_memory_tool.py` (910 lines) —
-  the Anthropic **memory tool** (a file-backed memory directory the model manipulates
-  through tool calls).
-- `lib/sessions/_accumulate.py` — event-stream → message accumulation.
-- Context/compaction as above (§4.2).
-
-**[V]** Memory here is a *tool*, not a framework subsystem. That is a legitimate design
-choice PACT should be able to express: `memory:` may lower to a tool.
+`lib/tools/_beta_builtin_memory_tool.py` (910 lines) implements a filesystem-backed
+memory *tool* — memory as something the model calls, not something the harness
+injects. **[V]** A third distinct meaning of "memory" in the corpus (§7.7).
 
 ### 4.8 Multi-agent
 
-Server-side only, via Managed Agents. `AgentCreateParams`
-(`types/beta/agent_create_params.py:23-70`): `model` (string or `model_config` object),
-`name`, `description`, `mcp_servers` (max 20), `metadata`, `multiagent`, `skills`,
-`system`, `tools` (max 128 across all toolsets).
-
-`BetaManagedAgentsMultiagentParams` (`types/beta/beta_managed_agents_multiagent_params.py:13-30`):
-```
-type: Literal["coordinator"]
-agents: 1–20 entries — agent id | {"type":"agent","id","version"} | {"type":"self"}
-```
-with the constraint, verbatim (`:22-28`): referenced agents "must not themselves have
-`multiagent` set (**depth limit 1**)"; at most one `self`.
-
-**[V]** Two findings:
-1. Anthropic's Managed Agents API is itself a *competing agent-definition format* with
-   model, system, tools, skills, MCP servers, versioning (`beta/agents/versions.py`), and a
-   topology field. PACT must be able to **project onto it** (an export target alongside
-   A2A/OSSA), and its field set is a good superset check for `contract`+`strategy`.
-2. **Depth limit 1** directly contradicts PACT `G-4` (recursive composition, "any topology
-   may be exposed as an agent"). Any PACT topology deeper than supervisor→specialist is
-   `unsupported` on this substrate and must be reported, not flattened silently.
+Nothing in the core SDK. `agent_toolset.py` (842 lines) provides a bundled tool set,
+not orchestration. Multi-agent exists only in the server-side managed-agents
+product surfaced through `types/beta/sessions/`. **[V]**
 
 ### 4.9 Model binding
 
-`model: ModelParam` per request (`tool_runner` signature). `fallbacks:
-BetaFallbacksParam` and `fallback_credit_token` are request-level parameters — i.e.
-**model fallback is a provider feature here**, not an SDK loop feature. Also
-`service_tier: "auto"|"standard_only"`, `speed: "standard"|"fast"`, `inference_geo`.
+`model` is a string in the request params. No capability declaration, no model
+registry, no provider abstraction inside the SDK — though `lib/bedrock`,
+`lib/vertex`, `lib/aws`, `lib/google_cloud` and `lib/foundry.py` provide alternate
+transports for the same API shape. **[V]**
 
-**[V]** `inference_geo`, `service_tier`, and `speed` are exactly the kind of
-substrate-level SLO knobs `D16`/`O4.2` need a home for. PACT's `substrate`/`profile`
-should have a place for provider routing hints that are neither capability nor cost.
+### 4.10 Harness-lowering seam — **THE CLEANEST OF THE FIVE**
 
-### 4.10 Harness-lowering seam — Anthropic SDK
+```
+client.messages.create(model=..., messages=[...], tools=[...], max_tokens=...)
+client.beta.messages.create(..., output_format={"type":"json_schema","schema":{...}})
+```
 
-**Seam (best): `client.beta.messages.create/stream/parse`** — the Messages API itself.
-Concretely, for a PACT harness, the pair to drive is:
-- `client.beta.messages.parse(**params)` (used at `_beta_runner.py:701`), and
-- `client.beta.messages.stream(**params)` (used at `_beta_runner.py:710`).
+Pure HTTP-shaped model transport. No agent semantics, no framework types, no
+handoffs, no output-schema rewriting. Multimodal on both the input side and the
+tool-result side (§4.3). Works against any Anthropic-API-compatible endpoint, so it
+is air-gap-viable (D17) given a local gateway.
 
-This is a **pure model transport**: messages in, content blocks out, tools as JSON
-schemas, `tool_choice`, `output_config.format` for structured output, `thinking` config,
-`context_management`. PACT owns the loop entirely.
+Plus a **second, higher seam**: `client.beta.messages.tool_runner(...)` returning a
+`BetaToolRunner` that PACT can drive one iteration at a time via `__next__`
+(`_beta_runner.py:175`) while rewriting the next request through
+`set_messages_params` (`:96`). **[V]**
 
-**Second seam (if you want the SDK's loop): `BaseToolRunner`** — `set_messages_params`
-(`:96`), `append_messages` (`:111`), `generate_tool_call_response` (`:316`) are all public
-and the runner is an iterator, so a PACT harness *can* drive it step-by-step and interpose
-approvals/guardrails between steps. **[I]** Plausible from the API shape; not exercised.
-
-**Verdict: cleanest seam of the five.** No SDK-native tool/handoff/output objects leak into
-it — everything is JSON-schema and wire types.
-
-**Modality caveat.** `BetaContentBlockParam`
-(`types/beta/beta_content_block_param.py:36-61`) admits text, image, document (PDF),
-search-result, thinking, tool-use/result, server-tool results, MCP blocks, container
-upload, compaction, mid-conversation system, tool addition/removal, fallback. A grep of
-`src/anthropic/types/beta/` for `audio|speech|voice|video` returns **nothing**. **[V]**
-Anthropic has **no audio input modality**. D16's audio/voice modality cannot be lowered
-natively here; it must become STT→text→TTS with the speech models supplied by another
-provider. PACT's capability lattice must express that as `emulated`, and the SLO model must
-account for the added TTFT.
+**Verdict: this is the reference implementation for what a harness-lowering seam
+should look like, and PACT should evaluate adapters against it.** The Vercel
+`LanguageModelV4` seam (§5.10) is its equal on normalisation and its superior on
+provider breadth.
 
 ---
 
-## 5. Vercel AI SDK (`vercel/ai`, `ai@7.0.37`)
+## 5. Vercel AI SDK (`ai@7.0.37`)
 
-### 5.1 Loop
+### 5.1 Loop — and an internal contradiction [NEW]
 
-`ToolLoopAgent` (`packages/ai/src/agent/tool-loop-agent.ts:38`) delegates to
-`generateText` / `streamText`. Its class docstring (`:28-37`) states the loop continues
-until:
-- a finish reason other than `tool-calls`, **or**
-- a tool that is invoked has no `execute` function, **or**
-- a tool call needs approval, **or**
-- a stop condition is met (default `isStepCount(20)`).
+`generate-text/generate-text.ts:797` opens a `do { … }` block; the exit condition
+is at `:1365-1375`:
 
-The actual continue-predicate is `generate-text.ts:1365-1374`:
 ```ts
 } while (
   ((clientToolCalls.length > 0 &&
-    clientToolOutputs.length + deniedToolApprovalResponses.length === clientToolCalls.length)
-   || pendingDeferredToolCalls.size > 0) &&
+    clientToolOutputs.length + deniedToolApprovalResponses.length ===
+      clientToolCalls.length) ||
+    pendingDeferredToolCalls.size > 0) &&
   !(await isStopConditionMet({ stopConditions, steps }))
 );
 ```
-**[V]** Note the loop does **not** test `finishReason` directly — it tests "were there
-client tool calls, and did every one of them resolve to an output or a denial?" A tool
-without `execute`, or one awaiting approval, leaves the counts unequal and exits the loop.
-This is a materially different termination rule from every other framework and is the
-mechanism behind both HITL and "client-side tools."
 
-Stop conditions are composable data: `StopCondition` (`stop-condition.ts:14-19`),
-`isStepCount(n)` (`:27`), `isLoopFinished()` (`:37`), `hasToolCall(...names)` (`:47`),
-`isStopConditionMet` = OR over the array (`:64-76`).
+The default is `generate-text.ts:240` — **`stopWhen = isStepCount(1)`**, and
+`stop-condition.ts` defines `isStepCount(n)` as `({steps}) => steps.length === stepCount`.
 
-**`prepareStep` is the loop-engineering hook** (`prepare-step.ts:33-93`): per-step it
-receives `{steps, stepNumber, model, instructions, initialInstructions, messages,
-initialMessages, responseMessages, toolsContext, runtimeContext, sandbox}` and may return
-overrides for `model`, `toolChoice`, `activeTools`, `toolOrder`, `instructions`,
-`messages`, `toolsContext`, `runtimeContext`, `sandbox`, `providerOptions`
-(`prepare-step.ts:100-176`). Overrides for `instructions` and `messages` **carry forward**
-to later steps (`:126,133`).
+**[V] `generateText`/`streamText` default to a single step: one model call, tools
+execute, stop — the model never sees its own tool results.** Functionally identical
+to AutoGen's `max_tool_iterations=1` (§1.1), reached by a completely different
+mechanism.
 
-**[V]** `prepareStep` alone can express model-switching mid-loop, tool-set narrowing,
-history rewriting, and per-step system prompts — i.e. most of PACT's loop IR, as a
-callback. It is the single best *native lowering target* for `loop.yaml` in the corpus.
+But the `Agent` class disagrees with its own SDK:
+
+- `agent/tool-loop-agent.ts:132` — `stopWhen: this.settings.stopWhen ?? isStepCount(20)`
+- `agent/tool-loop-agent-settings.ts:88` — `@default isStepCount(20)`
+- `agent/tool-loop-agent.ts:37` — *"A stop condition is met (default stop condition is isStepCount(20))"*
+
+**[V] Two different loop defaults inside one SDK: 1 for the function API, 20 for the
+Agent class.** If a single SDK cannot keep its own default consistent, PACT
+inheriting "the framework default" is not a coherent policy.
+
+`stop-condition.ts` documents four natural terminations besides `stopWhen`:
+finish reason other than `tool-calls`; a tool without an `execute` function is
+called; a tool call needs approval; a stop condition returns true. The middle two
+are the HITL/deferred seam.
+
+Stop conditions are composable (`generate-text.ts:562` `asArray(stopWhen)`,
+`stop-condition.ts` `isStopConditionMet` = `.some(...)`) but are **functions**, not
+data. `isStepCount`, `isLoopFinished` and `hasToolCall` are the only built-ins.
+Compare AutoGen's 12 serialisable conditions (§1.1) — AutoGen is more declarative
+here, Vercel more composable.
 
 ### 5.2 State
 
-State is **the message array plus `steps`**. `StepResult` accumulates per step;
-`responseMessages` accumulate into `messagesForNextStep` (`generate-text.ts:1349-1350`).
-There is no opaque snapshot object.
+No run-state object and no checkpointer. State is `messages` + `steps`, both plain
+data. Resume is by reconstructing the message array — including approval responses
+carried as message parts (§5.6). **[V]**
 
-Durability is a *separate package*: `@ai-sdk/workflow`'s `WorkflowAgent`
-(`packages/workflow/src/workflow-agent.ts:1185` **[D]** — "A class for building durable AI
-agents within workflows"), which reimplements the step loop against the same primitives
-imported from `ai/internal` (`workflow-agent.ts:38-46`: `collectToolApprovals`,
-`convertToLanguageModelPrompt`, `standardizePrompt`, `validateApprovedToolApprovals`, …).
+### 5.3 Tools — the richest tool descriptor in the corpus
 
-**[V]** Durability is *not* in the agent abstraction — it is a parallel implementation.
-That is a real risk for PACT's `P-5`: choosing `ToolLoopAgent` vs `WorkflowAgent` changes
-which code path runs, and they can diverge (the repo has
-`workflow-agent-compat.test.ts` precisely to police this).
+`packages/provider-utils/src/types/tool.ts`. Fields on a tool:
+`title` (`:66`), `providerOptions` (`:73`), `metadata` (`:84`),
+`inputSchema` (`:93`), `contextSchema` (`:100`), `needsApproval` (`:107`),
+`onInputStart` (`:118`), `onInputDelta` (`:126`), `onInputAvailable` (`:136`),
+`toModelOutput` (`:149`), `description` (`:189`), `strict` (`:203`),
+`inputExamples` (`:209`).
 
-Context pruning is a pure function over messages: `pruneMessages({messages, reasoning:
-'all'|'before-last-message'|'none', toolCalls: 'all'|'before-last-message'|
-'before-last-N-messages'|'none'| [{type, tools?}], emptyMessages: 'keep'|'remove'})`
-(`packages/ai/src/generate-text/prune-messages.ts:17-34`).
-**[V]** This is the most *declarative* context-management policy in the corpus and maps
-almost 1:1 onto a PACT `context:` block. Recommend adopting the vocabulary.
+Three tool kinds, discriminated: `type?: undefined | 'function'` (`:226`),
+`type: 'dynamic'` (`:240`), `type: 'provider'` (`:251`, with
+`id: \`${string}.${string}\`` at `:256`). Plus `isProviderExecuted: false | true`
+(`:283`, `:303`) and `supportsDeferredResults?: boolean` (`:318`).
 
-### 5.3 Tools
+Two of these have no analogue anywhere else and both matter to PACT:
 
-`Tool` (`packages/provider-utils/src/types/tool.ts:328`), built from `BaseTool` (`:56`):
-`inputSchema` (`:93`), `outputSchema`/`execute` (mutually shaped by `ToolOutputProperties`
-`:18-50` — **if you omit `execute` you must declare `outputSchema`**), `contextSchema`
-(`:99`), `description` (static or `(options:{context}) => string`, `:189-193`),
-`providerOptions` (`:73`), `metadata` (not sent to the model, `:82`),
-`toModelOutput` (`:149`), `onInputStart`/`onInputDelta`/`onInputAvailable` (`:118,126,136`),
-and tool kinds `type?: 'function' | 'dynamic' | 'provider'` (`:226,240,251`).
+- **`toModelOutput`** (`:149`) — an author-supplied transform from the tool's return
+  value to the content the *model* sees, returning a `ToolResultOutput`. This
+  cleanly separates "what the tool returns to the program" from "what the model is
+  shown". PACT's tool IR should have this as a declarative field (a template or a
+  projection), because it is the single highest-leverage no-code knob for
+  small-model portability — §7.3 of the thesis calls this "context discipline", and
+  this is where it is actually applied.
+- **`inputExamples`** (`:209`) — few-shot examples attached to the tool definition.
+  Again a strategy variable that belongs in the IR.
 
-`ToolResultOutput` (`packages/provider-utils/src/types/content-part.ts:247-340`):
-`text | json | execution-denied{reason} | error-text | error-json | content[]`, where
-`content[]` items are `text` or `file{data: FileData, mediaType}` with `FileData` =
-`{type:'data'} | {type:'url'} | {type:'reference'} | {type:'text'}` (`:322-330`).
-
-**[V]** This is the richest tool-result content model of the five: typed errors, an
-explicit `execution-denied` variant, and multimodal file results with IANA media types
-and provider references (uploaded files).
-
-Concurrency: `Promise.all` over tool calls (`generate-text.ts:1515-1518`), unbounded.
-
-Repair and refinement: `repairToolCall: ToolCallRepairFunction`
-(`tool-loop-agent-settings.ts:145`) and `experimental_refineToolInput: ToolInputRefinement`
-(`:160`). **[V]** Tool-call repair as a first-class loop concept exists only here and (in
-a different form) in Pydantic AI's retry/`ModelRetry`.
+`needsApproval` may be a static status or a runtime function
+(`tool-approval-configuration.ts:14-34`), with statuses `'not-applicable'`,
+`'user-approval'` and others.
 
 ### 5.4 Structured output
 
-`Output` interface (`packages/ai/src/generate-text/output.ts:21-56`):
-`name`, `responseFormat`, `parseCompleteOutput`, `parsePartialOutput`,
-`createElementStreamTransform`. Built-ins: `text()` (`:65`), `object()` (`:92`),
-`array()` (`:196`), `choice()` (`:384`), `json()` (`:523`).
+`generate-object/generate-object.ts:94-97` — four output strategies:
+`'object'`, `'array'`, `'enum'`, `'no-schema'`. Plus
+`experimental_repairText` (`:99`) and `inject-json-instruction.ts` for the prompted
+fallback. **[V]** Second-richest after Pydantic AI's seven `OutputMode` values (§6.1).
 
-**[V]** `Output` is a *pluggable* structured-output strategy with **partial parsing** —
-`parsePartialOutput` + `parsePartialJson` gives streaming structured output, and
-`array()` + `createElementStreamTransform` gives element-at-a-time streaming. Nothing else
-in the corpus streams partial structured output. `choice()` (constrained enum output) is a
-directly useful primitive for PACT's small-model story (`00-THESIS.md §7.3 item 5`).
+### 5.5 Streaming — the best normalised event vocabulary
 
-### 5.5 Streaming
+`packages/provider/src/language-model/v4/language-model-v4-stream-part.ts`:
+`stream-start` (`:30`), `text-start`/`text-delta`/`text-end` (`:17,22,28`),
+`reasoning-start`/`reasoning-delta`/`reasoning-end` (`:35,40,46`),
+`tool-input-start`/`tool-input-delta`/`tool-input-end` (`:53,62,68`),
+`response-metadata` (`:90`), `finish` (`:94`), `raw` (`:102`), `error` (`:108`),
+plus the content parts.
 
-Three stacked layers:
-1. **Provider layer** — `LanguageModelV4StreamPart`
-   (`packages/provider/src/language-model/v4/language-model-v4-stream-part.ts:14-110`):
-   `text-start|text-delta|text-end`, `reasoning-start|delta|end`,
-   `tool-input-start|tool-input-delta|tool-input-end`, `tool-approval-request`,
-   `tool-call`, `tool-result`, custom content, file, reasoning-file, source,
-   `stream-start{warnings}`, `response-metadata`, `finish{usage,finishReason}`,
-   `raw{rawValue}` (opt-in via `includeRawChunks`), `error`.
-2. **Core layer** — `streamText` step events, `smoothStream`, `StreamTextTransform`.
-3. **UI layer** — `packages/ai/src/ui/`: `ui-message-stream`, `process-ui-message-stream`,
-   chat transports (`http-chat-transport.ts`, `direct-chat-transport.ts`,
-   `text-stream-chat-transport.ts`), and resume predicates
-   (`last-assistant-message-is-complete-with-tool-calls.ts`,
-   `last-assistant-message-is-complete-with-approval-responses.ts`).
+**[V] ~18 part kinds with explicit start/delta/end lifecycles, each carrying a
+string `id`.** This is the only *provider-neutral* streaming vocabulary in the
+corpus — the others are either vendor wire formats (OpenAI Agents §2.5, Anthropic
+§4.5) or text-only (AutoGen §1.5).
 
-**[V]** Layer 1 is the best candidate for PACT's canonical stream IR: it is
-provider-neutral, id-correlated (every part carries a block `id`), covers reasoning and
-tool-input deltas, and keeps raw provider bytes in an explicitly-opt-in `raw` variant
-rather than as the substrate.
+`LanguageModelV4Content` (`language-model-v4-content.ts`) unions nine content kinds:
+text, reasoning, custom, reasoning-file, file, **tool-approval-request**, source,
+tool-call, tool-result.
 
-### 5.6 HITL
+**PACT takeaway.** Adopt this vocabulary as the basis of PACT's streaming IR. It is
+a superset of what the other four can emit, it is already provider-neutral, it has
+been implemented against ~60 providers in this repo, and it has explicit
+start/delta/end framing (which OpenAI's format has and Anthropic's does not, and
+which PACT needs for TTFT/TPOT SLO measurement — see `slo-observability.md`).
 
-**Approvals are message content, not run state.** This is the key architectural difference.
+### 5.6 HITL — approvals carried in the message history
 
-- Request: `LanguageModelV4ToolApprovalRequest{type:'tool-approval-request', approvalId,
-  toolCallId, providerMetadata}`
-  (`packages/provider/src/language-model/v4/language-model-v4-tool-approval-request.ts:9-27`)
-  — a stream part *and* implicitly a content part.
-- Response: `LanguageModelV4ToolApprovalResponsePart{type:'tool-approval-response',
-  approvalId, approved: boolean, reason?}`, (`language-model-v4-prompt.ts:259-282`), allowed **only in a `role:'tool'` message**
-  (`language-model-v4-prompt.ts:44-49`).
-- Policy: `ToolApprovalConfiguration`
-  (`packages/ai/src/generate-text/tool-approval-configuration.ts:111-127`) — either one
-  generic function over `{toolCall, tools, toolsContext, runtimeContext, messages}` or a
-  per-tool map to `ToolApprovalStatus` = `'not-applicable'|'approved'|'denied'|
-  'user-approval'` (or object form with `reason`) (`:25-34`).
-- Denial produces a tool result of `{type:'execution-denied', reason}` (§5.3), so the model
-  *sees* the denial.
-- Tamper-resistance is explicit: `tool-approval-signature.ts`,
-  `validate-tool-approvals.ts`, and the comment at `generate-text.ts:363` about "preventing
-  client-forged approvals."
-- The per-tool `Tool.needsApproval` is **deprecated** in favour of the call-level config
-  (`tool.ts:103-107`).
+`generate-text/tool-approval-response-output.ts`:
 
-**[V]** Because approval state lives in the transcript, resume is "append a message and
-call again" — no snapshot, no checkpointer, no session id. **This is the model PACT should
-adopt**, because it is the only one that survives the Expansion Rule (T5): a transcript is
-data an author can read, diff, and hand-write; a `RunState` blob is not.
+```ts
+export type ToolApprovalResponseOutput<TOOLS extends ToolSet> = {
+  type: 'tool-approval-response';
+  approvalId: string;
+  toolCall: TypedToolCall<TOOLS>;
+  approved: boolean;
+  reason?: string;
+  providerExecuted?: boolean;
+};
+```
+
+And `language-model-v4-prompt.ts:260` carries `type: 'tool-approval-response'` as a
+**prompt content part**, with `tool-approval-request` a **model output content
+kind** (`language-model-v4-content.ts`).
+
+**[V] Approval is part of the conversation, not part of a side-channel snapshot.**
+Resume = append the approval response part to `messages` and call again. Stateless,
+serialisable, and requires no framework-specific state object.
+
+This is the third HITL architecture in the set, and it is the one that composes
+best with D2 (the tree is the source of truth, no build artifact required):
+message-carried approvals need no checkpointer and no runtime.
 
 ### 5.7 Memory
 
-**None.** There is no memory abstraction in `packages/ai/src`. Conversation state is the
-caller's message array; the only built-in policy is `pruneMessages` (§5.2). Persistence is
-the app's job (the `ui` package's chat transports assume a server holds messages).
-
-**[V]** Negative finding: a PACT `memory:` block has *no* native lowering on Vercel and must
-always be realised as harness-side machinery or as tools.
+**None.** A grep for `memory` across `packages/ai/src` returns three hits, all
+about RAM usage (e.g. `agent/tool-loop-agent-settings.ts:261` —
+*"Disabling inclusion can help reduce memory usage when processing"*). **[V]**
 
 ### 5.8 Multi-agent
 
-**None.** `grep -rl "handoff|Handoff|subagent|Subagent" packages/ai/src --include=*.ts`
-(excluding tests) returns **no files**. `packages/ai/src/agent/index.ts` exports only
-`Agent`, `ToolLoopAgent`, settings types, and UI-stream helpers — **no `asTool` helper**.
+**None.** A grep for `handoff|subagent|sub-agent|supervisor` across
+`packages/ai/src` returns nothing outside tests. **[V]**
 
-**[V]** Multi-agent on Vercel is: wrap an `Agent` in `tool({inputSchema, execute})` by hand.
-Every topology in `AC-5.1` must therefore be synthesised by PACT's harness. Native lowering
-of topology is `unsupported` for this adapter, full stop.
+`Agent` is a single tool loop. The separate `@ai-sdk/workflow` package
+(`packages/workflow/src/workflow-agent.ts`) provides a `WorkflowAgent`, but that is
+durable-execution plumbing, not a topology model.
 
-(There is a coordinator-ish shape in `packages/workflow`, but it is workflow orchestration,
-not agent topology.)
+**Consequence:** the Vercel adapter must *build* multi-agent from scratch out of
+PACT primitives. That is an argument **for** harness lowering, not against it — but
+it means the Vercel adapter's topology fidelity is entirely PACT's own code, so
+CTS coverage for §AC-5.1 patterns on this adapter is testing PACT, not testing
+Vercel.
 
 ### 5.9 Model binding
 
-`LanguageModel = string | LanguageModelV2|V3|V4` (`packages/ai/src/types/language-model.ts`).
-Resolution: `resolveLanguageModel` (`packages/ai/src/model/resolve-model.ts:29-43`):
+`LanguageModelV4` (below) with `provider`, `modelId`, `specificationVersion: 'v4'`
+and `supportedUrls: Record<string, RegExp[]>` — a per-media-type declaration of
+which URLs the provider can ingest natively rather than downloading.
+**[V]** That last one is a genuinely good idea nobody else has and it is directly
+relevant to D16 + D17: it tells the harness whether a document/image URL must be
+fetched locally (air-gap-relevant) or can be passed through.
+
+Versions `v2`, `v3`, `v4` coexist in `packages/provider/src/language-model/`, i.e.
+the provider spec is explicitly versioned and multiple versions ship simultaneously —
+the same discipline as OpenAI's `RunState` schema versions (§2.2) and what E-2
+asks of PACT.
+
+### 5.10 Harness-lowering seam — **BEST-IN-CLASS**
+
 ```ts
-if (typeof model === 'string') return getGlobalProvider().languageModel(model);
+type LanguageModelV4 = {
+  readonly specificationVersion: 'v4';
+  readonly provider: string;
+  readonly modelId: string;
+  supportedUrls: PromiseLike<Record<string, RegExp[]>> | Record<string, RegExp[]>;
+  doGenerate(options: LanguageModelV4CallOptions): PromiseLike<LanguageModelV4GenerateResult>;
+  doStream(options: LanguageModelV4CallOptions): PromiseLike<LanguageModelV4StreamResult>;
+};
 ```
-and `getGlobalProvider()` (`:181-184`):
-```ts
-const provider = globalThis.AI_SDK_DEFAULT_PROVIDER ?? gateway;
-```
-i.e. **a bare model-id string resolves against Vercel's hosted AI Gateway by default**
-(`packages/ai/src/global.ts` documents this: "If not set, the default provider is the
-Vercel AI gateway provider").
+`packages/provider/src/language-model/v4/language-model-v4.ts`.
 
-**[V] Air-gap consequence (D17):** a PACT/Vercel adapter must *never* pass a model id
-string without first setting `globalThis.AI_SDK_DEFAULT_PROVIDER`, or it will attempt a
-network call to `gateway.ai.vercel.sh`. This should be an assertion in the adapter, and a
-line item in the offline conformance test (`AC-7.3`).
+Two methods. No agent concepts. Fully normalised content and stream vocabularies.
+~60 provider packages in this repo implement it. The `doGenerate`/`doStream` naming
+carries a source comment: *"'do' prefix to prevent accidental direct usage of the
+method by the user"* — i.e. it is explicitly the low-level seam.
 
-Middleware: `wrapLanguageModel` + `defaultSettingsMiddleware`, `extractReasoningMiddleware`,
-`extractJsonMiddleware`, `simulateStreamingMiddleware`, `addToolInputExamplesMiddleware`
-(`packages/ai/src/middleware/`). **[V]** `simulateStreamingMiddleware` is a capability
-*shim* — it makes a non-streaming model satisfy a streaming contract. That is exactly the
-"emulated" tier of PACT's capability lattice, implemented as a decorator. Strongly worth
-copying as a pattern.
+### 5.11 `HarnessV1` — the anti-pattern PACT is defined against [NEW]
 
-### 5.10 Harness-lowering seam — Vercel AI SDK, and the `HarnessV1` precedent
+`packages/harness/src/v1/harness-v1.ts:8-19`:
 
-**Seam: `LanguageModelV4`** (`packages/provider/src/language-model/v4/language-model-v4.ts:8-59`; `doGenerate` `:46`, `doStream` `:58`):
-```ts
-readonly specificationVersion: 'v4';
-readonly provider: string;
-readonly modelId: string;
-supportedUrls: PromiseLike<Record<string, RegExp[]>> | Record<string, RegExp[]>;
-doGenerate(options: LanguageModelV4CallOptions): PromiseLike<LanguageModelV4GenerateResult>;   // :46
-doStream(options: LanguageModelV4CallOptions): PromiseLike<LanguageModelV4StreamResult>;       // :58
-```
-`LanguageModelV4CallOptions` (`language-model-v4-call-options.ts:8-138`) carries
-`prompt`, sampling params, `responseFormat: {type:'text'} | {type:'json', schema?, name?, description?}`,
-`tools`, `toolChoice`, `includeRawChunks`, `abortSignal`, `headers`,
-`reasoning: 'provider-default'|'none'|'minimal'|'low'|'medium'|'high'|'xhigh'`,
-`providerOptions`.
-
-`LanguageModelV4Prompt` (`language-model-v4-prompt.ts:18-58`) is a normalized four-role
-message list with `user: (text|file)[]`, `assistant: (text|file|custom|reasoning|
-reasoning-file|tool-call|tool-result)[]`, `tool: (tool-result|tool-approval-response)[]`,
-and files are `{data: bytes|base64|url, mediaType: IANA}` — i.e. **all four D16 modalities
-are representable at this seam**, since `mediaType` is open.
-
-**Verdict: the best-designed seam in the corpus**, and the natural template for PACT's own
-model-transport interface. Also note `supportedUrls` — a declarative statement of which
-media URLs the provider ingests natively vs which the SDK must download. PACT's capability
-lattice should have exactly this.
-
-**The `HarnessV1` precedent (directly load-bearing for §3.10 and for D15).**
-`@ai-sdk/harness@1.0.43` defines a *second, peer* specification for driving opaque
-coding-agent runtimes: `HarnessV1`
-(`packages/harness/src/v1/harness-v1.ts:21-92`), whose docstring (`:8-19`) says:
-
-> `Versioned specification for a harness adapter — the integration point for one
+> *"Versioned specification for a harness adapter — the integration point for one
 > third-party coding-agent runtime (Claude Code, Codex, …). Modelled after
-> LanguageModelV4: a tagged spec version, a small set of descriptive fields, and one
-> entry-point method (doStart) that yields a session.`
+> `LanguageModelV4`: a tagged spec version, a small set of descriptive fields, and
+> one entry-point method (`doStart`) that yields a session. **There is intentionally
+> no static "capabilities" object** — optional features are signalled by the presence
+> or absence of optional methods on the prompt-control handle. Adapters that cannot
+> satisfy a request … throw `HarnessCapabilityUnsupportedError` from the method that
+> needs the capability."*
 
-Fields: `harnessId`, `builtinTools: ToolSet`, `supportsBuiltinToolApprovals?`,
-`supportsBuiltinToolFiltering?`, `lifecycleStateSchema?`, `getBootstrap?`,
-`doStart(options) -> HarnessV1Session`. Capability negotiation is by *method presence* and
-by throwing `HarnessCapabilityUnsupportedError` (`:16-19`).
-`HarnessV1StreamPart` (`packages/harness/src/v1/harness-v1-stream-part.ts:28-92`)
-deliberately **reuses `LanguageModelV4ToolCall`/`ToolResult`/`ToolApprovalRequest`/`Usage`/
-`FinishReason` verbatim** (`:18-25`) so a harness session can be piped into AI SDK
-consumers, and renames provider metadata to `harnessMetadata` "because a harness is a peer
-to a provider, not a kind of provider" (`:22-26`).
+Shipped adapters: `harness-claude-code`, `harness-codex`, `harness-deepagents`,
+`harness-opencode`, `harness-pi`.
 
-Concrete adapters exist: `packages/harness-claude-code` (dev-dependency
-`@anthropic-ai/claude-agent-sdk@0.3.213`), `harness-codex`, `harness-opencode`,
-`harness-deepagents`, `harness-pi`.
+Fields: `builtinTools` (a `ToolSet` of the wrapped runtime's native tools),
+`supportsBuiltinToolApprovals`, `supportsBuiltinToolFiltering`,
+`lifecycleStateSchema` (opaque adapter-defined resume state),
+`getBootstrap`, `doStart({resumeFrom, continueFrom})`.
+`harness-v1-permission-mode.ts`: `'allow-reads' | 'allow-edits' | 'allow-all'`.
+`harness-v1-stream-part.ts` adds agent-runtime events absent from
+`LanguageModelV4`: `file-change` (`:99`), `compaction` (`:110`), `finish-step` (`:79`).
 
-**[V]** Vercel independently hit the same wall PACT hits at §3.10 and solved it by adding a
-*third* lowering tier below "native" and "harness": an **opaque-runtime session tier**,
-with capability discovery by throwing. This is strong external validation of PACT's
-two-level lowering thesis (T3) *and* evidence that two levels are not enough.
+**Three findings for PACT, in descending importance:**
+
+1. **This is exactly what D15 forbids**, shipped by a serious vendor. The loop lives
+   in the wrapped runtime; `builtinTools` is a declaration of *someone else's* tools;
+   `lifecycleStateSchema` is opaque resume state PACT could never validate. It is
+   the concrete artifact of the "opaque wrapping" road not taken, and it is useful
+   to cite in `00-THESIS.md` §1.3 as the alternative design.
+2. **Vercel chose runtime capability failure over static capability declaration**,
+   deliberately and with a written rationale. PACT's P-2 capability lattice takes
+   the opposite position. That is defensible — a static lattice is what makes the
+   Conformance Report available *before* execution (AC-2.2) — but the note should
+   record that a competitor considered and rejected it, and that the cost PACT is
+   accepting is lattice maintenance drift.
+3. **`file-change` and `compaction` are real agent-runtime events with no home in
+   any model-level IR.** PACT's trace/stream IR needs an extension point for
+   runtime-level events, or it will lose them on import from any coding-agent
+   source.
 
 ---
 
 ## 6. Cross-check: Pydantic AI and LangGraph (only what the matrix needs)
 
-Verified directly, so the matrix rows are evidence-backed rather than recalled.
+### 6.1 Pydantic AI
 
-### 6.1 Pydantic AI seam
+**Seam.** `pydantic_ai_slim/pydantic_ai/direct.py:55` —
+`async def model_request(model, messages, *, model_settings, model_request_parameters, instrument) -> ModelResponse`,
+with `model_request_sync:108`, `model_request_stream:164`,
+`model_request_stream_sync:227`. Underneath, `models/__init__.py:261` `Model` ABC
+with `request` (`:309-310`) and `request_stream` (`:347`).
 
-`pydantic_ai.models.Model` (`pydantic_ai_slim/pydantic_ai/models/__init__.py:261`):
+**[V] Confirmed: a first-class, publicly documented, four-variant low-level model
+API.** This is the best *ergonomics* of any seam in the corpus — it is the only one
+where the framework authors have deliberately exposed "call a model without an
+agent" as a supported public API rather than an internal ABC.
+
+**Structured output is the richest.** `pydantic_ai/output.py:42`:
+
 ```python
-async def request(self, messages: list[ModelMessage], model_settings: ModelSettings | None,
-                  model_request_parameters: ModelRequestParameters) -> ModelResponse    # :310
-async def request_stream(..., run_context=None) -> AsyncGenerator[StreamedResponse]     # :347
-def customize_request_parameters(self, mrp) -> ModelRequestParameters                   # :378
-async def count_tokens(...)                                                             # :322
-async def compact_messages(self, request_context, *, instructions=None)                 # :331
-async def cancel_suspended_response(self, response)                                     # :359
-def continuation_delay(self, response) -> float | None                                  # :366
+OutputMode = Literal['text', 'tool', 'native', 'prompted', 'tool_or_text', 'image', 'auto']
+StructuredOutputMode = Literal['tool', 'native', 'prompted']   # :48
 ```
-**[V]** Framework-neutral message vocabulary (`ModelMessage`, not provider wire types) —
-the only seam besides `LanguageModelV4` that is *not* provider-shaped.
 
-`ModelRequestParameters` (`:133-163`) is uniquely expressive on structured output:
-`function_tools`, `native_tools`, `output_mode: OutputMode`, `output_object`,
-`output_tools`, `prompted_output_template`, `allow_text_output`, `allow_image_output`,
-`instruction_parts: list[InstructionPart]` (with static/dynamic provenance for cache
-boundary placement — `:150-158`), `thinking: ThinkingLevel | None`.
+**[V] Seven output modes, including `image` output and an `auto` that selects per
+model profile.** Nobody else distinguishes *how* structured output is obtained
+(native constrained decoding vs a forced tool vs prompting). This is precisely the
+distinction PACT needs, because §7.3 of the thesis lists constrained decoding as
+a portability mechanism that is **substrate-bound** — the mode is a *strategy*
+variable that must be re-selected per model, and Pydantic AI is the only framework
+that already models it as one.
 
-**[V]** Pydantic AI is the only framework that makes the **structured-output *mode*** a
-declared, portable request parameter (native / tool / prompted / text), and the only one
-that carries **instruction provenance** for prompt-cache boundary placement. Both belong
-in PACT.
+`ModelRequestParameters` (`models/__init__.py:133-165`) also separates
+`function_tools` from `native_tools` from `output_tools`, and carries
+`allow_text_output`, `allow_image_output`, `instruction_parts` (with a
+static/dynamic split *"so models that support granular caching … place cache
+boundaries at the static/dynamic instruction boundary"*, `:145-151`) and a resolved
+`thinking` level (`:157-163`).
 
-Also uniquely: `cancel_suspended_response` / `continuation_delay` (`:359,366`) model
-*server-side suspended turns* (Anthropic `pause_turn`, OpenAI background mode) as a loop
-concept. No other framework has this.
+**[V] The static/dynamic instruction split is a cache-optimisation primitive PACT
+should adopt** — it costs nothing in the IR (instructions already decompose into
+parts under the Expansion Rule) and it is the difference between a cacheable and an
+uncacheable prompt on Anthropic and Bedrock, which feeds directly into the D26
+performance budget and AC-3.6 cost SLOs.
 
 ### 6.2 LangGraph
 
-`langgraph.types.interrupt(value)` (`libs/langgraph/langgraph/types.py:811`),
-`Interrupt` (`:535`), `Command` (`:759`, `Generic[N], ToolOutputMixin`). Prebuilt agent at
-`libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py`, with `interrupt.py`,
-`tool_node.py`, `tool_validator.py`, `_tool_call_stream.py`. Model seam is LangChain's
-`BaseChatModel`.
+**Seam.** `libs/langgraph/langgraph/func/__init__.py:262` — `class entrypoint`,
+with `checkpointer` (`:439`, `:467`), `task` (`:110`), `entrypoint.final` (`:476`)
+and `interrupt` used inside the function body (`:324`, `:351`). Durability is
+declared by attaching a checkpointer; HITL is `interrupt()` + `Command(resume=...)`.
 
-**[V]** LangGraph's HITL is *state-graph* scoped (thread + checkpointer), and its resume
-token is `Command(resume=...)` — a third distinct HITL model, matching neither OpenAI's
-`RunState` nor Vercel's message parts.
+**[V] Confirmed.** The functional API lets PACT write its own loop as a plain
+Python function and get checkpointing, resume and interrupt for free — which is why
+the earlier pass called LangGraph harness lowering *"better than native"*. I concur
+on the evidence: `entrypoint(checkpointer=...)` is the only construct in the corpus
+that gives PACT durable execution without PACT implementing it.
 
 ---
 
 ## 7. THE DIVERGENCE MATRIX
 
-Legend: **✓** native/first-class · **~** partial or awkward · **✗** absent ·
-**[srv]** delegated to a server · **[bin]** delegated to a closed binary.
+Read as: *where do these frameworks disagree in ways a single IR must reconcile?*
+Each section ends with the reconciliation PACT must specify. "PACT must decide"
+means there is no defensible default to inherit.
 
-### 7.0 Dimension 1 — Loop
+### 7.1 Dimension 1 — Loop
 
-| | AutoGen | OpenAI Agents | Claude Agent SDK | Anthropic SDK | Vercel AI | Pydantic AI | LangGraph |
-|---|---|---|---|---|---|---|---|
-| Default loop | **1 tool round** (`max_tool_iterations=1`) | ReAct until final output | opaque **[bin]** | while tool_use present | until no unresolved client tool call | ReAct | user-authored graph |
-| Loop unit | "tool iteration" | "turn" | "turn" (CLI-defined) | "iteration" | "step" | "node run" | "superstep" |
-| Bound | `max_tool_iterations` | `max_turns` (+recoverable handler) | `max_turns`, `max_budget_usd` | `max_iterations` | `stopWhen` (default `isStepCount(20)`) | `usage_limits` | `recursion_limit` |
-| Declarative stop vocabulary | **✓ 12 conditions + and/or** | ~ (`tool_use_behavior` 4-way) | ✗ | ✗ (count only) | ✓ (`StopCondition` array) | ~ | ✓ (graph edges) |
-| Per-step reconfiguration | ✗ | ~ (`is_enabled` callbacks) | ✗ | ✓ (`set_messages_params`) | **✓✓ `prepareStep`** | ~ | ✓ (node code) |
-| Model-visible tool results by default | **✗** (`reflect_on_tool_use=False`) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Refusal is terminal | ✗ | ✗ | ~ | **✓** | ✗ | ✗ | ✗ |
-| Server-suspended turn modelled | ✗ | ~ (background) | ✗ | ~ | ✗ | **✓** | ✗ |
+| Framework | Default turn budget | Does the model see its own tool results by default? | Termination model |
+|---|---|---|---|
+| AutoGen | `max_tool_iterations = 1` (`_assistant_agent.py:739,85`) | **No** — `_summarize_tool_use` returns the tool string (`:1317-1324`) | 12 serialisable conditions + And/Or (`conditions/_terminations.py`) |
+| OpenAI Agents | `max_turns = 10` (`run.py:210`) | **Yes** | 4-way `NextStep` algebra (`run_steps.py:155-175`) + `tool_use_behavior` (`agent.py:347`) |
+| Claude Agent SDK | CLI-owned (`--max-turns`, `subprocess_cli.py:498`) | Yes (inside the CLI) | Opaque |
+| Anthropic SDK | `max_iterations = None` — **unbounded** (`_beta_runner.py:74`) | **Yes** | no tool_use / max_iterations / refusal (`_beta_runner.py:289-298`) |
+| Vercel `generateText` | `stopWhen = isStepCount(1)` (`generate-text.ts:240`) | **No** | composable `StopCondition` functions |
+| Vercel `Agent` | `isStepCount(20)` (`tool-loop-agent.ts:132`) | **Yes** | same |
+| Pydantic AI | (cross-check) run-scoped | Yes | — |
+| LangGraph | (cross-check) graph-scoped | n/a | graph edges |
 
-**Irreconcilable pair:** AutoGen's "tool result *is* the answer" default vs everyone else's
-"model sees tool result." A single IR default must pick one (pick: model sees results) and
-mark AutoGen's alternative as an explicit `loop.tool_result_disposition: return|reflect`
-field, otherwise import from AutoGen silently changes behaviour.
+**Three incompatible defaults — 1, 10, 20, unbounded — and three frameworks where
+the default agent never reasons over its tool output.** Vercel contradicts itself
+inside one package.
 
-### 7.1 Dimension 2 — State / resume
+Two further disagreements at the same level:
 
-| | AutoGen | OpenAI Agents | Claude Agent SDK | Anthropic SDK | Vercel AI | Pydantic AI | LangGraph |
-|---|---|---|---|---|---|---|---|
-| Canonical run state | typed per-component dicts | **opaque `RunState` JSON**, `$schemaVersion 1.13` | session file / store **[bin]** | **the message array** | **the message array** | message history | checkpointed graph state |
-| Mid-run snapshot | **✗ (unsafe)** | ✓ | ~ (`defer` only) | ✓ (trivially) | ✓ (trivially) | ✓ | ✓ |
-| Resume input | n/a | `Runner.run(agent, run_state)` | `resume=<session-id>` | re-call with messages | re-call with messages | re-call | `Command(resume=)` |
-| Fork | ✗ | ✗ | **✓ `fork_session`** | ~ (copy messages) | ~ | ~ | ✓ (checkpoint id) |
-| Versioned state schema | `version: "1.0.0"` per model | **✓ + refusal to load unknown** | ~ | n/a | n/a | n/a | ~ |
-| Durable execution | ✗ | ✗ | **[bin]** | **[srv]** (sessions) | separate `WorkflowAgent` | ✗ (DBOS integration exists out of tree) | ✓ checkpointer |
+- **Tool-call concurrency.** AutoGen: parallel, unconditional
+  (`_assistant_agent.py:1200` `asyncio.gather`). Anthropic: sequential, unconditional
+  (`_beta_runner.py:342` `for` loop). Neither exposes a choice.
+- **Tool error disposition.** Anthropic swallows every exception into an
+  `is_error` tool_result (`_beta_runner.py:366-384`). OpenAI Agents has a
+  configurable `failure_error_function` (`tool.py:147`). AutoGen returns
+  `content=f"Error: {e}"` (`_assistant_agent.py:1551-1556`).
 
-**Irreconcilable triple:** *opaque snapshot* (OpenAI) vs *transcript-only* (Anthropic,
-Vercel, Pydantic AI) vs *graph checkpoint* (LangGraph). PACT must pick **transcript-only**
-as canonical and treat the other two as adapter-private projections, because only the
-transcript is authorable/diffable (D18) and only it satisfies T5.
+**PACT must decide, and must not default silently.** Recommendations:
+1. `loop.max_iterations` is **required** in the IR — no default. A missing value is
+   a validation error naming the file and line (O7.3). Inheriting any framework's
+   default reproduces that framework's surprise.
+2. `loop.tool_results_visible_to_model: true` is the PACT default, because it is
+   what authors mean by "agent", and the three frameworks that default otherwise
+   are all defaulting to a *non-agent*. Deviating must be explicit.
+3. `tools.concurrency: parallel | sequential | <int>` is an IR field. Adapters that
+   cannot honour it declare `degraded` — AutoGen cannot do sequential, Anthropic
+   cannot do parallel.
+4. `tools.on_error: to_model | fail_run | <handler-ref>` is an IR field, defaulting
+   to `to_model`.
+5. Adopt AutoGen's **termination-condition algebra** as the shape of `loop.halt:`
+   (composable, serialisable predicates), not an integer.
 
-### 7.2 Dimension 3 — Tools
+### 7.2 Dimension 2 — State and resume
 
-| | AutoGen | OpenAI Agents | Claude Agent SDK | Anthropic SDK | Vercel AI | Pydantic AI |
-|---|---|---|---|---|---|---|
-| Tool-result payloads | **`str` only** | text/image/file | MCP content blocks | text + blocks | **text/json/error/denied/file** | rich |
-| Parallel tool execution | ✓ unbounded | ✓ **with cap** | **[bin]** | **✗ sequential** | ✓ unbounded | ✓ |
-| Dynamic exposure | ✗ | ✓ `is_enabled(ctx, agent)` | `allowed/disallowed_tools` | **in-transcript add/remove blocks** | `activeTools`, `toolOrder`, `prepareStep` | toolsets |
-| Per-tool timeout | ✗ | ✓ + `timeout_behavior` | ✗ | ✗ | ✓ (`TimeoutConfiguration`) | ~ |
-| Declared tool *output* schema | ✗ | ✓ `output_json_schema` | ✗ | ~ | ✓ `outputSchema` (**required** when no `execute`) | ✓ |
-| Tool-call repair | ✗ | ~ (retry) | ✗ | ✗ | ✓ `repairToolCall` + `refineToolInput` | ✓ `ModelRetry` |
-| Per-tool guardrails | ✗ | **✓ in/out** | hooks (**unordered**) | ✗ | ✗ | ✗ |
-| Sandbox as tool config | ✗ | ✓ `ShellTool` net/fs policy | ✓ `SandboxSettings` | ~ (`agent_toolset` trust note) | `experimental_sandbox` | ~ |
+| Framework | Serialisable run state | Granularity | Resume mid-tool-call |
+|---|---|---|---|
+| AutoGen | message context only (`_assistant_agent.py:1630-1639`) | conversation | **No** |
+| OpenAI Agents | `RunState`, `$schemaVersion` `"1.13"`, 25 fields (`run_state.py:153,212-311`) | step + approvals | **Yes** |
+| Claude Agent SDK | CLI session (`--resume`, `--fork-session`) | opaque session | Unknown/opaque |
+| Anthropic SDK | none (params are the state) | conversation | **[I]** possible, not shipped |
+| Vercel | none (messages are the state) | conversation + approval parts | via message replay |
+| LangGraph | checkpointer (`func/__init__.py:439`) | super-step | **Yes** |
 
-**Three incompatible dynamic-exposure mechanisms**: callback (OpenAI, Vercel), transcript
-blocks (Anthropic), static lists (Claude SDK). PACT should express exposure *declaratively*
-(a predicate over run context) and lower it to whichever mechanism the target has —
-reporting `degraded` for AutoGen, which has none.
+**Two frameworks give durable step-level resume (OpenAI Agents, LangGraph); two
+give message-level replay (Anthropic, Vercel); one gives neither (AutoGen); one is
+opaque (Claude).**
 
-### 7.3 Dimension 4 — Structured output
+**Reconciliation.** PACT's durability IR needs **two levels, declared per agent**:
+`durability: none | conversation | step`. AC-2.6 ("resume to the same terminal
+state") can only be claimed at `step`, and only on adapters that have it. The
+capability lattice must carry it. Critically, PACT should adopt OpenAI's split
+(§2.2 point 3): **definitions are identified by lockfile digest and never
+serialised into the run snapshot**; only run-scoped data is persisted. That is a
+strictly better contract than any framework's and PACT gets it for free.
 
-| | AutoGen | OpenAI Agents | Claude Agent SDK | Anthropic SDK | Vercel AI | Pydantic AI |
-|---|---|---|---|---|---|---|
-| Where | agent `output_content_type` | agent `output_type` (final only) | `output_format` dict | `output_config.format` | `Output` plugin | `output_type` + **mode** |
-| Mode selectable (native/tool/prompted/text) | ✗ | ✗ | ✗ | ✗ | ~ (`responseFormat` only) | **✓ `OutputMode`** |
-| Partial/streaming parse | ✗ | ✗ | ✗ | ✗ | **✓ `parsePartialOutput`** | ✓ |
-| Element streaming (arrays) | ✗ | ✗ | ✗ | ✗ | **✓** | ~ |
-| Constrained choice primitive | ✗ | ✗ | ✗ | ✗ | **✓ `choice()`** | ~ |
-| Capability declared on model | **✓ `ModelInfo.structured_output` vs `json_output`** | ✗ | ✗ | ✗ | ~ | ✓ (profiles) |
+Also adopt OpenAI's **machine-enforced schema changelog** (`run_state.py:179-191`
+raises at import time if a version lacks a summary) for PACT's own state and IR
+versions. E-2 currently states the policy; this is the mechanism.
 
-### 7.4 Dimension 5 — Streaming
+### 7.3 Dimension 3 — Tools
 
-| | AutoGen | OpenAI Agents | Claude Agent SDK | Anthropic SDK | Vercel AI |
-|---|---|---|---|---|---|
-| Model-seam granularity | **`str` chunks + final `CreateResult`** | OpenAI Responses events verbatim | raw Anthropic events in envelope (opt-in) | typed semantic events | **normalized `LanguageModelV4StreamPart`** |
-| Tool-arg deltas | **✗** | ✓ (provider) | ✓ (raw) | ✓ `BetaInputJsonEvent` | ✓ `tool-input-delta` |
-| Reasoning deltas | ~ (`ThoughtEvent`, whole) | ✓ (provider) | ✓ (raw) | ✓ `BetaThinkingEvent` | ✓ `reasoning-delta` |
-| Block ids for correlation | ✗ | ✓ (provider) | ✓ | ✓ | ✓ |
-| Semantic run-level events | ✓ (10 event classes) | ✓ (10-name literal) | message-level | ✗ | ✓ (step/UI layers) |
-| Raw passthrough opt-in | n/a | always-on raw layer | `include_partial_messages` | raw SSE available | **`includeRawChunks`** |
-
-### 7.5 Dimension 6 — HITL
-
-| | Mechanism | Suspends? | Resume token | Serialisable? | Model sees denial? |
-|---|---|---|---|---|---|
-| AutoGen | `UserProxyAgent.input_func` blocking callback | ✗ | n/a | **✗ (`input_func` dropped)** | as a chat message |
-| OpenAI Agents | `needs_approval` → `NextStepInterruption` | ✓ | `RunState` blob + `approve`/`reject` | ✓ (opaque) | ✓ (rejection tool output) |
-| Claude Agent SDK | `can_use_tool` / hooks / `defer` | only `defer` | session id | ✗ (callbacks) | ✓ |
-| Anthropic (messages) | **none** | ✗ | n/a | n/a | n/a |
-| Anthropic (sessions) | server `evaluated_permission: ask` | ✓ **[srv]** | event id | **[srv]** | ✓ |
-| Vercel AI | `toolApproval` config → approval request/response **content parts** | ✓ | **a message** | **✓ (plain data)** | ✓ `execution-denied{reason}` |
-| Pydantic AI | deferred toolsets / approval | ✓ | message history | ✓ | ✓ |
-| LangGraph | `interrupt()` + checkpointer | ✓ | `Command(resume=)` + thread id | ✓ (checkpoint) | depends |
-
-**This is the sharpest divergence in the study.** Four incompatible resume tokens:
-a blob, a message, a graph command, a session id. Only *a message* is authorable.
-
-### 7.6 Dimension 7 — Memory
-
-| | Conversation store | Retrieval memory | Context-window policy | Compaction |
+| Framework | Tool kinds | Tool-result content | Execution locus declared? | Dynamic exposure |
 |---|---|---|---|---|
-| AutoGen | via `ChatCompletionContext` | **✓ `Memory` ABC** | **✓ 4 policies, stateful** | via context policy |
-| OpenAI Agents | ✓ `Session` protocol | ✗ | ✗ | ✓ optional session protocol ext. |
-| Claude Agent SDK | ✓ sessions + `SessionStore` + **fork** | ✗ (CLAUDE.md scopes) | **[bin]** | **[bin]** (`PreCompact` hook) |
-| Anthropic SDK | ~ (caller's array) / **[srv]** sessions | ✓ **as a tool** (memory tool) | `context_management` param | `compaction_control` + stream event |
-| Vercel AI | **✗** | **✗** | ✓ `pruneMessages` (pure fn) | ✗ |
-| Pydantic AI | message history | ✗ (toolsets) | ~ | `compact_messages` on `Model` |
-| LangGraph | checkpointer + store | ✓ `BaseStore` | ~ | ~ |
+| AutoGen | Workbench tools + handoff tools | **`str` only** (`models/_types.py:59`) | No | No |
+| OpenAI Agents | **13** (`tool.py:1455-1469`) | text / image / file (`tool.py:193-268`) | Implicitly (hosted vs local, `run_steps.py:135`) | `is_enabled` |
+| Claude Agent SDK | CLI builtins + MCP + SDK-MCP | MCP content | No | `--allowedTools` |
+| Anthropic SDK | runnable tools + server tools | text/image/search-result/document/tool-reference | Partially (`_beta_session_runner.py:85-86`) | **Yes**, advisory (`_beta_runner.py:130-138`) |
+| Vercel | 3 (`function`/`dynamic`/`provider`) + `isProviderExecuted` | text/json/content(text,file,custom)/error/denied (`language-model-v4-prompt.ts:293-402`) | **Yes, explicitly** | `activeTools`, `prepareStep` |
 
-**Only AutoGen and LangGraph have a memory *interface*.** PACT's `memory:` block has no
-native lowering on 3 of 7 targets; it must be a harness-side construct that can *optionally*
-lower to a native interface.
+**Three disagreements a single IR must reconcile:**
 
-### 7.7 Dimension 8 — Multi-agent
+1. **Tool-result content type.** `str` (AutoGen) vs five content kinds (Anthropic,
+   Vercel). This is not cosmetic: it is the difference between computer use working
+   and not working (§1.3).
+2. **Execution locus.** Vercel declares it (`isProviderExecuted`), OpenAI implies it
+   (`run_steps.py:135`), the rest ignore it. **This is the single most important
+   missing concept**, because it bounds what harness lowering can mean at all.
+3. **Result projection.** Only Vercel has `toModelOutput` (`tool.ts:149`) — a
+   declared transform from tool return value to model-visible content.
 
-| | Native topology objects | Max depth | Serialisable topology | Routing decided by |
+**Reconciliation.** PACT's tool IR requires, as *mandatory* fields:
+- `execution: client | provider | remote` — required, no default. Adapters must
+  reject an agent whose tool execution locus they cannot honour.
+- `result_content: [text|image|audio|document|json|binary]` — content-typed per G-1.
+- `to_model:` — a declarative projection (template/JSONPath/`ref:`) from result to
+  model-visible content, defaulting to identity. This is the no-code expression of
+  "context discipline" and it is a strategy variable the optimiser can search.
+- `concurrency`, `on_error` per §7.1.
+- Optional `input_examples:` (Vercel `tool.ts:209`) — also an optimiser target.
+
+And the **Conformance Report must report loop ownership per tool**, not per agent:
+an agent whose tools are all provider-executed is not running PACT's loop in any
+meaningful sense, whatever the adapter's lattice says.
+
+### 7.4 Dimension 4 — Structured output
+
+| Framework | Mechanism | Modes | Schema mangling |
+|---|---|---|---|
+| AutoGen | `json_output: bool \| type[BaseModel]` (`_model_client.py:218`) | 3 (off/json/structured) | none; but flips `reflect_on_tool_use` (`:842-844`) |
+| OpenAI Agents | `output_type` → `AgentOutputSchema` | strict / non-strict | **Yes** — wraps non-objects in `{"response":…}` (`agent_output.py:14`); forces `additionalProperties:false` and **all-required** (`strict_schema.py:88,109`); rejects nested `oneOf` (`:135`) |
+| Claude Agent SDK | `--json-schema` (`subprocess_cli.py:659`) | 1 | unknown (CLI) |
+| Anthropic SDK | `output_format: {type:"json_schema", schema}` (`message_create_params.py:199`) | 1 | none; disables assistant-prefill (`:164`) |
+| Vercel | `generateObject` | 4: object/array/enum/no-schema (`generate-object.ts:94-97`) | none; `experimental_repairText` (`:99`) |
+| Pydantic AI | `output_mode` | **7** incl. `image`, `auto` (`output.py:42`) | none |
+
+**The reconciliation problem is not the field name — it is that the same declared
+schema produces different wire schemas and different agent behaviour per target.**
+
+**PACT must specify:**
+1. **`output.mode: auto | native | tool | prompted`**, adopting Pydantic AI's
+   taxonomy (`output.py:48`). `auto` resolves against the model catalogue at resolve
+   time. This makes constrained decoding — a substrate-bound mechanism per thesis
+   §7.3 — an explicit, re-selectable strategy variable rather than a hidden one.
+2. **A schema-portability pre-flight in `pact resolve`.** Before binding, check the
+   author's output schema against the target's structured-output profile
+   (root type must be object? optional fields allowed? `oneOf` allowed? `additionalProperties` allowed?).
+   Violations are a **resolve-time FAIL with a recommendation** (D11), not a
+   runtime surprise. This is cheap, fully offline (D17), and catches a class of bug
+   nothing else in the ecosystem catches.
+3. **Never silently wrap.** If a target cannot express a root-level array, that is
+   a reported loss (T7), not an invisible `{"response": …}`.
+4. Record the cross-feature interaction: on Anthropic, structured output disables
+   assistant-prefill; on AutoGen, it changes the loop.
+
+### 7.5 Dimension 5 — Streaming
+
+| Framework | Vocabulary | Normalised? | Block addressing | Tool-arg deltas |
 |---|---|---|---|---|
-| AutoGen | **5** (RoundRobin, Selector, Swarm, MagenticOne, **GraphFlow/DiGraph**) | unbounded (SocietyOfMind nests) | ✓ **but callable edge conditions silently dropped** | code / LLM selector / graph edges |
-| OpenAI Agents | handoff (tool) + `as_tool` | unbounded via nesting | ~ (code) | model (tool call) |
-| Claude Agent SDK | `agents:` subagent roster | **1** | ✓ (`AgentDefinition` dicts) | model (Agent tool) |
-| Anthropic (managed) | `multiagent{type:"coordinator", agents[1..20]}` | **1 (hard)** | ✓ **[srv]** | model |
-| Vercel AI | **none** | n/a | n/a | n/a |
-| Pydantic AI | agent-as-tool / delegation | unbounded | ~ | model |
-| LangGraph | the graph itself | unbounded | ✓ (graph def) | edges / conditional edges |
+| AutoGen | `str \| CreateResult` (`_model_client.py:251`) | n/a (text only) | none | **No** |
+| OpenAI Agents | OpenAI Responses events + 10 run-item names (`stream_events.py`) | **No** — raw passthrough (`:11-21`) | `item_id`+`output_index`+`content_index` | Yes |
+| Claude Agent SDK | CLI `stream-json` + partial messages (`subprocess_cli.py:582`) | No | n/a | Yes |
+| Anthropic SDK | 6 event types + 7 delta subtypes (`lib/streaming/_beta_messages.py:343-428`) | vendor-shaped | integer `event.index` | Yes (`input_json_delta`, `:367`) |
+| Vercel | ~18 parts, start/delta/end, string `id` (`language-model-v4-stream-part.ts`) | **Yes, provider-neutral** | string `id` | Yes (`tool-input-*`) |
 
-**PACT `AC-5.1` (8 patterns × ≥3 adapters) is only reachable through harness lowering.**
-Native topology exists in only 2 of 7, one of which is frozen and one of which drops
-conditions on serialize.
+**Three incompatible addressing schemes for "which content block is this delta
+for": integer index, string id, and a triple.** Any IR that streams must pick one
+and specify the mapping in both directions for every adapter.
 
-### 7.8 Dimension 9 — Model binding
+**Reconciliation.** Adopt the **Vercel `LanguageModelV4` stream-part vocabulary**
+as PACT's streaming IR, with string `id` addressing:
+- It is the only provider-neutral one, already implemented against ~60 providers.
+- Its start/delta/end framing is what TTFT/TPOT measurement needs (AC-4.2/AC-3.6).
+- Mapping Anthropic's integer index → string id is mechanical; mapping OpenAI's
+  triple → string id is mechanical; mapping AutoGen's `str` chunks is a *lossy
+  degrade* that the lattice must declare (`tool_arg_streaming: unsupported`).
+- Extend it with the two agent-runtime events `HarnessV1` needed and
+  `LanguageModelV4` lacks — `file-change` and `compaction`
+  (`harness-v1-stream-part.ts:99,110`) — or PACT loses them on import.
 
-| | Binding shape | Provider routing | Fallback | Air-gap default | Capability self-report |
+### 7.6 Dimension 6 — HITL
+
+**Four architecturally distinct models. This is the widest divergence in the set
+after the loop.**
+
+| Framework | Mechanism | Durable? | Can rewrite tool input? | Serialisable declaration? |
+|---|---|---|---|---|
+| AutoGen | `input_func` callback (`_user_proxy_agent.py:169`) | **No** (blocking) | No | **No** — `input_func=None` on round-trip (`:244-245,249`) |
+| OpenAI Agents | `NextStepInterruption` + `RunState.approve/reject` (`run_steps.py:171`, `run_state.py:365,371`) | **Yes** | No | via RunState |
+| Claude Agent SDK | `can_use_tool` → `PermissionResultAllow(updated_input=…)` (`types.py:235-240`) | No (blocking) | **Yes** | No (callback); but `permission_mode` + rules are data |
+| Anthropic SDK | none locally; server-side `user.tool_confirmation` (`_beta_session_runner.py:9-11`) | server-side | No | n/a |
+| Vercel | `tool-approval-request`/`-response` **as message parts** (`language-model-v4-prompt.ts:260`) | **Yes**, statelessly | No | **Yes** — it is data |
+| LangGraph | `interrupt()` + checkpointer | **Yes** | via `Command(resume=…)` | No (code) |
+
+Plus the Claude SDK's **runtime-mutable permission rules** (`PermissionUpdate`:
+addRules/replaceRules/removeRules/setMode/addDirectories/removeDirectories across
+four destinations, `types.py:106-133`), which nothing else has, and its documented
+**shadowing footgun** (`types.py:1696-1750`): `can_use_tool` is silently skipped
+under `bypassPermissions` or for pre-allowed tools.
+
+**Reconciliation — this is where PACT should be opinionated, because the best
+answer is clear:**
+
+1. **Adopt Vercel's message-carried approval model as the IR's normative form.**
+   An approval request and its response are *content parts in the conversation*.
+   Consequences: HITL is serialisable by construction; it needs no checkpointer, no
+   runtime and no framework state object; it works on the four frameworks that have
+   no durable state; and it satisfies D2 (the tree is the source of truth, nothing
+   external required).
+2. **Approval gates are declared on the tool, not written as a callback** —
+   `approval: never | always | <predicate>` in the tool IR, per D14 (no-code).
+   AutoGen's `input_func=None` round-trip hole (§1.6) is the proof that callbacks
+   are not a portable HITL model.
+3. **Argument rewriting must be in the IR** (`updated_input`, Claude SDK
+   `types.py:239`) — a human approving "with edits" is a real workflow that only
+   one framework supports and that PACT must not lose on import (P-3).
+4. **Precedence must be explicit and fail-closed.** The Claude shadowing warning is
+   a genuine security bug shape: a configured allow-rule silently disabling a human
+   gate. PACT's policy IR must define a total precedence order over
+   (mode, allow-rules, per-tool approval, run-scoped override) and must **fail
+   closed** — if any layer says "ask", the answer is "ask" (T7).
+5. **Blocking-callback HITL is a `degraded` lattice entry, not a supported mode.**
+
+### 7.7 Dimension 7 — Memory: the word means four different things
+
+| Framework | What "memory" is | Operations |
+|---|---|---|
+| AutoGen | **context injection** — mutates the model context pre-call | `update_context`, `query`, `add` (`memory/_base_memory.py:77,93,113`) |
+| OpenAI Agents | **conversation history store** | `get_items`, `add_items`, `pop_item`, `clear_session` (`memory/session.py:24,36,44,52`) |
+| Anthropic SDK | **a tool the model calls** (`_beta_builtin_memory_tool.py`, 910 lines) | tool invocations |
+| Claude Agent SDK | **a location** — `Literal["user","project","local"]` (`types.py:95`) | n/a |
+| Vercel | **absent** | — |
+
+**[V] Five frameworks, four incompatible meanings, one of which is "nothing".**
+Only AutoGen's has a relevance/query notion; only OpenAI's has ordered history
+semantics with `pop`; only Anthropic's is model-driven.
+
+**Reconciliation.** PACT must **not** ship a field called `memory:` with a single
+meaning — it is the most overloaded word in the domain and D13's non-technical
+author will guess wrong. Split it into three orthogonal, separately-declared
+constructs:
+
+- `history:` — the conversation record. Ordered, with retention/compaction policy.
+  Maps to OpenAI `Session`, Vercel `messages`, AutoGen `model_context`.
+- `recall:` — retrieval injected into context before a call, with a declared
+  relevance strategy and a **budget**. Maps to AutoGen `Memory.update_context`.
+- `notes:` — a store the *model* reads and writes through tools. Maps to
+  Anthropic's memory tool and Claude's `memory` location.
+
+Each is independently portable and independently `unsupported`-able. Collapsing
+them is how a spec becomes unimplementable, and it is also how an author gets a
+different agent on every adapter.
+
+### 7.8 Dimension 8 — Multi-agent
+
+| Framework | Constructs | Control returns? | Serialisable? |
+|---|---|---|---|
+| AutoGen | RoundRobin, Selector, Swarm, **GraphFlow** (DAG + cycles) | Swarm: no; Graph: per edge | **Mostly** — but callable edge conditions are dropped (`_digraph_group_chat.py:47,69-79`) and `selector_func`/`candidate_func` are code (`_selector_group_chat.py:163-186`) |
+| OpenAI Agents | handoffs + agent-as-tool | handoff: **no**; as-tool: yes | handoff targets are agent objects |
+| Claude Agent SDK | `agents: dict[str, AgentDefinition]` (`types.py:1981,84-102`) | subagent returns | **Yes** — fully declarative |
+| Anthropic SDK | **none** in-SDK | — | — |
+| Vercel | **none** (`packages/ai/src`) | — | — |
+| LangGraph | graph | per edge | code |
+
+**[V] Two of the five target frameworks have no multi-agent construct at all.**
+D20's first demo — a non-technical author builds a supervisor plus specialists —
+is therefore **entirely PACT's own implementation** on the Vercel and Anthropic
+adapters. That is the correct outcome under D12, but it must be stated: CTS
+topology results on those adapters test PACT's harness, not the framework.
+
+The one genuinely reusable design is AutoGen's `GraphFlow` join semantics:
+`activation: "all" | "any"` on nodes (`_digraph_group_chat.py:112`),
+`activation_group` + `activation_condition` on edges (`:48,58`), and the rule that
+every cycle must contain at least one conditional edge (`:151`).
+
+**Handoff conflict semantics diverge and must be decided:** AutoGen executes only
+the first of multiple handoff calls and warns (`_assistant_agent.py:1347-1362`);
+OpenAI Agents resolves to a single `NextStepHandoff`. PACT must specify — recommend
+**error, not silent first-wins**, consistent with the Expansion Rule's
+disjoint-union stance (E-rules: "conflict is an error, never last-wins").
+
+### 7.9 Dimension 9 — Model binding and capability
+
+| Framework | Capability declaration | Model identity |
+|---|---|---|
+| AutoGen | `ModelInfo` — **6 boolean-ish keys** (`_model_client.py:164-182`) | `ModelFamily` **hardcoded enum**, ~30 values (`:16-95`) |
+| OpenAI Agents | **none** on `Model` | string + `MultiProvider` prefixes |
+| Claude Agent SDK | none | `--model`, aliases `sonnet/opus/haiku/inherit` |
+| Anthropic SDK | none | string |
+| Vercel | `supportedUrls` per media type; spec version `v2/v3/v4` | `provider` + `modelId` |
+| Pydantic AI | model profiles drive `output_mode: auto` | `KnownModelName \| str` |
+
+**[V] No framework in the set declares context length, cost, latency, benchmark
+scores, audio capability, or computer-use capability.** AutoGen comes closest with
+six keys and pays for it with a hardcoded enum that must be edited to add a model.
+
+**Reconciliation.** This is a clean win for PACT rather than a reconciliation
+problem: **the model catalogue (O3.2) has no competitor in the corpus.** The
+findings that shape it:
+- Capability must be **data, never an enum** — AutoGen's `ModelFamily` is the
+  anti-pattern, and `family` is doing double duty as identity *and* capability.
+- Adopt Vercel's `supportedUrls` idea as a catalogue field: which media types the
+  binding can ingest by URL vs must have inlined. It is directly load-bearing for
+  D17 (air-gapped: nothing may be fetched) and D16 (documents/images).
+- The six AutoGen keys are the *floor*, not the ceiling: PACT needs at minimum
+  `vision`, `audio_in`, `audio_out`, `computer_use`, `function_calling`,
+  `parallel_tool_calls`, `structured_output: {native|tool|prompted}`,
+  `context_window`, `max_output`, plus benchmarks with provenance (AC-3.3).
+
+### 7.10 Modality coverage (D16) — three of five fail
+
+| Modality | AutoGen | OpenAI Agents | Claude SDK | Anthropic SDK | Vercel |
 |---|---|---|---|---|---|
-| AutoGen | `ChatCompletionClient` instance | via `ComponentModel.provider` (**python import path**) | ✗ | ✓ (explicit client) | **✓ `ModelInfo`** |
-| OpenAI Agents | `str \| Model` | **prefix map** (`openai/`, `litellm/`, `any-llm/`) | ~ (retry advice) | ✓ | ✗ |
-| Claude Agent SDK | `str` alias/id | ✗ | ✓ `fallback_model` | **✗ (binary + env only)** | ✗ |
-| Anthropic SDK | `model: str` per request | ✗ | ✓ `fallbacks` param **[srv]** | ✓ (base_url) | ~ (`beta_capability_support`) |
-| Vercel AI | `string \| LanguageModelV*` | **global provider; defaults to hosted gateway** | ~ (middleware) | **✗ by default** | `supportedUrls` + warnings |
-| Pydantic AI | `str \| Model` + profiles | provider classes | ~ | ✓ | ✓ (model profiles) |
+| Text + tools | Yes | Yes | Yes | Yes | Yes |
+| Vision **in** | Yes, PNG/JPEG only (`_image.py:51`) | Yes | Yes | Yes | Yes (`file` content) |
+| Vision **out** (tool→model) | **No** — flattened to `"[Image: b64]"` (`_workbench.py:70-74`) | Yes (`ToolOutputImage`, `tool.py:207`) | via MCP | Yes (`BetaImageBlockParam`) | Yes (`content` output) |
+| Documents | **No** | Yes (`ToolOutputFileContent`, `tool.py:236`) | via MCP | Yes (`BetaRequestDocumentBlockParam`) | Yes (`file`, incl. `application/pdf` in `supportedUrls`) |
+| Audio / voice | **No** — no `audio` in `autogen-core`; only a video-surfer *tool* in `autogen-ext` | **Yes** — `voice/` + `realtime/` packages | **No** | **No** — `audio` appears only in `lib/tools/mcp.py` passthrough | **Yes** — `generate-speech/`, `transcribe/`, `realtime/` |
+| Computer use | **No** on the portable path (§1.3); bespoke `MultimodalWebSurfer` only | **Yes** — `ComputerTool` (`tool.py:761`) | via CLI builtins | via tools | via provider tools |
 
-### 7.9 Modality coverage (D16)
+**[V] Only OpenAI Agents and Vercel can express all four D16 modalities. AutoGen
+can express one and a half.**
 
-| | Text+tools | Vision (image) | Documents/PDF | Audio in | Audio out / voice | Computer use |
-|---|---|---|---|---|---|---|
-| AutoGen | ✓ | ✓ (`Image`) | **✗** | **✗** | **✗** | via ext tools |
-| OpenAI Agents | ✓ | ✓ | ✓ | **separate `RealtimeAgent`/`VoicePipeline`** | separate | ✓ `ComputerTool` |
-| Claude Agent SDK | ✓ | ✓ | ✓ | ✗ | ✗ | via built-in tools |
-| Anthropic SDK | ✓ | ✓ | ✓ (`document`) | **✗ (no audio types at all)** | ✗ | ✓ (computer tool) |
-| Vercel AI | ✓ | ✓ | ✓ | ✓ (`mediaType` open) | separate `realtime-session` | ✓ (provider tools) |
-
-**The voice finding is structural, not incidental.** `RealtimeAgent`
-(`openai-agents-python/src/agents/realtime/agent.py:28-40`) documents, verbatim, that it
-does **not** support `model`, `modelSettings`, `outputType`, or `toolUseBehavior` —
-"outputType is not supported, as RealtimeAgents do not support structured outputs." Its
-model interface is a different ABC entirely (`realtime/model.py:151` `RealtimeModel` with
-`connect/add_listener/send_event/close`). Vercel likewise puts realtime in a separate
-subsystem (`packages/ai/src/realtime/realtime-session.ts`).
-
-**[V]** In every framework that has voice, voice is a *disjoint agent abstraction*, not a
-modality flag. PACT cannot model audio as "just another content type" and expect native
-lowering.
+**Consequence for the CTS.** AC-2.1 requires a golden agent set covering the
+modalities on all seven adapters. That is not achievable and should not be
+attempted. The honest form is: **the golden set is partitioned by modality, and
+the conformance level an adapter can reach is bounded by its modality support**,
+declared in the lattice before execution (AC-2.2's second clause). PACT should
+publish a modality × adapter matrix as a first-class artifact, because it is the
+single most useful thing an adopter needs before choosing a target.
 
 ---
 
 ## 8. Harness-lowering seam table (the brief's explicit question)
 
-| SDK | Lowest-level model/tool transport | Verdict |
-|---|---|---|
-| **AutoGen** | `autogen_core.models.ChatCompletionClient.create()` / `.create_stream()` — `_model_client.py:212,242` | **Exists, `degraded`.** No text+tool interleave (`_types.py:43`), no audio/doc parts (`_types.py:32`), string-only tool results (`_types.py:59`), text-only stream (`_model_client.py:254`). |
-| **OpenAI Agents** | `agents.models.interface.Model.get_response()` / `.stream_response()` — `models/interface.py:61,96`; provider via `ModelProvider.get_model()` `:138` | **Exists, coupled.** Speaks OpenAI Responses wire types (`items.py:76,79,82`) and accepts SDK `Tool`/`Handoff`/`AgentOutputSchemaBase`. Workable; costs a translation layer. |
-| **Claude Agent SDK** | *(none)* — only `Transport` (`_internal/transport/__init__.py:9`), which is the Claude Code control protocol, not a model API | **BLOCKING. No seam.** Loop, tools, compaction, subagents live in the `claude` binary (`subprocess_cli.py:463`, `_cli_version.py:3`). Harness lowering would mean reimplementing Claude Code. |
-| **Anthropic SDK** | `client.beta.messages.parse()` / `.stream()` (as driven at `_beta_runner.py:701,710`); optionally step-drive `BaseToolRunner` via `set_messages_params`/`append_messages`/`generate_tool_call_response` (`:96,111,316`) | **Cleanest seam.** Pure wire types, no SDK objects. Only gap: no audio content block anywhere in `types/beta/`. |
-| **Vercel AI SDK** | `LanguageModelV4.doGenerate()` / `.doStream()` — `packages/provider/src/language-model/v4/language-model-v4.ts:46,58` | **Best-designed seam.** Normalized prompt with open `mediaType`, normalized tools, normalized stream parts, `providerOptions` escape, `supportedUrls` capability declaration. |
-| *(cross-check)* Pydantic AI | `Model.request()` / `.request_stream()` — `models/__init__.py:310,347` | Framework-neutral messages; richest request-parameter object (`ModelRequestParameters:133`). |
-| *(cross-check)* LangGraph | LangChain `BaseChatModel` | Standard; not audited here. |
+| Framework | Exact lowest-level API | Neutral? | Verdict |
+|---|---|---|---|
+| **AutoGen** | `autogen_core.models.ChatCompletionClient.create(messages, *, tools, tool_choice, json_output, extra_create_args, cancellation_token) -> CreateResult` and `.create_stream(...) -> AsyncGenerator[str \| CreateResult]` — `autogen-core/src/autogen_core/models/_model_client.py:211-269` | **Yes** — no agent concepts | **USABLE, LOSSY.** Text+tools+vision-in only. No audio, no documents, no image tool-results, no tool-arg streaming, no text+tool-calls in one turn |
+| **OpenAI Agents** | `agents.models.interface.Model.get_response(system_instructions, input, model_settings, tools, output_schema, handoffs, tracing, *, previous_response_id, conversation_id, prompt) -> ModelResponse` and `.stream_response(...)` — `src/agents/models/interface.py` | **No** — takes `handoffs`; I/O is OpenAI Responses format (`items.py:76,79,82`) | **USABLE, LEAKY.** Costs a full message-format translation layer; topology leaks into the transport signature |
+| **Claude Agent SDK** | *none* — lowest is `Transport.write(data: str)` to a subprocess (`_internal/transport/__init__.py`); `query(prompt=...)` accepts **user messages only** (`query.py:46-53`) | n/a | **NONE — BLOCKING** (§3.10). Loop is in a closed-source binary. Corroborated by Vercel's `harness-claude-code` wrapping rather than translating |
+| **Anthropic SDK** | `client.messages.create(...)` / `client.beta.messages.create(..., output_format=…)`; plus steerable `client.beta.messages.tool_runner(...)` → `BetaToolRunner.__next__` (`lib/tools/_beta_runner.py:175`) with `set_messages_params` (`:96`) | **Yes** | **BEST-IN-CLASS (Python).** Fully multimodal both directions; two seams (pure transport + steerable loop); air-gap-viable |
+| **Vercel AI SDK** | `LanguageModelV4.doGenerate(options)` / `.doStream(options)` — `packages/provider/src/language-model/v4/language-model-v4.ts` | **Yes** — fully normalised | **BEST-IN-CLASS (TS).** Provider-neutral content + stream vocabularies; ~60 implementations; explicitly the intended low-level seam |
+| Pydantic AI *(cross-check)* | `pydantic_ai.direct.model_request` / `_sync` / `_stream` / `_stream_sync` — `pydantic_ai_slim/pydantic_ai/direct.py:55,108,164,227` | Yes | **CLEAN.** The only publicly-documented, four-variant "call a model without an agent" API in the corpus |
+| LangGraph *(cross-check)* | `langgraph.func.entrypoint(checkpointer=…)` + `task` + `interrupt` — `libs/langgraph/langgraph/func/__init__.py:110,262,439` | Yes | **BETTER THAN NATIVE.** The only construct that gives PACT durable execution + resume + interrupt without implementing them |
+
+**Summary: 6 of 7 target frameworks have a clean or usable harness-lowering seam.
+One does not, and no amount of adapter engineering fixes it.**
 
 ---
 
 ## 9. Blocking and near-blocking findings
 
-**B1 — `claude-agent-sdk` has no harness-lowering seam.** (§3.10)
-Violates `P-2`/`AC-2.2` outright, strains `D17` (proprietary bundled binary), and is in
-direct tension with `D15` (no opaque wrapping). *Any* PACT adapter for this SDK is an
-opaque wrapper by construction.
+**B1 — BLOCKING. The Claude Agent SDK has no harness-lowering seam.** §3.10.
+There is no API accepting a message list and returning a model response; `query`
+accepts user messages only (`query.py:46-53`); the loop is in a closed-source
+binary. D12 (PACT owns loop semantics) and D15 (translate or nothing) cannot both
+hold for this target. **Requires an explicit decision** — recommended: import-only
+target, execute on the Anthropic SDK (§3.10 option (b)). Corroborated by Vercel's
+`harness-claude-code` choosing to wrap rather than translate.
 
-**B2 — AutoGen cannot satisfy kill-and-resume.** (§1.2)
-`save_state` during a run is documented-unsafe (`_base_group_chat.py:773-776`) and
-`load_state` refuses while running (`:808-809`). `AC-2.6` unreachable natively.
+**B2 — BLOCKING for D16. AutoGen cannot return an image to the model.**
+`_assistant_agent.py:1609` calls `tool_result.to_text()`, which renders an image as
+the literal string `f"[Image: {base64}]"` (`_workbench.py:70-74`), and
+`FunctionExecutionResult.content` is `str` (`models/_types.py:59`). Computer use and
+any screenshot-returning tool are impossible on AutoGen's portable path.
 
-**B3 — AutoGen is frozen.** (§1.0) Maintenance mode since ≥2026-04; no new features;
-successor named. Building an export adapter targets a dead runtime.
+**B3 — BLOCKING for D17. Anthropic managed-agents sessions run the loop
+server-side.** `_beta_session_runner.py:1-16`; MCP tools run server-side and never
+surface (`:85-86`). The adapter must refuse this mode in air-gapped profiles rather
+than silently degrade.
 
-**B4 — Four incompatible HITL resume tokens.** (§7.5) blob / message / graph-command /
-session-id. Without a decision, `AC-2.2` fails on any HITL golden agent.
+**B4 — NEAR-BLOCKING. Harness lowering does not bound provider-executed tools.**
+`run_internal/run_steps.py:135` — *"Hosted tools have already run, so there's
+nothing to do."* PACT's loop cannot gate, approve, budget or trace a tool the
+provider already executed. Requires a mandatory `execution:` field in the tool IR
+and per-tool loop-ownership reporting in the Conformance Report (§7.3).
 
-**B5 — No native multi-agent on Vercel; depth-1 caps on Anthropic managed agents and
-Claude subagents.** (§7.7) `AC-5.1` and `G-4` are harness-only.
+**B5 — NEAR-BLOCKING. Three of five frameworks default to a loop where the model
+never sees its own tool results.** AutoGen `max_tool_iterations=1`
+(`_assistant_agent.py:739`); Vercel `generateText` `stopWhen=isStepCount(1)`
+(`generate-text.ts:240`); and Vercel contradicts itself with `isStepCount(20)` on
+`Agent` (`tool-loop-agent.ts:132`). There is no framework default PACT can inherit.
 
-**B6 — Audio is a disjoint abstraction everywhere, and absent from Anthropic entirely.**
-(§7.9) `D16`'s "all four modalities in v1" cannot mean "one agent kind with a modality
-flag."
+**B6 — MAJOR. OpenAI strict-mode rewrites author schemas.**
+`strict_schema.py:109` forces every property to be required; `:88-99` forces
+`additionalProperties: false` or errors; `:135` rejects nested `oneOf`;
+`agent_output.py:14` silently wraps non-object outputs in `{"response": …}`. The
+same PACT contract produces a different observable output shape per adapter unless
+a resolve-time schema pre-flight is added.
 
-**B7 — Vercel resolves bare model-id strings against a hosted gateway by default.**
-(§5.9, `resolve-model.ts:181-184`) Silent network dependency; breaks `AC-7.3` unless the
-adapter asserts `AI_SDK_DEFAULT_PROVIDER`.
+**B7 — MAJOR. AutoGen cannot resume mid-tool-call.** `save_state` persists only the
+model context (`_assistant_agent.py:1630-1639`). AC-2.6 is unachievable on that
+adapter; it must declare `durable_resume: unsupported`.
 
-**B8 — Serialization holes are real and shipped.** AutoGen drops callable graph-edge
-conditions on dump (`_digraph_group_chat.py:69-76`), drops `input_func` on
-`UserProxyAgent` export (`_user_proxy_agent.py:244-245`), and documents
-`tool_call_summary_formatter` as ignored by config
-(`_assistant_agent.py:158-160,233`). Import from AutoGen must therefore treat *absence* as
-suspicious, not as "no such feature."
+**B8 — MAJOR. Human-gate bypass by configuration.**
+`claude-agent-sdk-python/src/claude_agent_sdk/types.py:1696-1750` warns that
+`can_use_tool` is **not invoked** under `bypassPermissions` or for tools allowed by
+`allowed_tools` or settings files. A configured allow-rule silently disables a human
+approval gate. PACT's policy IR needs a total, fail-closed precedence order.
+
+**B9 — MAJOR. "Memory" has four incompatible meanings across five frameworks**
+(§7.7), one of which is "does not exist". A single `memory:` field would produce a
+different agent on every adapter and would mislead the D13 non-technical author.
+
+**B10 — MAJOR. Callback-shaped constructs are not serialisable, and the frameworks
+know it.** AutoGen's `UserProxyAgent._to_config` returns `input_func=None` with a
+`# TODO: Add ability to serialie input_func` (`_user_proxy_agent.py:244-245`);
+`DiGraphEdge` moves callables into an `exclude=True` field so the model serialises
+(`_digraph_group_chat.py:47,69-79`); `SelectorGroupChat`'s `selector_func` is code.
+Every one of these is a place where a "declarative" config silently loses
+behaviour — the exact failure mode D14 and T7 exist to prevent.
+
+**B11 — MODERATE. Two of five target frameworks have no multi-agent construct at
+all** (Anthropic SDK, Vercel AI SDK — §7.8). D20's supervisor demo is entirely
+PACT's own code on those adapters.
+
+**B12 — MODERATE. Three incompatible stream-block addressing schemes** — integer
+index (Anthropic `_beta_messages.py:356`), string id (Vercel), triple
+(OpenAI Responses). Any streaming IR must pick one and specify bidirectional
+mappings, with AutoGen declared `unsupported` for tool-arg deltas.
+
+**B13 — MODERATE. AutoGen is frozen** (`README.md:14,19-24`, HEAD 2026-04-06).
+Treat as a legacy import target; do not spend native-lowering budget on it.
 
 ---
 
 ## 10. Design implications for PACT (actionable)
 
-Ordered by how much they change the spec.
+Each is written as something a spec author can implement.
 
-1. **Canonical run state = the transcript.** Adopt Anthropic/Vercel/Pydantic-AI semantics:
-   everything needed to resume a PACT run is a list of typed messages plus a small
-   scalar cursor. `RunState`-style blobs (OpenAI) and checkpoints (LangGraph) become
-   adapter-private projections computed *from* the transcript, never the source of truth.
-   Rationale: only the transcript is diffable, hand-editable, and Expansion-Rule-compatible
-   (T5, D18).
+**DI-1. `loop.max_iterations` is a required IR field with no default.**
+A missing value is a validation error naming file, line, rule and fix (O7.3).
+Rationale: the corpus offers 1, 10, 20 and unbounded, and one SDK contradicts
+itself (B5). Silence is the one thing PACT must not inherit.
 
-2. **HITL = two message part kinds, not a control-flow feature.** Standardise
-   `tool-approval-request{approvalId, toolCallId, reason?}` and
-   `tool-approval-response{approvalId, approved, reason?}` as PACT content parts, copying
-   `LanguageModelV4ToolApprovalRequest`/`...ResponsePart` exactly. Add a
-   `tool-output/execution-denied{reason}` result variant so the model observes denials.
-   Lower to `RunState.approve/reject` (OpenAI), `Command(resume=)` (LangGraph),
-   `can_use_tool` (Claude SDK), and report `unsupported` for AutoGen and the Anthropic
-   Messages runner.
+**DI-2. `loop.tool_results_visible_to_model` defaults to `true`, and deviation is
+explicit.** Three frameworks default to a non-agent (B5). PACT's default must match
+what the D13 author means by "agent".
 
-3. **Adopt `LanguageModelV4` as the shape of PACT's model-transport ABI.** Specifically:
-   four-role normalized prompt; user/assistant content parts with an **open IANA
-   `mediaType`**; `tool-*` deltas with block ids; `responseFormat` as a first-class request
-   field; `providerOptions` as the typed escape hatch; and a `supportedUrls`-equivalent so
-   the resolver knows which media the substrate ingests natively vs which PACT must fetch.
+**DI-3. Adopt AutoGen's termination-condition algebra as the shape of `loop.halt:`.**
+Composable, serialisable predicates (`conditions/_terminations.py`, 12 conditions +
+And/Or) rather than an integer. Exclude the callable form (`FunctionalTermination`
+has no `Config` and does not serialise) and provide a typed `ref:` escape instead
+(F-2).
 
-4. **Make the structured-output *mode* a declared field, not an inference.**
-   Copy `ModelRequestParameters.output_mode` (`pydantic-ai .../models/__init__.py:135-139`):
-   `text | native_json_schema | tool | prompted`, plus `allow_text_output`,
-   `prompted_output_template`. Without it, PACT cannot express "this small model needs
-   prompted JSON with a repair loop, the frontier model uses native schema" — which is a
-   core T4 strategy lever.
+**DI-4. Add `execution: client | provider | remote` as a REQUIRED field on every
+tool.** No default. Adapters reject agents whose execution locus they cannot honour.
+Rationale: B4 — harness lowering is only faithful for client-executed tools.
 
-5. **Add `loop.tool_result_disposition: reflect | return` with default `reflect`.**
-   This is the only way to import AutoGen's default agent without silently changing
-   behaviour (§7.0), and it is independently useful (it *is* `stop_on_first_tool`).
+**DI-5. The Conformance Report reports loop ownership per tool, not per agent.**
+An agent whose tools are all provider-executed is not running PACT's loop, and the
+report must say so before execution (AC-2.2).
 
-6. **Add a third lowering tier: `session lowering`.** Native / harness / **session**.
-   Model it on `HarnessV1` (`packages/harness/src/v1/harness-v1.ts:21-92`): a versioned
-   spec with `builtinTools`, boolean capability flags, `lifecycleStateSchema`, one
-   `doStart() -> Session` entry point, and capability negotiation by *throwing a typed
-   error*. This is where `claude-agent-sdk` (and Codex/OpenCode/Goose) legitimately live.
-   **This requires an explicit amendment to D15**: session lowering *is* opaque wrapping,
-   and the honest move is to name the tier, restrict it (a session-lowered agent is
-   `portability: session-only` in its lattice and cannot be a node in a PACT topology
-   unless its transcript is exportable), rather than to pretend `claude-agent-sdk` can be
-   translated.
+**DI-6. Content-type tool results: `[text|image|audio|document|json|binary]`.**
+Adapters that flatten to text declare `degraded` with the specific loss named.
+Rationale: B2 — AutoGen renders images as `"[Image: b64]"`, which silently breaks
+computer use.
 
-7. **Split `memory:` from `context:`.** Copy AutoGen's separation
-   (`Memory` ABC vs `ChatCompletionContext`). `context:` should use Vercel's
-   `pruneMessages` vocabulary directly — `reasoning: all|before-last-message|none`,
-   `toolCalls: all|before-last-N-messages|none|[{type,tools}]`,
-   `emptyMessages: keep|remove` — plus a `compaction:` sub-block (threshold, mode,
-   `force`) modelled on `OpenAIResponsesCompactionArgs` and Anthropic
-   `compaction_control`. `memory:` is retrieval and MUST be lowerable to *a tool* (the
-   Anthropic pattern) because 3 of 7 targets have no memory interface.
+**DI-7. Add a declarative `to_model:` projection on tools** (template / JSONPath /
+`ref:`), defaulting to identity, modelled on Vercel's `toModelOutput`
+(`tool.ts:149`). This is the no-code expression of "context discipline" from thesis
+§7.3 and it is a first-class optimiser search target. Add `input_examples:`
+(`tool.ts:209`) for the same reason.
 
-8. **Declare tool-execution concurrency in the IR.** `tools.concurrency: {max: N | unbounded,
-   order: parallel | sequential}`. Anthropic executes sequentially
-   (`_beta_runner.py:342,651`), OpenAI has a cap (`run_config.py:109`), Vercel and AutoGen
-   are unbounded. Latency-sensitive SLOs (`O4.2`) are not portable unless this is declared.
+**DI-8. Add `tools.concurrency: parallel | sequential | <int>` and
+`tools.on_error: to_model | fail_run | <ref>`.** AutoGen is parallel-only
+(`_assistant_agent.py:1200`), Anthropic sequential-only (`_beta_runner.py:342`);
+neither exposes a choice, so both become lattice entries.
 
-9. **Tool results are content-typed, not strings.** Adopt Vercel's `ToolResultOutput`
-   union verbatim: `text | json | error-text | error-json | execution-denied{reason} |
-   content[{text|file{data,mediaType}}]`. Mark AutoGen `degraded` on this axis
-   (`_types.py:59` — `content: str`) and emit a loss report on export.
+**DI-9. Adopt Pydantic AI's `output.mode: auto | native | tool | prompted`**
+(`output.py:48`). Constrained decoding is substrate-bound (thesis §7.3), so *how*
+structured output is obtained must be a re-selectable strategy variable, not an
+implementation detail.
 
-10. **Model voice/realtime as a distinct `loop.kind: realtime`, not a modality flag.**
-    Evidence: `realtime/agent.py:28-40` (no model, no model settings, no output type, no
-    tool-use behaviour) and `realtime/model.py:151` (a different model ABC). PACT should
-    define `RealtimeContract` sharing identity/capabilities/policy with `AgentContract`
-    but with its own loop, event vocabulary, and SLOs (TTFT/barge-in), and should refuse to
-    compile a `realtime` agent onto a substrate whose realtime seam is absent.
+**DI-10. Add a resolve-time schema-portability pre-flight.** Before binding, check
+the author's output schema against the target's structured-output profile
+(root-type restrictions, optional fields, `oneOf`, `additionalProperties`) and emit
+a **FAIL + recommendation** (D11). Rationale: B6. Fully offline (D17), cheap, and
+catches a class of bug no other tool catches.
 
-11. **Capability lattice needs an `emulated` tier with a named shim.** Vercel's
-    `simulateStreamingMiddleware` (`packages/ai/src/middleware/`) is the pattern: a
-    decorator that makes a non-streaming model satisfy a streaming contract. PACT should
-    ship the same idea as first-class: `capability: streaming → emulated by
-    pact:shim/simulate-streaming`, recorded in the lockfile so the Portability Report can
-    say *how* a capability was satisfied.
+**DI-11. Never silently wrap or mangle an author schema.** If a target cannot
+express a root-level array, that is a reported loss (T7), not an invisible
+`{"response": …}` (`agent_output.py:14`).
 
-12. **Adopt `ModelInfo`-style declared capabilities in the catalogue, and keep
-    `json_output` distinct from `structured_output`.** AutoGen already found this
-    distinction necessary (`_model_client.py:174-180`), and `validate_model_info` (`:185`)
-    hard-fails on omission. PACT's `models/catalog.yaml` should require
-    `{vision, function_calling, json_output, structured_output, family, context_window}` and
-    fail closed, per `AC-3.3`.
+**DI-12. Adopt the Vercel `LanguageModelV4` stream-part vocabulary as PACT's
+streaming IR**, with string-`id` block addressing, and extend it with `file-change`
+and `compaction` from `HarnessV1` (`harness-v1-stream-part.ts:99,110`). Specify
+bidirectional mappings to Anthropic's integer index and OpenAI's triple; declare
+AutoGen `unsupported` for tool-argument deltas.
 
-13. **Reserve provider routing hints in the profile.** `inference_geo`, `service_tier`,
-    `speed`, `fallbacks` (Anthropic `tool_runner` params) and `previous_response_id` /
-    `conversation_id` (OpenAI) are neither capability nor cost — they are substrate routing.
-    Give them a home (`profile.routing:`) or they will leak into `x-` blocks on every export.
+**DI-13. Adopt Vercel's message-carried approval model as the normative HITL form.**
+`tool-approval-request` (model output content) and `tool-approval-response`
+(prompt content part) — `language-model-v4-prompt.ts:260`. Consequences: HITL is
+serialisable by construction, needs no checkpointer or runtime, works on the four
+frameworks with no durable state, and satisfies D2.
 
-14. **Import from AutoGen must be *pessimistic*.** Because AutoGen silently drops callable
-    edge conditions, `input_func`, and `tool_call_summary_formatter`
-    (§9/B8), the PACT importer must flag any AutoGen `DiGraphEdge` with
-    `condition: null` and any `UserProxyAgent` with `input_func: null` as
-    `ImportReport.suspected_loss`, not as clean. Absence in AutoGen's serialisation is not
-    evidence of absence in the agent.
+**DI-14. Approval gates are declared on the tool** (`approval: never | always |
+<predicate>`), never written as a callback. Rationale: B10 — AutoGen's
+`input_func=None` round-trip hole is the proof.
 
-15. **The Vercel adapter must assert an offline provider.** Before any `generateText`
-    call, the adapter sets `globalThis.AI_SDK_DEFAULT_PROVIDER` from the resolved PACT
-    substrate and fails loudly if a bare string model id would otherwise reach
-    `gateway` (`resolve-model.ts:181-184`). Add this to the `AC-7.3` offline test.
+**DI-15. Carry human argument-rewriting in the IR** (`updated_input`, Claude SDK
+`types.py:239`). One framework supports "approve with edits"; P-3 forbids dropping
+it on import.
 
-16. **Reprioritise adapters.** On this evidence the seven-framework list should be
-    re-cut as: **tier 1 (real seams, live repos)** Pydantic AI, Vercel AI SDK, Anthropic
-    SDK, OpenAI Agents SDK, LangGraph; **tier 2 (import-only)** AutoGen, LangChain;
-    **tier 3 (session lowering)** Claude Agent SDK. Note this *swaps* the Anthropic
-    representative from `claude-agent-sdk` to `anthropic-sdk-python`, which is the only
-    change that makes `P-2` satisfiable across the whole set.
+**DI-16. Define a total, fail-closed precedence order over approval layers**
+(mode → allow-rules → per-tool approval → run override). If any layer says "ask",
+the answer is "ask". Rationale: B8.
 
-17. **Steal these three primitives outright** because nothing in PACT's current design
-    covers them and each is cheap:
-    - **Refusal as a terminal loop condition** (`_beta_runner.py:288-292`) — a distinct
-      `halt.reason: refusal`, since executing a refused turn's tool calls is a correctness
-      *and* safety bug.
-    - **Instruction provenance for cache boundaries**
-      (`pydantic-ai .../models/__init__.py:150-158`, `instruction_parts` with
-      static/dynamic marks) — static vs dynamic instruction split is exactly what PACT's
-      `instructions.md` + variant overlay produces for free, and it is worth ~cache-hit
-      money at runtime.
-    - **`defer_loading` / tool-search** (`openai-agents .../tool.py:453`) — hide tool
-      definitions until searched. A direct implementation of `00-THESIS.md §7.3 item 4`
-      (context discipline), already shipping.
+**DI-17. Split `memory:` into `history:`, `recall:` and `notes:`.** Rationale: B9 —
+four incompatible meanings across five frameworks. Each is independently portable
+and independently `unsupported`-able; collapsing them guarantees a different agent
+per adapter.
+
+**DI-18. Declare durability as `durability: none | conversation | step`.**
+AC-2.6 may only be claimed at `step`, and only on adapters that have it
+(OpenAI Agents, LangGraph). AutoGen declares `unsupported` (B7).
+
+**DI-19. Split the run snapshot: definitions by lockfile digest, run-scoped data
+only.** OpenAI Agents already refuses to serialise agent definitions
+(`run_state.py:2714,2724` require a live starting agent), and PACT derives
+definitions deterministically from the tree. This yields a strictly better resume
+contract than any framework's, for free.
+
+**DI-20. Adopt OpenAI's machine-enforced schema changelog for PACT's IR and state
+versions.** `run_state.py:179-191` raises at import time if a shipped version lacks
+a one-line summary; `:146-152` documents fail-fast forward incompatibility. E-2
+states this as policy; this is the mechanism that makes it true.
+
+**DI-21. Adopt AutoGen's `GraphFlow` join vocabulary for the topology IR** —
+node `activation: all | any` (`_digraph_group_chat.py:112`), edge
+`activation_group` + `activation_condition` (`:48,58`), and the rule that every
+cycle must contain at least one conditional edge (`:151`). Reject the callable
+edge condition, which is dropped on serialisation (`:47,69-79`).
+
+**DI-22. Specify multiple-handoff conflict as an ERROR, not first-wins.**
+AutoGen executes the first and warns (`_assistant_agent.py:1347-1362`). Consistent
+with the Expansion Rule's disjoint-union stance: conflict is an error, never
+last-wins.
+
+**DI-23. Model capability is data, never an enum.** AutoGen's `ModelFamily`
+(`_model_client.py:16-95`) is the anti-pattern and conflates identity with
+capability. The catalogue's minimum key set exceeds AutoGen's six by
+`audio_in`/`audio_out`/`computer_use`/`parallel_tool_calls`/`context_window`/
+`max_output`/`structured_output: {native|tool|prompted}` plus provenanced benchmarks
+(AC-3.3).
+
+**DI-24. Add `supported_urls` (per media type) to the model catalogue**, modelled on
+`LanguageModelV4.supportedUrls`. It determines whether a document/image URL must be
+inlined locally — directly load-bearing for D17 (air-gapped: nothing may be fetched).
+
+**DI-25. Publish a modality × adapter matrix as a first-class artifact, and
+partition the golden set by modality.** Only 2 of 5 frameworks support all four D16
+modalities (§7.10); AC-2.1 as written is unachievable and should be restated as
+modality-partitioned with the lattice bounding the reachable conformance level.
+
+**DI-26. Adopt Pydantic AI's static/dynamic instruction split**
+(`models/__init__.py:145-151`). Instructions already decompose into parts under the
+Expansion Rule, so this costs nothing in the IR and is the difference between a
+cacheable and an uncacheable prompt on Anthropic and Bedrock — feeding D26's
+performance budget and AC-3.6's cost SLOs.
+
+**DI-27. Add an extension point for agent-runtime events in the trace IR.**
+`file-change` and `compaction` (`harness-v1-stream-part.ts:99,110`) have no home in
+any model-level IR and will be lost on import from any coding-agent source (P-3).
+
+**DI-28. Record `HarnessV1` in `00-THESIS.md` §1.3 as the shipped alternative
+design.** Vercel's `packages/harness/` is the concrete artifact of the
+opaque-wrapping road D15 rejects, and its explicit refusal of a static capabilities
+object (`harness-v1.ts:14-19`) is a considered counter-position to P-2 that the
+thesis should acknowledge rather than ignore.
+
+**DI-29. Dynamic tool exposure is advisory and must be specified as such.**
+Anthropic's `_available_tool_names` docstring (`_beta_runner.py:130-138`) is
+explicit that removal is a hint the model can ignore. PACT's "tool exposure set"
+strategy variable must say the same, and route calls to withdrawn tools down the
+unknown-tool path rather than pretending revocation is enforceable.
 
 ---
 
 ## 11. Open questions this stream could not close
 
-1. Does OpenAI Agents' `Model.get_response` tolerate `handoffs=[]` while PACT synthesises
-   handoff tools itself? Shape suggests yes; **not exercised**. Needs a spike.
-2. Can `BaseToolRunner` (Anthropic) be step-driven from outside to interpose approvals,
-   given `generate_tool_call_response()` is public and cached? Shape suggests yes;
-   **not exercised**.
-3. Is there any supported way to point the bundled `claude` binary at a non-Anthropic,
-   on-prem endpoint? Nothing in `claude-agent-sdk-python` reads such a variable; it would
-   be the binary's behaviour. **Unknown from this corpus.**
-4. What is the actual conformance cost of AutoGen's text/tool-call disjunction
-   (`_types.py:43`)? I can show it is inexpressible; I have not measured whether it changes
-   eval scores. Needs a CTS fixture with an interleaved-content golden agent.
-5. `@ai-sdk/workflow`'s `WorkflowAgent` vs `ToolLoopAgent` — how far have they diverged?
-   The repo carries `workflow-agent-compat.test.ts` to police it, which implies drift is
-   expected. Relevant to `P-5`.
-6. LangChain (the 7th target) was not audited here; its `BaseChatModel` seam is assumed,
-   not verified.
+**OQ1. Does the `claude` CLI expose an undocumented single-turn or
+message-injection mode?** The binary is not in the corpus. If `--max-turns 1`
+combined with some form of transcript injection allowed PACT to drive the loop,
+B1 would downgrade from blocking to lossy. `--resume`/`--fork-session`
+(`subprocess_cli.py:536,591`) hint that transcript state is addressable, but
+`query`'s documented input is user messages only (`query.py:46-53`). Cheap
+experiment: run the CLI with `--resume` against a hand-edited transcript and see
+whether an injected assistant/tool_result turn is accepted.
+
+**OQ2. What is the real cost of the OpenAI Responses translation layer?**
+§2.10 says the OpenAI Agents adapter needs full bidirectional translation between
+PACT's message IR and OpenAI Responses items. Unmeasured. Given D26's "few percent
+latency, no meaningful token increase" budget, this should be benchmarked before
+the adapter is committed to.
+
+**OQ3. Does `BetaToolRunner`'s steerability actually give a third lowering mode?**
+`set_messages_params` (`_beta_runner.py:96`) + `__next__` (`:175`) suggest PACT
+could keep the framework's loop while owning every decision inside it. That would
+be cheaper than full harness lowering and more faithful than native. Nobody has
+tried it; it is a one-day spike and it would matter for every SDK that has a
+similar shape.
+
+**OQ4. Is Vercel's rejection of a static capabilities object right?**
+`harness-v1.ts:14-19` argues for runtime `HarnessCapabilityUnsupportedError` over
+declaration. PACT's P-2 lattice takes the opposite view, and the cost PACT accepts
+is lattice drift — a lattice that claims `native` for a feature the adapter has
+since broken. There is no mechanism in the current design that *detects* drift
+other than the CTS itself. Worth asking whether the lattice should be
+**generated from CTS results** rather than hand-declared.
+
+**OQ5. How does `tool_use_behavior` interact with PACT's loop IR?**
+OpenAI Agents' `StopAtTools` / `stop_on_first_tool` (`agent.py:347-348`) is a
+declarative early-exit that overlaps with `loop.halt:` but is scoped to tools
+rather than messages. Whether these unify into one predicate language or must stay
+separate was not resolved here and belongs with `orchestration-loops.md`.
+
+**OQ6. Which of the three HITL architectures survives contact with a real
+non-technical author?** DI-13 recommends Vercel's message-carried model on
+architectural grounds (serialisable, runtime-free). Whether a D13 author can
+actually operate an approval queue built that way is an AC-1.5-shaped question and
+belongs in `pact-dx-personas`, not here.

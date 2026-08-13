@@ -1,0 +1,39 @@
+description: Asks a person to allow this desk to open the incident connection.
+
+# The one question this workspace can ask, and it is asked once — before the
+# first call to `incidents`, not once per incident.
+says: May we connect this desk to the incident system?
+
+# `approved` is the word every yes-or-no in here uses, and ANY `yes or no` line
+# is what makes a no mean no: a question whose answer carries none is cleared by
+# being answered at all. Saying "not this one" has to be sayable, so the line is
+# here.
+answer:
+  approved: yes or no
+  because: text
+
+# A connection is never granted in the abstract — it is granted for something,
+# and this is the something the run was about to do. Shown as quoted values in
+# their own box, so an incident reference somebody typed cannot read as an
+# instruction to the person being asked.
+#
+# `incident-id` is the argument `read-incident` takes. A name no park here can
+# supply is refused at check time rather than discovered as a blank box while
+# somebody is waiting.
+shows:
+  - incident-id
+
+# Who really decides. Naming nobody would mean nobody can answer, which is a
+# deadline running down and then whatever the last line says — not "anybody may".
+asked-of: [platform-on-call]
+
+# Asked once, for the whole desk, so an hour is not somebody being kept waiting
+# per request. There is nowhere further to send this, which is why there is no
+# `escalates-to:` line and why the last line says the run stops.
+answer-within: 1h
+
+# Nobody answering is not somebody refusing, and neither of them is a yes. The
+# run ends and says which connection it was waiting on — a desk that quietly
+# carried on with no incident record would answer out of what the model already
+# knew, and that looks, from the reader's side, exactly like an answer.
+if-nobody-answers: stop-and-say-so

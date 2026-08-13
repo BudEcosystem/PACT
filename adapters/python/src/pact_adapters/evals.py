@@ -252,6 +252,60 @@ class CaseOutcome:
     unenforced: tuple[str, ...] = ()
 
 
+#: A suite that stopped because nothing on the other end of `--serving-at`
+#: accepted the connection, or accepted it and never answered. The remedy is a
+#: runtime: start one, pull the model, or point the command somewhere else.
+NOT_SERVING = "not-serving"
+#: Something is listening and it answered — with bytes no model runtime would
+#: send. An author who pointed `--serving-at` at a web server is here, and
+#: telling them to start a runtime sends them to a machine that is already up.
+NOT_A_RUNTIME = "not-a-runtime"
+#: The model answered and the RUN stopped for a reason that is not the network —
+#: a teammate over its budget, a member that halted. Nothing about the machine
+#: is wrong, so no sentence here may say there is.
+STOPPED = "stopped"
+
+
+@dataclass(frozen=True)
+class Silence:
+    """Why a suite produced no score, as facts rather than as a sentence.
+
+    THE FIELD THAT MATTERS IS `answered`. "Answered three of six and then
+    stopped" and "never opened a socket" were one state for a round — a verdict
+    that was UNDECIDED with no results — so a machine that was serving the model
+    perfectly well got reported to its author as one that is not, with "start the
+    model runtime" as the remedy. Refusing to publish a SCORE off a shorter suite
+    than the author wrote is argued (AC-3.1); refusing to carry the FACT that it
+    answered was never argued, and it is what made that sentence reachable.
+
+    `unenforced` is carried for the same reason and it is T7's, not convenience:
+    the cases that DID answer may each have met a rule nothing could grade, and
+    dropping the whole `Verdict.results` list dropped those reports with it. A
+    lossy step that emits nothing is the one thing T7 forbids by name, so the
+    channel is kept even though the number is not.
+    """
+
+    #: `NOT_SERVING`, `NOT_A_RUNTIME` or `STOPPED` — which remedy is honest.
+    kind: str
+    #: What actually happened, in as few words as the exception gave us.
+    cause: str
+    #: Cases that answered before the suite stopped. `0` is "never answered".
+    answered: int = 0
+    #: Cases the author wrote, so `answered` is readable as a fraction.
+    of: int = 0
+    #: Rules nothing could decide, off the cases that did answer.
+    unenforced: tuple[str, ...] = ()
+
+    def as_sentence(self, model: str) -> str:
+        """The note a report prints, which is a different sentence per fact."""
+        if self.answered:
+            return (
+                f"{model} answered {self.answered} of {self.of} cases and then "
+                f"stopped, so nothing was measured on it — {self.cause}"
+            )
+        return f"{model} did not answer, so nothing was measured on it — {self.cause}"
+
+
 @dataclass
 class Verdict:
     outcome: str  # PASS | FAIL | UNDECIDED
@@ -259,6 +313,10 @@ class Verdict:
     bar: float
     results: list[CaseOutcome] = field(default_factory=list)
     note: str = ""
+    #: Why there is no score, when there is none. `None` on every verdict
+    #: `verdict()` computes — it is set only by a run that stopped, and it is
+    #: what tells a reader "unmeasured" apart from "measured at nought".
+    silence: "Silence | None" = None
 
     @property
     def failures(self) -> list[CaseOutcome]:
@@ -273,14 +331,20 @@ class Verdict:
         judged rule that nothing graded was reported into a function nobody
         called — which from a reader's side is indistinguishable from a rule that
         passed.
+
+        A stopped suite keeps NO results and still reports here, off
+        `Silence.unenforced`. Those sentences are about cases that really ran, and
+        a run that threw its score away has no business throwing away the report
+        of a rule that was never applied — the score is a claim this module
+        refuses to make, and the hole is a fact it is obliged to state (T7).
         """
         out: list[str] = []
         seen: set[str] = set()
-        for result in self.results:
-            for sentence in result.unenforced:
-                if sentence not in seen:
-                    seen.add(sentence)
-                    out.append(sentence)
+        carried = list(self.silence.unenforced) if self.silence is not None else []
+        for sentence in [s for r in self.results for s in r.unenforced] + carried:
+            if sentence not in seen:
+                seen.add(sentence)
+                out.append(sentence)
         return out
 
 

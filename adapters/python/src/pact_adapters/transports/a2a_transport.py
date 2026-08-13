@@ -56,6 +56,51 @@ class A2ATransport:
     #: not a row in `models/catalog.yaml`.
     runtime = "a2a"
 
+    #: Whether ANYTHING can put a price on what one exchange here carried.
+    #: Nothing can, and nothing ever will: this is bound to an AGENT, and an
+    #: agent is not a row in `models/catalog.yaml`. The seven model-bound
+    #: transports answer the same question from `_metering.can_price`, which asks
+    #: the catalogue; there is nothing here to ask it about.
+    #:
+    #: **Declared, because for a round it was not, and the absence was not
+    #: neutral.** `harness.run` reads two facts off a transport in two steps —
+    #: does `usage()` exist (can tokens be counted?) and `prices_money` (can
+    #: anything put a price on them?) — and the second used to default to the
+    #: first: `getattr(transport, "prices_money", reports_usage)`. `usage()`
+    #: exists here, so this transport was taken to price its calls. A document
+    #: whose `limits:` wrote `cost-per-request-under: 0.05 USD` over a remote
+    #: agent therefore got an empty `RunResult.unmetered` — the author told the
+    #: cap was enforced — against a money meter that read 0.00 for the life of
+    #: the workspace, because `usage()` below answers `None` on every exchange
+    #: where the agent volunteers nothing. That is the outcome
+    #: `transports/_metering.py` opens by forbidding in the imperative: *"a spend
+    #: cap that can never be reached, under an author who believes they capped
+    #: their spend."*
+    #:
+    #: The default is now `False` and this line is therefore no longer what makes
+    #: the report correct — it is what makes it correct FOR A REASON a reader can
+    #: check, next to the fact that produces it. A transport that says nothing
+    #: gets no promise made on its behalf; this one says the thing that is true.
+    #:
+    #: **Only the money half moves, and that is the point of two questions.**
+    #: `tokens-at-most` is help-texted as *"the only ceiling that still bites
+    #: when there is no price list"*, and a remote agent MAY volunteer
+    #: `result.usage.totalTokens` — `_what_it_cost` reads exactly that — so the
+    #: token ceiling is still answered by whether `usage()` exists. Collapsing
+    #: the two into one boolean is a regression `Limits.unmeterable` records as
+    #: its own past defect.
+    #:
+    #: **And this is a promise about the REPORT, not a gag on the meter.** If the
+    #: agent says what an exchange cost, `harness._meter_usage` charges it and
+    #: `Limits.reached` fires on it like any other figure. So this is the one
+    #: transport where `cost-per-request-under` can be on `RunResult.unmetered`
+    #: *and* be the thing that stopped the run: the ceiling bound this exchange
+    #: because somebody else chose to say what it cost, and no run here can
+    #: promise it will bind the next. That pair is why that field says *"cannot
+    #: promise to measure"* and not *"did not enforce"*, and it is pinned by
+    #: `tests/test_a_remote_agents_bill_is_not_a_ceiling_we_hold.py`.
+    prices_money = False
+
     def __init__(
         self,
         url: str,
@@ -81,6 +126,21 @@ class A2ATransport:
         remote agent may well use tools, and **we do not see them**. What comes
         back is an answer. Reporting `native` because tools were probably
         involved would be claiming to have observed something nobody observed.
+
+        `connected_tools: unsupported` is the same argument one turn further on,
+        and it is the entry a reader is most likely to want to argue with. Every
+        other harness-driven target says `emulated` here, because PACT's own
+        client (`pact_adapters/mcp/`) reaches a `connect:` server through the
+        `tool_impls` seam `harness.run` already has. That seam is exactly what a
+        remote agent takes away: this transport comes back with an ANSWER, not
+        tool calls, so no implementation of ours is ever consulted — which is
+        the same fact `unenforced` reports about the author's other mechanisms.
+
+        The remote agent may well hold connections of its own to systems this
+        document has never named. None of them is a `connect:` line of THIS
+        author's, and a `degraded` would tell somebody their reviewed
+        `payments-server` is being reached when what is being reached is
+        somebody else's choice of server.
         """
         return {
             "model_call": "degraded",
@@ -89,6 +149,7 @@ class A2ATransport:
             "parallel_tool_calls": "unsupported",
             "streaming": "unsupported",
             "durable_resume": "unsupported",
+            "connected_tools": "unsupported",
         }
 
     def unenforced(self) -> tuple[str, ...]:

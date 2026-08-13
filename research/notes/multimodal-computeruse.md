@@ -1,15 +1,21 @@
 # PACT Research Stream — Multimodal & Computer Use (D16)
 
 **Author:** research subagent, stream `multimodal-computeruse`
-**Date:** 2026-07-26
-**Binding inputs read:** `docs/00-THESIS.md`, `docs/01-DECISIONS.md` (D2, D3, D12, D13, D14, D15, D16, D17, D18, D19, D22, D23, D24)
-**Prior in-repo work checked for overlap:** `gaia-ai-runtime/research/SYNTHESIS.md` — grep for
-`modal|vision|audio|computer.use|screenshot` returns **zero substantive hits** (only the word
-"vision" in "vision doc"). This stream is new ground; nothing here restates F1–F6.
+**Date:** 2026-08-07 (supersedes the 2026-07-26 revision of this file)
+**Binding inputs read:** `docs/00-THESIS.md`, `docs/01-DECISIONS.md`
+(D2, D3, D5, D8, D11, D12, D13, D14, D15, D16, D17, D18, D19, D22, D23, D24, D26, D27)
 
-**Evidence convention.** Every factual claim below carries `path:line`. Claims marked
-**[INFERRED]** are my synthesis, not something I read. Claims marked **[NEGATIVE]** are
-absence-of-feature findings verified by grep returning zero.
+**Relationship to the previous revision.** The 2026-07-26 pass of this stream produced a
+1048-line document. This revision **re-verified its load-bearing claims against source**,
+**corrects four of them**, and adds ~20 findings from source the prior pass did not read
+(Vercel **Eve**'s attachment staging/hydration, **Goose**'s image and permission model,
+**AG-UI**'s capability schema, **SWE-agent**'s YAML browser-tool bundle, **terminal-bench**'s
+task format, **promptfoo**'s trajectory assertion family, and quantitative catalogue analysis).
+Corrections are marked **[CORRECTION]**; new material is marked **[NEW]**.
+
+**Evidence convention.** Every factual claim carries `path:line` or an exact quote.
+**[INFERRED]** = my synthesis, not something I read. **[NEGATIVE]** = absence verified by a
+grep that returned zero. Line numbers were re-read on 2026-08-07 unless stated.
 
 Repo roots abbreviated:
 - `FW/` = `/home/bud/ditto/agent-inter-op/research/repos/frameworks/`
@@ -18,625 +24,770 @@ Repo roots abbreviated:
 - `PR/` = `/home/bud/ditto/agent-inter-op/research/repos/protocols/`
 - `RT/` = `/home/bud/ditto/agent-inter-op/research/repos/runtime/`
 - `RO/` = `/home/bud/ditto/agent-inter-op/research/repos/routing/`
+- `FD/` = `/home/bud/ditto/agent-inter-op/research/repos/filedef/`
 
 ---
 
-## 0. Executive summary — the five things that change the design
+## 0. Executive summary — the seven things that change the design
 
-1. **The industry has already converged on one content shape, and it is not "one part type per
-   modality".** It is a single **media-typed part with a source union**: Vercel AI SDK v4
-   (`FilePart{mediaType, data: data|url|reference|text}`), A2A (`Part{oneof text|raw|url|data} +
-   filename + media_type`), and LangChain's `FileContentBlock` all land on it. Pydantic AI and
-   MCP still use per-modality classes. PACT should adopt the media-typed-part shape as canonical
-   and *derive* per-modality convenience in the loader — because the per-modality unions are the
-   ones that keep needing new members (LangChain literally has a comment listing "3D models,
-   tabular data" as future modalities at `FW/langchain/libs/core/langchain_core/messages/content.py:785-787`).
+1. **[CORRECTION] The industry has *not* converged on a single media-typed part. It has
+   converged on the *source union*.** The previous revision claimed convergence on
+   `FilePart{mediaType, source}`. That is wrong as a general claim: **AG-UI moved in the
+   opposite direction and did so deliberately**, deprecating its generic
+   `BinaryInputContent{mime_type, id|url|data}` in favour of per-modality classes
+   `ImageInputContent | AudioInputContent | VideoInputContent | DocumentInputContent`, all
+   sharing one `InputContentSource` union
+   (`PR/ag-ui/sdks/python/ag_ui/core/types.py:106-160`; the deprecation warning naming the
+   replacements is at `types.py:152-159`). What **is** universal across all eight systems
+   surveyed is the *source* shape: `{inline-bytes | url | provider-file-id | inline-text}`
+   plus a MIME type. **PACT's discriminator should be the modality class** (because every
+   capability-negotiation surface in the corpus is a per-modality boolean — §2.1), **with
+   `mediaType` required and the modality class derived from it by a normative table**, so
+   adding a modality is a table entry, not a schema change.
 
-2. **Modality support diverges more by (framework × provider-API) than by framework.** Pydantic AI
-   supports audio input on OpenAI **Chat Completions** (`FW/pydantic-ai/pydantic_ai_slim/pydantic_ai/models/openai.py:1668-1674`)
-   and raises `NotImplementedError` for the same content on OpenAI **Responses**
-   (`.../models/openai.py:3469-3470`). A per-framework capability lattice is therefore too coarse;
-   the lattice key must be `(adapter, provider, api-surface, model)`.
+2. **[NEW] Vercel Eve — the system PACT is modelled on — already ships the media
+   degradation ladder PACT needs, and PACT should adopt it verbatim.** Inbound attachment
+   bytes are written into the sandbox at `/workspace/attachments` and the message part is
+   rewritten to a compact ref `eve-sandbox:?path=…&size=…&type=…`
+   (`FW/vercel-eve/packages/eve/src/internal/attachments/sandbox-refs.ts:1-62`;
+   `harness/attachment-staging.ts:26-30`). At model-call time, bytes are inlined **only**
+   for `image/*` ≤ 3 MiB and `application/pdf` ≤ 20 MiB
+   (`attachment-staging.ts:45,51,266-274`); everything else becomes a **text part naming
+   the file path** so the agent reads it with its ordinary filesystem tools:
 
-3. **Audio is not a message type in most of the target frameworks — it is a separate subsystem.**
-   `audio` appears **0 times** in `FW/openai-agents-python/src/agents/items.py` and `agent.py`;
-   it lives in `voice/` and `realtime/`. The Claude Agent SDK's `ContentBlock` union has no image
-   or audio member at all (`FW/claude-agent-sdk-python/src/claude_agent_sdk/types.py:994-1002`), and
-   its MCP tool-result converter **silently drops audio with a log warning**
-   (`FW/claude-agent-sdk-python/src/claude_agent_sdk/__init__.py:514-518`). PACT must model voice as
-   a distinct **session shape** (realtime duplex) with a **cascaded fallback** (STT → text agent →
-   TTS), not as "just another content part".
+   > "only the shapes every major provider supports natively qualify for byte inlining.
+   > Everything else — raw documents, archives, source code, oversized images/PDFs — reaches
+   > the model as a text reference so the agent's filesystem tools do the reading."
+   > — `attachment-staging.ts:259-265`
 
-4. **Computer use has four incompatible action vocabularies and no model-catalogue truth.**
-   Anthropic (versioned: `computer_20241022` / `_20250124` / `_20251124`), OpenAI Responses
-   (`Click/DoubleClick/Drag/Keypress/Move/Screenshot/Scroll/Type/Wait`), Google Gemini
-   (`click_at/hover_at/type_text_at/scroll_at/drag_and_drop/wait_5_seconds/open_web_browser/navigate`),
-   and shell-command bundles (SWE-agent). `inspect_ai` is the only project in the corpus that
-   normalises across all three native vocabularies (its own 22-action `Action` literal at
-   `EV/inspect_ai/src/inspect_ai/tool/_tools/_computer/_computer.py:19-40`, parameter set frozen at
-   `:46-58`) — and its Gemini mapping is **explicitly lossy**:
-   "actions without Gemini equivalents (screenshot, triple_click, cursor_position, etc.) map to
-   wait_5_seconds as a no-op" (`EV/inspect_ai/src/inspect_ai/model/_providers/_google_computer_use.py:152-156`).
-   Meanwhile LiteLLM's catalogue marks 166 models `supports_computer_use: true` — **all Anthropic
-   plus two Gemini — and omits the flag entirely on OpenAI's own `computer-use-preview`.**
+   This converts an unsatisfiable modality requirement into a satisfiable filesystem
+   requirement. It is the single most important mechanism for D17 (air-gapped, weak
+   local models) and for the `fail-then-recommend` stance (D11).
 
-5. **Config-only evaluation of a voice turn is impossible today with DeepEval, and it is not close.**
-   `grep -rn "audio" deepeval/` returns **zero hits** across the whole Python package. DeepEval's
-   multimodal surface is 5 image metrics (`EV/deepeval/deepeval/metrics/multimodal_metrics/__init__.py:1-5`)
-   over an image/PDF-only `MLLMImage` that is embedded in strings as `[DEEPEVAL:IMAGE:<id>]`
-   placeholders (`EV/deepeval/deepeval/test_case/llm_test_case.py:100-105`), and
-   `Turn.content: str` (`EV/deepeval/deepeval/test_case/conversational_test_case.py:59-61`).
-   D16 + D19 + G4 cannot all be satisfied by "DeepEval parity". PACT needs a **native eval
-   provider** for audio and computer-use, with DeepEval as one provider among several.
+3. **[NEW] Goose does the exact *inverse* transformation, silently, and Goose is Bud's
+   execution home.** `detect_image_path` scans **tool-output text** for `.png/.jpg/.jpeg`
+   paths and `load_image_file` promotes them to `ImageContent`
+   (`FD/goose/crates/goose-provider-types/src/images.rs:36-100, 202-241`). So the same PACT
+   folder yields *text* on Eve and *an image* on Goose for the identical tool output.
+   **This is a portability defect that exists today between two of PACT's own targets.**
+   PACT must make media promotion/demotion an explicit, declared, lowering-time rule with a
+   loss report — never an adapter heuristic.
+
+4. **[NEW] Capability derivation in PACT's highest-priority adapter is substring matching on
+   the model name.** Pydantic AI: `is_image_model = 'image' in model_name`
+   (`FW/pydantic-ai/pydantic_ai_slim/pydantic_ai/profiles/google.py:61`);
+   `supports_web_search = '-search-preview' in model_name` and
+   `supports_image_output = model_name.startswith('gpt-5') or 'o3' in model_name or '4.1' in
+   model_name or '4o' in model_name` (`profiles/openai.py:314-317`). `inspect_ai` gates
+   OpenAI computer use on a version regex `(major, minor) >= (5, 4)` plus an exclusion list
+   and an `is_latest` escape (`EV/inspect_ai/src/inspect_ai/model/_providers/_openai_computer_use.py:88-101`).
+   **Nobody derives modality capability from a catalogue.** PACT must own the catalogue
+   *and* expect adapter-internal guesses to disagree with it; the lockfile must record which
+   source decided.
+
+5. **[NEW, quantified] The largest model catalogue in the ecosystem is structurally bimodal,
+   and a naive modality predicate silently excludes most of it.** Measured over
+   `RO/litellm/model_prices_and_context_window.json` (2,984 entries) on 2026-08-07:
+   `supported_modalities` present on **360** entries (12.1%); `supports_vision` present on
+   **980**; both on **272**; **861 entries (28.9%) carry no capability key at all**. Of 297
+   `claude`-named entries, **4** carry `supported_modalities`. A predicate written as
+   `modality.input contains image` against `supported_modalities` therefore **excludes 293 of
+   297 Claude models**. Where both keys exist they agree (2 disagreements, both TTS models).
+   ⇒ The catalogue schema needs a **normative merge order across synonymous keys** and a
+   **tri-state** (`true | false | unknown`), with `unknown` never satisfying a predicate in
+   `strict` mode (AC-3.3).
+
+6. **Computer use has five incompatible action vocabularies, three coordinate spaces, and no
+   catalogue truth.** Anthropic (dated tool versions), OpenAI Responses, Google Gemini
+   (**normalised** coordinates), inspect_ai's 22-action normalisation, and SWE-agent's
+   17-action browser bundle. Verified: `supports_computer_use` is **absent** from LiteLLM's
+   entry for OpenAI's own `computer-use-preview` (§2.3), and **166** entries carry it — all
+   Anthropic-family except two `gemini-2.5-computer-use-preview-10-2025` rows.
+   `computer_use` does not exist as a capability at all in **AG-UI**, **ACP**, **A2A**, or
+   **models.dev**.
+
+7. **Config-only evaluation: images are feasible today, computer use needs one new assertion
+   family, voice is not close.** DeepEval has **zero** audio code and `Turn.content: str`
+   (§4.1). promptfoo already ships a **declarative, trace-backed trajectory assertion
+   family** — `trajectory:goal-success`, `trajectory:tool-used`, `trajectory:tool-sequence`,
+   `trajectory:tool-args-match`, `trajectory:step-count`
+   (`EV/promptfoo/src/assertions/index.ts:143-147`, `src/types/index.ts:651-655`) — so PACT
+   should adopt rather than invent that. **[NEGATIVE] No project in the corpus has a
+   declarative environment-state assertion.** terminal-bench grades by running **pytest
+   inside the container** (`parser_name: pytest`); inspect_ai grades in Python scorers;
+   promptfoo's `sql` assertion is a *syntax* check on model output, not a database query.
+   `final_state:` is genuinely new work.
 
 ---
 
 ## 1. Deliverable 1 — A content-type model for agent I/O
 
-### 1.1 Framework-by-framework survey (source-read)
+### 1.1 Framework-by-framework survey (source-read, re-verified 2026-08-07)
 
-#### 1.1.1 Pydantic AI (highest-priority adapter, D5)
+#### 1.1.1 Pydantic AI (highest-priority adapter, D5/D7)
 
-File: `FW/pydantic-ai/pydantic_ai_slim/pydantic_ai/messages.py` (3583 lines).
+`FW/pydantic-ai/pydantic_ai_slim/pydantic_ai/messages.py`:
 
 | Construct | Line | Notes |
 |---|---|---|
-| `AudioMediaType` | 82 | Closed literal: wav, mpeg, ogg, flac, aiff, aac |
-| `ImageMediaType` | 83 | Closed literal: jpeg, png, gif, webp |
-| `DocumentMediaType` | 84-94 | pdf, txt, csv, docx, xlsx, html, md, doc, xls |
+| `AudioMediaType` | 82 | closed literal: `audio/wav, mpeg, ogg, flac, aiff, aac` |
+| `ImageMediaType` | 83 | `image/jpeg, png, gif, webp` |
+| `DocumentMediaType` | 84-94 | pdf, txt, csv, docx, xlsx, html, markdown, msword, ms-excel |
 | `VideoMediaType` | 95-104 | mkv, mov, mp4, webm, flv, mpeg, wmv, 3gpp |
-| `FileUrl` (ABC) | 212 | `url`, `force_download`, `vendor_metadata`, `_media_type`, `_identifier` |
-| `VideoUrl` / `AudioUrl` / `ImageUrl` / `DocumentUrl` | 301 / 360 / 407 / 453 | four separate classes |
-| `TextContent` | 503 | text + `metadata` **not sent to the LLM** |
-| `BinaryContent` | 535 | `data: bytes` + `media_type` (open `str` escape) + `vendor_metadata` |
-| `BinaryImage` | 697 | narrowed subclass, validated `image/*` |
-| `CachePoint` | 720 | in-band cache boundary marker with `ttl: '5m'|'1h'` |
-| `UploadedFile` | 769 | `file_id` + `provider_name` (closed literal of 8 providers, 750-759) |
-| `MultiModalContent` union | 896-904 | discriminated on `kind` |
+| `AudioFormat`/`ImageFormat`/`DocumentFormat`/`VideoFormat` | 106-109 | parallel **extension** literals — a second vocabulary for the same thing |
+| `FileUrl` (ABC) | ~212 | `url`, `force_download`, `vendor_metadata`, `_media_type`, `_identifier` |
+| `VideoUrl`/`AudioUrl`/`ImageUrl`/`DocumentUrl` | 301/360/407/453 | four classes |
+| `BinaryContent` | 535 | `data: bytes` + `media_type: str` (open escape) |
+| `BinaryImage` | 697 | narrowed subclass |
+| `CachePoint` | 720 | in-band cache boundary, `ttl: '5m'\|'1h'` |
+| `UploadedFile` | 769 | `file_id` + `provider_name` (closed literal of 8) |
+| `MultiModalContent` | 896-904 | `ImageUrl \| AudioUrl \| DocumentUrl \| VideoUrl \| BinaryContent \| UploadedFile`, discriminated on `kind` |
 | `UserContent` | 916 | `str \| TextContent \| MultiModalContent \| CachePoint` |
-| `ToolReturn` | 930 | `return_value` + `content: Sequence[UserContent]` + `metadata` |
-| `FilePart` (model **output**) | 1898 | wraps `BinaryContent`; `provider_name`, `provider_details` |
+| `ToolReturn` | ~930 | `return_value` + `content: Sequence[UserContent]` + `metadata` |
 
-Three design ideas here are worth stealing outright:
+Worth stealing:
+- **Content identifier** `sha1(data)[:6]` so the model can name a file in a later call
+  (`messages.py:204-208`, `625-640`); auto-passed only for *tool returns*.
+- **`force_download: False | True | 'allow-local'`** — SSRF policy as a typed field on the
+  content part (`messages.py:145-152`, `220-227`).
+- **`vendor_metadata`** documented per provider (`messages.py:229-238`).
 
-- **Stable content identifier.** `BinaryContent.identifier` is `sha1(data)[:6]`
-  (`messages.py:204-208`, `625-640`) so a model can refer to a specific file by ID in a later tool
-  call. The docstring is explicit that this identifier is only auto-passed when the content is a
-  *tool return*, and that a user-message file needs a separate text part naming it (`messages.py:630-636`).
-- **`force_download` with SSRF policy as a typed field** — `False | True | 'allow-local'`
-  (`messages.py:145-152`, `220-227`): "blocks private IPs and cloud metadata". A URL-valued content
-  part is an SSRF vector and the *policy* is part of the content type.
-- **`vendor_metadata` is documented per-provider** (`messages.py:229-238`) — e.g. Google video
-  metadata / `media_resolution`, OpenAI/xAI/Groq/Mistral `detail`. This is the escape hatch that
-  keeps the closed union usable.
+**[NEW] Two divergences the previous revision missed, both load-bearing:**
 
-**[NEGATIVE] Model profiles carry no input-modality flags.** `ModelProfile`
-(`FW/pydantic-ai/pydantic_ai_slim/pydantic_ai/profiles/__init__.py:40-121`) has
-`supports_tools`, `supports_tool_return_schema`, `supports_json_schema_output`,
-`supports_json_object_output`, `supports_image_output`, `supports_inline_system_prompts`,
-`supports_thinking`, `thinking_always_enabled`, `supported_native_tools` — and **no**
-`supports_vision`, `supports_audio_input`, `supports_video_input`, `supports_computer_use`.
-Consequence: PACT cannot source modality capability from Pydantic AI; it must own a catalogue.
+- **The type system's media support is wider than any binding's.** `AudioMediaType` admits
+  six formats, but the OpenAI Chat Completions mapping executes
+  `assert item.format in ('wav', 'mp3')` (`models/openai.py:1668-1674`). A `.flac` audio part
+  is *type-valid* and *runtime-fatal*. **Type-level support ≠ binding-level support**, and
+  PACT's lattice key must therefore be `(adapter, provider, api-surface, model)` — not
+  `(adapter)`.
+- **Video is `NotImplementedError` on *both* OpenAI surfaces**, not just Responses:
+  `models/openai.py:1686` and `:1736` (Chat Completions), `:3472` and `:3501` (Responses).
+  Audio is `NotImplementedError` on Responses only (`:3470`), and works on Chat Completions
+  (`:1668-1674`). The previous revision recorded only the Responses audio case.
 
-**[NEGATIVE] No computer use.** `native_tools/__init__.py:15-33` lists `WebSearchTool`,
-`XSearchTool`, `CodeExecutionTool`, `WebFetchTool`, `ImageGenerationTool`, `MemoryTool`,
-`MCPServerTool`, `FileSearchTool`, `AdvisorTool` — no computer tool. Confirmed by the handler
-comment `# Pydantic AI doesn't yet support the ComputerUse built-in tool`
-(`.../models/openai.py:2287-2288`), where `ResponseComputerToolCall` is `pass`-ed. Adjacent
-`LocalShellCall` is also unsupported (`.../models/openai.py:2292-2294`).
+**[NEGATIVE] `ModelProfile` carries no *input* modality flags.**
+`profiles/__init__.py:40-138` has `supports_tools` (48), `supports_tool_return_schema` (51),
+`supports_json_schema_output` (58), `supports_json_object_output` (65),
+**`supports_image_output` (72)**, `supports_inline_system_prompts` (75),
+`supports_thinking` (95), `supported_native_tools` (120) — and **no** `supports_vision`,
+`supports_audio_input`, `supports_video_input`, `supports_computer_use`.
 
-**Streaming.** Delta parts are `TextPartDelta` (2982), `ThinkingPartDelta` (3032),
-`ToolCallPartDelta` (3143). **There is no `FilePartDelta`** — binary content is atomic in the
-stream. `ModelResponseState` (`messages.py:124-140`) distinguishes
-`complete|incomplete|suspended|interrupted`, where `suspended` covers Anthropic `pause_turn` /
-OpenAI background mode.
+**[NEW] The one per-model media allowlist in the whole corpus is here.**
+`GoogleModelProfile.google_supported_mime_types_in_tool_returns: tuple[str, ...]`
+(`profiles/google.py:47-50`), populated from
+`_GOOGLE_NATIVE_TOOL_RETURN_MIME_TYPES = ('image/png','image/jpeg','image/webp',
+'application/pdf','text/plain')` (`google.py:7-14`) and gated on Gemini 3+ (`google.py:78`).
+**Tool-result media capability is narrower than input media capability and is model-specific.**
+PACT's capability model must carry media types *per direction and per position*
+(user-input / assistant-output / tool-result), not one `vision: bool`.
 
-**Telemetry.** `_otel_messages.py` models media for traces as `MediaUrlPart` (48-50, four url
-kinds), `UriPart` (53-66, with `modality: image|audio|video` + `mime_type`), `FilePart` (69-75,
-`file_id` + `mime_type`), `BinaryDataPart` (78-81), `BlobPart` (84-97, `modality` + `mime_type` +
-inline base64). `InstrumentationSettings.include_content` gates whether payload is recorded at all
-(`messages.py:198-199`).
+**[NEGATIVE] No computer use.** `native_tools/__init__.py:15-33` lists WebSearch, XSearch,
+CodeExecution, WebFetch, ImageGeneration, Memory, MCPServer, FileSearch, Advisor — no
+computer tool. Confirmed by `# Pydantic AI doesn't yet support the ComputerUse built-in tool`
+(`models/openai.py:2287-2288`).
 
-#### 1.1.2 LangChain / LangGraph (LangGraph reuses LangChain messages)
+**Streaming.** Delta parts are `TextPartDelta`, `ThinkingPartDelta`, `ToolCallPartDelta`
+only. **There is no `FilePartDelta`** — binary content is atomic in the stream.
 
-File: `FW/langchain/libs/core/langchain_core/messages/content.py` (1488 lines).
+#### 1.1.2 LangChain / LangGraph
 
-| Block | Line | Payload fields |
-|---|---|---|
-| `TextContentBlock` | 207 | `text`, `annotations` |
-| `ToolCall` / `ToolCallChunk` / `InvalidToolCall` | 247 / 291 / 336 | |
-| `ServerToolCall` / `ServerToolCallChunk` / `ServerToolResult` | 372 / 397 / 425 | provider-executed tools |
-| `ReasoningContentBlock` | 456 | |
-| `ImageContentBlock` | 498 | `file_id` \| `url` \| `base64`; `mime_type`; `index` (streaming) |
-| `VideoContentBlock` | 549 | same shape |
-| `AudioContentBlock` | 600 | same shape |
-| `PlainTextContentBlock` | 651 | + `text`, `title`, `context` (Anthropic citations) |
-| `FileContentBlock` | 721 | catch-all for PDFs/docs |
-| `NonStandardContentBlock` | 790 | `value: dict` passthrough |
+`FW/langchain/libs/core/langchain_core/messages/content.py` (1488 lines):
+`TextContentBlock` (207), `ToolCall`/`ToolCallChunk`/`InvalidToolCall` (247/291/336),
+`ServerToolCall`/`Chunk`/`ServerToolResult` (372/397/425), `ReasoningContentBlock` (456),
+**`ImageContentBlock` (498)**, **`VideoContentBlock` (549)**, **`AudioContentBlock` (600)**,
+`PlainTextContentBlock` (651), `FileContentBlock` (721), `NonStandardContentBlock` (790).
+Unions 832-853; `KNOWN_BLOCK_TYPES` 856-877 with the rule "If a block has a type not in this
+set, it is considered to be provider-specific."
 
-Unions at 832-853; `KNOWN_BLOCK_TYPES` at 856-877 with the explicit rule "If a block has a type not
-in this set, it is considered to be provider-specific."
+Two structural observations that survive:
+- Every data block has the **same three-way source union** `file_id | url | base64` plus
+  `mime_type`; the classes differ only in their `type` literal. LangChain's own comment
+  listing "3D models, Tabular data" as future modalities is at `content.py:785-787` —
+  evidence the per-modality enumeration does not close.
+- `index: int | str` on every data block, "used during streaming": LangChain streams media
+  by **index correlation**, not delta chunks. This is a third streaming regime (§1.5).
 
-Two structural observations:
-- Every data block has **exactly the same three-way source union** (`file_id | url | base64`) plus
-  `mime_type`. The four classes differ only in their `type` literal. This is redundancy that PACT
-  should collapse. LangChain's own comment at 785-787 ("Future modalities to consider: 3D models,
-  Tabular data") is evidence the per-modality enumeration does not close.
-- `index: int | str` on every data block "used during streaming" — LangChain streams media blocks
-  by *index correlation*, not by delta chunks.
-
-#### 1.1.3 AutoGen — **the binding constraint**
+#### 1.1.3 AutoGen — the binding constraint
 
 `FW2/../autogen/python/packages/autogen-core/src/autogen_core/models/_types.py`:
-
 ```
-UserMessage.content: Union[str, List[Union[str, Image]]]        # line 32
-AssistantMessage.content: Union[str, List[FunctionCall]]        # line 43
-FunctionExecutionResult.content: str                            # line 58
+UserMessage.content: Union[str, List[Union[str, Image]]]      # line 32
+AssistantMessage.content: Union[str, List[FunctionCall]]      # line 43
+FunctionExecutionResult.content: str                          # line 58
 ```
+**[NEGATIVE]** Images only. No audio, no video, no documents, no file references, and
+**tool results are plain `str`** — a tool cannot return an image to the model through the
+typed API. `MultiModalMessage.content: List[str | Image]` in agentchat, with
+`to_model_text(image_placeholder="[image]")` as a documented lossy downgrade.
 
-**[NEGATIVE]** AutoGen's model layer supports **images only**. No audio, no video, no documents, no
-file references, and **tool results are plain `str`** — a tool cannot return an image to the model
-through the typed API. `autogen-agentchat` `MultiModalMessage.content: List[str | Image]`
-(`.../autogen-agentchat/src/autogen_agentchat/messages.py:373-379`), and its
-`to_model_text(image_placeholder="[image]")` (381-395) is a documented lossy downgrade path.
-
-AutoGen *does* have an explicit capability declaration: `ModelInfo`
-(`autogen-core/src/autogen_core/models/_model_client.py:164-181`) requires
+`ModelInfo` (`autogen-core/src/autogen_core/models/_model_client.py:164-181`) requires
 `vision`, `function_calling`, `json_output`, `family`, `structured_output`, optional
-`multiple_system_messages`. It is **author-declared**, not catalogue-derived — for any
-OpenAI-compatible endpoint the user supplies it by hand.
+`multiple_system_messages`. **Author-declared, not catalogue-derived** — the deprecated
+`ModelCapabilities` at `:157-161` had the same three flags. AutoGen is the only target
+framework that *requires* a modality declaration, and it requires the human to supply it.
 
 #### 1.1.4 OpenAI Agents SDK
 
-`FW/openai-agents-python/src/agents/items.py` imports `ResponseInputImageContentParam` (line 35)
-and `ResponseInputFileContentParam` (line 34) — mapped at 957 and 968.
-**[NEGATIVE] `grep -c audio items.py` → `0`; `grep -c audio agent.py` → `0`.** Audio is entirely
-outside the core agent item model. It exists in two *separate subsystems*:
-
-- **`voice/`** — a cascaded pipeline. `AudioInput` is a numpy `int16|float32` buffer with
-  `frame_rate` (default `DEFAULT_SAMPLE_RATE = 24000`), `sample_width`, `channels`
-  (`voice/input.py:13, 42-57`); `StreamedAudioInput` at `voice/input.py:76`.
-  `TTSModelSettings` (`voice/model.py:22-61`) carries `voice` (9-value literal at 17),
-  `buffer_size=120`, `dtype`, `transform_data`, `instructions`, `text_splitter`, `speed`.
-  `STTModelSettings` (`voice/model.py:104-118`) carries `prompt`, `language`, `temperature`,
-  `turn_detection: dict[str, Any]` — untyped.
-  Stream events: `VoiceStreamEventAudio`, `VoiceStreamEventLifecycle`
-  (`turn_started|turn_ended|session_ended`), `VoiceStreamEventError` (`voice/events.py:9-43`).
+`FW/openai-agents-python/src/agents/items.py` imports `ResponseInputImageContentParam` (35)
+and `ResponseInputFileContentParam` (34).
+**[NEGATIVE] `grep -c audio items.py agent.py` → `0` and `0`** (re-verified). Audio lives in
+two *separate subsystems*:
+- **`voice/`** — cascaded. `AudioInput` is a numpy `int16|float32` buffer with `frame_rate`
+  (`DEFAULT_SAMPLE_RATE = 24000`), `sample_width`, `channels` (`voice/input.py:13,42-57`);
+  `StreamedAudioInput` (`voice/input.py:76`). `TTSModelSettings` (`voice/model.py:22-61`):
+  `voice` (9-value literal at 17), `buffer_size=120`, `dtype`, `transform_data`,
+  `instructions`, `text_splitter`, `speed`. `STTModelSettings` (`voice/model.py:104-118`):
+  `prompt`, `language`, `temperature`, `turn_detection: dict[str, Any]` (untyped).
 - **`realtime/`** — duplex. `RealtimeTurnDetectionConfig` (`realtime/config.py:96-124`):
   `type: semantic_vad|server_vad`, `create_response`, `eagerness`, `interrupt_response`,
-  `prefix_padding_ms`, `silence_duration_ms`, `threshold`, `idle_timeout_ms`, `model_version`.
-  `RealtimeAudioInputConfig` / `RealtimeAudioOutputConfig` (127-142) carry format, noise reduction
-  (`near_field|far_field`, 89-94), transcription config, voice, speed. Formats normalised to
-  `audio/pcm@24000 | audio/pcmu | audio/pcma` (`realtime/audio_formats.py:16-52`).
+  `prefix_padding_ms`, `silence_duration_ms`, `threshold`, `idle_timeout_ms`,
+  `model_version`. Audio formats normalised to `audio/pcm@24000 | audio/pcmu | audio/pcma`
+  (`realtime/audio_formats.py:16-52`).
 
-**Computer use is first-class here.** `computer.py:4-5` defines
-`Environment = Literal["mac","windows","ubuntu","browser"]` and
-`Button = Literal["left","right","wheel","back","forward"]`; `Computer` (line 8) and
-`AsyncComputer` (line 72) are ABCs with exactly nine operations:
-`screenshot, click, double_click, scroll, type, wait, move, keypress, drag`, plus
-`environment` and `dimensions` properties. `ComputerTool` (`tool.py:761-789`) takes a computer
-instance/factory plus `on_safety_check` — and its runtime name is pinned to
-`"computer_use_preview"` for RunState compatibility (`tool.py:783-785`).
+**Computer use is first-class.** `computer.py:4-5`:
+`Environment = Literal["mac","windows","ubuntu","browser"]`,
+`Button = Literal["left","right","wheel","back","forward"]`. `Computer` ABC (line 8) and
+`AsyncComputer` (72) expose exactly nine operations — `screenshot, click, double_click,
+scroll, type, wait, move, keypress, drag` — plus optional `environment` (17-20) and
+`dimensions` (22-25) properties. `ComputerTool` (`tool.py:761-789`) takes the computer plus
+`on_safety_check`, with its runtime name pinned to `"computer_use_preview"` (`tool.py:783-785`).
 
 #### 1.1.5 Anthropic SDK + Claude Agent SDK
 
-`FW/anthropic-sdk-python/src/anthropic/types/content_block_param.py` — **input** union:
-Text, **Image**, **Document**, SearchResult, Thinking, RedactedThinking, ToolUse, ToolResult,
-ServerToolUse, WebSearchToolResult, WebFetchToolResult, CodeExecutionToolResult,
-BashCodeExecutionToolResult, TextEditorCodeExecutionToolResult, ToolSearchToolResult,
-ContainerUpload, MidConversationSystem.
-
-`content_block.py` — **output** union: Text, Thinking, RedactedThinking, ToolUse, ServerToolUse,
-and five tool-result blocks + ContainerUpload. **[NEGATIVE] No image, audio, or video in model
-output.** **[NEGATIVE] No audio or video anywhere in the Anthropic content model, input or output.**
+Anthropic **input** union (`types/content_block_param.py`): Text, **Image**, **Document**,
+SearchResult, Thinking, RedactedThinking, ToolUse, ToolResult, ServerToolUse, five
+tool-result blocks, ContainerUpload, MidConversationSystem.
+**Output** union (`types/content_block.py`): Text, Thinking, RedactedThinking, ToolUse,
+ServerToolUse, five tool-result blocks, ContainerUpload.
+**[NEGATIVE] No image, audio, or video in model output. No audio or video anywhere.**
 
 Sources are narrow: `ImageBlockParam.source = Base64ImageSourceParam | URLImageSourceParam`
-(`image_block_param.py:14`); `DocumentBlockParam.source = Base64PDF | PlainText | ContentBlock |
-URLPDF` (`document_block_param.py:17`), plus `citations`, `context`, `title` (28-32).
+(`image_block_param.py:14`); `DocumentBlockParam.source = Base64PDF | PlainText |
+ContentBlock | URLPDF` (`document_block_param.py:17`) plus `citations`, `context`, `title`.
 
-**Computer tools are date-versioned betas** with drifting schemas:
-`types/beta/beta_tool_computer_use_20241022_param.py`, `..._20250124_param.py`,
-`..._20251124_param.py`. `BetaToolComputerUse20250124Param` requires `display_width_px`,
-`display_height_px`, `name: "computer"`, `type: "computer_20250124"`, and optionally
-`display_number` (X11), `allowed_callers`, `defer_loading`, `strict`, `input_examples`.
-**[NEGATIVE] The action vocabulary is untyped in the SDK** — `grep -rn "left_click|triple_click|
-hold_key|mouse_move" src/` returns nothing. The actions live only in prose in the tool description
-served by the API.
+Computer tools are **date-versioned betas**: `beta_tool_computer_use_20241022_param.py`,
+`..._20250124_param.py`, `..._20251124_param.py`. `BetaToolComputerUse20250124Param`
+requires `display_width_px`, `display_height_px`, `name:"computer"`, `type:"computer_20250124"`,
+optionally `display_number`, `allowed_callers`, `defer_loading`, `strict`, `input_examples`.
+**[NEGATIVE] The action vocabulary is untyped in the SDK** — the actions exist only in the
+prose tool description served by the API.
 
-**Claude Agent SDK** (`FW/claude-agent-sdk-python/src/claude_agent_sdk/types.py`):
-`ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | ToolResultBlock | ServerToolUseBlock |
-ServerToolResultBlock` (994-1002). **[NEGATIVE] No image block.** Media reaches the model only
-through `ToolResultBlock.content: str | list[dict[str, Any]]` (line 950) — untyped dicts.
-The SDK's own MCP result converter handles `text`, `image`, `resource_link`, and text-only
-`resource`, and then:
-
+**Claude Agent SDK** (`FW/claude-agent-sdk-python/src/claude_agent_sdk/types.py:994-1001`):
+```python
+ContentBlock = (
+    TextBlock | ThinkingBlock | ToolUseBlock
+    | ToolResultBlock | ServerToolUseBlock | ServerToolResultBlock
+)
+```
+**[NEGATIVE] No image block.** Media reaches the model only through
+`ToolResultBlock.content: str | list[dict[str, Any]]` — untyped dicts. The SDK's MCP result
+converter declares `ImageContent | AudioContent` in its input type
+(`__init__.py:469-470`) and then:
 ```python
 logger.warning("Binary embedded resource cannot be converted to text, skipping")   # __init__.py:512
 logger.warning("Unsupported content type %r in tool result, skipping", item_type)  # __init__.py:516
 ```
+**This is exactly the silent-loss failure mode T7/AC-7.1 forbids, in a first-party SDK of a
+target framework.** PACT's adapter for the Claude Agent SDK must intercept before this
+point and emit a lattice `degraded` entry rather than let the warning be the report.
 
-even though `AudioContent` is in the declared output type at `__init__.py:470`. **This is exactly
-the silent-loss failure mode T7/AC-7.1 forbids, in a first-party SDK.**
-
-#### 1.1.6 Vercel AI SDK — the cleanest model
+#### 1.1.6 Vercel AI SDK v4 — the cleanest *language-model* model
 
 `FW/vercel-ai/packages/provider/src/language-model/v4/language-model-v4-prompt.ts`:
-
-- One `LanguageModelV4FilePart` (line 151) with `mediaType` accepting either a full IANA type
-  **or just the top-level segment** (`image`, `audio`, `video`, `text`), and `*`-wildcards
-  normalised to the top-level segment. Helpers `isFullMediaType`, `getTopLevelMediaType`,
-  `detectMediaType` are named in the doc comment.
-- `SharedV4FileData` = `{type:'data'} | {type:'url'} | {type:'reference'} | {type:'text'}`
-  (`packages/provider/src/shared/v4/shared-v4-file-data.ts`). The `reference` variant is
-  `{[provider]: id}` — provider file IDs are first-class, and non-portable by construction.
-- Assistant messages may carry file parts (the union at role `assistant` includes
-  `LanguageModelV4FilePart`), unlike Anthropic.
-- **Tool results are richly multimodal**: `LanguageModelV4ToolResultOutput` (line 288) =
-  `text | json | execution-denied | error-text | error-json | content[]` where `content[]` items are
-  `text | file | custom`. `execution-denied{reason}` is a *first-class output value* — denial is
-  data, not an exception.
-- `LanguageModelV4ToolApprovalResponsePart{approvalId, approved, reason}` (line 259) is a
-  **message part** in role `tool` (referenced in the role-`tool` content union at line 49).
-  Approvals live in the transcript.
+- One `LanguageModelV4FilePart` (line 151) with `filename?` (157), `data: SharedV4FileData`
+  (168), and `mediaType: string` (181) accepting **either a full IANA type or just the
+  top-level segment**, with `*`-subtype wildcards normalised to the top-level segment
+  (doc comment 169-180, naming helpers `isFullMediaType`, `getTopLevelMediaType`,
+  `detectMediaType`).
+- `SharedV4FileData` (`packages/provider/src/shared/v4/shared-v4-file-data.ts:6-46`) =
+  `{type:'data', data: Uint8Array|string} | {type:'url', url: URL} |
+  {type:'reference', reference: {[provider]: id}} | {type:'text', text: string}`.
+  **[NEW, load-bearing negative] There is no `path`/file variant.** Every filesystem-native
+  system in the corpus fakes one with a custom URL scheme (Eve's `eve-sandbox:`, §1.2).
+  PACT is filesystem-native by D2, so `path:` must be a **first-class source variant** —
+  this is one of the few places PACT must exceed its best prior art rather than copy it.
+- Assistant messages may carry file parts (unlike Anthropic).
+- **Tool results are richly multimodal.** `LanguageModelV4ToolResultOutput` (288) =
+  `text | json | execution-denied | error-text | error-json | content[]` where `content[]`
+  items are `text | file | custom`. **`execution-denied{reason}` is a first-class output
+  value** — denial is data, not an exception. This is what makes a denied approval
+  replayable and eval-able.
+- `LanguageModelV4ToolApprovalResponsePart{approvalId, approved, reason}` (259) is a
+  **message part** in role `tool`. Approvals live in the transcript.
 
 Streaming (`language-model-v4-stream-part.ts`): `text-start/-delta/-end`,
 `reasoning-start/-delta/-end`, `tool-input-start/-delta/-end`, then whole-object
-`LanguageModelV4File`, `LanguageModelV4Source`, `LanguageModelV4ToolCall`,
-`LanguageModelV4ToolResult`, `LanguageModelV4ToolApprovalRequest`, plus
+`LanguageModelV4File`, `…Source`, `…ToolCall`, `…ToolResult`, `…ToolApprovalRequest`, plus
 `stream-start{warnings}`, `response-metadata`, `finish`, `raw`, `error`.
 **Files stream as whole parts; only text/reasoning/tool-input have delta triples.**
 
-**Modality is a model *role*, not a flag.** `packages/provider/src/` contains sibling interfaces:
-`language-model`, `embedding-model`, `image-model`, `speech-model`, `transcription-model`,
-`realtime-model`, `video-model`, `reranking-model`. `RealtimeModelV4`
-(`realtime-model/v4/realtime-model-v4.ts`) is a provider-neutral duplex contract with
-`doCreateClientSecret`, `getWebSocketConfig`, `parseServerEvent`, `serializeClientEvent`,
-`buildSessionConfig`.
+**Modality is a model *role*, not a flag.** `packages/provider/src/` contains sibling
+interfaces: `language-model`, `embedding-model`, `image-model`, `speech-model`,
+`transcription-model`, `realtime-model`, `video-model`, `reranking-model`.
+`RealtimeModelV4SessionConfig` is the **only provider-neutral voice session schema in the
+corpus**: `instructions`, `voice`, `outputModalities: ('text'|'audio')[]`,
+`inputAudioFormat{type, rate}`, `outputAudioFormat`, `inputAudioTranscription{model,
+language, prompt}`, `outputAudioTranscription`, `turnDetection{type:
+'server-vad'|'semantic-vad'|'disabled', threshold, …}`.
 
-`RealtimeModelV4SessionConfig` (`realtime-model-v4-session-config.ts`) is the **only
-provider-neutral voice session schema in the corpus**: `instructions`, `voice`,
-`outputModalities: ('text'|'audio')[]`, `inputAudioFormat{type, rate}`, `outputAudioFormat`,
-`inputAudioTranscription{model, language, prompt}`, `outputAudioTranscription{...}`,
-`turnDetection{type: 'server-vad'|'semantic-vad'|'disabled', threshold, ...}`.
+`SharedV4Warning = unsupported{feature,details} | compatibility{feature,details} |
+deprecated{setting,message} | other`
+(`packages/provider/src/shared/v4/shared-v4-warning.ts`) is the industry's existing runtime
+loss report, and it maps 1:1 onto PACT's lattice values `unsupported` / `degraded`.
+**Adopt the wire shape so adapter warnings forward unmodified.**
 
-Normalised server events (`realtime-model-v4-server-event.ts`): `session-created`,
-`session-updated`, `speech-started`, `speech-stopped`, `audio-committed`,
-`conversation-item-added`, `input-transcription-completed`, `response-created`, `response-done`,
-`output-item-added/-done`, `content-part-added/-done`, `audio-delta`, `audio-done`,
-`audio-transcript-delta`, `audio-transcript-done`, `text-delta`, `text-done`,
-`function-call-arguments-delta/-done`, `error`, `custom`.
+#### 1.1.7 **[NEW] Vercel Eve — the filesystem-native answer
 
-UI layer: `FileUIPart{mediaType, filename?, url, providerReference?}`
-(`packages/ai/src/ui/ui-messages.ts:180-218`) — one part type for all media in the UI too.
+Eve is PACT's closest structural analogue (D2) and its media handling is the most directly
+transferable code in the corpus.
 
-### 1.2 Divergence matrix
+**Two ref schemes, both versioned custom URLs occupying `FilePart.data`:**
 
-Legend: **N** native/typed · **P** partial (untyped or via escape hatch) · **—** absent · **X** explicit error
+| Scheme | Shape | Purpose | Evidence |
+|---|---|---|---|
+| `eve-attachment:` | `?v=1&p=<base64url JSON {params, size?}>` | carries file identity across step boundaries without inlining bytes; `params` is adapter-defined and "must not carry credentials" | `internal/attachments/refs.ts:1-42, 50-69` |
+| `eve-sandbox:` | `?path=<urlencoded>&size=<bytes>&type=<mediaType>` | names a file already staged in the sandbox; size and mediaType snapshotted so hydration can decide without re-reading | `internal/attachments/sandbox-refs.ts:1-62` |
 
-| Capability | Pydantic AI | LangChain/Graph | AutoGen | OpenAI Agents | Claude Agent SDK | Vercel AI v4 | MCP 2025-11-25 | A2A |
-|---|---|---|---|---|---|---|---|---|
-| Image **in** | N (`ImageUrl`, `BinaryImage`) | N (`ImageContentBlock`) | N (`Image`) | N (`input_image`) | P (tool-result dicts) | N (`file` + `image/*`) | N (`ImageContent`) | N (`media_type`) |
-| Image **out** (model emits) | N (`FilePart`) | N (block w/ base64) | — | N (`ImageGenerationCall`) | — | N (`file` stream part) | N | N |
-| Audio **in** | N (`AudioUrl`/`BinaryContent`), **X on OpenAI Responses** | N (`AudioContentBlock`) | — | — (only `voice/`,`realtime/`) | — (dropped w/ warning) | N (`file` + `audio/*`) | N (`AudioContent`) | N |
-| Audio **out** | P (provider-specific) | N (block) | — | — (only `voice/`,`realtime/`) | — | N | N | N |
-| Video **in** | N (`VideoUrl`, 8 formats) | N (`VideoContentBlock`) | — | — | — | N | **—** | N |
-| Document/PDF **in** | N (`DocumentUrl`, 9 types) | N (`FileContentBlock`,`PlainTextContentBlock`) | — | N (`input_file`) | P | N | P (`EmbeddedResource`) | N |
-| Provider file-ID reference | N (`UploadedFile`, 8 providers) | N (`file_id`) | — | N | — | N (`reference`) | — | — |
-| **Multimodal tool result** | N (`ToolReturn.content`) | N (`ToolMessage` blocks) | **— (`str` only)** | P | P (untyped dicts) | N (`content[]`) | N | n/a |
-| Streaming media deltas | — (atomic) | P (`index` correlation) | — | audio only in `voice`/`realtime` | — | — (atomic; realtime iface separate) | — | n/a |
-| Cache-boundary marker in content | N (`CachePoint`) | — | — | — | — | via providerOptions | — | — |
-| Computer use | **—** | — (generic `server_tool_call`) | — (ext: web surfer) | **N** (`Computer` ABC + `ComputerTool`) | P (via CLI tools) | **N** (Anthropic tool factories) | — | — |
-| Tool approval in transcript | N (`DeferredToolRequests`) | N (`interrupt()`) | — | N (`ToolApprovalItem`) | N (`can_use_tool`) | **N** (`tool-approval-response` part) | — | `TASK_STATE_INPUT_REQUIRED` |
+The attachment-ref decoder **rejects any wire version other than `1`** — "so a future format
+bump doesn't silently misparse" (`refs.ts:19-22`). That is PACT's E-2 rule
+("unknown features rejected loudly, never ignored") already implemented.
 
-**The three hard walls for harness lowering (D12):**
-1. **AutoGen tool results are `str`.** Any PACT tool returning an image must, on AutoGen, either
-   (a) emit the image as a following `UserMessage` part, or (b) degrade to a text placeholder. This
-   is a `degraded` lattice entry with a mandatory report.
-2. **Anthropic assistant output cannot contain media.** A PACT contract declaring
-   `output: {image: ...}` is `unsupported` on any Anthropic-family binding unless the image is
-   produced by a tool, not by the model.
-3. **MCP has no video content type** — `ContentBlock = TextContent | ImageContent | AudioContent |
-   ResourceLink | EmbeddedResource` in both `PR/mcp-spec/schema/2025-11-25/schema.ts:1740-1741` and
-   `PR/mcp-spec/schema/draft/schema.ts:2292-2293`. Since D14 makes MCP the no-code custom-tool path,
-   **a no-code tool cannot return video in v1.** Workaround: `ResourceLink` to a video URI.
+**Staging → hydration ladder** (`harness/attachment-staging.ts`):
+- `ATTACHMENTS_ROOT = "/workspace/attachments"` (line 30) — a canonical authored path that
+  `SandboxSession.writeFile` translates to the backend-native location.
+- Filenames are sanitised `UNSAFE_FILENAME_CHARS = /[^\w.-]+/g` and prefixed with
+  `sha256(bytes).slice(0,16)`; a missing filename becomes `file-<sha>`
+  (`:33-34, 386-393`). **This is a working solution to AC-1.2′'s portable-key problem for
+  binary payloads.**
+- `HYDRATE_IMAGE_INLINE_MAX_BYTES = 3 * 1024 * 1024` (`:45`);
+  `HYDRATE_PDF_INLINE_MAX_BYTES = 20 * 1024 * 1024` (`:51`, comment: "Matches provider-side
+  caps for native document understanding").
+- `shouldInlineSandboxRefAsBytes` (`:266-274`) inlines **only** `image/*` under 3 MiB and
+  `application/pdf` under 20 MiB. Everything else →
+  `renderSandboxRefAsTextPart` → `{type:"text", text:"Attached file <path> (<mediaType>)"}`
+  (`:285-287`), deliberately matching "the text shape produced by the compaction summarizer
+  … so the model sees one consistent surface for 'there is a file at this path'".
+
+**Declarative media policy** — `public/channels/upload-policy.ts`:
+```ts
+export type UploadPolicy = "disabled" | UploadPolicyConfig;
+export interface UploadPolicyConfig {
+  readonly maxBytes: number;
+  readonly allowedMediaTypes: readonly string[] | "*";   // "image/*" wildcards supported
+}
+export const DEFAULT_UPLOAD_POLICY = { allowedMediaTypes: "*", maxBytes: 25 * 1024 * 1024 };
+export type UploadPolicyViolation =
+  | { kind: "too-large";             mediaType; filename?; byteLength; limit }
+  | { kind: "disallowed-media-type"; mediaType; filename?; allowedMediaTypes };
+```
+(`upload-policy.ts:12-24, 30-34, 43-59`), with violations mapping to HTTP 413/415.
+**This is the shape of PACT's `interface.input.media` constraint** — but note the default
+is *permissive* (`"*"`). PACT should invert it to default-deny, matching ACP's stance (§2.4)
+and T7.
+
+**[NEGATIVE] Eve's image eval is TypeScript code.**
+`e2e/fixtures/agent-basic-runtime/evals/runtime/image-attachment.eval.ts` is a
+`defineEval({ async test(t) { … } })` that calls `t.sendFile(prompt, filePath, "image/png")`,
+then hand-inspects `turn.events` for a `message.received` event whose `data.parts` contains
+a `type:"file"` part with `mediaType === "image/png"`, throwing a hand-written `Error`
+otherwise. **The closest system to PACT cannot express an image eval in configuration.**
+That is the gap D19/AC-4.2 exists to close.
+
+#### 1.1.8 **[NEW] Goose — Bud's execution home (D3 superset target)
+
+- `ImageFormat = OpenAi | Anthropic` (`FD/goose/crates/goose-provider-types/src/images.rs:11-14`)
+  and `convert_image` (`:17-33`) emits either `{"type":"image_url","image_url":{"url":"data:…"}}`
+  or `{"type":"image","source":{"type":"base64","media_type":…,"data":…}}`. **Only two image
+  wire shapes exist in practice** — a useful narrowing for the adapter ABI.
+- `detect_image_path(text)` (`images.rs:36-100`) scans arbitrary text for `.png/.jpg/.jpeg`
+  paths (case-insensitive, up to `MAX_PATH_LEN = 4096`, handling spaces in paths);
+  `load_image_file(path)` (`images.rs:202-241`) reads the file, infers MIME from the
+  extension (**png/jpg/jpeg only**), base64-encodes and returns `ImageContent`.
+  ⇒ **Implicit text→image promotion.** See §0.3 for why this is a portability hazard.
+- The `developer` extension's `ImageTool` (`FD/goose/crates/goose/src/agents/platform_extensions/developer/image.rs`)
+  takes `ImageReadParams{source: String, crop: Option<CropParams{x,y,width,height}>}` where
+  the crop doc-comment reads "use to zoom in and get more details" (`:19-23`), enforces
+  `MAX_IMAGE_BYTES = 20 * 1024 * 1024` (`:14, 241-244`), and returns **both** a text summary
+  and the image, with `structured_content` carrying `{source, mimeType, width, height,
+  originalWidth, originalHeight}` (`:52-66, 128-158`). **This is the runtime answer to the
+  OS-survey resolution problem (§3.1) expressed as a tool rather than a preprocessing step**
+  — and therefore something the PACT optimiser could select.
+
+### 1.2 Divergence matrix (re-verified)
+
+Legend: **N** native/typed · **P** partial (untyped or via escape hatch) · **—** absent ·
+**X** explicit error
+
+| Capability | Pydantic AI | LangChain/Graph | AutoGen | OpenAI Agents | Claude Agent SDK | Vercel AI v4 | Eve | Goose | MCP 2025-11-25 | A2A | AG-UI | ACP |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Image **in** | N | N | N (`Image`) | N (`input_image`) | P (tool-result dicts) | N (`file`+`image/*`) | N (staged) | N | N (`ImageContent`) | N (`media_type`) | N | N (opt-in) |
+| Image **out** | N (`FilePart`) | N | — | N (`ImageGenerationCall`) | — | N (`file` stream part) | N | N | N | N | N (cap flag) | N |
+| Audio **in** | N, **X on Responses**, wav/mp3 only on Chat | N | — | — (only `voice/`,`realtime/`) | — (dropped w/ warning) | N | P (upload policy allows; no model path) | — | N | N | N | N (opt-in) |
+| Audio **out** | P | N | — | — (only `voice/`,`realtime/`) | — | N | — | — | N | N | N (cap flag) | — |
+| Video **in** | N (8 formats) but **X on both OpenAI surfaces** | N | — | — | — | N | — | — | **—** | N | N (cap flag) | — |
+| Document/PDF **in** | N (9 types) | N | — | N (`input_file`) | P | N | N (≤20 MiB inline) | N | P (`EmbeddedResource`) | N | N (cap flag) | N |
+| Provider file-ID ref | N (`UploadedFile`, 8) | N (`file_id`) | — | N | — | N (`reference`) | N (`eve-attachment:`) | — | — | — | — | — |
+| **Filesystem path source** | — | — | — | — | — | **—** | **N** (`eve-sandbox:`) | N (path scan) | — | — | — | N (`ResourceLink`) |
+| **Multimodal tool result** | N (`ToolReturn.content`) | N | **— (`str`)** | P | P (untyped) | N (`content[]`) | N | N | N | n/a | n/a | N |
+| Streaming media deltas | — (atomic) | P (`index`) | — | audio only in `voice`/`realtime` | — | — (atomic) | — | — | — | n/a | — | — |
+| Computer use | **—** | — | — | **N** (`Computer` ABC) | P (via CLI tools) | **N** (Anthropic factories) | — | — | — | — | **—** | — |
+| Tool approval in transcript | N (`DeferredToolRequests`) | N (`interrupt()`) | — | N (`ToolApprovalItem`) | N (`can_use_tool`) | **N** (`tool-approval-response` part) | N | N (`PermissionLevel`) | — | `TASK_STATE_INPUT_REQUIRED` | N (`interrupts`) | N (4 option kinds) |
+
+**The four hard walls for harness lowering (D12):**
+1. **AutoGen tool results are `str`** (`_types.py:58`). A PACT tool returning an image must,
+   on AutoGen, either emit the image as a following `UserMessage` part or degrade to a text
+   placeholder. `degraded` lattice entry with a mandatory report.
+2. **Anthropic assistant output cannot contain media** (`content_block.py` has no image
+   member). `output: {image: …}` is `unsupported` on any Anthropic-family binding unless the
+   image is produced by a *tool*.
+3. **MCP has no video content type.** `ContentBlock = TextContent | ImageContent |
+   AudioContent | ResourceLink | EmbeddedResource` in **both**
+   `PR/mcp-spec/schema/2025-11-25/schema.ts:1740-1741` and
+   `PR/mcp-spec/schema/draft/schema.ts:2292-2293`; `grep -rn video PR/mcp-spec/schema/`
+   returns **zero** across all five schema versions. Since D14 makes MCP the no-code
+   custom-tool path, **a no-code tool cannot return video in v1.** Workaround: `ResourceLink`.
+   (Note `SamplingMessageContentBlock` at `:1693-1698` is a *different, narrower* union —
+   `Text | Image | Audio | ToolUse | ToolResult`, no resources — so a tool result and a
+   sampling message are not interchangeable content-wise.)
+4. **No target framework has a filesystem-path source.** PACT must define one and adapters
+   must lower it (to inline bytes, a provider upload, or an Eve-style text reference).
 
 ### 1.3 Proposed PACT content model
 
-**Canonical part** (one shape; per-modality forms are sugar the loader desugars):
+**Canonical part.** Discriminated on **modality class**, with `mediaType` required and the
+class derived from it by a normative table (so a new modality is a table row, not a schema
+change — E-2/E-3). Rationale for choosing modality-as-discriminator over Vercel's
+media-typed-part: **every capability negotiation surface in the corpus is a per-modality
+boolean** (ACP `PromptCapabilities{image, audio, embeddedContext}`; AG-UI
+`MultimodalInputCapabilities{image, audio, video, pdf, file}`; AutoGen `ModelInfo.vision`),
+so the modality must be a first-class discriminator for the gate to be expressible; and
+AG-UI's deliberate deprecation of the generic form (§0.1) is a warning against it.
 
 ```yaml
 # canonical form
-- kind: media                    # text | media | tool_call | tool_result | thinking | approval | control
-  mediaType: image/png           # full IANA type, or top-level segment (image|audio|video|text)
+- kind: image                    # text | image | audio | video | document | binary
+                                 #  | tool_call | tool_result | thinking | approval | control
+  mediaType: image/png           # REQUIRED, full IANA type. `kind` is derivable from it.
   source:                        # exactly one key
-    file: ./screenshots/cart.png #   relative to the spec tree  (PACT-native, D2)
-    # bytes: <base64>            #   inline (discouraged >64 KiB, see §1.4)
+    path: ./screenshots/cart.png #   relative to the spec tree  (PACT-native, D2) — see §1.2 wall 4
+    # bytes: <base64>            #   inline (permitted below a profile threshold, §1.4)
     # url: https://...           #   with fetch policy
-    # ref: sha256:...            #   content-addressed artifact store
-    # providerRef: {openai: file-abc}   #   non-portable; resolver marks it
+    # blob: sha256:...           #   content-addressed artifact store
+    # providerRef: {openai: file-abc}   #   non-portable by construction; resolver marks it
     # text: "..."                #   inline text document
-  filename: cart.png             # optional
-  id: cart-before                # author-stable ID for cross-reference (see §1.3.3)
-  role: screenshot               # optional semantic tag (see §1.3.2)
+  filename: cart.png
+  id: cart-before                # author-stable ID for cross-reference (§1.3.3)
+  role: screenshot               # semantic tag (§1.3.2)
   fetch: {download: false, allowPrivateNetwork: false}   # SSRF policy, from pydantic-ai
   x-vendor: {openai: {detail: high}, google: {media_resolution: high}}
 ```
 
-Sugar forms the loader accepts and normalises (D13/D18 — a non-coder must be able to write these):
+Sugar the loader normalises (D13/D18 — a non-coder must write these):
 ```yaml
-- image: ./cart.png              # → kind: media, mediaType inferred from extension
+- image: ./cart.png              # → kind inferred from extension → mediaType from table
 - audio: ./greeting.wav
 - document: ./policy.pdf
 - text: "hello"
 ```
 
-Rationale, each traceable:
-- **Media-typed single part, not per-modality classes** — matches Vercel v4, A2A
-  (`PR/a2a-spec/specification/a2a.proto:224-241`) and the LangChain shape-collapse observation
-  (§1.1.2). Adding a modality then requires **zero schema change**, satisfying E-2/E-3.
-- **Source as a tagged union with `file:`** — this is the D2 requirement. The native form is a
-  folder tree; media must be able to live as a file *in* the tree and be referenced by relative
-  path. No other framework has this variant because none of them are filesystem-native.
-- **`fetch` policy on the part** — from `pydantic-ai messages.py:145-152, 220-227`. A URL part is an
-  SSRF surface; the policy must travel with the content, and in air-gapped mode (D17) the default
-  must be `deny`.
-- **`x-vendor`** — the `x-` extension mechanism (O1.4) carries the per-provider knobs that
-  Pydantic AI documents at `messages.py:229-238` and Vercel calls `providerOptions`.
+Traceability of each choice:
+- **Source union `{path|bytes|url|blob|providerRef|text}`** — the union minus `path`/`blob`
+  is Vercel `SharedV4FileData` verbatim (`shared-v4-file-data.ts:6-46`); `path` is required
+  by D2 and has no prior art outside Eve's `eve-sandbox:` hack; `blob` is required by §1.4.
+- **`fetch` policy on the part** — from `pydantic-ai messages.py:145-152, 220-227`. A URL
+  part is an SSRF surface and the policy must travel with the content. Air-gapped (D17)
+  default is `deny`.
+- **`x-vendor`** — the `x-` mechanism (O1.4) carrying what Pydantic AI calls
+  `vendor_metadata` (`messages.py:229-238`) and Vercel calls `providerOptions`.
 
 #### 1.3.1 Tool results
 
-Adopt Vercel's output union verbatim in shape, extended with MCP's `structuredContent`:
-
+Adopt Vercel's output union in shape, extended with MCP's `structuredContent`:
 ```yaml
 toolResult:
   callId: t_1
   output:
-    kind: content                 # text | json | content | error-text | error-json | execution-denied
+    kind: content                # text | json | content | error-text | error-json | execution-denied
     value:
       - text: "Found 3 matches"
       - image: ./out/chart.png
-  structured: {...}               # MCP structuredContent, validated against tool outputSchema
+  structured: {...}              # MCP structuredContent, validated against tool outputSchema
 ```
+`execution-denied{reason}` must be a first-class output kind
+(`language-model-v4-prompt.ts:288`ff), not an exception — this is what makes a **denied
+approval replayable and eval-able** (§4.3 case B).
 
-`execution-denied{reason}` must be a first-class output kind, not an exception —
-`FW/vercel-ai/packages/provider/src/language-model/v4/language-model-v4-prompt.ts` (ToolResultOutput
-union). This is what makes a *denied approval* replayable and eval-able.
+**Constraint from §1.1.1:** the set of media types permitted in a tool result is a **separate,
+narrower** capability than the set permitted in a user message
+(`pydantic-ai profiles/google.py:7-14, 47-50`). The PACT capability model must key media on
+`(direction, position, mediaType)`.
 
-#### 1.3.2 Semantic `role` tag on media — new, not copied
+#### 1.3.2 Semantic `role` tag on media
 
-None of the seven frameworks distinguish "this image is a screenshot of the environment" from
-"this image is user-supplied evidence". For computer use, the harness must know: screenshots are
-**prunable** (SWE-agent elides them: `FW2/swe-agent/sweagent/agent/history_processors.py:171-174`
-appends `" (N images omitted)"`), user evidence is **not**. Proposed closed-ish vocabulary:
+None of the frameworks distinguish "this image is a screenshot of the environment" from
+"this image is user-supplied evidence". For computer use the harness must know: screenshots
+are **prunable**, user evidence is not. SWE-agent's `LastNObservations` processor elides old
+observations and appends `" (N images omitted)"`
+(`FW2/swe-agent/sweagent/agent/history_processors.py:171-175`), parameterised by
+`n` (`:114`), `polling` (`:117`), `always_remove_output_for_tags` (`:124`) and
+`always_keep_output_for_tags` (`:129`) — i.e. **the retention policy is already tag-driven
+in production**. Proposed vocabulary:
 `screenshot | user_attachment | tool_output | generated | reference`. **[INFERRED]**
 
 #### 1.3.3 Stable content IDs
 
-Adopt Pydantic AI's identifier idea (`messages.py:204-208, 625-640`) but make it **author-visible
-and author-stable**: `id:` is an author-chosen slug in the spec tree; the runtime falls back to
-`sha256(content)[:12]`. Reason: eval cases must be able to say "the answer must reference
-`cart-before`", and a content-derived hash is not writable by a non-coder before the run.
+Adopt Pydantic AI's identifier idea (`messages.py:204-208, 625-640`) but make it
+**author-visible and author-stable**: `id:` is an author-chosen slug in the tree; the runtime
+falls back to `sha256(content)[:16]` (Eve's `SHA_PREFIX_LENGTH = 16`,
+`attachment-staging.ts:34`). Reason: an eval case must be able to say "the answer must
+reference `cart-before`", and a content-derived hash is not writable by a non-coder before
+the run.
 
-### 1.4 The Expansion Rule vs binary payloads — a genuine stress point
+### 1.4 The Expansion Rule vs binary payloads
 
-The thesis asks (§9.3) where field↔directory equivalence breaks. Binary media is one of those places.
+Binary media is one of the places field↔directory equivalence breaks (thesis §9.3).
 
-- **`explode`** (document → tree) of an inline base64 blob must write a **file**, not a YAML scalar,
-  or diffs become unreviewable (D18 requires "human-meaningful diffs").
-- **`collapse`** (tree → document) of a media file must **not** inline the bytes into
-  `canonical.json`, or the derived index becomes gigabytes. Evidence that this is a real failure
-  mode, not a hypothetical: OpenHands ships a config flag whose comment reads "The screenshots are
-  encoded and can make trajectory json files very large"
-  (`FW2/openhands/config.template.toml:31-33`), and SWE-agent raises
-  `max_observation_length: 10_000_000  # need longer for images`
+- **`explode`** (document → tree) of an inline base64 blob must write a **file**, or diffs
+  become unreviewable (D18 requires human-meaningful diffs).
+- **`collapse`** (tree → document) of a media file must **not** inline bytes into
+  `canonical.json`. Evidence this is a real failure mode: OpenHands ships
+  `save_screenshots_in_trajectory` with the comment "The screenshots are encoded and can make
+  trajectory json files very large" (`FW2/openhands/config.template.toml:31-33`); SWE-agent
+  raises `max_observation_length: 10_000_000  # need longer for images`
   (`FW2/swe-agent/config/default_mm_with_images.yaml:41`).
 
-**Resolution:** `canonical.json` stores a **content-addressed reference**
-(`{ref: "sha256:...", mediaType, bytes: 48213}`) and the bytes live in a
-content-addressed artifact store under `.pact/blobs/<sha256>`. Round-trip identity
-(`explode(collapse(X)) ≡ X`, O1.3/AC-1.2) is then over the *reference*, and byte identity is
-guaranteed by the hash. Precedent: promptfoo's `BlobStorageProvider` with `store()/getByHash()/
-exists()/deleteByHash()/getUrl()` and a `deduplicated` flag on store
-(`EV/promptfoo/src/blobs/types.ts:18-32`).
+**Resolution.** `canonical.json` stores a **content-addressed reference**
+(`{blob: "sha256:…", mediaType, bytes: 48213}`), bytes live under `.pact/blobs/<sha256>`.
+Round-trip identity (`explode(collapse(X)) ≡ X`, O1.3/AC-1.2′) is over the *reference*; byte
+identity is guaranteed by the hash. Precedent: promptfoo's `BlobStorageProvider`
+(`EV/promptfoo/src/blobs/types.ts:18-32`: `store()/getByHash()/exists()/deleteByHash()/getUrl()`
+with a `deduplicated` flag), and Eve's sha-prefixed staged filenames
+(`attachment-staging.ts:386-393`).
 
-**Threshold rule [INFERRED]:** inline base64 permitted only below a profile-configured limit
-(propose 64 KiB default, per F-1 it must be a profile value, not a literal); above it, `explode`
-writes a file and `collapse` writes a `ref`.
+**Threshold rule.** Inline base64 only below a **profile-configured** limit (F-1 forbids a
+literal). Anchors from shipping systems: Eve inlines images ≤ **3 MiB** and PDFs ≤ **20 MiB**
+(`attachment-staging.ts:45,51`); Eve's inbound cap is **25 MiB**
+(`upload-policy.ts:30-34`); Goose caps images at **20 MiB**
+(`developer/image.rs:14`). Recommend `64 KiB` for *inline-in-document*, distinct from the
+much larger *inline-at-model-call* thresholds, which are a lowering concern.
 
-### 1.5 Streaming model
+**Consequence for O1.2 (digest).** If `canonical.json` never carries bytes, the artifact
+digest must be a **Merkle root over `hash(canonical.json)` plus `hash(blob_i)` for each
+referenced blob**, not a single file hash. Otherwise two agents with different screenshots
+share a digest.
 
-Three distinct streaming regimes exist in the corpus and PACT must name all three, because
-collapsing them loses the D16 voice-TTFT requirement:
+### 1.5 Streaming model — four regimes, not three
 
 | Regime | Shape | Evidence |
 |---|---|---|
-| **Token stream** | `*-start` / `*-delta` / `*-end` triples for text, reasoning, tool input | `vercel-ai .../language-model-v4-stream-part.ts:14-68`; pydantic-ai `messages.py:2982,3032,3143` |
-| **Atomic artifact** | whole `file` / `source` / `tool-result` parts, no deltas | `vercel-ai .../language-model-v4-stream-part.ts` (file/source/tool parts have no delta variants); pydantic-ai has no `FilePartDelta` |
-| **Duplex media session** | continuous `audio-delta` + `audio-transcript-delta` + VAD lifecycle events, bidirectional | `vercel-ai realtime-model-v4-server-event.ts:94-131`; `openai-agents realtime/config.py:96-150` |
+| **Token stream** | `*-start`/`*-delta`/`*-end` triples for text, reasoning, tool input | `vercel-ai .../language-model-v4-stream-part.ts:14-68`; pydantic-ai `TextPartDelta`/`ThinkingPartDelta`/`ToolCallPartDelta` |
+| **Atomic artifact** | whole `file`/`source`/`tool-result` parts, no deltas | Vercel file/source/tool parts have no delta variants; pydantic-ai has no `FilePartDelta` |
+| **[NEW] Index-correlated media** | media blocks re-emitted with a stable `index: int\|str`, reassembled by the consumer | LangChain `content.py` — `index` on `ImageContentBlock` (498), `VideoContentBlock` (549), `AudioContentBlock` (600), "used during streaming" |
+| **Duplex media session** | continuous `audio-delta` + `audio-transcript-delta` + VAD lifecycle, bidirectional | `vercel-ai realtime-model-v4-server-event.ts`; `openai-agents realtime/config.py:96-150` |
 
-PACT's IR needs `streaming: {mode: token|duplex}` on the interface contract, and duplex implies a
-`realtime` model role binding. **[INFERRED]**
-
-`stream-start{warnings: SharedV4Warning[]}` with
-`SharedV4Warning = unsupported{feature,details} | compatibility{feature,details} |
-deprecated{setting,message} | other`
-(`FW/vercel-ai/packages/provider/src/shared/v4/shared-v4-warning.ts`) is the industry's existing
-runtime loss-report, and it maps 1:1 onto PACT's lattice values `unsupported` / `degraded`
-(= `compatibility`). Adopt the wire shape so adapter warnings can be forwarded unmodified.
+PACT's IR needs `interface.streaming: {mode: token | duplex}` and, for duplex, a separate
+`realtime` model-role binding. **Do not model duplex audio as a content part** — in every
+framework that supports it, it is a separate interface (`realtime-model/`) or a separate
+pipeline (`voice/`). **[INFERRED]**
 
 ---
 
-## 2. Deliverable 2 — Capability requirements and how they are verified
+## 2. Deliverable 2 — Capability requirements and verification
 
-### 2.1 What each framework knows about a model's modality
+### 2.1 What each system knows about modality
 
-| Source | Has modality capability data? | Fields |
+| Source | Modality capability data? | Shape |
 |---|---|---|
-| Pydantic AI `ModelProfile` | **No input modalities** | only `supports_image_output` (`profiles/__init__.py:72-73`) |
-| LangChain `langchain-model-profiles` | **Yes**, vendored from models.dev | see below |
-| AutoGen `ModelInfo` | Partial, author-declared | `vision`, `function_calling`, `json_output`, `structured_output` (`_model_client.py:159-181`) |
-| OpenAI Agents SDK | No catalogue | model-name regex for computer use lives in inspect_ai, not the SDK |
-| Claude Agent SDK | No | |
-| Vercel AI SDK | No catalogue; **runtime rejection instead** | `UnsupportedFunctionalityError({functionality: 'media type: X'})` at `packages/anthropic/src/convert-to-anthropic-prompt.ts:401-402` |
-| LiteLLM | **Yes**, largest | see below |
+| Pydantic AI `ModelProfile` | **No input modalities**; only `supports_image_output` (`profiles/__init__.py:72`) | derived by **substring match on the model name** (`profiles/google.py:61`, `profiles/openai.py:314-317`) |
+| LangChain `langchain-model-profiles` | **Yes**, vendored from models.dev | 28 keys incl. `{text,image,audio,video}_{inputs,outputs}`, `pdf_inputs`, `image_url_inputs`, `pdf_tool_message`, `image_tool_message` |
+| AutoGen `ModelInfo` | Partial, **author-declared** | `vision`, `function_calling`, `json_output`, `structured_output`, `family` (`_model_client.py:164-181`) |
+| OpenAI Agents SDK | No catalogue | — |
+| Claude Agent SDK | No | — |
+| Vercel AI SDK | No catalogue; **runtime rejection instead** | `UnsupportedFunctionalityError({functionality: 'media type: X'})` in provider converters |
+| **AG-UI** | **Yes — at the *agent* level** | `MultimodalCapabilities{input:{image,audio,video,pdf,file}, output:{image,audio}}` (`capabilities.py:223-283`) |
+| **ACP** | **Yes — negotiated, default-deny** | `PromptCapabilities{image:false, audio:false, embeddedContext:false}` |
+| **A2A** | **Yes — REQUIRED MIME lists** | `AgentCard.default_input_modes` / `default_output_modes` (`a2a.proto:386-390`, both `REQUIRED`), per-skill `input_modes`/`output_modes` (`:446-451`) |
+| LiteLLM | **Yes**, largest and least consistent | §2.3 |
 
-**LangChain / models.dev** (`FW/langchain/libs/partners/openai/langchain_openai/data/_profiles.py`
-header: "It contains data derived from the models.dev project. Source:
-https://github.com/sst/models.dev, License: MIT"). Full key set observed in the Anthropic file:
-`name, release_date, last_updated, status, open_weights, max_input_tokens, max_output_tokens,
-text_inputs, image_inputs, audio_inputs, video_inputs, text_outputs, image_outputs, audio_outputs,
-video_outputs, reasoning_output, reasoning_effort_levels, reasoning_effort_default, tool_calling,
-tool_call_streaming, structured_output, attachment, temperature, image_url_inputs, pdf_inputs,
-pdf_tool_message, image_tool_message`.
-**[NEGATIVE] No `computer_use` key** — `grep -c computer` on both the OpenAI and Anthropic profile
-files returns `0`.
+**[NEW] AG-UI's `AgentCapabilities` is a near-complete draft of PACT's contract-side
+capability block**, and its normative tri-state rule is exactly what PACT needs:
 
-Crucially, LangChain ships a **human override layer**:
-`FW/langchain/libs/partners/anthropic/langchain_anthropic/data/profile_augmentations.toml` sets
-provider-wide overrides (`image_url_inputs = true`, `pdf_inputs = true`,
-`structured_output = false`) then re-enables `structured_output = true` per model. Upstream feed +
-local corrections is exactly D8's hybrid, and it is in production today.
+> "All fields are optional — agents only declare what they support. **Omitted fields mean the
+> capability is not declared (unknown), not that it's unsupported.** The `custom` field is an
+> escape hatch for integration-specific capabilities."
+> — `PR/ag-ui/sdks/python/ag_ui/core/capabilities.py:363-371`
 
-**LiteLLM** `RO/litellm/model_prices_and_context_window.json` — 2,984 entries. Modality-relevant
-keys present across the file:
-`supported_modalities`, `supported_output_modalities`, `supports_vision`, `supports_image_input`,
-`supports_audio_input`, `supports_audio_output`, `supports_video_input`, `supports_pdf_input`,
-`supports_computer_use`, `supports_web_search`, `supports_url_context`, `supports_multimodal`,
-`supports_embedding_image_input`, `supports_native_streaming`, plus per-modality cost fields
-(`input_cost_per_audio_token`, `output_cost_per_audio_token`,
-`input_cost_per_audio_per_second`, `cache_creation_input_audio_token_cost`, …).
+Its category set (`capabilities.py:362-414`): `identity`, `transport`, `tools`, `output`,
+`state`, `multi_agent`, `reasoning`, `multimodal`, `execution`, `human_in_the_loop`, `custom`.
+Notable members PACT should mirror:
+- `ExecutionCapabilities{code_execution, sandboxed, max_iterations, max_execution_time}`
+  (`:285-313`) — `sandboxed` is documented as "Only meaningful when `code_execution` is
+  `True`", i.e. a **conditional capability**, which PACT's predicate language must express.
+- `HumanInTheLoopCapabilities{supported, approvals, interventions, feedback, interrupts,
+  approve_with_edits}` (`:316-358`) — `approve_with_edits` ("tool-call interrupts accept
+  editedArgs in the resume payload") is the one approval affordance PACT would otherwise miss.
+- `OutputCapabilities.supported_mime_types: List[str]` (`:134`) — MIME lists again.
 
-Measured coverage (my count over the file):
+**[NEGATIVE] `computer_use` does not exist as a capability in AG-UI, ACP, A2A, or
+models.dev.** Only LiteLLM has it, and §2.3 shows it is wrong. There is no ecosystem-wide
+vocabulary for computer use; PACT must define one and cannot import one.
 
-| Flag | entries `true` |
-|---|---|
-| `supports_function_calling` | 1667 |
-| `supports_vision` | 888 |
-| `supports_reasoning` | 770 |
-| `supports_pdf_input` | 464 |
-| `supports_web_search` | 260 |
-| **`supports_computer_use`** | **166** |
-| `supports_audio_input` | 105 |
-| `supports_audio_output` | 62 |
-| `supports_video_input` | 54 |
+### 2.2 **[NEW]** Quantitative catalogue audit (LiteLLM, 2,984 entries, measured 2026-08-07)
 
-`supported_modalities` values seen: `text`(358), `image`(299), `audio`(108), `video`(73).
-`supported_output_modalities`: `text`(309), `audio`(44), `image`(38), `video`(27), `code`(8).
-`mode` values: `chat`(2285), `image_generation`(209), `embedding`(124), `responses`(85),
-`audio_transcription`(62), `completion`(36), `image_edit`(31), `realtime`(28), `audio_speech`(27),
-`rerank`(25), `video_generation`(25), `search`(18), `ocr`(13), `moderation`(5), `vector_store`(1),
-`None`(9), plus **one entry whose `mode` is literally the string
-`"one of: chat, embedding, completion, image_generation, audio_transcription, audio_speech,
-image_generation, moderation, rerank, search"`** — i.e. the schema documentation leaked into the
-data as a record.
+`supports_*` flags set `true`:
 
-### 2.2 The catalogue is demonstrably wrong — evidence for AC-3.3 `strict` mode
+| Flag | count | | Flag | count |
+|---|---|---|---|---|
+| `supports_function_calling` | 1667 | | `supports_computer_use` | **166** |
+| `supports_tool_choice` | 1508 | | `supports_audio_input` | 105 |
+| `supports_vision` | 888 | | `supports_audio_output` | 62 |
+| `supports_response_schema` | 879 | | `supports_video_input` | 54 |
+| `supports_reasoning` | 770 | | `supports_url_context` | 50 |
+| `supports_pdf_input` | 464 | | `supports_embedding_image_input` | 19 |
+| `supports_web_search` | 260 | | `supports_image_input` | **6** |
+| `supports_native_streaming` | 222 | | `supports_multimodal` | **6** |
 
-Every `supports_computer_use: true` entry in LiteLLM is Anthropic-family plus
-`gemini-2.5-computer-use-preview-10-2025`. And:
+**Key coverage/consistency findings:**
+- `supported_modalities` present on **360 / 2984 = 12.1%**; `supports_vision` present on
+  **980**; **both** on **272**; `supported_modalities`-only on **88**; `supports_vision`-only
+  on **708**.
+- **861 entries (28.9%) carry no capability key at all.**
+- Of **297** `claude`-named entries, **4** carry `supported_modalities`. Anthropic rows use
+  `supports_vision`; OpenAI rows use `supported_modalities: [text, image]`.
+- Where both keys exist they agree — only **2** disagreements
+  (`gemini-2.5-pro-preview-tts`, `gemini/gemini-2.5-pro-preview-tts`).
+- Three near-synonymous keys coexist: `supports_vision` (888), `supports_image_input` (6),
+  `supported_modalities` containing `image` (299).
+
+**Design consequence.** A modality predicate is only sound if the catalogue schema defines
+(a) a **normative key-merge order** across synonyms, and (b) a **tri-state** where `unknown`
+never satisfies a predicate in `strict` mode. Without both, `modality.input contains image`
+evaluated against `supported_modalities` excludes 293 of 297 Claude models — a silent,
+catastrophic resolver bug that would surface as "no candidate model passes".
+
+### 2.3 The catalogue is demonstrably wrong on computer use
+
+Verified entries (exact key sets read 2026-08-07):
 
 ```
-computer-use-preview        → {mode: chat, supported_modalities: [text,image],
-                               supports_vision: true, ... }        # no supports_computer_use
-azure/computer-use-preview  → same, no supports_computer_use
-gpt-5.5 / gpt-5.4           → supports_vision, supports_pdf_input, supports_web_search;
-                               no supports_computer_use
+computer-use-preview        mode: chat, supported_endpoints: ["/v1/responses"],
+                            supported_modalities: [text,image], supports_vision: true,
+                            supports_reasoning: true            ← NO supports_computer_use
+azure/computer-use-preview  identical                            ← NO supports_computer_use
+gpt-5.5                     supports_vision, supports_pdf_input, supports_web_search
+                                                                 ← NO supports_computer_use
+claude-opus-4-5             supports_computer_use: true, supports_vision: true
+                                                                 ← NO supported_modalities
+gemini-2.5-computer-use-preview-10-2025
+                            supports_computer_use: true, supported_modalities: [text,image]
 ```
 
-**OpenAI's dedicated computer-use model is not marked as supporting computer use in the largest
-model catalogue in the ecosystem.** Meanwhile `inspect_ai` gates OpenAI computer use on a
-*model-version regex* — `(major, minor) >= (5, 4)` plus an exclusion list, plus an `is_latest`
-escape (`EV/inspect_ai/src/inspect_ai/model/_providers/_openai_computer_use.py:89-101`) — i.e. the
-best-informed implementation in the corpus does not trust a catalogue either; it hardcodes version
-logic.
+**OpenAI's dedicated computer-use model is not marked as supporting computer use in the
+largest model catalogue in the ecosystem.** Meanwhile the best-informed implementation in the
+corpus does not trust a catalogue either: inspect_ai hardcodes
+`(major, minor) >= (5, 4)` plus `_COMPUTER_USE_EXCLUDED_VARIANTS` plus an `is_latest` escape
+(`EV/inspect_ai/src/inspect_ai/model/_providers/_openai_computer_use.py:88-101`), and gates
+Gemini on `"gemini-2.5-computer-use-preview" in model_name or "gemini-3-flash-preview" in
+model_name` (`_google_computer_use.py:24-36`).
 
-Design consequences:
-- A capability predicate on `computer_use` **must not** be satisfiable by an unprovenanced
-  catalogue row in `strict` mode (AC-3.3), and the `PORTABILITY: FAIL / RECOMMENDED` flow (D11)
-  must be able to say "capability unknown for this model" as distinct from "capability absent".
-- The catalogue schema needs `provenance` **per field**, not per model — `supports_vision` may come
-  from models.dev while `supports_computer_use` came from a hand override. LangChain's
-  `profile_augmentations.toml` gets this structurally right (overrides are a separate file) but
-  records no source or date.
+Also: **models.dev has no `computer_use` key** — `grep -c computer` on LangChain's vendored
+OpenAI and Anthropic `_profiles.py` returns `0`. And LangChain ships a **human override
+layer**: `libs/partners/anthropic/langchain_anthropic/data/profile_augmentations.toml` sets
+provider-wide `image_url_inputs = true`, `pdf_inputs = true`, `structured_output = false`,
+then re-enables `structured_output = true` per model. **Upstream feed + local corrections is
+exactly D8's hybrid, in production today** — but it records **no source and no date**, which
+is precisely what AC-3.3 requires and PACT must add.
 
-### 2.3 Proposed capability vocabulary and predicate semantics
+### 2.4 Proposed capability vocabulary and predicate semantics
 
-Split the D16 vocabulary into three *kinds* of requirement, because they are verified differently:
+Split the D16 vocabulary into three kinds, because they are verified differently:
 
-**(a) Model-intrinsic capabilities** — verified against the catalogue at resolve time.
+**(a) Model-intrinsic** — verified against the catalogue at resolve time.
 ```
-modality.input:  text | image | audio | video | document
-modality.output: text | image | audio | video
+media.in[<mediaType glob>]      # e.g. media.in["image/*"], media.in["application/pdf"]
+media.out[<mediaType glob>]
+media.toolResult[<mediaType glob>]      # narrower than media.in — see §1.1.1 (google profile)
 context.window >= 128k
 tool_calling: none | serial | parallel
 structured_output: none | json_object | json_schema
 reasoning: none | optional | always
 ```
-Map directly onto LiteLLM `supported_modalities` / `supported_output_modalities` and models.dev
-`{text,image,audio,video}_{inputs,outputs}`.
+Keying on **MIME globs rather than modality words** is the change from the previous
+revision. Justification: A2A's card contract is MIME lists (`a2a.proto:386-390`), Eve's
+policy is MIME globs (`upload-policy.ts:19-23`), AG-UI's `OutputCapabilities` is
+`supported_mime_types` (`capabilities.py:134`), and the one per-model tool-return allowlist
+in the corpus is a MIME tuple (`pydantic-ai profiles/google.py:7-14`). Modality words
+(`vision`, `audio_in`) remain as **sugar that desugars to globs** for D13 authors.
 
-**(b) Provider-tool capabilities** — verified against the (provider, api-surface) pair, not the
-model alone.
+**(b) Provider-tool capabilities** — verified against `(provider, api-surface)`, not the model.
 ```
 tool.web_search · tool.web_fetch (web_scrape) · tool.code_interpreter ·
-tool.computer_use{environment: browser|mac|windows|ubuntu, actions: [...]}  ·
+tool.computer_use{environment: browser|mac|windows|ubuntu, actions: [...], coordinateSpace: ...} ·
 tool.image_generation · tool.file_search · tool.memory
 ```
-Evidence they are provider-tool-shaped, not model-shaped: Pydantic AI's
+Evidence they are tool-shaped, not model-shaped: Pydantic AI's
 `ModelProfile.supported_native_tools: frozenset[type[AbstractNativeTool]]`
-(`profiles/__init__.py:120-121`) — a per-profile *set of tool types*; Claude Agent SDK's
-`ServerToolName` literal (`types.py:954-963`: advisor, web_search, web_fetch, code_execution,
-bash_code_execution, text_editor_code_execution, tool_search_tool_regex, tool_search_tool_bm25);
-Anthropic's `allowed_callers` on the computer tool
-(`beta_tool_computer_use_20250124_param.py:29-31`).
+(`profiles/__init__.py:120`) — a per-profile *set of tool types*, adjusted per model family
+(`profiles/openai.py:324-325`); Claude Agent SDK's `ServerToolName` literal (`types.py:954-963`:
+advisor, web_search, web_fetch, code_execution, bash_code_execution,
+text_editor_code_execution, tool_search_tool_regex, tool_search_tool_bm25); Anthropic's
+`allowed_callers` on the computer tool (`beta_tool_computer_use_20250124_param.py:29-31`).
 
 **(c) Substrate capabilities** — verified against the *runtime*, not the model.
 ```
 sandbox.kind: none | process | container | microvm | remote
-sandbox.gui: true            # a display exists at all
+sandbox.gui: true                 # a display exists at all
+sandbox.gui.geometry: {w, h}
 sandbox.network: none | allowlist | full
-approval.channel: available  # a human can be reached
-audio.duplex: true           # a realtime transport exists
+approval.channel: available       # a human can be reached
+audio.duplex: true                # a realtime transport exists
+filesystem.tools: true            # needed for the Eve-style text-reference fallback (§0.2)
 ```
-A `computer_use` contract that binds a capable model to a runtime with no display is a resolve-time
-failure that no model catalogue can catch. **[INFERRED]** — no framework in the corpus models this;
-the closest is `Computer.dimensions`/`environment` being optional properties on the ABC
-(`FW/openai-agents-python/src/agents/computer.py:17-25`).
+A `computer_use` contract bound to a capable model on a runtime with no display is a
+resolve-time failure no model catalogue can catch. **[INFERRED]** — nothing in the corpus
+models this; the closest is `Computer.environment`/`Computer.dimensions` being optional
+properties on the ABC (`FW/openai-agents-python/src/agents/computer.py:17-25`), and AG-UI's
+`ExecutionCapabilities.sandboxed` (`capabilities.py:296-302`).
 
-**Verification levels** (all four required by D17's air-gap rule):
-1. **Declared** — catalogue row with provenance. Cheap, offline, pre-filter only (R5).
-2. **Probed** — a one-shot capability probe run against the live endpoint, cached in the lockfile.
-   Not available air-gapped against remote models, but *is* available against a local model.
-3. **Evidenced** — a modality-specific eval in the suite passed (the real oracle, T2).
-4. **Asserted** — author wrote `x-capability-override:` with a justification string; recorded in
-   the lockfile and surfaced in the Portability Report.
+**Verification levels** (all four needed under D17):
+1. **Declared** — catalogue row with per-field provenance. Cheap, offline, **pre-filter only** (R5).
+2. **Probed** — one-shot capability probe against a live endpoint, cached in the lockfile.
+   Unavailable air-gapped against remote models; available against a local model.
+3. **Evidenced** — a modality-specific eval in the suite passed. The real oracle (T2).
+4. **Asserted** — author wrote `x-capability-override:` with justification; recorded in the
+   lockfile and surfaced in the Portability Report.
 
-**Prior art for negotiated modality capability:** ACP's `PromptCapabilities`
-(`PR/agent-client-protocol/schema/v1/schema.json`, `$defs.PromptCapabilities`) —
-`{image: false, audio: false, embeddedContext: false}` by default, with the rule "Baseline agent
-functionality requires support for `ContentBlock::Text` and `ContentBlock::ResourceLink` … Other
-variants must be explicitly opted in to." PACT should mirror this default-deny stance: **sending a
-content kind the binding did not declare is an error, never a silent drop.**
+**Default-deny is settled prior art.** ACP: "Baseline agent functionality requires support
+for `ContentBlock::Text` and `ContentBlock::ResourceLink` … **Other variants must be
+explicitly opted in to**", with `image`, `audio`, `embeddedContext` all `default: false`
+(`PR/agent-client-protocol/schema/v1/schema.json`, `$defs.PromptCapabilities`). PACT should
+mirror it: **sending a content kind the binding did not declare is an error, never a silent
+drop.** Note this *conflicts* with Eve's permissive `allowedMediaTypes: "*"` default
+(`upload-policy.ts:30-34`); PACT should follow ACP, not Eve, here.
 
-### 2.4 Air-gapped implications (D17)
+### 2.5 Air-gapped implications (D17)
 
-- **Catalogue**: both candidate feeds are already offline-capable artefacts — LiteLLM's single JSON
-  file, and LangChain's *vendored* `_profiles.py` generated by a CLI. Both are MIT/permissive.
-  Recommend seeding `models/catalog.yaml` from both, keeping per-field provenance, and shipping the
-  merge as a build-time step so `pact validate` needs no network.
-- **Vision judge**: DeepEval multimodal metrics instantiate a judge model and pass a multimodal
-  array (`EV/deepeval/deepeval/metrics/multimodal_metrics/image_coherence/image_coherence.py:1-45`).
-  Air-gapped image evals therefore require a **local vision-capable judge** in the profile. This is
-  a hard dependency PACT must declare, not discover at eval time.
-- **Voice**: the Bud manifest already has a local path —
-  `input.dictation.provider: local` with Whisper model download/selection
-  (`gaia-ai-runtime/bud-agentic-runtime/sdk-and-declarative-dev.md:2515-2553`:
-  "local transcription uses Goose local Whisper models, cache, audio decode, deduplication, and
-  download manager"). **[NEGATIVE] There is no local TTS and no local duplex/realtime model anywhere
-  in the corpus.** `FW/openai-agents-python/src/agents/voice/models/` contains only
-  `openai_stt.py`, `openai_tts.py`, `openai_model_provider.py`. Air-gapped voice in v1 is therefore
-  **STT-in only**, or STT+text+TTS where TTS is out of scope.
+- **Catalogue.** Both candidate feeds are offline-capable artefacts: LiteLLM's single JSON
+  file, and LangChain's *vendored* `_profiles.py`. Both permissive-licensed (the LangChain
+  header names models.dev, MIT). Seed `models/catalog.yaml` from both, keep **per-field**
+  provenance, ship the merge as a build step so `pact validate` needs no network.
+- **Vision judge.** DeepEval's five multimodal metrics all instantiate a judge model and pass
+  a multimodal array. Air-gapped image evals therefore require a **declared local
+  vision-capable judge** in the profile — a hard dependency PACT must declare, not discover
+  at eval time.
+- **Voice.** `FW/openai-agents-python/src/agents/voice/models/` contains only
+  `openai_stt.py`, `openai_tts.py`, `openai_model_provider.py`.
+  **[NEGATIVE] There is no local TTS and no local duplex/realtime model anywhere in the
+  corpus.** The Bud manifest does have a local STT path — `input.dictation.provider: local`
+  with Whisper model download/selection
+  (`gaia-ai-runtime/bud-agentic-runtime/sdk-and-declarative-dev.md:2515-2553`). **Air-gapped
+  voice in v1 is therefore STT-in only.**
+- **[NEW] terminal-bench-style container evals are not air-gap-clean by default.** Its
+  generated `run-tests.sh` does `apt-get update` and
+  `curl -LsSf https://astral.sh/uv/0.7.13/install.sh | sh` at grading time
+  (`EV/terminal-bench/original-tasks/weighted-max-sat-solver/run-tests.sh:9-16`). PACT's
+  environment declaration must therefore distinguish **build-time network** from
+  **run-time network** and forbid the former in air-gapped profiles.
 
 ---
 
@@ -646,98 +797,162 @@ content kind the binding did not declare is an error, never a silent drop.**
 
 | System | Declaration | Fields observed |
 |---|---|---|
-| OpenAI Agents SDK | Pydantic `Manifest` (`FW/openai-agents-python/src/agents/sandbox/manifest.py:88-97`) | `version`, `root` (default `/workspace`), `entries: {path: Dir\|File\|Mount}`, `environment` (with `EnvValue` indirection for secrets, 45-84), `users`, `groups`, `extra_path_grants`, `remote_mount_command_allowlist` (default list of 19 commands at 22-40). Backends: `sandboxes/docker.py`, `sandboxes/unix_local.py`. **[NEGATIVE] no network policy field** — `grep -rn network sandbox/ --include=*.py` yields one comment in an S3 mount provider. |
-| Claude Agent SDK | `SandboxSettings` TypedDict (`FW/claude-agent-sdk-python/src/claude_agent_sdk/types.py:874-916`) | `enabled`, `autoAllowBashIfSandboxed` (default **True**), `excludedCommands`, `allowUnsandboxedCommands`, `network`, `ignoreViolations`, `enableWeakerNestedSandbox`. `SandboxNetworkConfig` (836-860): `allowedDomains`, `deniedDomains`, `allowManagedDomainsOnly`, `allowUnixSockets`, `allowAllUnixSockets`, `allowLocalBinding`, `allowMachLookup`, `httpProxyPort`, `socksProxyPort`. Docstring at 878-885 is explicit that **filesystem/network restrictions are expressed as permission rules, not sandbox settings** — one policy language, two enforcement points. |
-| inspect_ai | `SandboxEnvironmentSpec{type, config}` where config is a filename or provider model (`EV/inspect_ai/src/inspect_ai/util/_sandbox/environment.py:503-536`); shorthands `"docker"` and `("docker","compose.yaml")` | The ABC (`environment.py:92-190+`) is `exec/write_file/read_file/…` with an output cap (`INSPECT_SANDBOX_MAX_EXEC_OUTPUT_SIZE`, default 10 MiB) and typed errors (`OutputLimitExceededError`, `TimeoutError`, `PermissionError`). |
-| E2B | `e2b.toml` yup schema (`RT/e2b/packages/cli/src/config/index.ts:8-17`) | `template_id`*, `template_name`, `dockerfile`*, `start_cmd`, `ready_cmd`, `cpu_count>=1`, `memory_mb>=128` |
-| microsandbox | CLI `SandboxOpts` (`RT/microsandbox/crates/cli/lib/commands/common.rs:51-91`) | `name`, `cpus`, `max_cpus`, `memory`, `max_memory`, `volume`, `mount_dir`, `mount_file`, `mount_disk`, `mount_named`; microVM isolation; per-pattern upstream CA certs (`common.rs:1977-1983`) |
-| OpenHands | TOML (`FW2/openhands/config.template.toml:149-221`) | `timeout`, `user_id`, `base_container_image`, `use_host_network`, `runtime_extra_build_args`, `runtime_extra_deps`, `runtime_startup_env_vars`, `volumes` (`"/host:/workspace:rw,/p2:/workspace/p2:ro"`), `platform`, `enable_gpu`, `cuda_visible_devices`, `keep_runtime_alive`, `close_delay` |
-| SWE-agent | YAML tool **bundles are directories** (`FW2/swe-agent/config/default_mm_with_images.yaml:44-50`) | `tools.bundles: [{path: tools/registry}, {path: tools/image_tools}, {path: tools/web_browser}, …]`, `execution_timeout`, `registry_variables` |
+| OpenAI Agents SDK | Pydantic `Manifest` (`FW/openai-agents-python/src/agents/sandbox/manifest.py:88-97`) | `version`, `root` (default `/workspace`), `entries: {path: Dir\|File\|Mount}`, `environment` (with `EnvValue` indirection for secrets, 45-84), `users`, `groups`, `extra_path_grants`, `remote_mount_command_allowlist` (19 defaults, 22-40). Backends `sandboxes/docker.py`, `sandboxes/unix_local.py`. **[NEGATIVE] no network policy field.** |
+| Claude Agent SDK | `SandboxSettings` TypedDict (`types.py:874-916`) | `enabled`, `autoAllowBashIfSandboxed` (**default `True`**, `:889`), `excludedCommands`, `allowUnsandboxedCommands`, `network`, `ignoreViolations`, `enableWeakerNestedSandbox`. `SandboxNetworkConfig` (836-860): `allowedDomains`, `deniedDomains`, `allowManagedDomainsOnly`, `allowUnixSockets`, `allowAllUnixSockets`, `allowLocalBinding`, `allowMachLookup`, `httpProxyPort`, `socksProxyPort`. Docstring 878-885 is explicit that **filesystem/network restrictions are permission rules, not sandbox settings** — one policy language, two enforcement points. |
+| inspect_ai | `SandboxEnvironmentSpec{type, config}` where config is a filename or provider model (`util/_sandbox/environment.py:503-536`); shorthands `"docker"` and `("docker","compose.yaml")` | ABC is `exec/write_file/read_file/…` with an output cap (`INSPECT_SANDBOX_MAX_EXEC_OUTPUT_SIZE`, 10 MiB default) and typed errors (`OutputLimitExceededError`, `TimeoutError`, `PermissionError`) |
+| E2B | `e2b.toml` yup schema (`RT/e2b/packages/cli/src/config/index.ts:8-17`) | `template_id`*, `template_name`, `dockerfile`*, `start_cmd`, `ready_cmd`, `cpu_count>=1`, `memory_mb>=128`. **[NEW]** A `desktop` template with X11 exists (`packages/python-sdk/tests/bugs/test_envelope_decode.py:9-41` uses `Desktop(timeout=30)`, `Xlib.display.Display(os.environ["DISPLAY"])`, `desktop.pyautogui(...)`) — but **it is not declared in `e2b.toml`**; GUI is a template property, invisible to the config schema. |
+| microsandbox | CLI `SandboxOpts` (`RT/microsandbox/crates/cli/lib/commands/common.rs:51-91`) | `name`, `cpus`, `max_cpus`, `memory`, `max_memory`, `volume`, `mount_dir`, `mount_file`, `mount_disk`, `mount_named`; microVM isolation. **[NEGATIVE] `grep -rn "screenshot\|display\|gui\|vnc" crates/` finds no GUI concept.** |
+| OpenHands | TOML (`FW2/openhands/config.template.toml:149-221`) | `timeout`, `user_id`, `base_container_image`, `use_host_network`, `runtime_extra_build_args`, `runtime_extra_deps`, `runtime_startup_env_vars`, `volumes` (`"/host:/workspace:rw,/p2:/workspace/p2:ro"`), `platform`, `enable_gpu`, `cuda_visible_devices`, `keep_runtime_alive`, `close_delay`. Core has `enable_browser = true` (`:48`) — **a modality capability as a config toggle** — and `replay_trajectory_path` (`:36`) for deterministic replay. VNC is env-gated: `'OH_ENABLE_VNC': '0'` (`openhands/app_server/sandbox/docker_sandbox_spec_service.py:42`). |
+| SWE-agent | YAML tool **bundles are directories** (`config/default_mm_with_images.yaml:44-50`) | `tools.bundles: [{path: tools/registry}, {path: tools/image_tools}, {path: tools/web_browser}, …]`, `execution_timeout`, `registry_variables` |
+| terminal-bench | **directory-per-task** | `task.yaml` (`instruction`, `author_*`, `difficulty`, `category`, `tags`, `parser_name`, `max_agent_timeout_sec`, `max_test_timeout_sec`, `run_tests_in_same_shell`, `disable_asciinema`) + `Dockerfile` + `docker-compose.yaml` + `tests/` + `run-tests.sh` + `solution.sh` |
 
-**Convergent minimum field set [INFERRED]:** `image/template`, `cpu`, `memory`, `mounts[]` with
-`ro|rw`, `env` (with a secret indirection), `network{mode, allowDomains, denyDomains}`,
-`timeout`, `user`, `gui{width,height,display}`, `persist{snapshot,keepAlive}`.
+**Convergent minimum field set [INFERRED]:** `image/template`, `cpu`, `memory`, `mounts[]`
+with `ro|rw`, `env` (with secret indirection), `network{mode, allowDomains, denyDomains}`,
+`timeout`, `user`, `gui{width, height, display}`, `persist{snapshot, keepAlive}`.
 
-**GUI is missing from every sandbox declaration in the corpus.** Nobody declares display geometry
-in the sandbox spec — Anthropic requires `display_width_px`/`display_height_px` on the *tool*
-(`beta_tool_computer_use_20250124_param.py:12-19`), inspect_ai hardcodes
-`DISPLAY_WIDTH=1366, DISPLAY_HEIGHT=768` in the Gemini provider with a comment that these "should
-stay in sync with the dimensions used by the container"
-(`EV/inspect_ai/src/inspect_ai/model/_providers/_google_computer_use.py:18-21`), and SWE-agent has a
-`set_browser_window_size` shell command. **This duplication is a real bug class** and PACT should
-own it: declare geometry once in `sandbox.gui`, and derive the tool parameters from it.
+**GUI geometry is missing from every sandbox declaration in the corpus, and the duplication
+is a live bug class.** Anthropic requires `display_width_px`/`display_height_px` on the
+*tool* (`beta_tool_computer_use_20250124_param.py:12-19`); inspect_ai hardcodes
+`DISPLAY_WIDTH = 1366, DISPLAY_HEIGHT = 768` in the Gemini provider with the comment "These
+should stay in sync with the dimensions used by the container"
+(`_google_computer_use.py:18-21`); SWE-agent exposes a `set_browser_window_size <width>
+<height>` shell command (`tools/web_browser/config.yaml`); e2b's desktop geometry lives in
+the template image. **PACT should declare geometry once in `sandbox.gui` and derive every
+tool parameter from it.**
 
-The OS-agents survey supplies the reason this matters for accuracy, not just plumbing:
-vision encoders commonly ingest ~224×224 while GUI screenshots are 720×1080 or 1920×1080, and
-"Resizing screenshots to fit the resolution vision encoders of MLLMs preserves features [but loses
-detail] sometimes vital for MLLMs to accomplish OS tasks"
-(`gaia-ai-runtime/research/papers/2508.04482-os-agents-survey.pdf`, §3 — extracted text lines
-704-716). Screenshot scaling is therefore a **strategy variable** that belongs in the plural
-strategy space (T1), and OpenAI's own harness sets `detail: "original"` for exactly this reason:
-"preserves full screenshot resolution (up to 10.24M px) and improves click accuracy"
-(`EV/inspect_ai/src/inspect_ai/model/_providers/_openai_computer_use.py:117-124`).
+**[NEW] There are three coordinate spaces, and a coordinate is not portable without knowing
+which one it is in.**
+1. **Native display pixels** — the container's actual resolution.
+2. **Scaled API pixels** — inspect_ai down-scales to a fixed aspect-matched table
+   `MAX_SCALING_TARGETS = {XGA: 1024×768, WXGA: 1280×800, FWXGA: 1366×768}`
+   (`_resources/tool/_x11_client.py:35-40`, comment at `:34`: "sizes above XGA/WXGA are not
+   recommended"), matching aspect ratio within `0.02` tolerance and converting both
+   directions (`_scale_coordinates`, `:377-410`), with screenshots resized via
+   `convert -resize {x}x{y}!` (`:344-345`).
+3. **Normalised 0-1 (Gemini)** — `_denormalize_coordinate` is applied to every Gemini
+   action (`_google_computer_use.py:161, 165, 175`).
 
-### 3.2 Approval gates — four independent implementations, one converged vocabulary
+Screenshot scaling is also an **accuracy variable, not just plumbing**. The OS-agents survey:
+vision encoders commonly ingest ~224×224 while GUI screenshots are 720×1080; "Resizing
+screenshots to fit the resolution vision encoders of MLLMs preserves features of general
+layout and most objects, but text and small icons cannot be well perceived, which sometimes
+would be vital for MLLMs to accomplish OS tasks"
+(`gaia-ai-runtime/research/papers/2508.04482-os-agents-survey.pdf`, §3.2.1, extracted lines
+703-708). OpenAI's harness therefore sets `detail: "original"` — "preserves full screenshot
+resolution (up to 10.24M px) and improves click accuracy"
+(`_openai_computer_use.py:117-124`). Goose's answer is a **crop tool** with explicit
+`originalWidth`/`originalHeight` reporting (`developer/image.rs:19-23, 52-66`).
+⇒ **Screenshot resolution/crop policy belongs in the plural strategy space (T1), and is
+optimisable.**
+
+### 3.2 Approval gates — six independent implementations, one converged vocabulary
 
 | System | Vocabulary | Evidence |
 |---|---|---|
-| Claude Agent SDK | `PermissionMode = default \| acceptEdits \| plan \| bypassPermissions \| dontAsk \| auto`; `PermissionBehavior = allow \| deny \| ask`; rules are `{tool_name, rule_content}`; updates are `addRules/replaceRules/removeRules/setMode/addDirectories/removeDirectories` with destination `userSettings\|projectSettings\|localSettings\|session` | `types.py:25-27, 106-140` |
+| Claude Agent SDK | `PermissionMode = default \| acceptEdits \| plan \| bypassPermissions \| dontAsk \| auto`; `PermissionBehavior = allow \| deny \| ask`; rules `{tool_name, rule_content}`; updates `addRules/replaceRules/removeRules/setMode/addDirectories/removeDirectories` with destination `userSettings\|projectSettings\|localSettings\|session` | `types.py:25-27, 106-140` |
 | | `PermissionResultAllow{updated_input, updated_permissions}` / `PermissionResultDeny{message, interrupt}`; `CanUseTool = (name, input, ctx) -> PermissionResult` | `types.py:235-258` |
-| | Rich UI context: `title` ("Claude wants to read foo.txt"), `display_name` ("Read file"), `description`, `blocked_path`, `decision_reason`, `suggestions[]` | `types.py:199-233` |
+| | UI context: `title`, `display_name`, `description`, `blocked_path`, `decision_reason`, `suggestions[]` | `types.py:199-233` |
+| **Goose** | `PermissionLevel = AlwaysAllow \| AskBefore \| NeverAllow`; `PermissionConfig{always_allow: Vec<String>, ask_before: Vec<String>, never_allow: Vec<String>}` **persisted to a config file**, managed by `PermissionManager{config_path, permission_map}` | `FD/goose/crates/goose/src/config/permission.rs:18-37` |
+| **Goose (autonomy dial)** | `GooseMode = Auto \| Approve \| SmartApprove \| Chat` with human-readable messages: "Automatically approve tool calls" / "Ask before every tool call" / "**Ask only for sensitive tool calls**" / "Chat only, no tool calls" | `FD/goose/crates/goose-provider-types/src/goose_mode.rs:22-32` |
 | OpenAI Agents SDK | `Tool.needs_approval: bool \| callable`; durable `RunState.get_interruptions() -> list[ToolApprovalItem]`; `approve(item, always_approve)`, `reject(item, always_reject, rejection_message)` | `tool.py:429-436`; `run_state.py:356-389` |
-| ACP (Zed) | `PermissionOptionKind = allow_once \| allow_always \| reject_once \| reject_always`; `RequestPermissionOutcome = cancelled \| selected` | `PR/agent-client-protocol/schema/v1/schema.json` `$defs.PermissionOptionKind`, `$defs.RequestPermissionOutcome` |
+| ACP | `PermissionOptionKind = allow_once \| allow_always \| reject_once \| reject_always`; `RequestPermissionOutcome = cancelled \| selected`, with the normative rule that a `session/cancel` **MUST** answer all pending permission requests with `cancelled` | `PR/agent-client-protocol/schema/v1/schema.json` `$defs.PermissionOptionKind`, `$defs.RequestPermissionOutcome` |
 | Vercel AI SDK | Approval is a **state machine on the tool part**: `input-streaming → input-available → approval-requested → approval-responded → output-available`, each `approval{id, approved?, reason?, isAutomatic?, signature?}` | `packages/ai/src/ui/ui-messages.ts:290-345` |
 | A2A | Approval as a **task state**: `TASK_STATE_INPUT_REQUIRED`, `TASK_STATE_AUTH_REQUIRED` | `PR/a2a-spec/specification/a2a.proto:195-208` |
-| LangGraph | `interrupt(value)` + `Command(resume=...)`; note the documented re-execution semantics: "The graph resumes from the start of the node, **re-executing** all logic" | `FW/langgraph/libs/langgraph/langgraph/types.py:535, 811-827` |
+| AG-UI | Capability flags `{supported, approvals, interventions, feedback, interrupts, approve_with_edits}` | `capabilities.py:316-358` |
+| LangGraph | `interrupt(value)` + `Command(resume=...)`; documented re-execution semantics: "The graph resumes from the start of the node, **re-executing** all logic" | `FW/langgraph/libs/langgraph/langgraph/types.py:535, 811-827` |
 | OpenHands | `[security] confirmation_mode`, `security_analyzer = "llm" \| "invariant"`, `enable_security_analyzer` | `FW2/openhands/config.template.toml:226-236` |
 
-**Four systems independently arrived at `{allow, deny} × {once, always}` plus a reason string.**
-That is a settled vocabulary; PACT should use it verbatim rather than invent.
+**Six systems independently arrived at `{allow, deny} × {once, always}` plus a reason
+string.** Settled vocabulary; PACT should use it verbatim.
+
+**[NEW] Goose already ships the non-technical author's autonomy dial** — and Goose is Bud's
+execution home, so D3's superset requirement makes `GooseMode`'s four values a *floor*, not
+a design option. `SmartApprove` ("ask only for sensitive tool calls") is a
+**classifier-driven** mode, which is exactly D23's blast-radius classification applied at
+tool-call time rather than at learning time. PACT should unify the two: one classification
+function, two call sites.
 
 Two features only Vercel has, both of which PACT needs:
-- **`isAutomatic`** — distinguishes a policy auto-approval from a human decision. Required for
-  D23's blast-radius classifier to be auditable.
-- **`signature`** — the approval decision is signed. Required because in PACT the approval travels
-  in the transcript and the transcript is promotable to an eval case (AC-4.4); an unsigned approval
-  in a replayable trace is a forgeable authorisation.
+- **`isAutomatic`** — distinguishes a policy auto-approval from a human decision. Required
+  for D23's classifier to be auditable, and for AC-4.4 (a promoted trace must not look like
+  a human approved something a rule did).
+- **`signature`** — the approval decision is signed. Required because in PACT the approval
+  travels in the transcript and the transcript is promotable to an eval case; an unsigned
+  approval in a replayable trace is a forgeable authorisation.
 
-**Computer-use-specific gate: model-side safety checks.** Distinct from tool approval. The OpenAI
-Responses computer tool returns `pending_safety_checks` that the harness must explicitly
-acknowledge in `computer_call_output.acknowledged_safety_checks`
-(`EV/inspect_ai/src/inspect_ai/model/_providers/_openai_computer_use.py:104-129`). The Agents SDK
-surfaces this as `ComputerTool.on_safety_check: (ComputerToolSafetyCheckData) -> bool`
-(`FW/openai-agents-python/src/agents/tool.py:767-768, 892-906`). **[NEGATIVE] No other framework in
-the corpus models a provider-originated safety check.** PACT needs a third approval channel:
-`policy.safetyChecks: {auto_acknowledge: false | [codes]}` — and defaulting it to auto-acknowledge
-would be a silent policy relaxation under T7.
+**Computer-use-specific gate: model-side safety checks.** Distinct from tool approval. The
+OpenAI Responses computer tool returns `pending_safety_checks` that the harness must
+explicitly acknowledge in `computer_call_output.acknowledged_safety_checks`
+(`_openai_computer_use.py:104-129`). The Agents SDK surfaces it as
+`ComputerTool.on_safety_check: (ComputerToolSafetyCheckData) -> bool`
+(`tool.py:767-768, 892-906`). **[NEGATIVE] No other framework in the corpus models a
+provider-originated safety check.** PACT needs a third approval channel:
+`policy.safetyChecks: {autoAcknowledge: false | [codes]}` — defaulting it to
+auto-acknowledge would be a silent policy relaxation under T7.
 
-**Error-channel asymmetry worth recording:** OpenAI's `computer_call_output` has **no error or text
-field** — the only payload is a screenshot, so a failed action (e.g. a bad key name) cannot be
-reported to the model; inspect_ai substitutes a 1×1 transparent PNG
-(`_openai_computer_use.py:109-113`). A PACT computer-use loop that relies on textual error feedback
-will silently lose it on OpenAI. This is a `degraded` lattice entry.
+**Error-channel asymmetry.** OpenAI's `computer_call_output` has **no error or text field** —
+the only payload is a screenshot, so a failed action (e.g. a bad key name) cannot be reported
+to the model; inspect_ai substitutes a 1×1 transparent PNG
+(`_openai_computer_use.py:104-113`, comment verbatim). A PACT computer-use loop that relies
+on textual error feedback silently loses it on OpenAI. `degraded` lattice entry.
 
-### 3.3 No-code declaration proposal
+### 3.3 **[NEW]** The no-code computer-tool declaration already exists — in SWE-agent
+
+SWE-agent's browser bundle is declared **entirely in YAML**, backed by executables in
+`bin/`, with per-argument `type`, `description`, `required`, and `enum`
+(`FW2/swe-agent/tools/web_browser/config.yaml`; 18 executables in `tools/web_browser/bin/`):
+
+```yaml
+tools:
+  click_mouse:
+    signature: "click_mouse <x> <y> [<button>]"
+    docstring: "Click at the specified coordinates (shown as a red crosshair) on the current page"
+    arguments:
+      - {name: x, type: integer, description: "X coordinate", required: true}
+      - {name: y, type: integer, description: "Y coordinate", required: true}
+      - {name: button, type: string, description: "Mouse button to click (left or right, default: left)",
+         required: false, enum: ["left", "right"]}
+```
+
+Its 17 actions — `open_site, close_site, screenshot_site, click_mouse, double_click_mouse,
+move_mouse, drag_mouse, type_text, scroll_on_page, execute_script_on_page, navigate_back,
+navigate_forward, reload_page, wait_time, press_keys_on_page, set_browser_window_size,
+get_console_output` — are a **fifth vocabulary**, and they include two affordances no
+model-native vocabulary has (`execute_script_on_page`, `get_console_output`) while lacking
+OS-level `key`/`hold_key`. This confirms browser and desktop are genuinely different action
+domains (open question #2 in §8).
+
+**Media handling is also a declared pipeline stage.**
+`history_processors: [{type: image_parsing}]`
+(`config/default_mm_with_images.yaml:73-74`) with
+`ImageParsingHistoryProcessor.allowed_mime_types: set[str] = {"image/png","image/jpeg","image/webp"}`
+(`sweagent/agent/history_processors.py:340-344, 378`), and
+`templates.disable_image_processing: false` (`default_mm_with_images.yaml:6`).
+**A declarative media-type allowlist attached to a declarative history-transform stage** is
+precisely PACT's `strategy.media` shape.
+
+### 3.4 No-code declaration proposal
 
 ```yaml
 # agents/browser-checker/sandbox.yaml     ← expansion of `sandbox:` (D2 Expansion Rule)
 kind: container                 # none | process | container | microvm | remote
-image: pact/browser-ubuntu:1    # resolved from a profile; not a literal (F-1)
+image: pact/browser-ubuntu:1    # resolved from a profile, never a literal (F-1)
 cpu: 2
 memoryMb: 4096
 timeoutSeconds: 300
 gui:
-  width: 1366                   # single source of truth; the computer tool inherits these
-  height: 768
+  width: 1366                   # SINGLE SOURCE OF TRUTH; the computer tool inherits these
+  height: 768                   # matches inspect_ai FWXGA (_x11_client.py:38)
   display: 0
+  coordinateSpace: pixels       # pixels | normalized — declared, never inferred (§3.1)
 network:
-  mode: allowlist               # none | allowlist | full
-  allow: ["*.mycompany.com", "docs.stripe.com"]
-  deny:  ["*.internal"]
+  buildTime: allow              # air-gapped profiles force `deny` (§2.5)
+  runTime:
+    mode: allowlist             # none | allowlist | full
+    allow: ["*.mycompany.com", "docs.stripe.com"]
+    deny:  ["*.internal"]
 mounts:
-  - host: ./fixtures            # relative to the spec tree
-    at: /workspace/fixtures
-    mode: ro
+  - {host: ./fixtures, at: /workspace/fixtures, mode: ro}
 env:
   API_BASE: https://staging.mycompany.com
   API_KEY: {secret: staging-api-key}      # never a literal
@@ -746,96 +961,145 @@ persist: {snapshot: false, keepAlive: false}
 
 ```yaml
 # agents/browser-checker/policy.yaml      ← expansion of `policy:`
-autonomy: supervised            # observe | supervised | autonomous
+autonomy: supervised            # observe | supervised | smart | autonomous
+                                #   ↑ four values, matching GooseMode (D3 superset)
+media:                          # from Eve UploadPolicy, but default-deny per ACP
+  in:
+    accept: ["image/png", "image/jpeg", "application/pdf"]
+    maxBytes: 26214400
+  onReject: fail                # fail | drop-with-report   (never silent — T7)
 approvals:
   default: ask                  # allow | deny | ask
   rules:
     - tool: computer.*
-      when: "action in [type, key] and target.matches('*password*')"
+      when: "action in ['type','key'] && target.matches('*password*')"
       decision: ask
       prompt: "The agent wants to type into a password field on {url}. Allow?"
     - tool: computer.navigate
-      when: "url.host not in sandbox.network.allow"
+      when: "!(url.host in sandbox.network.runTime.allow)"
       decision: deny
       reason: "Navigation outside the approved domain list."
     - tool: browser.*
-      decision: allow           # everything else inside the sandbox is fine
+      decision: allow
   remember: [allow_always, reject_always]   # which options the UI offers
   timeoutSeconds: 300
   onTimeout: deny                            # fail-closed (T7)
+  onCancel: cancelled                        # ACP requires pending requests be answered
 safetyChecks:
   autoAcknowledge: false        # provider-originated checks always reach a human
 ```
 
 Design notes:
-- `decision: allow|deny|ask` + `remember: [allow_always, reject_always]` reproduces the converged
-  vocabulary exactly, and the four ACP option kinds fall out as `decision × remember`.
-- `prompt:` is the author-written sentence. Claude's SDK already proves the UI wants
-  `title`/`display_name`/`description` (`types.py:219-233`); a non-coder can write the sentence, and
-  PACT should *require* it for any `ask` rule so the human sees a domain-meaningful question rather
-  than a JSON blob.
-- The `when:` expression is the one place a predicate language is needed. It must be **CEL or
-  equivalent, not code** (`PR/cel-spec` is in the corpus) so D14 holds. Same language as the
-  capability predicates (O3.1) — one expression language, not two.
-- **Fail-closed default `onTimeout: deny`** — every other system defaults the other way
-  (Claude's `autoAllowBashIfSandboxed` defaults **True**, `types.py:889`; PACT should not).
+- `decision: allow|deny|ask` + `remember: [allow_always, reject_always]` reproduces the
+  converged vocabulary exactly; ACP's four option kinds fall out as `decision × remember`;
+  Goose's three `PermissionLevel`s fall out as `allow`/`ask`/`deny` with `remember: [always]`.
+- `prompt:` is the author-written sentence. Claude's SDK proves the UI wants
+  `title`/`display_name`/`description` (`types.py:219-233`); **PACT should *require* a prompt
+  for any `ask` rule** so a human sees a domain-meaningful question rather than a JSON blob.
+  This is a D13/D18 requirement, not a nicety.
+- `when:` needs **one** expression language, shared with the capability predicates (O3.1).
+  CEL is in the corpus (`PR/cel-spec`) and is not code, satisfying D14.
+- **Fail-closed defaults.** Every other system defaults the other way: Claude's
+  `autoAllowBashIfSandboxed` defaults `True` (`types.py:889`); Eve's `allowedMediaTypes`
+  defaults `"*"` (`upload-policy.ts:30-34`); Goose's `GooseMode` defaults `Auto`
+  (`goose_mode.rs:23-25`). PACT must not.
 
 ---
 
 ## 4. Deliverable 4 — Eval implications
 
-### 4.1 What DeepEval can actually do (the honest sizing for O4.1 / AC-4.1)
+### 4.1 What DeepEval can actually do (honest sizing for O4.1 / AC-4.1)
 
-- **Images and PDFs only.** `MLLMImage` (`EV/deepeval/deepeval/test_case/llm_test_case.py:40-176`)
+- **Images and PDFs only.** `MLLMImage` (`EV/deepeval/deepeval/test_case/llm_test_case.py:39-176`)
   takes `url` **or** (`dataBase64` + `mimeType`), resolves local paths and `file://` URIs
-  (`process_url` at 116, `is_local_path` at 131), and auto-loads base64. PDFs get a distinct
-  placeholder (`_placeholder`, 101-105: `[DEEPEVAL:PDF:<id>]` vs `[DEEPEVAL:IMAGE:<id>]`).
-- **Media is smuggled through strings.** Multimodal content is not a typed field on `LLMTestCase`;
-  it is a `[DEEPEVAL:IMAGE:<id>]` marker inside `input`/`actual_output`, re-expanded by
-  `parse_multimodal_string` (144-172) against a process-global `_MLLM_IMAGE_REGISTRY` (line 31).
-  This registry is in-process state, so a purely declarative YAML case cannot populate it without a
-  provider shim.
-- **Five image metrics total** (`EV/deepeval/deepeval/metrics/multimodal_metrics/__init__.py:1-5`):
+  (`process_url` at 116-128, `is_local_path` at 131-142), and auto-loads base64
+  (`_load_base64`, 89-93). PDFs get a distinct placeholder (`_placeholder`, 100-104:
+  `[DEEPEVAL:PDF:<id>]` vs `[DEEPEVAL:IMAGE:<id>]`).
+- **Media is smuggled through strings.** Multimodal content is not a typed field on
+  `LLMTestCase`; it is a marker inside `input`/`actual_output`, re-expanded by
+  `parse_multimodal_string` (144-172) against a **process-global** `_MLLM_IMAGE_REGISTRY`
+  (line 31).
+- **[CORRECTION] A config-only image case *is* reachable today.** The previous revision
+  claimed "a purely declarative YAML case cannot populate [the registry] without a provider
+  shim". That is wrong: `parse_multimodal_string` falls back to
+  `MLLMImage(url=img_id, _id=img_id)` when the id misses the registry
+  (`llm_test_case.py:161-163`), and `MLLMImage.__post_init__` resolves a bare local path via
+  `is_local_path`/`process_url`. So a YAML case may emit
+  `[DEEPEVAL:IMAGE:./fixtures/invoice.png]` and it loads. This *lowers* the cost of PACT's
+  DeepEval image-eval provider considerably.
+- **Five image metrics total** (`metrics/multimodal_metrics/__init__.py:1-5`):
   `TextToImageMetric`, `ImageEditingMetric`, `ImageCoherenceMetric`, `ImageHelpfulnessMetric`,
-  `ImageReferenceMetric`. All are LLM-judged and require a vision-capable judge.
-- **[NEGATIVE] Zero audio support.** `grep -rn "audio\|Audio" --include=*.py deepeval/` → **no
-  hits**. There is no audio test-case field, no audio metric, no audio judge path.
-- **[NEGATIVE] Conversational turns are text-only.**
-  `Turn{role: 'user'|'assistant', content: str, ...}`
-  (`EV/deepeval/deepeval/test_case/conversational_test_case.py:59-61`). A voice turn is not
-  representable; only its transcript is.
+  `ImageReferenceMetric`. All LLM-judged; all require a vision-capable judge.
+- **[NEGATIVE] Zero audio support.** `grep -rn "audio\|Audio" --include=*.py deepeval/`
+  returns **no hits** (re-verified). No audio test-case field, no audio metric, no audio
+  judge path.
+- **[NEGATIVE] Conversational turns are text-only.** `Turn{role: Literal["user","assistant"],
+  content: str, user_id, retrieval_context, tools_called, mcp_tools_called,
+  mcp_resources_called, mcp_prompts_called, metadata}`
+  (`test_case/conversational_test_case.py:59-81`). A voice turn is not representable — only
+  its transcript. Note the multi-turn case *does* extract image ids from turn strings
+  (`_get_images_mapping`, `:324-350`), so images survive in conversations via the same
+  placeholder hack; audio has no equivalent.
 
-**Therefore: "config-only expression of every DeepEval metric" (O4.1) is satisfiable for text and
-image, and is vacuous for audio and computer use — because DeepEval has nothing there.** The
-coverage matrix must say so rather than quietly scoping the claim to text.
+**Therefore: "config-only expression of every DeepEval metric" (O4.1) is satisfiable for text
+and image and *vacuous* for audio and computer use — because DeepEval has nothing there.**
+The coverage matrix must say so rather than quietly scoping the claim to text.
 
 ### 4.2 What the rest of the ecosystem can do
 
 **inspect_ai** has the most complete eval-side content model:
 `Content = ContentText | ContentReasoning | ContentImage | ContentAudio | ContentVideo |
-ContentData | ContentToolUse | ContentDocument` (`EV/inspect_ai/src/inspect_ai/_util/content.py`,
-union at the tail of the file). `ContentAudio.format: 'wav'|'mp3'`, `ContentVideo.format:
-'mp4'|'mpeg'|'mov'`, `ContentImage.detail: 'auto'|'low'|'high'|'original'`,
-`ContentDocument` auto-derives `filename` and `mime_type` from a path or data URI
-(`set_name_and_mime_type` validator). It also owns the only cross-provider computer tool (§4.3).
+ContentData | ContentToolUse | ContentDocument` (`EV/inspect_ai/src/inspect_ai/_util/content.py`).
+`ContentAudio.format: 'wav'|'mp3'`, `ContentVideo.format: 'mp4'|'mpeg'|'mov'`,
+`ContentImage.detail: 'auto'|'low'|'high'|'original'`, `ContentDocument` auto-derives
+`filename` and `mime_type` from a path or data URI. It also owns the only cross-provider
+computer tool (§4.4). **But its scorers are Python.**
 
-**promptfoo** has the best *no-code authoring* story: a YAML var written as
-`file://path/to/x.png` is auto-detected by extension and loaded as base64, gated by
-`PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64` (`EV/promptfoo/src/evaluatorHelpers.ts:306-330`);
-`collectFileMetadata` tags each var `{path, type: image|video|audio, format}` (121-150);
-PDFs are text-extracted (`extractTextFromPDF` defined at 35, called at 305). Result payloads carry typed
-`audio{data, blobRef, transcript, format, sampleRate, channels, duration}`,
-`video{blobRef, format, size, duration, thumbnail, spritesheet, model, aspectRatio, resolution}`,
-`images[]` (`EV/promptfoo/src/types/index.ts:433-458`), backed by a content-hash
-`BlobStorageProvider` (`src/blobs/types.ts:18-32`).
+**promptfoo** has the best *no-code authoring* story:
+- A YAML var written `file://path/to/x.png` is auto-detected by extension and loaded as
+  base64, gated by `PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64`
+  (`EV/promptfoo/src/evaluatorHelpers.ts:306-330`); `collectFileMetadata` tags each var
+  `{path, type: image|video|audio, format}` (121-150); PDFs are text-extracted
+  (`extractTextFromPDF`, defined 35, called 305).
+- Result payloads carry typed
+  `audio{data, blobRef, transcript, format, sampleRate, channels, duration}`,
+  `video{blobRef, format, size, duration, thumbnail, spritesheet, model, aspectRatio,
+  resolution}`, `images[]` (`src/types/index.ts:433-458`), backed by a content-hash
+  `BlobStorageProvider` (`src/blobs/types.ts:18-32`).
+- **[NEW] It ships a declarative trajectory assertion family** — the single most reusable
+  thing in the corpus for D16 computer-use evals:
 
-**[NEGATIVE] No project in the corpus has an audio-native assertion.** promptfoo's assertion
-directory (`EV/promptfoo/src/assertions/`) has 50+ assertions and none consume audio; the
-`audio.transcript` field exists precisely so text assertions can be applied to a transcript.
+  | Assertion | Value shape | Evidence |
+  |---|---|---|
+  | `trajectory:tool-used` | step matcher `{name \| pattern}` | `src/assertions/index.ts:147`, `types/index.ts:655` |
+  | `trajectory:tool-sequence` | `{mode: 'exact'\|'in_order', steps: (string \| StepMatcher)[]}` | `src/assertions/trajectory.ts:22-25` |
+  | `trajectory:step-count` | `{name\|pattern, min?, max?}` | `trajectory.ts:17-21` |
+  | `trajectory:tool-args-match` | `{name\|pattern, args, mode: 'exact'\|'partial', defaults, ignore}` | `trajectory.ts:32-38` |
+  | `trajectory:goal-success` | `string` or `{goal: string}` — LLM-graded | `trajectory.ts:26-28`, listed in `MODEL_GRADED_ASSERTION_TYPES` (`index.ts:133`) |
 
-### 4.3 The two eval cases D16 demands, written the way a non-coder would write them
+  All five read **OTel trace spans** (`getTraceOrThrow`, `trajectory.ts:39-46`; the
+  `TRACE_AWARE_ASSERTION_TYPES` set at `index.ts:135-148` also contains
+  `trace-error-spans`, `trace-span-count`, `trace-span-duration`). ⇒ **PACT should adopt this
+  family and its trace-backed implementation**, which also means **tracing is a prerequisite
+  for computer-use evals**, not an optional observability feature.
 
-**(A) A screenshot / vision task**
+**[NEGATIVE] No project in the corpus has an audio-native assertion.** promptfoo's
+`src/assertions/` has **57** files and none consume audio; `audio.transcript` exists
+precisely so text assertions apply to a transcript.
+
+**[NEGATIVE] No project in the corpus has a declarative *environment-state* assertion.**
+- terminal-bench grades by running **pytest inside the container**: `parser_name: pytest`
+  in `task.yaml`, `run-tests.sh` invoking `uv run pytest $TEST_DIR/test_outputs.py -rA`, and
+  `tests/test_outputs.py` containing hand-written Python
+  (`assert solution_path.read_text().strip() == "26160"`). Its five parsers are
+  `pytest`, `mlebench`, `swebench`, `swelancer`, `sweperf` (`terminal_bench/parsers/`).
+- inspect_ai expresses final-state checks in Python scorers.
+- promptfoo's `sql` assertion is a **syntax validity check on model output**
+  (`src/assertions/sql.ts:1-30`, node-sql-parser), not a database query.
+
+### 4.3 The eval cases D16 demands, written the way a non-coder would write them
+
+**(A) A screenshot / vision task — buildable today**
 
 ```yaml
 # evals/cases/invoice-total.yaml
@@ -849,52 +1113,78 @@ expect:
   - metric: deepeval:answer_relevancy           # judge only if needed
     threshold: 0.8
 ```
-This is buildable today: promptfoo already resolves `file://x.png`; DeepEval's `MLLMImage` accepts a
-local path; the only new machinery is desugaring `image:` into the provider's content part.
+Machinery required: promptfoo already resolves `file://x.png`
+(`evaluatorHelpers.ts:306-330`); DeepEval's `MLLMImage` accepts a bare local path and the
+`[DEEPEVAL:IMAGE:<path>]` fallback works (§4.1 correction). The only new work is desugaring
+`image:` into the provider's content part. **Ship this in v1 with confidence.**
 
-**(B) A computer-use task**
+**(B) A computer-use task — mostly buildable, one new assertion family**
 
 ```yaml
 # evals/cases/cancel-subscription.yaml
 case: cancel-subscription
 environment:
-  sandbox: ./environments/billing-app.yaml      # replayable, offline
+  kind: vm-snapshot                             # replay | simulated | vm-snapshot | live
+  sandbox: ./environments/billing-app.yaml      # a sandbox.yaml, same schema as §3.4
   reset: snapshot://billing-app@clean           # deterministic start state
 input:
   - text: "Cancel the Pro subscription for acme-corp."
 expect:
-  - trajectory:                                 # step-level assertions
-      max_steps: 25
-      must_call: [computer.screenshot]
-      must_not_call: [computer.type]            # no free-text typing on this task
-      must_not_navigate_outside: ["billing.internal"]
-  - final_state:                                # environment assertion, not text
-      http: GET /api/subscriptions/acme-corp
+  # --- existing prior art: promptfoo trajectory family, trace-backed ---
+  - trajectory:tool-used: {name: computer, args: {action: screenshot}}
+  - trajectory:step-count: {pattern: "computer", max: 25}
+  - trajectory:tool-args-match:
+      name: computer
+      mode: partial
+      args: {action: navigate}
+      ignore: [coordinate]
+  - not:
+      trajectory:tool-used: {name: computer, args: {action: type}}
+  # --- NEW WORK: declarative environment-state assertion ---
+  - final_state:
+      http: {method: GET, path: /api/subscriptions/acme-corp}
       json_path: $.status
       equals: "cancelled"
+  # --- NEW WORK: approval assertion ---
   - approvals:
-      required: [computer.click@confirm-cancel]  # the gate must actually have fired
-  - slo: {e2e_p95_seconds: 90, cost_usd_max: 0.40}
+      required: [computer.click@confirm-cancel]
+      forbidden_automatic: true                 # must have been a human, not `isAutomatic`
+  - slo: {e2e_p95_seconds: 90, cost_usd_max: 0.40, screenshots_max: 25}
 ```
 
-The load-bearing move is `final_state:` — **a computer-use eval is graded on environment state, not
-on model text.** This is what OSWorld/AndroidWorld do and it is what makes the eval deterministic
-(AC-4.5). Nothing in DeepEval, promptfoo, or inspect_ai's *metric* layer expresses it; inspect_ai
-expresses it in Python scorers. **PACT needs a declarative `final_state` assertion family
-(`http`, `file`, `sql`, `shell_exit_code`, `sandbox_file_contains`) — this is new work.** [INFERRED]
+The load-bearing move is `final_state:` — **a computer-use eval is graded on environment
+state, not on model text.** The OS-agents survey names this the task-level criterion:
 
-**Offline determinism is bounded.** The OS-agents survey's taxonomy is the honest frame
-(`2508.04482-os-agents-survey.pdf`, extracted §4.2.2, lines 1-27 of the extracted range):
-- *Static* environments = cached site copies / recorded traces; "only one-step action are supported";
-  Mind2Web "captures comprehensive snapshots … enabling seamless offline replay".
-- *Interactive-simulated* = virtual sites/apps built to "avoid the reproducibility issues caused by
-  the dynamic nature of real-world environments".
-- *Interactive-real-world* = "one must consider the continuously updating nature of the environment,
-  uncontrollable user behaviors, and diverse device setups".
+> "Task-level evaluation centers on the final output and evaluates whether the agent reaches
+> the desired final state. The two main criteria are task completion and resource
+> utilization." — `2508.04482-os-agents-survey.pdf` §4.1.2 (extracted lines 1670-1673)
 
-**Only static and interactive-simulated are air-gappable (D17).** PACT must therefore type the
-environment: `environment.kind: replay | simulated | live`, with `live` **excluded from the CI gate
-by default** and flagged in the Portability Report.
+and the same section names the two other metric families PACT should adopt verbatim:
+**step-level** (action-grounding accuracy, element match by ID *or* position, step SR;
+"a given task may have various valid paths", so step-level alone is insufficient — extracted
+lines 1651-1668) and **efficiency** (`Step Ratio` = agent steps ÷ human-optimal steps, `API
+Cost`, `Execution Time`, `Peak Memory Allocation` — extracted lines 1679-1690).
+⇒ PACT SLO vocabulary should include **`step_ratio`** alongside latency and cost.
+
+**Proposed `final_state` assertion family (new work):**
+`http` · `file{path, exists|contains|sha256}` · `sql{query, equals}` ·
+`shell{command, exit_code, stdout_matches}` · `sandbox_file{path, contains}`. Each must be
+executable **inside the declared sandbox** (so it works air-gapped) and must not require the
+author to write code — which is exactly where terminal-bench stops and PACT must continue.
+
+**Environment typing — four values, not three. [CORRECTION]** The previous revision proposed
+`replay | simulated | live`. The survey's taxonomy is static vs interactive, with interactive
+splitting into simulated and real-world (§4.2.2, extracted lines 1729-1758) — and it
+classifies **OSWorld's VMs as real-world**, not simulated. But a VM snapshot *is*
+reproducible. So the reproducibility axis and the fidelity axis are independent, and PACT
+needs:
+
+| `environment.kind` | Reproducible? | Air-gappable? | CI-gateable by default? | Corpus example |
+|---|---|---|---|---|
+| `replay` | yes (cached pages / recorded traces; one-step only) | yes | yes | Mind2Web "captures comprehensive snapshots … enabling seamless offline replay" (extracted 1740-1742); OpenHands `replay_trajectory_path` (`config.template.toml:36`) |
+| `simulated` | yes ("to avoid the reproducibility issues caused by the dynamic nature of real-world environments", extracted 1751-1753) | yes | yes | FormWoB, virtual apps |
+| `vm-snapshot` | yes, if `reset:` is declared | yes (if the image is local) | yes | OSWorld VMs; terminal-bench `docker-compose.yaml` + `Dockerfile` per task |
+| `live` | **no** ("continuously updating nature of the environment, uncontrollable user behaviors, and diverse device setups", extracted 1756-1758) | no | **no — excluded from the gate, flagged in the Portability Report** | real sites/apps |
 
 **(C) A voice turn — and why it cannot be written today**
 
@@ -907,47 +1197,55 @@ turns:
     expect:
       - transcript_contains: ["order number"]
       - slo: {ttft_ms_p95: 800}          # voice TTFT ≠ batch E2E (D16)
-      - barge_in: allowed                # can the caller interrupt?
+      - barge_in: allowed
       - audio: {max_silence_ms: 1200}
 ```
 Blockers, each verified:
-1. DeepEval has no audio at all (§4.1) — no metric, no test-case field.
-2. `Turn.content: str` — the multi-turn model in DeepEval cannot hold audio.
-3. No local TTS/duplex model exists in the corpus, so an air-gapped voice eval cannot be run
-   end-to-end (§2.4).
-4. Barge-in / turn-taking has no assertion vocabulary anywhere. The closest primitives are
-   `RealtimeTurnDetectionConfig.interrupt_response` (`realtime/config.py:108-109`) and the
-   `speech-started`/`speech-stopped` events (`realtime-model-v4-server-event.ts:23-31`) — signals
-   exist, assertions do not.
+1. DeepEval has zero audio (§4.1) — no metric, no test-case field.
+2. `Turn.content: str` (`conversational_test_case.py:59-61`) — the multi-turn model cannot
+   hold audio.
+3. No local TTS and no local duplex model exists in the corpus (§2.5), so an air-gapped
+   voice eval cannot run end-to-end.
+4. **Barge-in / turn-taking has no assertion vocabulary anywhere.** The closest primitives
+   are `RealtimeTurnDetectionConfig.interrupt_response` (`realtime/config.py:108-109`) and
+   the `speech-started`/`speech-stopped` server events
+   (`realtime-model-v4-server-event.ts`). Signals exist; assertions do not.
 
-**Realistic v1:** grade a voice turn on its **transcript plus timing**, with the audio kept as an
-artifact for human review. That is honest and implementable: transcripts flow through every existing
-text metric, `input-transcription-completed` / `audio-transcript-done` events give both sides
-(`realtime-model-v4-server-event.ts:47-54, 113-131`), and promptfoo already stores
-`audio.transcript` alongside `audio.data` for exactly this reason
-(`EV/promptfoo/src/types/index.ts:433-442`).
+**Realistic v1:** grade a voice turn on its **transcript plus timing**, keeping the audio as
+an artifact for human review. This is honest and implementable: transcripts flow through
+every existing text metric; `input-transcription-completed` / `audio-transcript-done` give
+both sides; promptfoo already stores `audio.transcript` alongside `audio.data`
+(`src/types/index.ts:433-442`).
+
+**Open design question this forces (§8.4):** if the case supplies a `.wav` and the binding is
+cascaded, **the STT model becomes part of the system under test**. PACT should let an eval
+pin a reference transcript to isolate the agent from STT variance —
+`expect: [{transcript_equals_reference: ./fixtures/refund-request.txt}]` — otherwise a
+change of STT model shows up as an agent regression.
 
 ### 4.4 Modality-aware SLOs (D16 explicitly requires this)
 
-The corpus supplies the parameters that make voice SLOs measurable, and they are *different
-quantities* from batch metrics:
+Voice SLO quantities are *different quantities*, not tighter thresholds:
 - `prefix_padding_ms`, `silence_duration_ms`, `idle_timeout_ms`, `threshold`, `eagerness`
-  (`FW/openai-agents-python/src/agents/realtime/config.py:96-124`) — these determine perceived
-  latency more than model TTFT does.
-- `TTSModelSettings.buffer_size = 120` "minimal size of the chunks of audio data that are being
-  streamed out" and a sentence-based `text_splitter`
-  (`FW/openai-agents-python/src/agents/voice/model.py:31-58`) — the cascaded pipeline's TTFT is
-  dominated by the splitter, not the LLM.
-- Audio is billed per audio-token and per second in the catalogue
-  (`input_cost_per_audio_token`, `input_cost_per_audio_per_second`, `output_cost_per_audio_token` in
-  `RO/litellm/model_prices_and_context_window.json`), so `cost_usd_max` predicates need
-  modality-aware cost models, not token counts.
+  (`openai-agents realtime/config.py:96-124`) determine perceived latency more than model
+  TTFT does.
+- `TTSModelSettings.buffer_size = 120` ("minimal size of the chunks of audio data that are
+  being streamed out") and a sentence-based `text_splitter`
+  (`voice/model.py:31-58`) — the cascaded pipeline's TTFT is dominated by the splitter, not
+  the LLM.
+- Audio is billed **per audio-token and per second** in the catalogue
+  (`input_cost_per_audio_token`, `input_cost_per_audio_per_second`,
+  `output_cost_per_audio_token`, `cache_creation_input_audio_token_cost` in
+  `RO/litellm/model_prices_and_context_window.json`), so `cost_usd_max` needs a
+  modality-aware cost model, not token counts.
 - Image cost is driven by resolution/detail (`detail: original` = "up to 10.24M px",
-  `_openai_computer_use.py:117-119`), so a computer-use SLO must budget **screenshots per run**, not
-  just tokens.
+  `_openai_computer_use.py:117-119`), so a computer-use SLO must budget **screenshots per
+  run**. inspect_ai already parameterises this: `computer(max_screenshots: int | None = 1,
+  timeout: int | None = 180)` (`_computer.py:74`).
 
-Proposed SLO vocabulary additions: `ttft_ms` (voice), `turn_latency_ms`, `barge_in_ms`,
-`screenshots_per_run`, `audio_seconds_in/out`, `cost_usd` — all percentile-qualified per O4.2.
+**Proposed SLO vocabulary additions:** `ttft_ms` (voice), `turn_latency_ms`, `barge_in_ms`,
+`screenshots_per_run`, `step_ratio` (from the OS survey), `audio_seconds_in/out`,
+`cost_usd` — all percentile-qualified per O4.2.
 
 ---
 
@@ -957,26 +1255,31 @@ Ranked by how badly a v1 promise would hurt.
 
 | # | Claim that would be false | Verified basis | Recommended v1 scope |
 |---|---|---|---|
-| 1 | "Config-only evals for voice turns" | DeepEval has **zero** audio code; `Turn.content: str`; no audio assertion exists in promptfoo's 50+ assertions; no local TTS/duplex model in the corpus | **Transcript + timing only.** Audio retained as an artifact. State this in the coverage matrix. |
-| 2 | "Portable computer use" | 4 incompatible action vocabularies; inspect_ai's Gemini bridge maps 3+ actions to a **no-op** (`_google_computer_use.py:152-156`); OpenAI drops `triple_click`→`double_click` (`_openai_computer_use.py:159-162`); OpenAI's `computer_call_output` has no error channel (`_openai_computer_use.py:109-113`); Anthropic's action set changes per dated tool version (`computer_20250124.ts:11-27` vs `computer_20251124.ts:11-28`) | Define **one PACT action vocabulary** + per-target mapping tables with **mandatory loss reports**. Ship `browser` environment first (most uniform); desktop `mac/windows/ubuntu` as `experimental`. |
-| 3 | "Model catalogue tells you what a model can do" | LiteLLM omits `supports_computer_use` on OpenAI's own `computer-use-preview`; models.dev has no `computer_use` field at all; LangChain must ship a hand-maintained override TOML; one LiteLLM record's `mode` is the schema's docstring | Catalogue is a **pre-filter only** (R5). `strict` mode refuses unprovenanced fields. Add a `probe` verification level. |
-| 4 | "Video is first class" | MCP has no video content type in 2025-11-25 **or** draft; Anthropic has none; AutoGen has none; the Claude Agent SDK has none; only Pydantic AI, LangChain and Vercel model it | Video **in** = supported where the binding supports it, reported `unsupported` elsewhere. Video **out** = out of scope for v1. |
-| 5 | "Media round-trips through the Expansion Rule" | Base64 in `canonical.json` is a known blow-up (OpenHands flag comment; SWE-agent's 10 MB observation cap) | Content-addressed blob store + `ref:` in canonical.json; inline only under a profile threshold. |
-| 6 | "Tool results can be multimodal everywhere" | AutoGen `FunctionExecutionResult.content: str`; Claude Agent SDK drops audio and binary resources with a log warning (`__init__.py:512, 516`) | `degraded` lattice entries with reports; harness-lowering fallback = emit media as a following user part. |
-| 7 | "Audio streaming works in the agent loop" | Files are atomic stream parts in Vercel v4 and Pydantic AI has no `FilePartDelta`; duplex audio lives in a *separate model interface* (`realtime-model/`) or a *separate pipeline* (`voice/`) | Model voice as a distinct **session shape** with a separate `realtime` model-role binding. Do not pretend it is a content part. |
-| 8 | "Air-gapped multimodal eval" | DeepEval multimodal metrics require a vision-capable judge model; no local TTS anywhere | Require a declared **local vision judge** in the profile; mark audio-out evals as network-dependent. |
-| 9 | "Computer-use evals are deterministic" | Only static/simulated environments are reproducible (OS survey §4.2.2); live sites are explicitly called out as non-reproducible | Type the environment `replay|simulated|live`; exclude `live` from CI gates by default. |
-| 10 | "Safety checks are handled" | Provider-originated `pending_safety_checks` exist **only** in the OpenAI path; no other framework models them | Third approval channel, default **not** auto-acknowledged. |
+| 1 | "Config-only evals for voice turns" | DeepEval has **zero** audio code; `Turn.content: str`; no audio assertion in promptfoo's 57 assertion files; no local TTS/duplex model in the corpus | **Transcript + timing only.** Audio retained as an artifact. State it in the coverage matrix. |
+| 2 | "Portable computer use" | **Five** action vocabularies; **three** coordinate spaces; inspect_ai's Gemini bridge maps unmapped actions to `wait_5_seconds` **as a no-op** (`_google_computer_use.py:152-156`); `triple_click → double_click` and `hold_key → Keypress` (dropping `duration`) on OpenAI (`_openai_computer_use.py:159-172`); OpenAI's `computer_call_output` has no error channel; Anthropic's action set changes per dated tool version | Define **one PACT action vocabulary** + per-target mapping tables with **mandatory loss reports**. Ship `browser` first; desktop `mac/windows/ubuntu` as `experimental`. |
+| 3 | "The model catalogue tells you what a model can do" | 12.1% `supported_modalities` coverage; 28.9% of entries have no capability key; 293/297 Claude entries lack `supported_modalities`; `supports_computer_use` absent on `computer-use-preview`; models.dev has no `computer_use`; LangChain ships a hand-maintained override TOML with no provenance | Catalogue is a **pre-filter only** (R5). Tri-state with `unknown`. `strict` refuses unprovenanced fields. Add a `probe` level. |
+| 4 | "Video is first class" | MCP has no video in **any** schema version; Anthropic has none; AutoGen has none; Claude Agent SDK has none; pydantic-ai raises `NotImplementedError` on **both** OpenAI surfaces | Video **in** = supported where the binding supports it, `unsupported` elsewhere. Video **out** = out of scope for v1. |
+| 5 | "Media round-trips through the Expansion Rule" | base64 in `canonical.json` is a known blow-up (OpenHands flag comment; SWE-agent's 10 MB observation cap) | Content-addressed blob store + `blob:` refs; inline only under a profile threshold; **digest becomes a Merkle root** (§1.4). |
+| 6 | "Tool results can be multimodal everywhere" | AutoGen `FunctionExecutionResult.content: str`; Claude Agent SDK drops audio and binary resources with a log warning (`__init__.py:512, 516`); tool-return MIME allowlists are model-specific and narrow (5 types, Gemini 3+ only) | `degraded` lattice entries with reports; harness fallback = emit media as a following user part, or Eve-style text reference. |
+| 7 | "Audio streaming works in the agent loop" | Files are atomic stream parts in Vercel v4; pydantic-ai has no `FilePartDelta`; duplex audio lives in a *separate model interface* or *separate pipeline* everywhere | Model voice as a distinct **session shape** with a separate `realtime` model-role binding. |
+| 8 | "Air-gapped multimodal eval" | DeepEval multimodal metrics require a vision-capable judge; no local TTS anywhere; terminal-bench-style graders `curl` from the network at test time | Require a declared **local vision judge** in the profile; separate build-time from run-time network in the environment declaration. |
+| 9 | "Computer-use evals are deterministic" | Only static / simulated / snapshot-reset environments are reproducible; live sites explicitly called out as non-reproducible (OS survey §4.2.2) | Type the environment `replay\|simulated\|vm-snapshot\|live`; exclude `live` from CI gates by default. |
+| 10 | "Safety checks are handled" | Provider-originated `pending_safety_checks` exist **only** in the OpenAI path | Third approval channel, default **not** auto-acknowledged. |
+| 11 | **[NEW]** "The same folder behaves the same on every runtime, for media" | Eve demotes oversized/unsupported media to a text path (`attachment-staging.ts:259-287`); Goose promotes a text path to an image (`images.rs:36-100, 202-241`). Two PACT targets, opposite implicit transforms | Make promotion/demotion an **explicit declared lowering rule** with a loss report; forbid adapter heuristics; add a CTS fixture that pins the behaviour. |
+| 12 | **[NEW]** "Modality capability can be read off the adapter" | Pydantic AI derives capability by substring-matching the model name (`profiles/google.py:61`, `profiles/openai.py:314-317`); inspect_ai by version regex | The catalogue is authoritative; adapter guesses that disagree are a **reported conflict**, and the lockfile records which source decided. |
 
 **Things that ARE ready and should be promised confidently:**
 - Image input, document/PDF input, and provider-file-ID references across all seven targets
   (modulo AutoGen's tool-result gap).
-- A single media-typed part model — three independent projects converged on it.
-- The approval vocabulary `{allow,deny} × {once,always} + reason` — four independent
-  implementations agree.
-- Sandbox declaration — six systems, a clear common field set, `{type, config}` adapter seam
-  already proven by inspect_ai.
-- Config-only image evals — promptfoo's `file://` loading + DeepEval's five image metrics cover it.
+- The **source union** `{bytes | url | provider-ref | text}` + MIME — eight systems agree.
+- The approval vocabulary `{allow, deny} × {once, always}` + reason — **six** independent
+  implementations agree, including Goose (D3 superset target).
+- Sandbox declaration — eight systems, a clear common field set, `{type, config}` adapter
+  seam already proven by inspect_ai.
+- **Declarative trajectory assertions** — promptfoo ships five, trace-backed, config-only.
+- Config-only **image** evals — promptfoo's `file://` loading + DeepEval's five image metrics
+  + the `[DEEPEVAL:IMAGE:<path>]` fallback cover it end to end.
+- **Eve's staging/hydration ladder** — a proven, shipping media degradation strategy.
 - Modality-aware cost data — LiteLLM already carries per-audio-token and per-second pricing.
 
 ---
@@ -985,64 +1288,87 @@ Ranked by how badly a v1 promise would hurt.
 
 | Feature | v1 level | Rationale |
 |---|---|---|
-| `image` in (url/bytes/file/providerRef) | **native** on all 7 | universal |
-| `document` in (PDF, txt, csv, docx) | **native** on 5, `degraded` AutoGen/Claude-SDK | verified per §1.2 |
-| `image` out (model-generated) | **native** on Pydantic AI / Vercel / OpenAI Agents; `unsupported` Anthropic-family | `content_block.py` has no image member |
+| `image` in (url/bytes/path/providerRef) | **native** on all 7 | universal |
+| `document`/PDF in | **native** on 5, `degraded` AutoGen / Claude-SDK | §1.2 |
+| `image` out (model-generated) | **native** Pydantic AI / Vercel / OpenAI Agents; **`unsupported`** Anthropic-family | `content_block.py` has no image member |
+| **media→path fallback** (oversized/unsupported → text reference) | **native** wherever `filesystem.tools` is available | Eve `attachment-staging.ts:259-287` |
 | `audio` in — cascaded (STT → text) | **native** everywhere (STT is a separate model role) | works even where the message model has no audio |
-| `audio` in — native to the model | **native** on Pydantic AI (Chat Completions) / LangChain / Vercel; `unsupported` elsewhere; **error** on OpenAI Responses | `models/openai.py:3469-3470` |
+| `audio` in — native to the model | **native** Pydantic AI (Chat Completions, **wav/mp3 only**) / LangChain / Vercel; **error** on OpenAI Responses; `unsupported` elsewhere | `models/openai.py:1668-1674, 3470` |
 | `audio` out / duplex voice | **native** only where a `realtime` model role is bound (Vercel, OpenAI Agents); `emulated` via TTS elsewhere | separate interface everywhere |
-| `video` in | `native` on 3, `unsupported` on 4; **`unsupported` for all MCP tools** | MCP ContentBlock lacks video |
-| `computer_use` — browser | **native** OpenAI Agents / Vercel-Anthropic; **harness-lowered** elsewhere via MCP browser tool | PACT owns the action vocabulary (D12) |
-| `computer_use` — desktop (X11) | `experimental` | display geometry + action drift |
+| `video` in | `native` on 3, `unsupported` on 4; **`unsupported` for all MCP tools**; **error** on both OpenAI surfaces in pydantic-ai | MCP `ContentBlock` lacks video |
+| `computer_use` — browser | **native** OpenAI Agents / Vercel-Anthropic; **harness-lowered** elsewhere via an MCP browser tool | PACT owns the action vocabulary (D12) |
+| `computer_use` — desktop (X11) | `experimental` | geometry duplication + action drift + 3 coordinate spaces |
 | Tool approval gates | **native** on 6 of 7 (AutoGen via harness) | converged vocabulary |
 | Provider safety checks | **native** OpenAI only; `unsupported` reported elsewhere | |
 | Sandbox declaration | **native** via `{kind, config}` seam | D24: adapter-shaped, minimal |
+| Trajectory assertions | **native** wherever tracing is on | promptfoo family |
+| `final_state` assertions | **native** wherever `sandbox.kind != none` | new work |
 
 ---
 
-## 7. Superset check against `bud.dev/v1` (D3)
+## 7. Superset check against `bud.dev/v1` and Goose (D3)
 
-Everything the Bud manifest expresses in this area must be expressible in PACT on day one:
-
-| Bud manifest feature | Evidence | PACT expression |
+| Existing feature | Evidence | PACT expression |
 |---|---|---|
 | `input.dictation{enabled, provider: openai\|groq\|elevenlabs\|local\|default, model, maxAudioBytes}` | `sdk-and-declarative-dev.md:2519-2527` | `models.roles.stt: {provider, model, maxBytes}` + `interface.input.audio.mode: transcribe` |
 | Local Whisper for air-gapped transcription | `sdk-and-declarative-dev.md:2549-2553` | `profiles/airgapped.yaml` binds `stt` to a local model |
-| "channels can use dictation for voice attachments, but the transcribed text is still run input" | `sdk-and-declarative-dev.md:2554-2556` | This is the **cascaded** mode. PACT must be a *strict superset*: also support `interface.input.audio.mode: native` and `session: duplex`. |
+| "channels can use dictation for voice attachments, but the transcribed text is still run input" | `sdk-and-declarative-dev.md:2554-2556` | the **cascaded** mode. PACT must be a strict superset: also `interface.input.audio.mode: native` and `session: duplex`. |
 | `security.sandbox.profile: inherit` | `sdk-and-declarative-dev.md:2160-2161` | `sandbox: {profile: <name>}` with profile inheritance (F-1) |
 | `security.promptInjection.action: require_approval` | `sdk-and-declarative-dev.md:2153-2155` | `policy.approvals.rules[].when: injection_detected` |
 | `policy.toolOrigin.mode: off\|audit\|ask_on_cross_origin\|deny_sensitive` | `sdk-and-declarative-dev.md:2147-2149` | `policy.approvals.rules` with an origin predicate |
-| Parity-contract label "image behavior such as local marker extraction or unsupported MIME types" | `sdk-and-declarative-dev.md:2094` | This is *already* a per-provider capability lattice entry. PACT formalises it as `lattice[adapter][provider].media[mediaType] = native\|emulated\|degraded\|unsupported`. |
+| Parity-contract label "image behavior such as local marker extraction or unsupported MIME types" | `sdk-and-declarative-dev.md:2094` | formalised as `lattice[adapter][provider].media[mediaType] = native\|emulated\|degraded\|unsupported` |
 | MCP prompt/resource content "structured text, image, resource, and resource-link" | `sdk-and-declarative-dev.md:1588-1589` | maps to the PACT part model directly |
+| **[NEW] Goose `GooseMode = Auto\|Approve\|SmartApprove\|Chat`** | `goose_mode.rs:22-32` | `policy.autonomy: autonomous\|supervised\|smart\|observe` — **four values are a floor** |
+| **[NEW] Goose `PermissionConfig{always_allow, ask_before, never_allow}`** | `config/permission.rs:24-30` | `policy.approvals.rules` desugars to these three lists for the Goose adapter |
+| **[NEW] Goose `ImageTool{source, crop{x,y,width,height}}`, 20 MiB cap** | `developer/image.rs:14-36` | a first-party PACT tool, with `crop` in the strategy space |
+| **[NEW] Goose implicit text-path→image promotion** | `images.rs:36-100` | must become an **explicit** `strategy.media.promotePathsInToolOutput: bool` (default `false`), reported when enabled |
 
-No modality feature in the Bud manifest is inexpressible in the proposed model. The one place PACT
-**must go beyond** it is duplex voice: Bud today degrades voice to text before the run.
+No modality feature in the Bud manifest or in Goose is inexpressible in the proposed model.
+The two places PACT **must go beyond** them are **duplex voice** (Bud degrades voice to text
+before the run) and **explicit media promotion** (Goose does it implicitly).
 
 ---
 
 ## 8. Open questions for the architecture doc
 
-1. **Does `canonical.json` carry blob bytes at all, ever?** My recommendation is never (refs only),
-   but that interacts with the digest/signing story (O1.2): the digest must then cover
-   `hash(canonical.json) + hash(each referenced blob)`, i.e. a Merkle root, not a single file hash.
-2. **One action vocabulary or a family?** Browser and desktop have genuinely different affordances
-   (`navigate`/`open_web_browser` are meaningless on a desktop; `key`/`hold_key` are meaningless in
-   a headless DOM driver). Options: one superset with per-environment `supported` subsets, versus
-   `computer.browser.*` and `computer.desktop.*` as distinct resource kinds.
-3. **Does a media part carry its own retention/redaction policy?** AC-4.4 requires trace→eval
-   promotion "preserving redaction policy". A screenshot may contain PII that the text does not.
-   Suggests `retention: {redact: [pii], ttlDays: 30}` on the part.
-4. **Where does the STT/TTS boundary sit for eval replay?** If an eval case supplies a `.wav` and
-   the binding is cascaded, the STT model becomes part of the system under test. Should the eval be
-   able to pin a reference transcript to isolate the agent from STT variance?
-5. **Screenshot pruning as a strategy variable** — SWE-agent elides old images
-   (`history_processors.py:171-174`) and this measurably changes behaviour and cost. Is
-   `strategy.mediaRetention: {keepLastN: 3}` in the plural strategy space (optimisable by GEPA), or
-   in the contract? My instinct is strategy, which means the optimizer can tune it — an attractive
-   result for D9's end-to-end demo.
-6. **`allowed_callers` on provider tools** (`beta_tool_computer_use_20250124_param.py:29-31`) lets a
-   computer tool be invoked *from inside* a code-execution sandbox. That is a nested-capability
-   model PACT has no vocabulary for yet.
+1. **Does `canonical.json` carry blob bytes at all, ever?** Recommendation: never (refs
+   only) — but then the artifact digest (O1.2) must be a **Merkle root** over
+   `hash(canonical.json)` plus each referenced blob, not a single file hash. Signing and
+   caching both change shape.
+2. **One action vocabulary or a family?** SWE-agent's browser bundle (`execute_script_on_page`,
+   `get_console_output`, no OS-level keys) versus inspect_ai's desktop set (`hold_key`,
+   `cursor_position`, `zoom`) is direct evidence that browser and desktop are different
+   domains. Options: one superset with per-environment `supported` subsets, versus
+   `computer.browser.*` and `computer.desktop.*` as distinct resource kinds. Leaning:
+   distinct kinds, because a single superset makes every unsupported action a runtime
+   surprise rather than a resolve-time failure.
+3. **Does a media part carry its own retention/redaction policy?** AC-4.4 requires
+   trace→eval promotion "preserving redaction policy". A screenshot may contain PII the text
+   does not. Suggests `retention: {redact: [pii], ttlDays: 30}` on the part.
+4. **Where does the STT/TTS boundary sit for eval replay?** If a case supplies a `.wav` and
+   the binding is cascaded, the STT model is inside the system under test. Should a case be
+   able to pin a reference transcript (§4.3C)? My view: yes, and it should be the default
+   for regression suites.
+5. **Screenshot pruning and resolution as strategy variables.** SWE-agent's
+   `LastNObservations{n, polling, always_keep_output_for_tags, always_remove_output_for_tags}`
+   (`history_processors.py:114-129`), inspect_ai's `max_screenshots`
+   (`_computer.py:74`), Goose's `crop` (`developer/image.rs:19-23`), and OpenAI's
+   `detail: original` (`_openai_computer_use.py:117-124`) are four independent knobs that
+   measurably change accuracy and cost. Put them in the **plural strategy space** so the
+   optimiser can tune them — an attractive target for D9's end-to-end demo.
+6. **`allowed_callers` on provider tools** (`beta_tool_computer_use_20250124_param.py:29-31`)
+   lets a computer tool be invoked *from inside* a code-execution sandbox. That is a
+   nested-capability model PACT has no vocabulary for yet.
 7. **Should PACT ship the normalised computer tool as an MCP server** (making it a no-code
-   `tools/computer.yaml` reference) rather than a built-in? That would satisfy D14 with zero new
-   concepts, at the cost of an MCP round-trip per action.
+   `tools/computer.yaml` reference) rather than a built-in? That satisfies D14 with zero new
+   concepts, at the cost of an MCP round-trip per action — and MCP has `ImageContent`, so
+   screenshots round-trip fine. Counter-argument: MCP has no video and no structured
+   coordinate-space negotiation.
+8. **[NEW] Do PACT's own eval assertions run inside the sandbox?** `final_state` must, for
+   air-gap and for `shell`/`file` assertions. That makes the eval runner a sandbox client,
+   which couples the eval layer to the substrate layer in a way §7.1's L-model does not
+   currently admit.
+9. **[NEW] Does the media part model make `kind` authoritative or derived?** I recommend
+   `mediaType` authoritative and `kind` derived by a normative table, but two authors writing
+   `kind: document` + `mediaType: image/png` must get a loud error, and the table itself is
+   then a versioned normative artifact that adapters must agree on.

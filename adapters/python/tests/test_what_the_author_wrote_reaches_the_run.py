@@ -368,10 +368,29 @@ def test_the_command_offers_a_way_to_choose_a_model_and_not_only_to_name_one() -
     model" was a capability of the test suite, and the README showed a report no
     shipped command produced.
 
-    Asserted at the seam rather than by running models: the flag exists, the
-    parser accepts it, and `_choose` is what calls `resolve`. Whether the
-    resolution is *correct* is `test_model_portability.py`'s job and is already
-    held there.
+    THE LAST TWO ASSERTIONS USED TO BE A GREP of `scoring.py`'s own source for
+    the string `resolve(` after `def _choose(`. THAT IS WHY THE DEFECT SHIPPED.
+    The call was written, the grep found it, and it could not complete once:
+    `_choose` handed `resolve` a one-argument transport factory for the
+    two-argument protocol `evaluate` calls, so every `--choose-model` run died
+    with a `TypeError` six frames into the search. A source-grep is true of code
+    that raises on the line it matched, so it is gone and is not coming back.
+
+    What replaces it is an EXECUTION, and it lives one file over rather than
+    here: `test_the_model_choosing_door_survives_being_opened.py` opens the door
+    three ways — against a dead address, against a real stub server, and for the
+    text of the refusal — and asserts the search actually ran. It is kept there
+    and not here on purpose. That file is subprocess-isolated and skip-guarded
+    around `target/debug/pact`; this one is the GATE file, read on every change,
+    and an assertion in it that shells out to a binary another job may be
+    relinking is an assertion that fails for reasons that have nothing to do with
+    what it claims. It did: this test failed once in three full-suite runs while
+    a `cargo test --workspace` was relinking the loader underneath it.
+
+    So what stays here is what can be decided from the process this test is
+    already in: the flag exists, it is documented, and it parses as a flag rather
+    than eating the path. Whether the door behind it opens is asserted by
+    execution, by name, in the file above.
     """
     from pact_adapters import scoring
 
@@ -383,10 +402,14 @@ def test_the_command_offers_a_way_to_choose_a_model_and_not_only_to_name_one() -
     assert path == "somewhere", "the flag must not swallow the folder"
     assert options.get("--choose-model") == "yes"
 
-    src = Path(scoring.__file__).read_text()
-    assert "def _choose(" in src and "resolve(" in src.split("def _choose(")[1], (
-        "`_choose` is the door; if it stops calling `resolve` the capability is "
-        "unreachable again and only the reachability test would notice"
+    # The execution that used to be a grep is named here so that deleting it
+    # elsewhere is visible from the gate file rather than silent.
+    door = Path(__file__).with_name(
+        "test_the_model_choosing_door_survives_being_opened.py"
+    )
+    assert door.exists(), (
+        "the only execution asserting `_choose` reaches `resolve` has been "
+        "deleted, and this file went back to trusting that the call is written"
     )
 
 
@@ -769,7 +792,19 @@ def test_the_settings_the_register_called_unreachable_reach_the_wire() -> None:
     # asserted only the two things above, and severing the settings from the
     # payload left it green — a seam checked instead of an effect, which is the
     # same defect this file exists for, one layer down.
-    payload = t.payload_for("be brief", [{"role": "user", "content": "hello"}], [])
+    #
+    # The call OFFERS the tool, and for a round it did not: this asserted that
+    # `tool-choice: required` reached the payload of a call built with `[]`, which
+    # is the per-call defect `transports/_tool_choice.py` exists to prevent and
+    # which this test was pinning as intended behaviour. `required` has nothing to
+    # be required OF on a tool-less call, and this surface REJECTS a `tool_choice`
+    # sent without `tools` rather than ignoring it — so the payload this used to
+    # assert is one the endpoint declines. `harness.run` builds exactly that call
+    # to close a ceiling-terminated run.
+    # `test_the_two_provider_transports_send_a_choice_a_call_can_carry.py` holds
+    # the tool-less half.
+    offered = [{"name": "payments", "description": "issue a refund", "parameters": {}}]
+    payload = t.payload_for("be brief", [{"role": "user", "content": "hello"}], offered)
     assert payload["presence_penalty"] == 0.5, payload
     assert payload["frequency_penalty"] == 0.1, payload
     assert payload["tool_choice"] == "required", payload
@@ -923,3 +958,62 @@ def test_a_case_that_asserts_nothing_is_refused(document: dict, tmp_path: Path) 
         [str(PACT_BIN), "check", str(root)], capture_output=True, text=True
     )
     assert out.returncode == 0, out.stdout + out.stderr
+
+
+def test_every_length_of_time_the_checker_passes_is_read_here_the_same_way(
+    tmp_path: Path,
+) -> None:
+    """A spelling the gate accepts and this reader answers `None` to is no
+    ceiling at all — the one direction the two ports must never part in.
+
+    `coerce::duration`'s own note says the two sides are deliberately different
+    SETS and that the difference runs one way only: the Rust side is the
+    stricter one, so nothing it lets through can be unreadable here. C10 moved
+    that line — the exponent in `finishes-within: 1e6s` is part of the figure
+    and not the first letter of a unit called `e` — and moving it on one side
+    alone would have opened exactly the gap the note forbids: `pact check`
+    saying `OK` about a million-second deadline that this reader answered `None`
+    to, leaving a run with no wall clock and nothing said.
+
+    Measured before the matching edit here: `seconds("1e6s")` was `None`.
+    """
+    from pact_adapters.limits import seconds
+
+    if not PACT_BIN.exists():
+        pytest.skip("build the CLI first: cargo build -p pact-cli")
+
+    root = tmp_path / "ws"
+    (root / "agents" / "desk").mkdir(parents=True)
+    (root / "workspace.yaml").write_text("name: desk-shop\ndescription: A workspace.\n")
+    agent = root / "agents" / "desk" / "agent.yaml"
+
+    for written, expected in [
+        ("30s", 30.0),
+        ("1m30s", 90.0),
+        ("2 minutes", 120.0),
+        ("500ms", 0.5),
+        ("1e6s", 1_000_000.0),
+        ("2.5e2 ms", 0.25),
+    ]:
+        agent.write_text(
+            "name: Desk\ndescription: A desk.\ninstructions: Do it.\n"
+            f"limits:\n  finishes-within: {written}\n  when-it-runs-out: stop-and-say-so\n"
+        )
+        out = subprocess.run(
+            [str(PACT_BIN), "check", str(root)], capture_output=True, text=True
+        )
+        assert out.returncode == 0, f"`{written}` must load:\n{out.stdout}"
+        assert seconds(written) == expected, (
+            f"`pact check` passed `{written}` and this reader must hold the ceiling "
+            f"it names, not {seconds(written)!r}"
+        )
+
+    # And the direction the parting is allowed to run: what the gate refuses
+    # never reaches a run, so this reader may be the more generous one.
+    agent.write_text(
+        "name: Desk\ndescription: A desk.\ninstructions: Do it.\n"
+        "limits:\n  finishes-within: 1e999s\n  when-it-runs-out: stop-and-say-so\n"
+    )
+    out = subprocess.run([str(PACT_BIN), "check", str(root)], capture_output=True, text=True)
+    assert out.returncode != 0, out.stdout
+    assert "schema/too-long-to-count" in out.stdout, out.stdout

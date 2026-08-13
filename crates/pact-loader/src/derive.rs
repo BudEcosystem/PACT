@@ -82,7 +82,7 @@ fn resolve_collection(kind: &str, entries: &mut Map, diags: &mut Diagnostics) {
     let names: Vec<String> = entries.keys().cloned().collect();
     for name in &names {
         let mut seen: Vec<String> = Vec::new();
-        if let Err(d) = derive_one(kind, entries, name, &mut seen) {
+        if let Err(d) = derive_one(kind, entries, name, &mut seen, diags) {
             diags.push(*d);
             // One mistake, one message. An entry whose base did not resolve is
             // not a half-built entry, it is a document nobody can read: it holds
@@ -102,6 +102,7 @@ fn derive_one(
     entries: &mut Map,
     name: &str,
     seen: &mut Vec<String>,
+    diags: &mut Diagnostics,
 ) -> Result<(), Box<Diagnostic>> {
     let Some(entry) = entries.get(name) else { return Ok(()) };
     let Some(map) = entry.node.as_map() else { return Ok(()) };
@@ -155,7 +156,7 @@ fn derive_one(
     // The base may itself derive. Resolve it first so this entry inherits the
     // finished thing, not a half-derived one.
     seen.push(name.to_owned());
-    derive_one(kind, entries, &base_name, seen)?;
+    derive_one(kind, entries, &base_name, seen, diags)?;
     seen.pop();
 
     let base_map = match entries.get(&base_name).and_then(|e| e.node.as_map()) {
@@ -168,9 +169,43 @@ fn derive_one(
     };
 
     let mut merged = base_map;
+    // A base is something to be based on; being based on one must not make
+    // YOU one. Restating `base: yes` yourself (a base built on a base) is
+    // laid back over the top below.
+    merged.shift_remove("base");
     for (k, v) in own.iter() {
         if k == "based-on" {
             continue;
+        }
+        // Replacement is the rule — shallow, so narrowing stays expressible —
+        // and replacing a whole BLOCK is said out loud, naming what fell out
+        // of it: "removal expressible" and "removal silent" are different
+        // sentences (C8 §7 D-1).
+        if let (Some(base_had), Some(own_map)) = (merged.get(k), v.node.as_map())
+            && let Some(base_inner) = base_had.node.as_map()
+        {
+            let dropped: Vec<String> = base_inner
+                .iter()
+                .filter(|(bk, _)| !own_map.contains_key(bk.as_str()))
+                .map(|(bk, be)| match be.node.as_str() {
+                    Some(s) => format!("`{bk}: {s}`"),
+                    None => format!("`{bk}:`"),
+                })
+                .collect();
+            if !dropped.is_empty() {
+                diags.push(Diagnostic::warning(
+                    "loader/restating-a-block-drops-the-rest",
+                    v.key_span.clone(),
+                    format!(
+                        "`{k}:` here replaces the whole block '{base_name}' set, so {} {} not apply to '{name}'.",
+                        dropped.join(" and "),
+                        if dropped.len() == 1 { "does" } else { "do" }
+                    ),
+                    format!(
+                        "Restate the lines you meant to keep under `{k}:`, or leave this as it is to take them away on purpose."
+                    ),
+                ));
+            }
         }
         merged.insert(k.clone(), v.clone());
     }
@@ -330,6 +365,113 @@ mod tests {
             interceptors(&root, "mine").get("based-on").unwrap().node.as_str(),
             Some("pact:loop/standard"),
             "`loops.rs` resolves the shipped shapes; this pass must not eat the line"
+        );
+    }
+
+    /// These trees carry nested `limits:` blocks, which the flat str→str
+    /// helper above cannot spell — so they parse real YAML, the way the
+    /// teams tests do.
+    fn resolved(text: &str) -> (Node, Diagnostics) {
+        let mut root = pact_doc::parse_yaml(text, camino::Utf8Path::new("derive-test.yaml"))
+            .expect("parses");
+        let mut d = Diagnostics::new();
+        resolve(&mut root, &spec(), &mut d);
+        (root, d)
+    }
+
+    fn agent(root: &Node, name: &str) -> Map {
+        root.as_map()
+            .unwrap()
+            .get("agents")
+            .unwrap()
+            .node
+            .as_map()
+            .unwrap()
+            .get(name)
+            .unwrap()
+            .node
+            .as_map()
+            .unwrap()
+            .clone()
+    }
+
+    #[test]
+    fn a_restated_block_says_what_it_dropped() {
+        let (root, d) = resolved(
+            "agents:\n\
+             \x20 pattern:\n\
+             \x20   limits:\n\
+             \x20     cost-per-request-under: 0.05 USD\n\
+             \x20     finishes-within: 30s\n\
+             \x20     when-it-runs-out: stop-and-say-so\n\
+             \x20 desk:\n\
+             \x20   based-on: pattern\n\
+             \x20   limits:\n\
+             \x20     steps-at-most: 4\n\
+             \x20     when-it-runs-out: stop-and-say-so\n",
+        );
+        assert_eq!(d.items().len(), 1, "one restated block is one warning:\n{}", d.render());
+        assert_eq!(d.warning_count(), 1, "a warning, not an error:\n{}", d.render());
+        let w = &d.items()[0];
+        assert_eq!(w.rule, "loader/restating-a-block-drops-the-rest");
+        assert!(
+            w.message.contains("`cost-per-request-under: 0.05 USD`"),
+            "the dropped key is named with its value: {}",
+            w.message
+        );
+        assert!(w.message.contains("finishes-within"), "{}", w.message);
+        assert!(
+            !w.message.contains("when-it-runs-out"),
+            "a restated key was not dropped: {}",
+            w.message
+        );
+        // The replacement itself still holds — the warning reports it, it
+        // does not undo it.
+        let limits = agent(&root, "desk").get("limits").unwrap().node.as_map().unwrap().clone();
+        assert!(limits.get("steps-at-most").is_some());
+        assert!(limits.get("cost-per-request-under").is_none());
+    }
+
+    #[test]
+    fn a_restated_block_that_keeps_every_key_is_silent() {
+        let (_, d) = resolved(
+            "agents:\n\
+             \x20 pattern:\n\
+             \x20   limits:\n\
+             \x20     cost-per-request-under: 0.05 USD\n\
+             \x20     finishes-within: 30s\n\
+             \x20     when-it-runs-out: stop-and-say-so\n\
+             \x20 desk:\n\
+             \x20   based-on: pattern\n\
+             \x20   limits:\n\
+             \x20     cost-per-request-under: 0.01 USD\n\
+             \x20     finishes-within: 10s\n\
+             \x20     when-it-runs-out: stop-and-say-so\n",
+        );
+        assert!(d.is_empty(), "nothing fell out, so nothing to say:\n{}", d.render());
+    }
+
+    #[test]
+    fn deriving_from_a_base_does_not_make_you_one() {
+        // The strip asserts on a key the schema has not met yet — legal here,
+        // derive runs before validation.
+        let (root, d) = resolved(
+            "agents:\n\
+             \x20 house:\n\
+             \x20   base: yes\n\
+             \x20   description: a pattern\n\
+             \x20 desk:\n\
+             \x20   based-on: house\n\
+             \x20   instructions: answer plainly\n",
+        );
+        assert!(d.is_empty(), "{}", d.render());
+        let desk = agent(&root, "desk");
+        assert!(desk.get("base").is_none(), "being based on a base must not make you one");
+        assert!(desk.get("based-on").is_none());
+        assert_eq!(desk.get("description").unwrap().node.as_str(), Some("a pattern"));
+        assert!(
+            agent(&root, "house").get("base").is_some(),
+            "the base itself still carries the line"
         );
     }
 }

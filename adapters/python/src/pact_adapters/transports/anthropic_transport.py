@@ -22,6 +22,7 @@ from ..harness import ToolCall
 from ..resolve import default_for, window_of
 from ..script import Script
 from ._metering import can_price, priced, tokens_in, tokens_sent, what_the_summariser_cost
+from ._tool_choice import can_choose
 
 
 class AnthropicTransport:
@@ -152,6 +153,14 @@ class AnthropicTransport:
             "parallel_tool_calls": "native",
             "streaming": "emulated",
             "durable_resume": "unsupported",
+            # Worth being explicit about, because a reader may expect `native`:
+            # this PROVIDER publishes a server-side connector that would reach an
+            # MCP server, and this transport binds `messages.create` and not
+            # that. What a provider can do and what this file does are different
+            # claims and a lattice states the second — so the reaching here is
+            # PACT's own client above the seam, which is `emulated`; `mock.py`
+            # states the rule once for every target that shares it.
+            "connected_tools": "emulated",
         }
 
     def _message(self, history: list[dict[str, Any]], system: str = "") -> Message:
@@ -198,12 +207,23 @@ class AnthropicTransport:
         self._settings = dict(settings)
         return tuple(k for k in settings if k not in _WIRE)
 
-    async def model_call(
+    def request_for(
         self, system: str, history: list[dict[str, Any]], tools: list[dict[str, Any]]
-    ) -> tuple[str, list[ToolCall]]:
-        # Build the request in the SDK's wire shape so the mapping is exercised.
+    ) -> dict[str, Any]:
+        """The `messages.create` request this transport is about to make.
+
+        Split out of `model_call` for the reason `ollama_transport.payload_for`
+        was, and it is the same defect one file over: this dict was a LOCAL named
+        `_request`, built in the SDK's wire shape "so the mapping is exercised"
+        and then never read by anything. Nothing sent it and no test could reach
+        it, so `apply_settings` reporting seven of the twelve keys honoured rested
+        on a mapping table and a dict thrown away on the next line — a seam
+        asserted instead of an effect, which is the defect this whole round is
+        about. Returning it makes the claim checkable without a served model.
+        """
         settings = getattr(self, "_settings", {})
-        _request = {
+        offered = tuple(str(t["name"]) for t in tools)
+        return {
             "model": self.model,
             "system": system,
             # The author's ceiling if they wrote one. `max-tokens`' help says
@@ -224,9 +244,31 @@ class AnthropicTransport:
             **{
                 _WIRE[k]: _translated(k, v)
                 for k, v in settings.items()
+                # `max-tokens` has its own line above; putting it here as well
+                # would set it twice.
                 if k in _WIRE and k != "max-tokens"
+                # And a tool choice only when THIS call can carry it. The other
+                # five transports that map `tool-choice` decide this per call
+                # through `_tool_choice.can_choose`; this one did not, because
+                # the request it built went nowhere and so nothing ever failed.
+                # It is not merely unhonoured on a call with no tools: this
+                # provider's `tool_choice` is documented as valid only "while
+                # providing tools", and `harness.run` closes every
+                # ceiling-terminated run with `model_call(instructions, history,
+                # [])` while a stage may narrow the set to nothing or to tools
+                # the author's choice does not name. So the live version of this
+                # request would have been rejected on exactly the calls a run
+                # makes when it stops early.
+                and (k != "tool-choice" or can_choose(v, offered))
             },
         }
+
+    async def model_call(
+        self, system: str, history: list[dict[str, Any]], tools: list[dict[str, Any]]
+    ) -> tuple[str, list[ToolCall]]:
+        # Built through the same method a test asserts, so the request a run
+        # makes and the request a test reads are one object and not two.
+        self._last_request = self.request_for(system, history, tools)
         message = self._message(history, system)
         text = "".join(b.text for b in message.content if isinstance(b, TextBlock))
         calls = [

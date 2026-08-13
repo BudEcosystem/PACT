@@ -27,7 +27,7 @@ node kinds, six channel kinds, an edge algebra, a lockfile, a capability lattice
 typed escapes and 36 deterministic assertions. The one in `spec/schema.yaml` +
 `crates/` + `adapters/` is a **stage machine, a waiting vocabulary, and a
 closed-sentence governance layer** — and it is smaller, sharper, more honest, and
-on the evidence of its diagnostics and its four honesty channels, **better**. The
+on the evidence of its diagnostics and its five honesty channels, **better**. The
 documented Graph has zero implementation and no schema group. Almost every
 "gap register" entry in this repository is a symptom of that unmade decision,
 and almost every genuine strength of the shipped system is uncited because the
@@ -70,12 +70,19 @@ all of them combined.
 
 Measured, not read.
 
+**The two test counts are written by `./scripts/sync-counts.sh`, not by hand**
+(E3). They were `690` and `1207` for as long as it took somebody to re-run the
+suites, in a table whose stated point is that every cell re-runs — which is the
+same defect as everything this review is about, committed by the review. The
+script counts both suites and rewrites the two cells below; `--check` prints
+them and changes nothing.
+
 | | |
 |---|---|
 | Schema | **43 groups, 262 field entries, 207 distinct field names** (core 123, expert 69, both 15), 40 closed enums, 27 cross-reference constraints, **0 fields missing `tier:` or `surface:`** |
-| Rust | 5 crates, **690 tests**, `unsafe_code = forbid`, clippy-deny, edition 2024 |
-| Python | 47 modules, **1207 tests**, 7 transports + 2 more, offline by default |
-| TypeScript | 5 modules, ~1,960 lines, a second independent port of the loop |
+| Rust | 5 crates, **994 tests**, `unsafe_code = forbid`, clippy-deny, edition 2024 |
+| Python | **47 modules** (`find adapters/python/src -name "*.py" \| wc -l`), **1966 tests**, **nine transports** — seven model-bound (`anthropic`, `autogen`, `langchain`, `langgraph`, `ollama`, `openai_agents`, `pydantic_ai`), one bound to a remote *agent* (`a2a`), one deterministic mock; `_metering.py`, `_summarise.py` and `_tool_choice.py` are shared code the transports import, which is what the `_` says — offline by default |
+| TypeScript | 5 modules, 2,305 lines, a second port of **the stepping, the ceilings and the stage path** (`harness.ts:15-21`: *"AC-5.3's bar is the stage path"*) — **not** of the loop entire: no interceptor chain, no durable suspension record, no ledger (`notDoneHere`; a park returns `halted: "suspended"` and writes nothing down). This row is load-bearing for the Phase 3 pricing below (E4) |
 | CLI | **6 verbs**: `check`, `show`, `waits`, `discover`, `card`, `help` |
 | Worked example | 42 files, 1128 lines, **132 distinct authored keys**, `pact check` → OK (498 settings) |
 | Minimum agent | 2 files, 4 keys → OK (7 settings) |
@@ -94,10 +101,14 @@ These are the project's assets and no redesign may lose them.
    moves without anybody being asked.
    ```
    Nothing in Eve, and nothing in the 140-repo corpus, produces this.
-3. **Four honesty channels** — `unmetered` (nobody could measure it),
+3. **Five honesty channels** — `unmetered` (nobody could measure it),
    `unenforced` (nobody could evaluate it), `unwatched` (nowhere to write it),
-   `never_reached` (the meter is right and always zero). The fourth has no
-   counterpart anywhere and is the sharpest of them.
+   `never_reached` (the meter is right and always zero), `unretrieved` (the
+   documents were never opened, so the answer is what the model already knew).
+   The fourth has no counterpart anywhere and is the sharpest of them. The fifth
+   is a fifth rather than a fifth use of `unenforced` because it has a different
+   recipient: *the rule could not be evaluated* sends the reader to the rule,
+   *the corpus was never read* sends them to whoever runs the thing.
 4. **The schema is data.** No `match field_name` anywhere in `pact-schema`.
    Adding a field costs a YAML block and buys coercion, the directory form,
    span-accurate diagnostics, `x-` extension, digest participation and six
@@ -121,13 +132,23 @@ architecture draft admits this at its own §16 item 13; that sentence is one lin
 inside 12,802, and every summary document above it describes the Graph as the
 design.
 
-An independent audit of the schema against the draft found **39 constructs
-specified normatively and absent from the schema**, including `pact.lock`
-(~60 leaf fields, and §2.1 deletes `Lock` as a kind so none of it is
-machine-checkable), `lattice.yaml`, the six typed escapes, the trust lattice,
-the 36 `pact:` assertions, eval `severity:`/`splits:`, `x-namespaces:`, the
-`ESC-*` escalators, the optimiser ABI, and `impl:` — so the `no-code` badge's
-own linter clause *"rejects any `impl: code` reference"* has no referent.
+Constructs the draft specifies normatively and the schema does not have,
+**named rather than counted** (E5): `pact.lock` (~60 leaf fields, and §2.1
+deletes `Lock` as a kind so none of it is machine-checkable), `lattice.yaml`,
+the six typed escapes, the trust lattice, the 36 `pact:` assertions, eval
+`severity:`/`splits:`, `x-namespaces:`, the `ESC-*` escalators, the optimiser
+ABI, and `impl:` — so the `no-code` badge's own linter clause *"rejects any
+`impl: code` reference"* has no referent.
+
+**This sentence used to open *"an independent audit … found 39 constructs"*, and
+the audit does not exist.** `grep -rn "39 construct" docs/ research/` returns
+this line and the critique row that caught it, and nothing else — no list, no
+command, no file. A figure with no artifact behind it is not a measurement, and
+attributing it to an *"independent audit"* borrowed authority the number had not
+earned. The named examples above are each checkable in one grep and are what the
+paragraph was always resting on; the number was resting on nothing. It stays
+uncounted until somebody commits the list — the same standard this review's own
+method paragraph sets, applied to this review.
 
 **Three of the draft's flagship examples do not load**: §6.2's suite (the section
 that *defines* the eval suite), §11.9's small-model variant, and §11.10's
@@ -136,22 +157,45 @@ that *defines* the eval suite), §11.9's small-model variant, and §11.10's
 says `stop-sequences` is *"required by `pact:loop/codeact`"*. §7.11 says *"Two
 shapes ship."* Six ship.
 
-### 1.3 Six live defects, three safety-relevant
+### 1.3 Seven defects, three safety-relevant — three since fixed, four still live
 
-All in code the gap register lists as CLOSED. None caught by a test.
+All were in code the gap register listed as CLOSED. None was caught by a test.
 
-| # | Defect | Consequence |
-|---|---|---|
-| **S1** | `suspension.py:641` `escalate()` copies `used` and `granted` with a comment for each and **does not copy `spent_keys`** | an escalated wait returns with an empty at-most-once ledger — **a refund issued before the park can be issued again** |
-| **S2** | four of five park sites never set `Suspension.used`; only the budget park does (`harness.py:2073`) | `Meter.restored({})` rebuilds tokens, money, tool-calls and seconds at **zero** — **parking for an approval hands the run a fresh spend budget** |
-| **S3** | `_ran_out`'s `answer-with-what-it-has` path makes a model call and assigns `result.output` with **no `chain.run("turn.message.after", …)`** — it does not even take `chain` | **that setting escapes every redaction rule in the workspace**, contradicting `_finish`'s own docstring |
-| **S4** | a person's answer to an `ask-someone` stage is appended to history directly (`harness.py:1089`) | same bypass, second door |
-| **S5** | `anthropic_transport.py:206` builds `_request` and never uses it | tool schemas, `max-tokens`, `temperature`, `tool-choice` are dead while `apply_settings` **reports them honoured** |
-| **S6** | `Learner.baseline` is never set by `from_document`; `_drift` returns `0.0` when it is `None` | the cumulative-drift gate — justified by *"17 of 25 MLAS attack-surface cells have no per-diff defence"* — evaluates `0.0 > limit` on every real cycle |
+**Re-measured against the tree as it stands, and the table now says which are
+still there.** A review that keeps claiming a defect somebody has fixed is the
+same failure as a register claiming a fix nobody made — it is this document's own
+stated method (*"every number below was produced by running a command"*) pointing
+the other way, and the four fixed rows below were still written as live. Each
+`FIXED` row names the line that closes it so the claim can be disputed in one
+`sed`; each `LIVE` row was re-run today.
 
-**S1, S2 and S4 have one cause**: the five park sites each assemble a
-`Suspension` by hand, assigning eight to ten fields inline, and disagree about
-which. **One `park()` helper closes three defects.**
+| # | Defect | Status | Consequence |
+|---|---|---|---|
+| **S1** | `escalate()` copied `used` and `granted` with a comment for each and **did not copy `spent_keys`** | **FIXED** — `suspension.py:670` `spent_keys=tuple(self.spent_keys)` | was: an escalated wait returns with an empty at-most-once ledger — **a refund issued before the park can be issued again** |
+| **S2** | four of five park sites never set `Suspension.used`; only the budget park did | **FIXED** — every park site now goes through `_park_state` (`harness.py:2203`), which sets `used`, `granted` and `spent_keys` in one place (`:2246-2248`) | was: `Meter.restored({})` rebuilds tokens, money, tool-calls and seconds at **zero** — **parking for an approval hands the run a fresh spend budget** |
+| **S3** | `_ran_out`'s `answer-with-what-it-has` path made a model call and assigned `result.output` with **no `chain.run("turn.message.after", …)`** — it did not even take `chain` | **FIXED** — `chain` is now a required keyword argument of `_ran_out` (`harness.py:2265-2267`, *"required rather than defaulted … a caller that forgets it loses the rules on the closing answer in silence"*) and the path runs the moment at `:2388` | was: **that setting escapes every redaction rule in the workspace**, contradicting `_finish`'s own docstring |
+| **S4** | a person's answer to an `ask-someone` stage is appended to history directly | **NARROWED, half still live** — the *answer* door closed with S3: when the stage is the last one the reply goes through `_finish`, which runs `turn.message.after` (`harness.py:3139`). The *history* door did not: `harness.py:1253-1254` appends the person's words to `result.steps` and to `history` with no `chain.run` anywhere between `:1204` and there | a redaction rule never sees what a person typed into a wait, so it reaches the next model call — narrower than "same bypass, second door", and not nothing |
+| **S5** | `harness.py:2917` — `if out.halted != "final" and out.halted not in RAN_OUT: raise RuntimeError(...)`, and `"suspended"` is **absent** from `RAN_OUT` (`limits.py:463-465`, which holds only the five ran-out names) | **LIVE, and it is the safety-relevant one this review did not have** | **any suspension raised inside any team member becomes a member *failure***. A member that parks to ask a person is not a member that failed; the author's `if-someone-fails:` then decides, and with `carry-on` the approval gate vanishes **with no human asked at all**. `RAN_OUT`'s own comment says it is *"every way `RunResult.halted` can say a ceiling ended this"* — a park is not a ceiling, so the guard is asking the wrong question rather than holding a stale list |
+| **S6** | `anthropic_transport.py:206` builds `_request` and never uses it — `self._message(history, system)` on the next line takes neither the tools nor the settings | **LIVE** | tool schemas, `max-tokens`, `temperature`, `tool-choice` are dead while `apply_settings` **reports them honoured** |
+| **S7** | `Learner.from_document` (`learning.py:875-897`) never sets `baseline`, and `_drift` returns `0.0` when it is `None` (`learning.py:1278-1279`) | **LIVE** | the cumulative-drift gate — justified by *"17 of 25 MLAS attack-surface cells have no per-diff defence"* — evaluates `0.0 > limit` on every real cycle |
+
+**S1, S2 and S4 had one cause**, and the fix was the one this review proposed:
+the five park sites each assembled a `Suspension` by hand, assigning eight to ten
+fields inline, and disagreed about which. **One helper closed three defects** —
+`_park_state`, whose docstring records the measurement that justified it
+(`tool-calls-at-most: 5`, three calls before an approval park and four after,
+**seven against a ceiling of five**). S4's history half is the residue, and it is
+a different bug in the same door: the park sites now agree about what they carry
+*across* the boundary, and nothing yet governs what a person's answer carries
+*back in*.
+
+**S5 is new here and belongs with S1–S4 rather than with S6/S7**, because it is
+the same class: a guarantee the author wrote down — *ask a person before money
+moves* — dissolved by a run being one level deeper than the one that was tested.
+It is not caught by a test, and it is not reproducible on the flagship
+`refund-desk` by inspection alone, so it is recorded as read off the two lines
+above rather than as a reproduction. That distinction is the one this review
+keeps asking of everybody else.
 
 **S1 and S2 are not ordinary bugs. They are the two published attacks on agent
 checkpoint-restore, reproduced in this codebase.** ACRFence (arXiv:2603.20625)
@@ -168,18 +212,44 @@ names them:
 
 **PACT already has the primitives that close both**, which is what makes S1
 serious rather than routine: `spent_keys` **is** the single-use consumption
-record and `granted` **is** the approval capability surviving the park. S1 is the
-one line where `escalate()` carries `granted` and drops `spent_keys` — so PACT
-ships the defence for Authority Resurrection and reintroduces Action Replay
-through the escalation path. Fixing it makes PACT the only spec in the survey
-that structurally closes both.
+record and `granted` **is** the approval capability surviving the park. S1 was
+the one line where `escalate()` carried `granted` and dropped `spent_keys` — so
+PACT shipped the defence for Authority Resurrection and reintroduced Action
+Replay through the escalation path.
 
-Two more, from the same audit: **no delegation depth limit and no cycle guard** —
-two-level teams are not refused at load time, not documented as unsupported, and
-fail as `RuntimeError(f"{member} stopped: suspended")`; and **the TypeScript
-port's currency parser diverges on 4 of 6 spellings**, so the two ports print
-different words for the same file — the exact failure the 20-line comment above
-it was written to prevent.
+**S1 is fixed, so that last sentence is now a claim and not a proposal**, and it
+is narrower than it was written. Closing S1 makes PACT the only spec in the
+survey that structurally closes both **within an agent-run**. Across a team it
+does not: the at-most-once ledger is constructed inside the per-agent run, and a
+delegated member is started by a bare call that hands it neither the ledger nor
+the accumulated tool-call history — so every member mints a fresh at-most-once
+record and a fresh step list, and two teammates sharing a money tool defeat both
+the ledger and the `so-far` tool counter. **Not reproducible on the flagship
+example**: `fraud-checker` is `uses: [zendesk]` and `policy-checker` is
+`uses: [refund-policy]`, neither reaches `payments`, and the harness refuses a
+call a stage does not offer. The defect class needs a workspace where two agents
+share a money tool — which nothing refuses (E7).
+
+Two more, from the same audit, and **they have gone opposite ways**:
+
+- **No delegation depth limit and no cycle guard** — still true. Two-level teams
+  are not refused at load time and not documented as unsupported. What they fail
+  *as* is now recorded as **S5** above, which is the more serious half and is a
+  different bug: the `RuntimeError(f"{member} stopped: suspended")` fires on a
+  one-level team the moment a member parks, with no depth involved at all.
+  Keeping the depth guard as its own note, at lower priority, because it is real
+  and it is not that.
+- **The TypeScript currency parser no longer diverges.** This review said it
+  *"diverges on 4 of 6 spellings"* and never named the six, which made the claim
+  unreproducible as written; re-measured today it is **0 of 8**. Both ports were
+  handed `0.05 USD`, `USD 0.05`, `$0.05`, `500 JPY`, `JPY 500`, `usd 0.05`,
+  `$0.05 USD` and a bare `0.05`, through `Limits.from_mapping` and `limitsFrom`
+  respectively, and agreed on the amount **and the currency noun** on every one —
+  including the bare number, where both return an empty currency because nothing
+  was written and there is no noun to print. The row stays in this document
+  rather than being deleted: a defect that was real and is fixed is evidence the
+  20-line comment the two parsers share is doing its job, and deleting it would
+  leave the next reader unable to tell a fixed claim from one nobody checked.
 
 ### 1.4 The reader table nobody holds to the schema
 
@@ -517,9 +587,16 @@ of what it is for**, on the document that decides when money stops for a human.
   `impl:` does not exist. The only escape is a `scripts/` folder in a skill,
   which PACT records and never runs. That is right for `pact check` and it leaves
   a senior dev with **no in-tree extension point at all**.
-- **1207 adapter tests, but 48 of 69 files gate on the Rust binary and 19 tests
-  silently skip without it.** The loader is disk-bound; Eve's `ProjectSource`
-  in-memory abstraction is the fix.
+- **Over half the adapter test files gate on the Rust binary and skip without
+  it.** The loader is disk-bound; Eve's `ProjectSource` in-memory abstraction is
+  the fix. **The figures are deliberately not written here** — this line said
+  *"1207 adapter tests, but 48 of 69 files … and 19 tests silently skip"* and all
+  three had moved. The live count is stated once, in `scripts/test-all.sh`'s
+  refusal message, and `test_the_gate_is_run_by_something.py` fails when it stops
+  matching `grep -rl 'pytest.skip("build the CLI first' adapters/python/tests/`.
+  **The silence itself is closed**: the gate now refuses to run the suite at all
+  when `target/debug/pact` is absent, so the skip can no longer be reported as a
+  pass.
 
 ---
 

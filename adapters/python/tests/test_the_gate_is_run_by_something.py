@@ -12,11 +12,17 @@ second copy, and two copies drift — the interesting failures become the ones o
 one of them catches, and nobody knows which.
 
 It also holds the hole found while writing it: `test-all.sh` ran the adapter
-suite whether or not the CLI had been built, and forty-two test files load the
-worked example through that binary. Measured: nineteen tests skip without it, and
-the script exited 0 regardless. A gate that reports green over a suite that has
-quietly stopped checking invariant P-1 is the same defect as everything else in
-this register, wearing the gate's own clothes.
+suite whether or not the CLI had been built, dozens of test files load the worked
+example through that binary, and the script exited 0 regardless. A gate that
+reports green over a suite that has quietly stopped checking invariant P-1 is the
+same defect as everything else in this register, wearing the gate's own clothes.
+
+**How many files, and how many tests, are not written in this docstring** — for
+the reason `test_the_gate_refuses_to_run_the_suite_without_the_loader` gives
+below about the same two numbers. This paragraph said "forty-two test files" and
+"nineteen tests skip" while the assertion twenty lines down was holding the
+script to a different figure, so the file both stated the count and forbade
+stating it. The script states it once and that test holds it there.
 """
 
 from __future__ import annotations
@@ -68,8 +74,13 @@ def test_the_workflow_runs_the_script_rather_than_a_copy_of_it() -> None:
 
 
 def test_the_gate_refuses_to_run_the_suite_without_the_loader() -> None:
-    """Forty-two adapter test files read the worked example through
+    """Dozens of adapter test files read the worked example through
     `target/debug/pact` and skip when it is absent.
+
+    The exact number is deliberately NOT repeated here. It was "Forty-two" for
+    four revisions after the script had moved on, and a stale figure beside a
+    live assertion reads as though the assertion were stale too. The script
+    states it once and the assertion below holds the script to it.
 
     So the suite could report green having quietly stopped checking the thing
     invariant P-1 is about. The script asserts the binary is there rather than
@@ -251,10 +262,15 @@ def test_every_door_runs_when_somebody_opens_it(module: str) -> None:
     import subprocess
 
     # Through `main`, which is what the console script calls — NOT `python -m`.
-    # `scoring` has no `__main__` guard on purpose: its documented `-m` door is
-    # `pact_adapters.evals`, which imports `scoring.main` under its own guard. A
-    # test using `-m` here printed nothing and failed for a reason that was about
-    # the test rather than about the door.
+    # `scoring`'s `__main__` guard deliberately does NOT run the scorer: its
+    # documented `-m` door is `pact_adapters.evals`, which imports `scoring.main`
+    # under its own guard, and executing this file as `__main__` would build a
+    # second copy of every class `resolve.py` and `learning.py` share with it.
+    # So `-m pact_adapters.scoring` reaches that refusal rather than the door,
+    # and a test using it here would be about the refusal instead. The guard
+    # exists because with none at all the command printed nothing and exited 0 —
+    # register row C4, held by
+    # `test_no_plausible_command_at_this_package_answers_with_silence.py`.
     args = ", ".join(repr(a) for a in DOORS_AND_ARGS[module])
     out = subprocess.run(
         [

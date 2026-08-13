@@ -12,9 +12,11 @@ pub mod value;
 pub mod yaml;
 
 pub use canonical::{canonical_string, digest};
-pub use markdown::{Markdown, parse_markdown};
+pub use markdown::{Folded, Markdown, parse_markdown};
 pub use value::{Entry, FileRef, Map, Node, Payload, Value};
-pub use yaml::{Offset, parse_yaml, parse_yaml_at};
+pub use yaml::{
+    Offset, parse_yaml, parse_yaml_at, whole_number_past_holding, whole_number_written,
+};
 
 /// The version of the PACT format this build reads and writes.
 ///

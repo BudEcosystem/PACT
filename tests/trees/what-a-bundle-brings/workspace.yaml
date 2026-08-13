@@ -1,0 +1,7 @@
+name: what-a-bundle-brings
+workspace-id: 01JC5S8W0G7QK4T2H9RA3XB6NF
+description: A workspace that names two ready-made sets of capabilities — one whose folder is here, one whose is not.
+owner: support-operations
+
+# Nothing here talks to anything outside this box.
+allow-egress: []

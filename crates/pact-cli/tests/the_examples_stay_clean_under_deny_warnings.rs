@@ -23,17 +23,32 @@ fn repo() -> std::path::PathBuf {
 }
 
 /// Every workspace this repository ships, found rather than listed.
+///
+/// It said "found" and half of it was a list: `refund-desk` was named and only
+/// `examples/patterns/` was walked, so `examples/answers-from-documents/` — a
+/// shipped tree since the day `knowledge:` landed — was covered by this census
+/// by nothing, and every workspace added beside it inherited the same silence.
+/// A tree is what holds a `workspace.yaml`, which is the same question
+/// `pact discover` asks and the same one the golden set asks, so it is asked
+/// that way here too.
 fn shipped_trees() -> Vec<std::path::PathBuf> {
-    let mut out = vec![repo().join("examples/refund-desk")];
-    let patterns = repo().join("examples/patterns");
-    let mut dirs: Vec<std::path::PathBuf> = std::fs::read_dir(&patterns)
-        .expect("examples/patterns exists")
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.is_dir())
-        .collect();
-    dirs.sort();
-    out.extend(dirs);
+    let mut out = Vec::new();
+    let mut stack = vec![repo().join("examples")];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        for e in entries.flatten() {
+            let p = e.path();
+            if !p.is_dir() || p.file_name().unwrap().to_string_lossy().starts_with('.') {
+                continue;
+            }
+            if p.join("workspace.yaml").exists() {
+                out.push(p);
+            } else {
+                stack.push(p);
+            }
+        }
+    }
+    out.sort();
     out
 }
 

@@ -153,6 +153,14 @@ def measured(held_out: int, before: Verdict, after: Verdict) -> dict[str, Any]:
     same three facts itself and this function stayed unreachable — two functions
     answering one question, which is how they come to disagree. The count is the
     only thing the `Learner` was ever consulted for.
+
+    `held_out` is the size of the frozen split and nothing else. `Outcome.held_out`
+    carries it from the `Learner` that ran the cycle, and that field exists
+    because the caller used to pass `len(verdict_after.results)` — the number of
+    graded results, which answers a different question with the same number on
+    the one path where nothing has gone wrong. `enough-to-mean-something` below
+    is the whole reason the distinction matters: a run that graded the train
+    cases too would have called a three-case split big enough to claim on.
     """
     return {
         "margin-declared": MARGIN,

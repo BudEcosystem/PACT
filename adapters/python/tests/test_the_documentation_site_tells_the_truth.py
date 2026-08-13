@@ -219,8 +219,23 @@ def test_the_requirement_count_is_the_one_the_frd_computes() -> None:
 
 def test_output_the_readme_shows_is_attributed_to_something_that_can_produce_it() -> None:
     """A transcript in a README reads as "run this and see". The portability
-    report comes from `resolve()`, which has no shipped caller — so the block is
-    only honest while the text beside it says where it came from."""
+    report comes from `resolve()`, so the block is only honest while the text
+    beside it says truthfully where it came from — and that is a claim with TWO
+    directions, not one.
+
+    THIS TEST USED TO HAVE ONE. It computed `shipped` and then only asserted
+    `if not shipped`. `resolve()` acquired its shipped caller — `scoring.py:1005`,
+    behind `--choose-model` — and `shipped` went `True`, at which point the only
+    assertion in the function became unreachable and the README went on saying
+    "has no shipped command yet" and "its only caller today is
+    `tests/test_model_portability.py`" for rounds with a green suite. A guard
+    that can only fire in the direction the tree has already left is an absent
+    guard (VAL-10), and this is the `else:` that was missing.
+
+    MUTATION: delete the `else:` branch below and restore the stale paragraph to
+    the README. Measured red on the "no shipped command" assertion; before the
+    `else:` existed the same edit was green.
+    """
     readme = README.read_text()
     if "PORTABILITY: PASS" not in readme:
         return
@@ -231,6 +246,17 @@ def test_output_the_readme_shows_is_attributed_to_something_that_can_produce_it(
             "the README shows a PORTABILITY report and no shipped command produces "
             "one — say so beside the block, or wire `resolve()` and delete this"
         )
+    else:
+        # THE OTHER DIRECTION. `resolve()` has a shipped caller now, so the
+        # README must not still be telling a reader it has none — that sends
+        # somebody looking for a flag they already have, and it is exactly what
+        # this file exists to stop.
+        for stale in ("no shipped command", "only caller today"):
+            assert stale not in readme, (
+                f"`scoring.py` calls `resolve()` — measured in this test — and "
+                f"the README still says {stale!r} beside the portability block. "
+                f"Say that `--choose-model` ships, or unwire the caller"
+            )
 
 
 # ─────────────────────────── the worked example, counted rather than remembered
@@ -297,8 +323,10 @@ def test_no_page_claims_the_example_contains_no_code_while_it_does() -> None:
 
 
 def test_the_agent_count_the_site_states_is_the_number_of_agents() -> None:
-    """`verified.md` said *"One folder"* long after the golden set became 28
-    agents across 9 workspaces.
+    """`verified.md` said *"One folder"* long after the golden set became every
+    agent in `examples/` — the figure this test computes below, and deliberately
+    not repeated in this docstring, because every prose copy of it in the tree
+    has gone stale at least once.
 
     That direction of staleness is the quieter one — a page understating what
     works costs nobody anything immediately, and is exactly as untrue as a page
@@ -341,3 +369,39 @@ def test_the_orchestration_patterns_the_roadmap_names_are_the_ones_that_ship() -
     for refused in ("blackboard", "market"):
         assert refused in said, f"{refused} is refused and the roadmap is silent"
     assert "refused rather than pending" in said
+
+
+def test_every_python_module_the_site_tells_you_to_run_is_one_that_runs() -> None:
+    """A `python -m` line the site teaches must be a door that opens.
+
+    The site said `python -m pact_adapters.scoring <PATH>` in two places, under
+    "Running it" and "Scoring an eval suite". `scoring.py` is where the scoring
+    machinery lives, but the command that runs it is `pact_adapters.evals` —
+    which imports `scoring.main` rather than re-executing the file, so one copy
+    of `Case` exists rather than two. Typing what the site said did nothing at
+    all and exited 0, and then, once that silence was closed, refused with a
+    redirect. Both are the site teaching a command that does not work; only the
+    second one says so out loud.
+
+    Asserted on the EFFECT: the module is run with `--help`, which reaches no
+    model and costs nothing, and it must come back with something to read and
+    the exit code that means the command exists. Nothing here reads source.
+    """
+    src = REPO / "adapters/python/src"
+    named = sorted(set(re.findall(r"python -m (pact_adapters\.[\w.]+)", site_text())))
+    assert named, "no `python -m pact_adapters.…` line in the site any more"
+
+    for module in named:
+        out = subprocess.run(
+            [sys.executable, "-m", module, "--help"],
+            capture_output=True, text=True, cwd=REPO, timeout=120,
+            env={"PYTHONPATH": str(src), "PATH": "/usr/bin:/bin"},
+        )
+        said = out.stdout + out.stderr
+        assert out.returncode == 0, (
+            f"the site tells a reader to run `python -m {module}`, and that "
+            f"command answers:\n{said.strip()[:800]}\n\nEither the site names "
+            f"the wrong module or the module refuses the site's own "
+            f"instruction — fix whichever is wrong, in the same change"
+        )
+        assert said.strip(), f"`python -m {module} --help` printed nothing"

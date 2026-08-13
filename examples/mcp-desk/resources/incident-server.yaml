@@ -1,0 +1,27 @@
+# The other end of `connect: incident-server`, and four lines of it.
+#
+# Both `endpoint:` and `auth:` are REFERENCES the host resolves — never values,
+# never a command, never arguments — so reading this workspace is never an act of
+# running its code, and PACT holds no secret at any point. Ask your platform team
+# which endpoint name and which credential reference this machine already
+# publishes; both are their list, not a file in here.
+resource-kind: mcp-server
+endpoint: host/incidents-mcp
+auth: { by-reference: host/incidents-credential }
+
+# Saying where the credential is kept is not the same as having been allowed to
+# use it. The two lines above name a server and a credential; neither of them
+# says that this desk may open a connection to the platform team's incident
+# system, and the first run that gets here may find that nobody has ever said so.
+#
+# Failing at that point would be the wrong answer — the missing thing is one
+# person's yes — so the run stops here and waits for it, then carries on from
+# where it stopped. The line names the question; the wording, who is asked, how
+# long they have and what happens if nobody answers all live in that file.
+#
+# It is decided BEFORE either reference above is resolved. A bridge that opened
+# the socket and then asked would have fetched the credential of a server nobody
+# had allowed, which is the wait made decorative.
+asks-to-connect: may-we-connect
+
+description: The platform team's incident system, as they publish it.

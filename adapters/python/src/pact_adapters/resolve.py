@@ -35,6 +35,8 @@ three literals are gone.
 from __future__ import annotations
 
 import asyncio
+import inspect
+import json
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from pathlib import Path
@@ -45,8 +47,12 @@ import yaml
 from . import egress as _egress
 from .diagnostics import Problem
 from .evals import (
+    NOT_A_RUNTIME,
+    NOT_SERVING,
+    STOPPED,
     Case,
     CaseOutcome,
+    Silence,
     Verdict,
     bar_of,
     check,
@@ -54,8 +60,9 @@ from .evals import (
     rules_of,
     verdict,
 )
-from .harness import run
+from .harness import delegate_by_running, run
 from .ir import AgentSpec
+from .yes_no import said_yes
 
 #: Where the distribution keeps its catalogue, relative to this file:
 #: `<repo>/adapters/python/src/pact_adapters/resolve.py` -> `<repo>/models/`.
@@ -75,6 +82,18 @@ UNKNOWN = "unknown"
 #: because `reasoning: careful` was the first line of the first predicate file an
 #: author writes and it bound against nothing.
 LADDER: tuple[str, ...] = ("simple", "steady", "careful", "deep")
+
+#: The three answers `needs.tool-calling:` takes — `spec/schema.yaml`'s own
+#: `choices: [no, yes, parallel]`, and nothing else. NOT a `yes-no`: `parallel`
+#: is a third answer rather than a stronger tick, which is why this field does
+#: not go through `yes_no.said_yes` and needs a list of its own.
+#:
+#: `needs_of` reads it as *everything but `no` needs a model that can call
+#: tools*, which is true of all three and is the whole of what the field decides
+#: there. A FOURTH choice added to the schema fails the test that holds this set
+#: against it, which is the point: somebody then has to say whether the new word
+#: means tools, rather than having it silently mean them.
+TOOL_CALLING: frozenset[str] = frozenset({"no", "yes", "parallel"})
 
 
 def _rung(value: str) -> "int | None":
@@ -598,16 +617,38 @@ def _reasoning(written: Any) -> str:
     return value if _rung(value) is not None else ""
 
 
+#: How close two published figures have to be before `= 80` calls them equal.
+#:
+#: A billionth, and the same billionth `SCORE_TOLERANCE` in
+#: `crates/pact-schema/src/coerce.rs` allows, because the two decide the same
+#: author's line. The figure is written down in `spec/comparisons.yaml` and both
+#: ports are held to it there — the comment on `_HOLDS` below claimed a mirror
+#: for a release while this side allowed `1e-12` and the checker allowed
+#: `f64::EPSILON` (~2.2e-16), four orders of magnitude apart. A catalogue
+#: publishing `80.0000000001` cleared `= 80` for the checker and not for this
+#: file; one publishing `79.999999999999` cleared it here and not there.
+#:
+#: Why a billionth and not either of those: a score that has been written down
+#: as text, read back, and divided by a hundred lands a few steps from where it
+#: started, and around 80 a step is about 1.4e-14 — so `f64::EPSILON`, which is
+#: the step at 1.0, cannot reach even one of them and means bit-for-bit equality.
+#: A billionth leaves room for several hundred steps, and is still ten million
+#: times finer than the two decimal places a benchmark is published to, so
+#: `79.99` stays a different score from 80 and is refused.
+SCORE_TOLERANCE = 1e-9
+
 #: What each comparison means. Mirrors `Op::holds` in
 #: `crates/pact-schema/src/coerce.rs` — the loader parses these and this decides
 #: them, and a difference between the two is a model bound on a rule the checker
-#: read differently.
+#: read differently. Held to that claim, from both sides, by
+#: `spec/comparisons.yaml` and the two tests named
+#: `a_comparison_means_the_same_thing_in_both_ports`.
 _HOLDS: dict[str, Any] = {
     ">": lambda have, want: have > want,
     ">=": lambda have, want: have >= want,
     "<": lambda have, want: have < want,
     "<=": lambda have, want: have <= want,
-    "=": lambda have, want: abs(have - want) < 1e-12,
+    "=": lambda have, want: abs(have - want) < SCORE_TOLERANCE,
 }
 
 #: Longest first, so `>=` is not read as `>` followed by a stray `=`.
@@ -631,11 +672,28 @@ def _threshold(written: Any) -> "tuple[str, float] | None":
     must never have to learn is a syntax with precedence in it. Two lines that
     both have to be true is the same predicate without the parser.
 
-    A bare number is read as `> n`, which is what every author who wrote one
-    before this meant and what the old code did.
+    **A bare number is not a comparison and is refused here, as it is there.**
+    This file used to read `MMLU: 80` as `> 80` "which is what every author who
+    wrote one meant", and `coerce.rs::threshold` has always answered `None` to it
+    — *"a bare number states no comparison"* — so `pact check` prints:
+
+        error: 'scores' should be a comparison, like `> 80`, but it is a
+               whole number.
+          fix: Write it like `> 80` or `>= 0.8`.
+
+    The two were never reachable at once: a document with `MMLU: 80` in it does
+    not become a document this port is handed, so the generous arm here was
+    unreachable rather than wrong, and it stayed that way only because nothing
+    said so. It is gone rather than documented as deliberate, because the guess it
+    made is not obviously right — `< 5` is a real thing to want on a latency or a
+    hallucination-rate metric, and on those the silent `>` is the WRONG direction,
+    binding models the author meant to exclude. The checker refuses and shows the
+    two shapes; that is the better answer and there is now only one of them.
+
+    `satisfies` turns the `None` into the same sentence in this port's words, so
+    a document that somehow arrived without going through the checker refuses its
+    models with a line to type instead of binding them on a guess.
     """
-    if isinstance(written, (int, float)) and not isinstance(written, bool):
-        return ">", float(written)
     if not isinstance(written, str):
         return None
     said = written.strip()
@@ -646,13 +704,23 @@ def _threshold(written: Any) -> "tuple[str, float] | None":
             if rest.endswith("%"):
                 rest, scale = rest[:-1].strip(), 0.01
             try:
-                return ("=" if op == "==" else op), float(rest) * scale
+                figure = float(rest) * scale
             except ValueError:
                 return None
-    try:
-        return ">", float(said)
-    except ValueError:
-        return None
+            # `inf`, `nan` and `Infinity` all parse to a float here and to
+            # nothing at all in `coerce::threshold`, which refuses a non-finite
+            # result unless the author's text carried a digit
+            # (`pact_schema::has_a_digit`). The distinction is the same one money
+            # and sizes already draw: `> 1e999` is a real figure that ran off the
+            # end of the number line and is carried up so the ceiling can name
+            # it; `> inf` is a WORD spelled where a figure goes and is not a
+            # threshold. Without this line `> inf` bound every model in the
+            # catalogue here and was `schema/wrong-type` one crate over.
+            if figure != figure or figure in (float("inf"), float("-inf")):
+                if not any(c.isdigit() and c.isascii() for c in rest):
+                    return None
+            return ("=" if op == "==" else op), figure
+    return None
 
 
 def _benchmarks(written: Any) -> dict[str, float]:
@@ -731,13 +799,9 @@ def _capabilities(caps: dict[str, Any]) -> frozenset[str]:
     # 0 of any catalogue anybody could write. D16 names it as a v1 modality, and
     # D17's escape hatch — a workspace adding its own row — could not reach it
     # either, because there was no line to write it on.
-    if _yes(caps.get("computer-use")):
+    if said_yes(caps.get("computer-use")):
         out.add("computer-use")
     return frozenset(out)
-
-
-def _yes(v: Any) -> bool:
-    return str(v).strip().lower() in ("yes", "true", "on") or v is True
 
 
 def needs_of(document: dict[str, Any], agent_key: str) -> dict[str, Any]:
@@ -774,16 +838,30 @@ def needs_of(document: dict[str, Any], agent_key: str) -> dict[str, Any]:
         block = {}
 
     caps: list[str] = []
+    # `needs.tool-calling:` is NOT a `yes-no`, which is why it does not go
+    # through `said_yes` two lines down. `spec/schema.yaml` types it
+    # `one-of: [no, yes, parallel]`, because `parallel` is a third answer and not
+    # a stronger tick.
+    #
+    # It held a fourth word, `true`, for as long as this file held its own `_yes`
+    # beside it — and `pact check` refuses `tool-calling: true` at the author's
+    # own line (*"'tool-calling' should be one of: no, yes, parallel"*), so it
+    # was a spelling no document reaching here could ever carry. Removed for the
+    # reason `yes_no.py` gives for removing `facts._yes`'s `1`: a reader more
+    # generous than the checker is a second, unwritten specification, and the
+    # next person to read this line has no way to tell which of the two is the
+    # rule. `TOOL_CALLING` is held to the schema's own `choices:` by
+    # `tests/test_one_word_for_yes_means_one_thing_to_every_reader.py`.
     calling = str(block.get("tool-calling") or "").strip()
-    if calling in {"yes", "true", "parallel"}:
+    if calling in TOOL_CALLING - {"no"}:
         caps.append("tools")
     if calling == "parallel":
         caps.append("parallel-tools")
-    if _yes(block.get("images")):
+    if said_yes(block.get("images")):
         caps.append("images")
-    if _yes(block.get("audio")):
+    if said_yes(block.get("audio")):
         caps.extend(("audio_in", "audio_out"))
-    if _yes(block.get("computer-use")):
+    if said_yes(block.get("computer-use")):
         caps.append("computer-use")
 
     missing = _egress.missing_for(document, agent)
@@ -799,13 +877,6 @@ def needs_of(document: dict[str, Any], agent_key: str) -> dict[str, Any]:
         # not a per-role gate however carefully it reads one.
         "egress-missing": missing,
     }
-
-
-def _yes(written: Any) -> bool:
-    """`yes`, `true`, `on` — however a non-technical author wrote it."""
-    if isinstance(written, bool):
-        return written
-    return str(written or "").strip().lower() in {"yes", "true", "on", "y"}
 
 
 def _runtimes(written: Any) -> frozenset[str]:
@@ -881,6 +952,13 @@ class PortabilityReport:
     verdict: Verdict
     strategy: str
     recommendation: str = ""
+    #: The search's answer as FACTS, where `recommendation` is the same answer as
+    #: words. `--choose-model` binds off this: a flag whose help says it binds the
+    #: model that passes could only ever bind the one the agent already named,
+    #: because the name of the row that passed existed nowhere but inside a
+    #: sentence. Always set where `recommendation` is; `.model` is `""` when
+    #: nothing passed, which is the same thing `recommendation` opens with.
+    instead: "Alternative | None" = None
 
     def render(self) -> str:
         head = (
@@ -888,7 +966,25 @@ class PortabilityReport:
             f"  (agent {self.agent}, strategy {self.strategy})"
         )
         lines = [head, f"  measured against: {self.baseline}"]
-        lines.append(f"  score {self.verdict.score:.0%} vs bar {self.verdict.bar:.0%}")
+        if not self.verdict.results:
+            # NOTHING RAN, so there is no score, and `score 0% vs bar 70%` is not
+            # a neutral way of saying that — it is a measurement claim. Printed
+            # beside "did not answer, so nothing was measured on it" it reads as
+            # a model that answered and got every case wrong, which is the exact
+            # misreading `evaluate` refuses to encode when it returns no results
+            # instead of a figure off a shorter suite than the author wrote.
+            #
+            # NO RESULTS, whatever the outcome, and not UNDECIDED-with-no-results.
+            # The other empty verdict is the one `resolve` builds when the
+            # catalogue row does not meet the author's `needs:` — FAIL, refused
+            # before an eval was run — and it printed `score 0% vs bar 70%` beside
+            # "thinks at the 'steady' rung and this needs at least 'careful'",
+            # which is the same false number with a different word above it.
+            lines.append(f"  score: not measured (bar {self.verdict.bar:.0%})")
+        else:
+            lines.append(
+                f"  score {self.verdict.score:.0%} vs bar {self.verdict.bar:.0%}"
+            )
         if self.verdict.note:
             lines.append(f"  {self.verdict.note}")
         for f in self.verdict.failures[:5]:
@@ -969,6 +1065,66 @@ def _variant(written: Mapping[str, Any]) -> Strategy:
 TransportFactory = Callable[[str, str], Any]  # (model_name, strategy_name) -> Transport
 
 
+def _why_it_stopped(stopped: Exception) -> "tuple[str, str] | None":
+    """Which of the three no-score states this is, and the cause in words.
+
+    `None` means it is NOT one of them, and that is the important return: an
+    `AttributeError` in our own program, or a `TypeError` from a factory with the
+    wrong arity, is a defect in PACT. Filing it as "the model did not answer" and
+    then telling the author to start a model runtime is a right field name with a
+    wrong diagnosis and a remedy that cannot help — the shape C9 already names as
+    a defect in this repository (`docs/70-PRODUCTION-GAP-REGISTER.md`). Those
+    propagate.
+
+    `httpx` is imported here rather than at the top because this module is the
+    decision procedure and does not otherwise need a network library; a
+    distribution that scores with a scripted transport must still be able to
+    import it.
+    """
+    said = " ".join(str(stopped).split())
+    try:
+        import httpx
+    except ImportError:  # pragma: no cover — httpx ships with the adapter
+        httpx = None  # type: ignore[assignment]
+
+    if httpx is not None:
+        if isinstance(stopped, httpx.HTTPStatusError):
+            code = stopped.response.status_code
+            if code == 404:
+                return NOT_SERVING, (
+                    "something is listening there and answered 404 — it is not "
+                    "serving a model by that name"
+                )
+            return NOT_A_RUNTIME, (
+                f"something is listening there and answered HTTP {code} rather "
+                f"than a completion"
+            )
+        if isinstance(stopped, httpx.ConnectTimeout):
+            return NOT_SERVING, "nothing accepted the connection before it timed out"
+        if isinstance(stopped, httpx.TimeoutException):
+            # The socket was ACCEPTED. Nothing about this machine needs starting,
+            # so it must not be filed under "not serving" whatever the remedy
+            # sentence for that group happens to say.
+            return STOPPED, (
+                "the connection was accepted and no answer arrived before the "
+                "request timed out"
+            )
+        if isinstance(stopped, httpx.TransportError):
+            return NOT_SERVING, said or "nothing accepted the connection"
+    if isinstance(stopped, json.JSONDecodeError):
+        return NOT_A_RUNTIME, (
+            "something is listening there and what it sent back was not JSON, so "
+            "it is not a model runtime"
+        )
+    if isinstance(stopped, RuntimeError):
+        # The product raising on purpose: `harness.delegate_by_running` raises
+        # this when a member goes over the budget its grant allowed it, and when
+        # a member halts without finishing. Both are facts about the RUN, and
+        # neither is anything to do with whether a machine is serving a model.
+        return STOPPED, said or stopped.__class__.__name__
+    return None
+
+
 def evaluate(
     spec: AgentSpec,
     cases: list[Case],
@@ -978,11 +1134,23 @@ def evaluate(
     model: str,
     strategy_name: str,
     tools: dict[str, Callable[[dict], str]],
+    *,
+    document: dict[str, Any],
     min_cases: int = 5,
     judge: Any = None,
     metrics: Any = None,
 ) -> Verdict:
     """Score one model on one strategy against the author's own suite.
+
+    `document` is REQUIRED and keyword-only, because the one thing it is for is
+    the thing that is silently wrong when it is missing: an agent with a `team:`
+    is only runnable here if `run` is given an `ask_member`, and building one
+    needs the document its members are defined in. Without it every delegation
+    parks instead of asking, every governed case comes back "did not answer", and
+    the model under test is blamed for a suspension — the identical defect
+    `scoring._run_every_case` records at its own `ask_member` line. A default of
+    `None` would have made that a mistake a caller can make by omission, which is
+    how this module's transport factory came to default to `None` (D3).
 
     `judge` is the grader for the suite's `judged:` rules, built from the
     document by `judge.judge_of`. It is threaded rather than built here for the
@@ -1008,11 +1176,93 @@ def evaluate(
     # run parks, a delegated member parks under its own policy, and this one line
     # is where a reader looks to find out why the numbers differ.
     ungated = spec.asking.asking_only()
+    # THE TEAM RUNS, for the reason `scoring._run_every_case` gives at its own
+    # `ask_member` line and with the same construction. Without this, `run` gets
+    # no `ask_member`, `harness.run` leaves `delegates` empty, and every call to a
+    # teammate parks the run as WAITING_FOR_ANOTHER_AGENT — so scoring an agent
+    # with a `team:` measured a suspension and blamed the model for it. The
+    # worked example this door is run against has a `team:` of two, and the
+    # measured result of omitting this was six cases out of six failing with
+    # `expected decision 'approved', got ''`.
+    #
+    # The member runs on THE MODEL UNDER TEST, which is what makes the figure a
+    # portability figure: "can this model do this agent's job" includes the work
+    # its specialists do. `delegate_by_running` gives the member its share of the
+    # budget and charges back what it spent.
+    ask_member = (
+        delegate_by_running(document, lambda _member: transport_for(model, strategy_name))
+        if spec.team
+        else None
+    )
+    #: Why the suite stopped early, when it did. `None` means it did not.
+    silence: "Silence | None" = None
     for case in cases:
+        # DELIBERATELY OUTSIDE the `try` below, and belt-and-braces rather than
+        # load-bearing since the `except` narrowed: building the transport is this
+        # function's contract with whoever called it, and a factory that takes the
+        # wrong arguments is a mistake in the program — not a model that did not
+        # answer. Moving this line inside the `try` is a mutation
+        # `test_a_factory_with_the_wrong_arity_is_a_defect_and_not_a_model_that_did_not_answer`
+        # covers, because `_why_it_stopped` returns `None` for a `TypeError` and
+        # the raise goes on out.
         transport = transport_for(model, strategy_name)
-        result = asyncio.run(run(spec, transport, case.when, tools, asking=ungated))
+        try:
+            result = asyncio.run(
+                run(spec, transport, case.when, tools, asking=ungated,
+                    ask_member=ask_member)
+            )
+        except Exception as stopped:
+            reading = _why_it_stopped(stopped)
+            if reading is None:
+                # NOT one of the three no-score states, so it is a defect, and a
+                # defect reported as "this machine is not serving them. Start the
+                # model runtime" sends the author to fix a machine that is fine.
+                # `except Exception` here filed a missing attribute in our own
+                # program, and `harness`'s own deliberate `RuntimeError`s, under
+                # that sentence with the cause dropped.
+                raise
+            kind, cause = reading
+            # WHAT ANSWERED IS KEPT, even though the score is not. "Answered three
+            # of six and then stopped" and "never opened a socket" were the same
+            # state downstream, so a machine that was serving perfectly well was
+            # reported to its author as one that is not.
+            silence = Silence(
+                kind=kind,
+                cause=cause,
+                answered=len(results),
+                of=len(cases),
+                unenforced=tuple(
+                    dict.fromkeys(s for r in results for s in r.unenforced)
+                ),
+            )
+            break
         results.append(check(case, result, rules, judge=judge, metrics=metrics))
+    if silence is not None:
+        # UNDECIDED with no RESULTS kept, where `_run_every_case` keeps what it
+        # got. The divergence is this module's whole argument: a portability
+        # figure is a claim about the author's suite, and one computed off the
+        # four cases that answered before the runtime went away is a claim about
+        # a smaller suite than they wrote (AC-3.1). A row that went quiet gets a
+        # reason here rather than a number.
+        #
+        # WHAT IS NOT DISCARDED is on the `Silence`: how many cases answered, why
+        # it stopped, and every rule those cases met that nothing could grade.
+        # Dropping the score is argued; dropping a "a rule of yours was never
+        # applied" report is the silent degradation T7 forbids by name, and
+        # `Verdict.unenforced` reads it back so `render` still prints it.
+        return Verdict("UNDECIDED", 0.0, bar, [], silence.as_sentence(model), silence)
     return verdict(results, bar, min_cases=min_cases)
+
+
+def _went_quiet(v: Verdict) -> bool:
+    """Whether this row never answered at all, as against answering badly.
+
+    Structural, and now off the `Silence` itself rather than off "UNDECIDED with
+    no results": that shape could not tell a row that answered three of six cases
+    apart from one that never opened a socket, and the sentence built on it told
+    the author of the first that this machine is not serving the model.
+    """
+    return v.silence is not None and v.silence.answered == 0
 
 
 def resolve(
@@ -1020,7 +1270,15 @@ def resolve(
     document: dict[str, Any],
     requested: str,
     strategies: "dict[str, Strategy] | None" = None,
-    transport_for: TransportFactory = None,  # type: ignore[assignment]
+    # `| None` and NOT a `# type: ignore[assignment]`. The annotation was
+    # `TransportFactory` with a `None` default — a declared shape the value could
+    # not have — and the mismatch was silenced by a directive addressed to a type
+    # checker this tree does not run (`grep -n "mypy\|pyright" pyproject.toml
+    # scripts/test-all.sh` -> no output). AD-41: delete the unenforceable control
+    # rather than annotate around it. What the parameter can actually hold is
+    # written here, and what it must be by the time anything uses it is enforced
+    # in the body.
+    transport_for: "TransportFactory | None" = None,
     tools: "dict[str, Callable[[dict], str]] | None" = None,
     catalogue: "list[ModelEntry] | None" = None,
     needs: dict[str, Any] | None = None,
@@ -1042,6 +1300,78 @@ def resolve(
     but a *default* of "whatever you were handed" is how the price list ended up
     being three invented rows for a round.
     """
+    # `transport_for` KEEPS its `None` default, and the reason is not the one an
+    # earlier round of this comment gave. That round said a required parameter
+    # would "break all nine existing call sites, every one of which passes it
+    # positionally". Measured instead of recalled — by parsing the three files
+    # that call this function and counting `ast.Call` nodes named `resolve`,
+    # because a grep for the string also matches `Path.resolve()` and prose:
+    # there are SEVENTEEN call sites, not nine — fifteen positional, one that
+    # omits the argument on purpose (the guard's own test), and the one
+    # PRODUCTION caller, `scoring.py:1005`, which passes `transport_for=` BY
+    # KEYWORD. Making the parameter keyword-only would therefore break zero
+    # shipped callers and cost fifteen mechanical edits in two test files. Seven
+    # of the seventeen arrived with this very change — all of them in the door
+    # test file, which `git status --porcelain` still reports as untracked — so
+    # "existing" was wrong as well as "nine".
+    #
+    # THAT COUNT WAS ITSELF WRONG FOR A ROUND, in the same direction and for the
+    # same reason. It read FOURTEEN, measured before the two tests this change
+    # added had been written, and the three call sites they brought were never
+    # re-counted. A number in a comment is a measurement with no test behind it;
+    # re-take it rather than trusting it.
+    #
+    # The decision was reopened on that measurement and the default was kept
+    # DELIBERATELY, for one reason: a required parameter buys Python's stock
+    # `TypeError: resolve() missing 1 required keyword-only argument` and loses
+    # the authored sentence below, which is the sentence that says WHY a factory
+    # is needed. D13 — a refusal is a sentence, not a stack — applies to the
+    # library door as much as to the CLI. What actually closes the defect class
+    # is the check itself, and the check now covers the whole class rather than
+    # one member of it.
+    #
+    # WHAT IS CHECKED, AND THAT IT IS CHECKED HERE RATHER THAN NARRATED. An
+    # earlier round of this comment claimed the factory's ARITY "CANNOT" be seen
+    # at runtime and handed the job to a test file. That was false: three lines
+    # of `inspect` decide it, and they reject the exact original A1 defect (a
+    # one-argument lambda handed to the two-argument protocol) while admitting
+    # `scoring._choose`'s two-argument closure, a `*args` forwarder, a callable
+    # object and a `functools.partial`. Under AD-41 and T7 a declared control
+    # nothing enforces is worse than an absent one, so the annotation
+    # `TransportFactory = Callable[[str, str], Any]` — which no type checker in
+    # this tree reads, there being no `[tool.mypy]` in `pyproject.toml` and no
+    # checker in `scripts/test-all.sh` — is backed by an executable check rather
+    # than by a comment explaining that it is not.
+    #
+    # Six wrong shapes were measured against the old one-word guard and five of
+    # them reached `TypeError` four frames down with a message naming neither
+    # `resolve` nor `transport_for`: a zero-, one- and three-argument lambda, a
+    # transport INSTANCE, a bare string, and `False` — falsy, not callable, not
+    # `None`, and admitted. All six now stop here with the sentence below.
+    what = "nothing" if transport_for is None else repr(transport_for)
+    needed = (
+        "resolve() needs a transport_for(model_name, strategy_name) factory: "
+        "it decides portability by RUNNING the author's cases, and there is "
+        "nothing honest to return without something to run them on"
+    )
+    if not callable(transport_for):
+        raise TypeError(f"{needed} — got {what}, which is not callable")
+    try:
+        shape: "inspect.Signature | None" = inspect.signature(transport_for)
+    except (TypeError, ValueError):
+        # A C builtin whose arity is not introspectable. ADMITTED rather than
+        # refused: refusing on "I could not look" would turn a guard into a
+        # closed door for callers that are fine, which is the failure mode a
+        # gate that fires on the wrong evidence has.
+        shape = None
+    if shape is not None:
+        try:
+            shape.bind("model_name", "strategy_name")
+        except TypeError as wrong_arity:
+            raise TypeError(
+                f"{needed} — got {what}, which cannot be called with two "
+                f"positional arguments: {wrong_arity}"
+            ) from wrong_arity
     # The author's own `variants:` unless the caller overrode them. `is None`,
     # not `or`: an author who wrote no variants gets `{"authored": ...}` and one
     # who deliberately passed `{}` gets nothing, and those are different facts.
@@ -1075,35 +1405,128 @@ def resolve(
             spec.name, requested, baseline,
             Verdict("FAIL", 0.0, bar, [], f"{requested} {why}"), "authored",
         )
-        report.recommendation = _cheapest_passing(
+        report.instead = _cheapest_passing(
             spec, document, catalogue, strategies, transport_for, tools, needs, bar,
             exclude=requested, judge=judge,
         )
+        report.recommendation = report.instead.sentence
         return report
 
     last: Verdict | None = None
     for strategy_name, transform in strategies.items():
         candidate = transform(spec)
         v = evaluate(candidate, cases, rules, bar, transport_for, requested,
-                     strategy_name, tools, judge=judge, metrics=scores)
+                     strategy_name, tools, document=document, judge=judge,
+                     metrics=scores)
         last = v
         if v.outcome == "PASS":
             return PortabilityReport(spec.name, requested, baseline, v, strategy_name)
 
-    report = PortabilityReport(
-        spec.name, requested, baseline, last or Verdict("FAIL", 0.0, bar, []), "exhausted"
-    )
-    report.recommendation = _cheapest_passing(
+    # `last is None` MEANS THE LOOP ABOVE DID NOT RUN, which happens on exactly
+    # one input: `strategies={}`, which `resolve`'s docstring declares supported.
+    # It used to fall into `last or Verdict("FAIL", ...)` labelled `exhausted` —
+    # a FAIL verdict and the word "exhausted" over a search that built no
+    # transport and ran no case. `render` was already honest about the figure
+    # ("score: not measured"), so the head line read `PORTABILITY: FAIL for
+    # qwen2.5-vl-7b-instruct (strategy exhausted)` with nothing exhausted and
+    # nothing failed. UNDECIDED is the outcome this module already uses for "no
+    # score could be taken", and the note says which of the reasons it is.
+    if last is None:
+        report = PortabilityReport(
+            spec.name, requested, baseline,
+            Verdict("UNDECIDED", 0.0, bar, [],
+                    f"no strategy was supplied, so {requested} was never run"),
+            "none supplied",
+        )
+    else:
+        report = PortabilityReport(spec.name, requested, baseline, last, "exhausted")
+    report.instead = _cheapest_passing(
         spec, document, catalogue, strategies, transport_for, tools, needs, bar,
         exclude=requested, judge=judge,
     )
+    report.recommendation = report.instead.sentence
     return report
+
+
+@dataclass(frozen=True)
+class Alternative:
+    """What the search found instead: the NAME and the sentence, not one or the
+    other.
+
+    The sentence alone was the whole return for a round, and `--choose-model`
+    could therefore refuse with an error over a model it had just watched pass —
+    the search did the work, printed prose about it, and threw the answer away.
+    A caller that has to bind something needs the name; a caller that has to
+    print something needs the sentence; parsing the first back out of the second
+    is how a report becomes an API nobody declared.
+    """
+
+    #: The row that passed, or `""` when nothing did.
+    model: str = ""
+    #: What to print, whether or not anything passed.
+    sentence: str = ""
+    #: The strategy it passed under, and at what score — the two facts an author
+    #: needs to reproduce it.
+    strategy: str = ""
+    score: float = 0.0
+
+
+def _why_no_score(rows: "dict[str, Silence]") -> str:
+    """The rows that produced no score, grouped by WHAT TO DO about them.
+
+    One clause per remedy rather than one per row, and never a remedy the
+    evidence does not support. "This machine is not serving them. Start the model
+    runtime" was printed for every non-result there was — for a socket that
+    connected and answered `<html>nginx</html>`, for a teammate that went over
+    the budget its author set, and for a defect in our own program. A support
+    lead who cannot write code (D13) then goes and starts a runtime that is
+    already running.
+    """
+    said: list[str] = []
+
+    def grouped(kind: str) -> "dict[str, list[str]]":
+        """The rows of one kind that never answered, by the cause they share.
+
+        BY CAUSE and not merely by kind, because the cause is the half a reader
+        acts on: a row nothing accepted a connection for and a row whose runtime
+        timed out reach the same remedy by different roads, and printing the
+        first row's cause over both is how a report starts describing a run that
+        did not happen.
+        """
+        out: dict[str, list[str]] = {}
+        for name, s in rows.items():
+            if s.kind == kind and not s.answered:
+                out.setdefault(s.cause, []).append(name)
+        return out
+
+    for cause, names in grouped(NOT_SERVING).items():
+        said.append(
+            f"this machine is not serving {', '.join(names)} — {cause}. Start the "
+            f"model runtime, or run it again with `--serving-at` pointing at the "
+            f"machine that does"
+        )
+    for cause, names in grouped(NOT_A_RUNTIME).items():
+        said.append(
+            f"{', '.join(names)}: {cause}. Point `--serving-at` at a machine "
+            f"that is serving models"
+        )
+    for name, s in rows.items():
+        if not s.answered and s.kind in (NOT_SERVING, NOT_A_RUNTIME):
+            continue
+        if s.answered:
+            said.append(
+                f"{name} answered {s.answered} of {s.of} cases and then stopped "
+                f"— {s.cause}"
+            )
+        else:
+            said.append(f"{name} never answered — {s.cause}")
+    return "; ".join(said)
 
 
 def _cheapest_passing(
     spec, document, catalogue, strategies, transport_for, tools, needs, bar, exclude,
     judge=None,
-) -> str:
+) -> Alternative:
     """D11: a refusal that does not name an alternative is a dead end.
 
     And a refusal that names nothing *because nothing qualifies* has to say that
@@ -1116,6 +1539,10 @@ def _cheapest_passing(
     scores = metrics_of(document, spec.workspace)
     ruled_out: list[str] = []
     tried: list[str] = []
+    #: Rows that qualified and produced no score, with the reason each one did
+    #: not — a different fact from a row that answered badly, and a different
+    #: thing for the author to go and do.
+    no_score: dict[str, Silence] = {}
     off_box = False
     for entry in sorted(catalogue, key=lambda m: m.ranks_after(needs)):
         if entry.name == exclude:
@@ -1126,15 +1553,40 @@ def _cheapest_passing(
             off_box = off_box or "leave the box" in why
             continue
         tried.append(entry.name)
+        # SEEDED `False`, AND THE THIRD POPULATION IS COUNTED SEPARATELY BELOW.
+        # This flag was seeded `not strategies` for a round, so that a caller who
+        # passed `strategies={}` — an input `resolve`'s own docstring declares
+        # supported — did not have every qualifying row filed as having gone
+        # silent. That is a true fact about the rows and it was recorded in the
+        # wrong place: marking them SCORED put them in `measured` below, and the
+        # author was then told "N model(s) met the requirements and none reached
+        # the bar" about a search that ran zero cases and built zero transports.
+        # Measured on `examples/refund-desk` with a factory that raises if it is
+        # called: 0 factory calls, 0 results, and "5 model(s) met the
+        # requirements and none reached the bar".
+        #
+        # A row nobody tried is neither scored nor silent. It is UNRUN, and the
+        # `if not strategies` branch below is where unrun rows get said out loud.
+        scored_it = False
+        why_not: "Silence | None" = None
         for strategy_name, transform in strategies.items():
             v = evaluate(transform(spec), cases, rules, bar, transport_for,
-                         entry.name, strategy_name, tools, judge=judge,
-                         metrics=scores)
+                         entry.name, strategy_name, tools, document=document,
+                         judge=judge, metrics=scores)
             if v.outcome == "PASS":
-                return (
+                return Alternative(
+                    entry.name,
                     f"{entry.name} — passes at {v.score:.0%} using the "
-                    f"{strategy_name!r} strategy, {entry.price()}"
+                    f"{strategy_name!r} strategy, {entry.price()}",
+                    strategy_name,
+                    v.score,
                 )
+            if v.silence is None:
+                scored_it = True
+            else:
+                why_not = v.silence
+        if not scored_it and why_not is not None:
+            no_score[entry.name] = why_not
 
     # Nothing passed, and there are two different reasons for that. Both get a
     # sentence, because "no recommendation" printed as an empty string is the
@@ -1148,11 +1600,61 @@ def _cheapest_passing(
     )
     if not tried:
         head = "nothing in the catalogue meets what this agent needs"
-        return f"{head} — {reasons}.{fix}"
+        return Alternative(sentence=f"{head} — {reasons}.{fix}")
+
+    # NOTHING WAS RUN, because the caller supplied no strategy to run. Its own
+    # sentence, before either of the two below, because it is a third fact and
+    # not a shading of either: these rows did not fail to reach the bar (no bar
+    # was approached) and they did not go quiet (no socket was opened). The
+    # remedy is not to edit the suite and not to start a runtime — it is to pass
+    # a strategy — so printing it as either of those sends the author somewhere
+    # that cannot help, the shape D13 and C9 both name.
+    if not strategies:
+        head = (
+            f"nothing was measured: {len(tried)} model(s) met the requirements "
+            f"and no strategy was supplied, so not one of them was run"
+        )
+        if ruled_out:
+            head += f". The rest were ruled out before any eval ran — {reasons}"
+        return Alternative(sentence=f"{head}.{fix}")
+
+    # THE POPULATIONS ARE COUNTED SEPARATELY, and the mixed case is the ordinary
+    # one rather than a corner: a box serving one local model has that row answer
+    # and every other qualifying row go quiet. Rolling the quiet rows into "met
+    # the requirements and none reached the bar" states a measurement that was
+    # never taken, and sends the author to edit their suite over models their
+    # machine is not serving.
+    measured = [name for name in tried if name not in no_score]
+    silent = all(s.answered == 0 for s in no_score.values())
+    if not measured:
+        # NOT "none reached the bar". No bar was reached or missed, because
+        # nothing was measured at all. And "none of them answered" only when that
+        # is what happened: a row that answered four cases and stopped on the
+        # fifth ANSWERED, and reporting it as a row that did not is how a machine
+        # that is serving a model was reported as one that is not.
+        opened = (
+            "none of them answered" if silent else "no score could be taken off any"
+        )
+        head = (
+            f"nothing could be measured: {len(tried)} model(s) met the "
+            f"requirements and {opened} — {_why_no_score(no_score)}"
+        )
+        if ruled_out:
+            head += f". The rest were ruled out before any eval ran — {reasons}"
+        return Alternative(sentence=f"{head}.{fix}")
     head = (
-        f"nothing in the catalogue passed: {len(tried)} model(s) met the "
+        f"nothing in the catalogue passed: {len(measured)} model(s) met the "
         f"requirements and none reached the bar"
     )
     if ruled_out:
         head += f", and the rest were ruled out before any eval ran — {reasons}"
-    return f"{head}.{fix}"
+    if no_score:
+        # A SEPARATE SENTENCE, and it names them. These rows are not part of the
+        # count above and never were measured against the bar; what the author
+        # has to do about them is start a runtime, not change their suite.
+        head += (
+            f". {len(no_score)} more met the requirements and "
+            f"{'never answered' if silent else 'produced no score'} — "
+            f"{_why_no_score(no_score)}"
+        )
+    return Alternative(sentence=f"{head}.{fix}")

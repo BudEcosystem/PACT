@@ -121,12 +121,17 @@ fn priced_in(price_list: &str, document: &Node) -> BTreeSet<String> {
 /// row cannot make a currency spendable for the same reason it cannot make a
 /// model meterable.
 fn rows_of(catalogue: &Node, into: &mut BTreeSet<String>) {
-    let Some(rows) = catalogue.get("models").and_then(Node::as_map) else { return };
+    let Some(rows) = catalogue.get("models").and_then(Node::as_map) else {
+        return;
+    };
     for (_, entry) in rows {
-        let Some(cost) = entry.node.get("cost") else { continue };
-        let (Some(went_in), Some(came_out)) =
-            (currency_of(cost.get("input-per-mtok")), currency_of(cost.get("output-per-mtok")))
-        else {
+        let Some(cost) = entry.node.get("cost") else {
+            continue;
+        };
+        let (Some(went_in), Some(came_out)) = (
+            currency_of(cost.get("input-per-mtok")),
+            currency_of(cost.get("output-per-mtok")),
+        ) else {
             continue;
         };
         if went_in == came_out {
@@ -164,9 +169,7 @@ fn money_fields(schema: &Schema) -> BTreeSet<&str> {
         // amount at all — so a bare `80` on a score is skipped rather than
         // priced.
         .filter(|f| matches!(f.ty, Ty::Money) || f.may_be_money)
-        .flat_map(|f| {
-            std::iter::once(f.name.as_str()).chain(f.aliases.iter().map(String::as_str))
-        })
+        .flat_map(|f| std::iter::once(f.name.as_str()).chain(f.aliases.iter().map(String::as_str)))
         .collect()
 }
 
@@ -205,6 +208,20 @@ fn walk(
                 && let Some(coerce::Coerced::Money { amount, currency }) =
                     coerce::check(&entry.node, &Ty::Money)
                 && !priced.contains(&currency)
+                // ONE MISTAKE GETS ONE MESSAGE, settled here the way `money.rs`
+                // settled it against its own shape check. A value with no
+                // readable figure has nothing to price, and saying both things
+                // is worse than saying either: MEASURED on
+                // `more-than: 200 NaN`, one token drew
+                // `loader/currency-nothing-can-price` offering to add a NAN row
+                // to `models/catalog.yaml` — i.e. "NAN may be a currency you
+                // genuinely deal in" — beside `loader/threshold-is-not-a-figure`
+                // saying the value contains no figure. Two messages disagreeing
+                // about what is wrong. (`200 NaN` no longer draws the second at
+                // all, because `no_figure_in` now looks only at the figure slot;
+                // `NaN JPY` is the case where both still had something to say,
+                // and this is which one says it.)
+                && has_a_figure_to_price(&entry.node)
             {
                 diags.push(unpriced(key, entry, amount, &currency, priced));
             }
@@ -215,6 +232,17 @@ fn walk(
             walk(item, fields, priced, false, diags);
         }
     }
+}
+
+/// Whether there is a figure here at all — the thing being priced.
+///
+/// A value `money::no_figure_in` has a complaint about is one
+/// `loader/threshold-is-not-a-figure` is already speaking about, and it has
+/// nothing to price. `true` for a value that is not text at all, because the
+/// caller has already coerced it to `Money` and a non-text money value came from
+/// a number, which is a figure by construction.
+fn has_a_figure_to_price(node: &Node) -> bool {
+    node.as_str().is_none_or(|w| crate::money::no_figure_in(w.trim()).is_none())
 }
 
 /// The refusal: what was written, what is wrong with it, and a line to type.
@@ -265,7 +293,11 @@ fn unpriced(
 /// way a float prints. Mirrors `limits._round` on the Python side, so the two
 /// halves of this fix quote one amount the same way.
 fn plain(v: f64) -> String {
-    if v.fract() == 0.0 && v.abs() < 1e15 { format!("{v:.0}") } else { format!("{v}") }
+    if v.fract() == 0.0 && v.abs() < 1e15 {
+        format!("{v:.0}")
+    } else {
+        format!("{v}")
+    }
 }
 
 /// `USD`, `USD or EUR`, `USD, EUR or JPY` — a list the way a sentence carries
@@ -346,7 +378,12 @@ policies:
     }
 
     fn only(d: &Diagnostics) -> &Diagnostic {
-        assert_eq!(d.items().len(), 1, "expected exactly one problem:\n{}", d.render());
+        assert_eq!(
+            d.items().len(),
+            1,
+            "expected exactly one problem:\n{}",
+            d.render()
+        );
         &d.items()[0]
     }
 
@@ -355,7 +392,11 @@ policies:
         // The half that matters most: a correct tree must not be refused. A
         // false positive on the shipped shape costs an author their trust in
         // every other line the tool prints.
-        assert!(check_text(WORKSPACE).is_empty(), "{}", check_text(WORKSPACE).render());
+        assert!(
+            check_text(WORKSPACE).is_empty(),
+            "{}",
+            check_text(WORKSPACE).render()
+        );
     }
 
     #[test]
@@ -363,11 +404,31 @@ policies:
         let d = check_text(&WORKSPACE.replace("0.05 USD", "500 JPY"));
         let e = only(&d);
         assert_eq!(e.rule, "loader/currency-nothing-can-price");
-        assert_eq!(e.severity, pact_diag::Severity::Error, "a cap in the wrong money is not a warning");
-        assert!(e.message.contains("`cost-per-request-under: 500 JPY`"), "{}", e.message);
-        assert!(e.message.contains("JPY"), "name the currency written: {}", e.message);
-        assert!(e.message.contains("USD"), "name the currency that IS priced: {}", e.message);
-        assert!(e.fix.contains("USD"), "the fix must offer a currency: {}", e.fix);
+        assert_eq!(
+            e.severity,
+            pact_diag::Severity::Error,
+            "a cap in the wrong money is not a warning"
+        );
+        assert!(
+            e.message.contains("`cost-per-request-under: 500 JPY`"),
+            "{}",
+            e.message
+        );
+        assert!(
+            e.message.contains("JPY"),
+            "name the currency written: {}",
+            e.message
+        );
+        assert!(
+            e.message.contains("USD"),
+            "name the currency that IS priced: {}",
+            e.message
+        );
+        assert!(
+            e.fix.contains("USD"),
+            "the fix must offer a currency: {}",
+            e.fix
+        );
     }
 
     #[test]
@@ -378,7 +439,11 @@ policies:
         // and compares the bare numbers, so a 200 JPY line silently gates at 200
         // of whatever the model wrote.
         let d = check_text(&WORKSPACE.replace("more-than: 200 USD", "more-than: 200 JPY"));
-        assert!(only(&d).message.contains("`more-than: 200 JPY`"), "{}", only(&d).message);
+        assert!(
+            only(&d).message.contains("`more-than: 200 JPY`"),
+            "{}",
+            only(&d).message
+        );
     }
 
     #[test]
@@ -388,7 +453,11 @@ policies:
         // deal in JPY before they were allowed to say so.
         let text = WORKSPACE.replace("0.05 USD", "500 JPY")
             + "models:\n  models:\n    local-jp:\n      cost: { input-per-mtok: 1 JPY, output-per-mtok: 3 JPY }\n";
-        assert!(check_text(&text).is_empty(), "{}", check_text(&text).render());
+        assert!(
+            check_text(&text).is_empty(),
+            "{}",
+            check_text(&text).render()
+        );
     }
 
     #[test]
@@ -398,7 +467,10 @@ policies:
         // at all, so it cannot make a currency spendable either.
         let text = WORKSPACE.replace("0.05 USD", "500 JPY")
             + "models:\n  models:\n    half:\n      cost: { input-per-mtok: 1 JPY, output-per-mtok: unknown }\n";
-        assert!(!check_text(&text).is_empty(), "half a price priced a currency");
+        assert!(
+            !check_text(&text).is_empty(),
+            "half a price priced a currency"
+        );
     }
 
     #[test]
@@ -407,7 +479,11 @@ policies:
         // stopped checking — which is worse than not checking at all.
         for written in ["500 JPY", "JPY 500", "500 jpy"] {
             let d = check_text(&WORKSPACE.replace("0.05 USD", written));
-            assert_eq!(d.items().len(), 1, "'{written}' was read as no amount at all");
+            assert_eq!(
+                d.items().len(),
+                1,
+                "'{written}' was read as no amount at all"
+            );
         }
         // `$0.05` is USD by construction, so it is priced and says nothing.
         assert!(check_text(&WORKSPACE.replace("0.05 USD", "$0.05")).is_empty());
@@ -441,7 +517,12 @@ policies:
         // refusal whose only advice is a list with nothing in it.
         let node = parse_yaml(WORKSPACE, camino::Utf8Path::new("workspace.yaml")).expect("parses");
         let mut d = Diagnostics::new();
-        check(&node, &schema(), "models:\n  m:\n    cost: { input-per-mtok: unknown }\n", &mut d);
+        check(
+            &node,
+            &schema(),
+            "models:\n  m:\n    cost: { input-per-mtok: unknown }\n",
+            &mut d,
+        );
         assert!(d.is_empty(), "{}", d.render());
     }
 
@@ -450,6 +531,142 @@ policies:
         let text = WORKSPACE.replace("0.05 USD", "500 JPY")
             + "models:\n  models:\n    eu:\n      cost: { input-per-mtok: 1 EUR, output-per-mtok: 3 EUR }\n";
         let d = check_text(&text);
-        assert!(only(&d).message.contains("charges in EUR or USD"), "{}", only(&d).message);
+        assert!(
+            only(&d).message.contains("charges in EUR or USD"),
+            "{}",
+            only(&d).message
+        );
+    }
+
+    /// The shipped specification, not a schema written here. [`money_fields`]
+    /// reads whatever `spec/schema.yaml` says, so a fabricated one would prove
+    /// the selection works on fields nobody has.
+    fn shipped() -> Schema {
+        const SPEC: &str = include_str!("../../../spec/schema.yaml");
+        let mut d = Diagnostics::new();
+        let s = pact_schema::from_doc::schema_from_yaml(SPEC, &mut d);
+        assert!(
+            !d.has_errors(),
+            "the shipped specification does not load:\n{}",
+            d.render()
+        );
+        s
+    }
+
+    #[test]
+    fn every_field_this_check_selects_is_also_held_to_being_a_figure() {
+        // TWO invariants sit on one selection, and for a round the slot was
+        // occupied by the wrong one.
+        //
+        // `money_fields` selects on `Ty::Money` OR `may_be_money`, and B3's own
+        // diagnosis was that a money field can be CURRENCY-checked and
+        // FIGURE-unchecked at the same time — which is exactly what
+        // `question-rule.more-than` was, and what the next field declared
+        // `may-be-money: yes` would silently be, because the figure check for
+        // that half is hard-coded to one path in `money.rs` rather than derived
+        // from anything. A3 created that escape hatch and `spec/schema.yaml`
+        // now recommends it for money-shaped fields, so "the next one" is a
+        // line of YAML away.
+        //
+        // This fails HERE — where somebody is adding the field — rather than as
+        // a threshold nothing can compare against loading cleanly a year later.
+        let spec = shipped();
+        let selected = money_fields(&spec);
+        assert!(
+            !selected.is_empty(),
+            "the specification declares no money fields at all"
+        );
+
+        // HALF ONE: a field the schema TYPES `money` is held by the type's own
+        // floor. Exercised rather than asserted about — the document is
+        // validated and the diagnostic is read back, so "covered" means the
+        // refusal actually fires and not that a name appears in a list.
+        let mut typed = 0;
+        for group in spec.groups() {
+            for f in group.fields.iter().filter(|f| matches!(f.ty, Ty::Money)) {
+                typed += 1;
+                let yaml = format!("{}: NaN USD\n", f.name);
+                let node = parse_yaml(&yaml, camino::Utf8Path::new("x.yaml")).expect("parses");
+                let mut d = Diagnostics::new();
+                d.add_source("x.yaml", &yaml);
+                spec.validate(&node, &group.name, &mut d);
+                assert!(
+                    d.items().iter().any(|x| x.rule == "schema/below-the-floor"),
+                    "`{}.{}` is typed `money`, so this file holds its CURRENCY against the \
+                     price list — and nothing holds its FIGURE. Add it to the money arm of \
+                     `Schema::check_floor` in crates/pact-schema/src/lib.rs, or it can be \
+                     written `NaN USD` and never compared against anything:\n{}",
+                    group.name,
+                    f.name,
+                    d.render()
+                );
+            }
+        }
+        assert_eq!(
+            typed, 2,
+            "the specification types {typed} fields `money`, and this test was written when \
+             it typed two (`limits.cost-per-request-under`, \
+             `learning.cycle-limits.per-month`). The loop above covers the new one already; \
+             update this count once you have checked that."
+        );
+
+        // HALF TWO: a field that is money only when the thing it compares is
+        // never coerces to `Money` at all, so no arm of `check_floor` can ever
+        // reach it — see `a_gate_whose_figure_is_not_a_figure_is_refused.rs`.
+        // Its figure check is `money::a_threshold_that_is_not_a_figure`.
+        //
+        // THIS ASSERTION USED TO PIN THE WRONG DIMENSION, and the fix was in the
+        // walk rather than here. That check reached `more-than:` down a
+        // hard-coded PATH (`policies -> ask-a-person -> when -> more-than`)
+        // while this pinned the set of field NAMES — so a SECOND route to the
+        // SAME field added no name, left this green, and reopened the defect
+        // whole. Measured, with one extra line on the `agent` group of a copy of
+        // `spec/schema.yaml` (`ask-a-person: {type: list of
+        // group:question-rule}`) and an agent carrying `more-than: NaN USD`:
+        // "OK — … loaded cleanly (507 settings)", exit 0, every test green.
+        //
+        // `money::every_gate` now walks the document for the KEY wherever it
+        // appears, exactly as `walk` above does for these field names, so the
+        // path is gone and the name is the only thing left that can escape —
+        // which is the thing this can see. It is now pinning the dimension that
+        // is actually load-bearing.
+        let permissive: BTreeSet<&str> = spec
+            .groups()
+            .flat_map(|g| g.fields.iter())
+            .filter(|f| f.may_be_money && !matches!(f.ty, Ty::Money))
+            .map(|f| f.name.as_str())
+            .collect();
+        assert_eq!(
+            permissive,
+            BTreeSet::from(["more-than"]),
+            "`may-be-money: yes` is now on a field this crate figure-checks nobody. \
+             `crates/pact-loader/src/money.rs` finds `more-than:` wherever a document \
+             writes it, but it finds it BY NAME — a `may-be-money` field called anything \
+             else gets the price-list check from this file, no floor from \
+             `Schema::check_floor` (it is `type: text` and never coerces to money), and no \
+             figure check anywhere, so it can be written `NaN USD` and never compared \
+             against anything. Teach `a_threshold_that_is_not_a_figure` the new name \
+             before shipping it."
+        );
+
+        // AND THE ALIASES. `money_fields` deliberately collects them — *\"an
+        // alias is a spelling the author is allowed to use\"* — so a money field
+        // that grew one would be price-checked under both spellings and
+        // figure-checked under neither, since `money.rs` matches the literal
+        // key `more-than`. There are none today (the only `aliases` line in the
+        // specification is the X1 note), and the day there is one this says so.
+        let aliased: Vec<&str> = spec
+            .groups()
+            .flat_map(|g| g.fields.iter())
+            .filter(|f| (matches!(f.ty, Ty::Money) || f.may_be_money) && !f.aliases.is_empty())
+            .map(|f| f.name.as_str())
+            .collect();
+        assert!(
+            aliased.is_empty(),
+            "{aliased:?} carry aliases. This file checks every spelling; \
+             `money::a_threshold_that_is_not_a_figure` matches the literal key, so the \
+             alias is a legal spelling that turns the figure check off. Teach it the \
+             alias, or drop the alias."
+        );
     }
 }

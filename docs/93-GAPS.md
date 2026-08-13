@@ -226,8 +226,11 @@ Any redesign that loses these has gone backwards.
 - **Semantic reachability warnings** — *"money moves without anybody being
   asked"* is a check across four documents. Nothing in the 140-repo corpus does
   this.
-- **Four honesty channels** — `unmetered` / `unenforced` / `unwatched` /
-  `never_reached`. The fourth has no counterpart anywhere.
+- **Five honesty channels** — `unmetered` / `unenforced` / `unwatched` /
+  `never_reached` / `unretrieved`. The fourth has no counterpart anywhere; the
+  fifth is separate from `unenforced` because its recipient is, *the corpus was
+  never read* being a sentence for whoever runs the thing rather than for the
+  author of the document.
 - **The schema is data.** No slot table. Adding a field costs a YAML block.
 - **Governance survives compaction by construction** — policies are re-applied
   from the document, not carried in history. The measured failure mode

@@ -1,0 +1,1542 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PACT — Portable Agent Contract &amp; Topology</title>
+<style>
+:root{
+  --bg:#fbfbfa; --panel:#fff; --ink:#1a1a19; --muted:#6b6a66; --faint:#93918b;
+  --rule:#e5e3de; --rule2:#efedE8;
+  --accent:#8a5a2b; --accent-soft:#f5ede3;
+  --code-bg:#f6f5f2; --code-ink:#2b2a27;
+  --k:#8a5a2b; --s:#4a6f3c; --c:#93918b; --n:#3a5f8a;
+  --ok:#3f6b46; --warn:#8a6a1f; --bad:#8f3f38;
+  --core:#3f6b46; --core-bg:#eaf2ea; --exp:#7a5a8a; --exp-bg:#f2ecf5;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#131312; --panel:#1a1a19; --ink:#e8e6e1; --muted:#a6a49e; --faint:#7d7b75;
+    --rule:#2e2d2b; --rule2:#262523;
+    --accent:#d9a066; --accent-soft:#2a2219;
+    --code-bg:#1e1e1c; --code-ink:#ddd9d2;
+    --k:#d9a066; --s:#9ec48a; --c:#7d7b75; --n:#8fb4dd;
+    --ok:#8fbf98; --warn:#d9b45f; --bad:#e08b82;
+    --core:#8fbf98; --core-bg:#1f2a21; --exp:#c3a3d4; --exp-bg:#282130;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#131312; --panel:#1a1a19; --ink:#e8e6e1; --muted:#a6a49e; --faint:#7d7b75;
+  --rule:#2e2d2b; --rule2:#262523; --accent:#d9a066; --accent-soft:#2a2219;
+  --code-bg:#1e1e1c; --code-ink:#ddd9d2;
+  --k:#d9a066; --s:#9ec48a; --c:#7d7b75; --n:#8fb4dd;
+  --ok:#8fbf98; --warn:#d9b45f; --bad:#e08b82;
+  --core:#8fbf98; --core-bg:#1f2a21; --exp:#c3a3d4; --exp-bg:#282130;
+}
+:root[data-theme="light"]{
+  --bg:#fbfbfa; --panel:#fff; --ink:#1a1a19; --muted:#6b6a66; --faint:#93918b;
+  --rule:#e5e3de; --rule2:#efedE8; --accent:#8a5a2b; --accent-soft:#f5ede3;
+  --code-bg:#f6f5f2; --code-ink:#2b2a27;
+  --k:#8a5a2b; --s:#4a6f3c; --c:#93918b; --n:#3a5f8a;
+  --ok:#3f6b46; --warn:#8a6a1f; --bad:#8f3f38;
+  --core:#3f6b46; --core-bg:#eaf2ea; --exp:#7a5a8a; --exp-bg:#f2ecf5;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth; scroll-padding-top:1rem}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+  font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased}
+.wrap{display:grid;grid-template-columns:270px minmax(0,1fr);gap:0;max-width:1400px;margin:0 auto}
+nav{position:sticky;top:0;height:100vh;overflow-y:auto;padding:1.6rem 1rem 3rem 1.4rem;
+  border-right:1px solid var(--rule);font-size:.855rem}
+nav .brand{font-weight:700;font-size:1.05rem;letter-spacing:-.01em;margin-bottom:.15rem}
+nav .brandsub{color:var(--faint);font-size:.75rem;margin-bottom:1.3rem;line-height:1.4}
+nav h4{margin:1.4rem 0 .4rem;font-size:.68rem;text-transform:uppercase;letter-spacing:.09em;
+  color:var(--faint);font-weight:600}
+nav a{display:block;color:var(--muted);text-decoration:none;padding:.2rem 0;border-radius:4px}
+nav a:hover{color:var(--accent)}
+main{padding:2.2rem 2.6rem 6rem;min-width:0}
+header.hero{border-bottom:1px solid var(--rule);padding-bottom:1.6rem;margin-bottom:2rem}
+h1{font-size:2.1rem;letter-spacing:-.025em;margin:.2rem 0 .5rem;line-height:1.15}
+h2{font-size:1.42rem;letter-spacing:-.018em;margin:3rem 0 .9rem;padding-top:.6rem;
+  border-top:1px solid var(--rule);line-height:1.25}
+h2:first-of-type{border-top:none}
+h3{font-size:1.06rem;margin:1.9rem 0 .55rem;letter-spacing:-.008em}
+h4{font-size:.93rem;margin:1.3rem 0 .4rem;color:var(--muted)}
+p{margin:.7rem 0}
+.lede{font-size:1.08rem;color:var(--muted);max-width:62ch}
+code{font-family:var(--mono);font-size:.855em;background:var(--code-bg);
+  padding:.12em .38em;border-radius:4px;color:var(--code-ink);
+  border:1px solid var(--rule2);white-space:nowrap}
+pre{background:var(--code-bg);border:1px solid var(--rule);border-radius:9px;
+  padding:1rem 1.1rem;overflow-x:auto;margin:.9rem 0;line-height:1.55}
+pre code{background:none;border:none;padding:0;font-size:.82rem;white-space:pre;color:var(--code-ink)}
+.k{color:var(--k);font-weight:600}.s{color:var(--s)}.c{color:var(--c);font-style:italic}.n{color:var(--n)}
+table{border-collapse:collapse;width:100%;margin:1rem 0;font-size:.855rem;display:block;overflow-x:auto}
+th,td{text-align:left;padding:.5rem .7rem;border-bottom:1px solid var(--rule2);vertical-align:top}
+th{font-weight:600;border-bottom:1.5px solid var(--rule);white-space:nowrap;color:var(--muted);
+  font-size:.75rem;text-transform:uppercase;letter-spacing:.05em}
+td code{font-size:.8em}
+tbody tr:hover{background:var(--rule2)}
+.tier{display:inline-block;font-size:.64rem;font-weight:700;padding:.1rem .4rem;border-radius:3px;
+  text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+.tier.core{color:var(--core);background:var(--core-bg)}
+.tier.expert{color:var(--exp);background:var(--exp-bg)}
+.note{border-left:3px solid var(--accent);background:var(--accent-soft);
+  padding:.75rem 1rem;margin:1.1rem 0;border-radius:0 7px 7px 0;font-size:.9rem}
+.note.warn{border-left-color:var(--warn)}
+.note.bad{border-left-color:var(--bad)}
+.note.ok{border-left-color:var(--ok)}
+.note strong{color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:.8rem;margin:1.1rem 0}
+.card{border:1px solid var(--rule);border-radius:9px;padding:.85rem 1rem;background:var(--panel)}
+.card h4{margin:0 0 .25rem;font-size:.88rem;color:var(--ink)}
+.card p{margin:0;font-size:.83rem;color:var(--muted);line-height:1.5}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin:1rem 0}
+@media(max-width:1000px){.two{grid-template-columns:1fr}}
+.tree{font-family:var(--mono);font-size:.8rem;line-height:1.75;white-space:pre;overflow-x:auto;
+  background:var(--code-bg);border:1px solid var(--rule);border-radius:9px;padding:1rem 1.1rem;margin:.9rem 0}
+.tree .d{color:var(--accent);font-weight:600}
+.tree .cm{color:var(--c);font-style:italic}
+#toggle{position:fixed;top:.9rem;right:1rem;z-index:20;background:var(--panel);
+  border:1px solid var(--rule);color:var(--muted);border-radius:7px;padding:.4rem .65rem;
+  cursor:pointer;font-size:.78rem;font-family:var(--sans)}
+#toggle:hover{color:var(--accent)}
+.burger{display:none}
+@media(max-width:900px){
+  .wrap{grid-template-columns:1fr}
+  nav{position:static;height:auto;border-right:none;border-bottom:1px solid var(--rule);
+    max-height:none;padding:1.2rem}
+  main{padding:1.4rem 1.1rem 4rem}
+  h1{font-size:1.7rem}
+}
+.anchor{color:var(--faint);text-decoration:none;font-weight:400;opacity:0;margin-left:.4rem;font-size:.8em}
+h2:hover .anchor,h3:hover .anchor{opacity:1}
+ul,ol{padding-left:1.3rem}
+li{margin:.3rem 0}
+.small{font-size:.85rem;color:var(--muted)}
+.kbd{font-family:var(--mono);font-size:.78rem;background:var(--code-bg);border:1px solid var(--rule);
+  border-radius:4px;padding:.1rem .35rem}
+</style>
+</head>
+<body>
+<button id="toggle" onclick="tt()">◐ theme</button>
+<div class="wrap">
+<nav>
+  <div class="brand">PACT</div>
+  <div class="brandsub">Portable Agent Contract &amp; Topology — a complete guide</div>
+
+  <h4>Start</h4>
+  <a href="#what">What PACT is</a>
+  <a href="#quick">Quick start</a>
+  <a href="#expansion">The Expansion Rule</a>
+  <a href="#folders">Folder structure</a>
+
+  <h4>Writing agents</h4>
+  <a href="#workspace">workspace.yaml</a>
+  <a href="#agent">The agent</a>
+  <a href="#shapes">Input &amp; output shapes</a>
+  <a href="#tools">Tools &amp; resources</a>
+  <a href="#custom-code"><strong>→ Your own Python as a tool</strong></a>
+  <a href="#knowledge">Knowledge (RAG)</a>
+  <a href="#skills">Skills</a>
+  <a href="#memory">Memory</a>
+
+  <h4>Control</h4>
+  <a href="#loops">Loops &amp; stages</a>
+  <a href="#teams">Teams</a>
+  <a href="#context">Context policies</a>
+  <a href="#settings">Model settings</a>
+
+  <h4>Governance</h4>
+  <a href="#limits">Limits &amp; SLOs</a>
+  <a href="#policies">Approvals</a>
+  <a href="#evals">Evals</a>
+  <a href="#interceptors">Interceptors</a>
+  <a href="#learning">Learning</a>
+
+  <h4>Portability</h4>
+  <a href="#needs">needs: the model floor</a>
+  <a href="#catalog">Model catalogue</a>
+  <a href="#variants">Variants</a>
+  <a href="#per-model"><strong>→ Architecture per model</strong></a>
+
+  <h4>Reference</h4>
+  <a href="#ports">Ports</a>
+  <a href="#bundles">Bundles &amp; watch</a>
+  <a href="#ir">The IR</a>
+  <a href="#cli">Command line</a>
+  <a href="#adapters">Adapters</a>
+  <a href="#kinds">All 44 kinds</a>
+  <a href="#status">Honest status</a>
+</nav>
+
+<main>
+<header class="hero">
+<h1>PACT — Portable Agent Contract &amp; Topology</h1>
+<p class="lede">An AI agent written as a folder of YAML and Markdown, which runs unchanged
+across seven framework targets and can be moved between models without being rewritten.
+No code, no framework lock-in, and it works fully offline.</p>
+</header>
+
+<h2 id="what">What PACT is <a class="anchor" href="#what">#</a></h2>
+
+<p>PACT is a <strong>specification format</strong>, not a framework. You describe what an agent
+is — what it accepts, what it answers with, which tools it may call, what it must never do,
+how fast it must be, and how you will know it works. A runtime then executes that description.</p>
+
+<p>Three ideas explain almost every design decision in it:</p>
+
+<div class="grid">
+<div class="card"><h4>The specification is the tree</h4>
+<p>There is no build step and no compiled manifest. The folder <em>is</em> the agent. A change is
+a diff a person can read and approve.</p></div>
+<div class="card"><h4>The harness owns the loop</h4>
+<p>PACT decides what "one step" means, not LangChain or AutoGen. Frameworks are demoted to
+model-and-tool transports, which is what makes the same agent behave the same way on all of them.</p></div>
+<div class="card"><h4>Refuse, then recommend</h4>
+<p>When a model cannot meet the contract, PACT will not bind it. Then it searches the catalogue
+and names the cheapest model that <em>would</em> pass.</p></div>
+</div>
+
+<h3>The vocabulary is deliberately plain</h3>
+<p>Fields are named the way a person would say them out loud, because the target author is a
+domain expert who cannot write code — a support lead, an analyst. You will see
+<code>when-it-runs-out: stop-and-say-so</code> rather than <code>on_budget_exceeded: HALT</code>,
+and <code>ask-a-person</code> rather than <code>human_in_the_loop</code>. This is not decoration;
+it is the constraint the whole format is built around.</p>
+
+<div class="note">
+<strong>Every field has a tier.</strong> <span class="tier core">core</span> fields are the
+no-code surface — a non-technical author is expected to use them.
+<span class="tier expert">expert</span> fields are legal anywhere but assume you know why you
+want them. Tiers are marked throughout this guide.
+</div>
+
+<h2 id="quick">Quick start <a class="anchor" href="#quick">#</a></h2>
+
+<h3>The smallest complete agent</h3>
+<p>A workspace and one agent. That is genuinely all that is required to load and run.</p>
+
+<pre><code><span class="c"># workspace.yaml</span>
+<span class="k">name</span>: Staff desk
+<span class="k">description</span>: Answers staff questions out of the handbook, and cites it.
+<span class="k">allow-egress</span>: []          <span class="c"># nothing leaves this machine</span>
+</code></pre>
+
+<pre><code><span class="c"># agents/helpdesk/agent.yaml</span>
+<span class="k">name</span>: Staff desk
+<span class="k">description</span>: Answers questions about leave, expenses and working hours.
+<span class="k">instructions</span>: Answer from the handbook. Quote the clause you used.
+</code></pre>
+
+<p>Check it. This is the shipped <code>examples/answers-from-documents</code>, which is
+those two files plus a knowledge corpus:</p>
+<pre><code>$ pact check examples/answers-from-documents
+OK — examples/answers-from-documents loaded cleanly (21 settings).
+</code></pre>
+<p class="small">The count is every setting the loader resolved, expanded form included. The
+full <code>examples/refund-desk</code> reports 498.</p>
+
+<h3>Growing it</h3>
+<p>Nothing has to be moved to add capability. You add fields, or you add files — the two are
+the same thing (see <a href="#expansion">the Expansion Rule</a>).</p>
+
+<pre><code><span class="c"># agents/helpdesk/agent.yaml — now with a contract, a corpus and a promise</span>
+<span class="k">name</span>: Staff desk
+<span class="k">description</span>: Answers questions about leave, expenses and working hours.
+<span class="k">instructions</span>: Answer from the handbook. Quote the clause you used.
+
+<span class="k">accepts</span>:
+  <span class="k">question</span>: text
+<span class="k">answers-with</span>:
+  <span class="k">answer</span>: text
+  <span class="k">clause</span>: text
+
+<span class="k">uses</span>:
+  - staff-handbook          <span class="c"># a knowledge corpus, defined below</span>
+
+<span class="k">limits</span>:
+  <span class="k">feel</span>: interactive         <span class="c"># supplies the latency promises</span>
+  <span class="k">when-it-runs-out</span>: stop-and-say-so
+
+<span class="k">needs</span>:
+  <span class="k">reasoning</span>: steady
+  <span class="k">because</span>: it has to read a clause and apply it, not just summarise.
+</code></pre>
+
+<h2 id="expansion">The Expansion Rule <a class="anchor" href="#expansion">#</a></h2>
+
+<div class="note">
+<strong>A directory is a field; a field may be a directory.</strong> That single rule is the
+whole layout system. There is no fixed list of "things that may be folders".
+</div>
+
+<p>These two trees produce the <strong>identical</strong> loaded document and the identical
+content digest:</p>
+
+<div class="two">
+<div>
+<h4>As one file</h4>
+<pre><code><span class="c"># agents/refund-desk/agent.yaml</span>
+<span class="k">name</span>: Refund Desk
+<span class="k">instructions</span>: |
+  Be precise. Check the
+  policy before you answer.
+</code></pre>
+</div>
+<div>
+<h4>As a tree</h4>
+<pre><code><span class="c"># agents/refund-desk/agent.yaml</span>
+<span class="k">name</span>: Refund Desk
+
+<span class="c"># agents/refund-desk/instructions.md</span>
+Be precise. Check the
+policy before you answer.
+</code></pre>
+</div>
+</div>
+
+<p>The loader does not know <code>instructions</code> is special. It knows that a name on disk
+beside a document is a field of that document, and the schema knows what shape that field
+should take when it arrives. Consequences worth knowing:</p>
+
+<ul>
+<li><strong>You never memorise a layout.</strong> Put the file where it feels natural. If the
+loader does not expect it there, the error tells you where it goes.</li>
+<li><strong>A new field costs nothing.</strong> Add <code>remembers:</code> to the schema and
+<code>agents/x/remembers/budget.yaml</code> works the same day, with no loader change.</li>
+<li><strong>Defining a field twice is an error, never a precedence contest.</strong> Writing
+<code>instructions</code> in <code>agent.yaml</code> <em>and</em> as <code>instructions.md</code>
+is refused, naming both locations. Picking a winner would hide a mistake you want to know about.</li>
+</ul>
+
+<h2 id="folders">Folder structure <a class="anchor" href="#folders">#</a></h2>
+
+<p>A full workspace, from the shipped <code>examples/refund-desk</code>. Every directory here is
+simply a field of <code>workspace.yaml</code> that was written as a folder.</p>
+
+<div class="tree"><span class="d">refund-desk/</span>
+├── workspace.yaml              <span class="cm">the root: name, owner, egress, and every collection below</span>
+├── <span class="d">agents/</span>
+│   ├── <span class="d">refund-desk/</span>
+│   │   ├── agent.yaml          <span class="cm">name, team, uses, accepts, answers-with, policy…</span>
+│   │   ├── instructions.md     <span class="cm">the `instructions:` field, as prose</span>
+│   │   ├── limits.yaml         <span class="cm">the `limits:` field, as a file</span>
+│   │   ├── needs.yaml          <span class="cm">what the model must be capable of</span>
+│   │   ├── run-inputs.yaml     <span class="cm">values the surrounding system supplies each run</span>
+│   │   └── teamwork.yaml       <span class="cm">how it waits for its team</span>
+│   ├── <span class="d">policy-checker/</span>          <span class="cm">a team member — an agent like any other</span>
+│   └── <span class="d">fraud-checker/</span>
+├── <span class="d">tools/</span>
+│   ├── payments.yaml           <span class="cm">actions, and what each one is allowed to do</span>
+│   └── zendesk.yaml
+├── <span class="d">resources/</span>
+│   ├── payments-server.yaml    <span class="cm">the MCP server a tool connects through</span>
+│   └── zendesk-server.yaml
+├── <span class="d">skills/</span>
+│   └── <span class="d">refund-policy/</span>
+│       ├── SKILL.md            <span class="cm">the procedure itself</span>
+│       ├── <span class="d">references/</span>          <span class="cm">supporting material it may read</span>
+│       └── <span class="d">scripts/</span>             <span class="cm">deterministic helpers</span>
+├── <span class="d">knowledge/</span>                  <span class="cm">document corpora (see §Knowledge)</span>
+├── <span class="d">policies/</span>
+│   └── approvals.yaml          <span class="cm">what needs a person's approval</span>
+├── <span class="d">questions/</span>                  <span class="cm">the questions a person is actually asked</span>
+│   ├── is-this-ok.yaml
+│   └── how-much-to-refund.yaml
+├── <span class="d">evals/</span>
+│   ├── suite.yaml              <span class="cm">the bar, the rules, the grader</span>
+│   └── <span class="d">cases/</span>
+│       ├── 01-clear-approve.yaml
+│       └── 02-outside-window.yaml
+├── <span class="d">loops/</span>
+│   └── careful.yaml            <span class="cm">a named thinking shape</span>
+├── <span class="d">context-policies/</span>
+│   └── long-threads.yaml       <span class="cm">what to do when the conversation outgrows the model</span>
+├── <span class="d">interceptors/</span>
+│   ├── redact-card-numbers.yaml
+│   └── stop-runaway-refunds.yaml
+├── <span class="d">ports/</span>                       <span class="cm">how the outside world reaches it</span>
+│   ├── email.yaml
+│   ├── slack.yaml
+│   └── weekly-review.yaml      <span class="cm">a schedule is a port too</span>
+├── <span class="d">watch/</span>
+│   └── tool-calls.yaml         <span class="cm">which events get written down</span>
+├── redaction.yaml              <span class="cm">values never to be shown or stored</span>
+└── learning.yaml               <span class="cm">what it may improve about itself, and who approves</span>
+</div>
+
+<div class="note">
+<strong>Ordinal prefixes are stripped.</strong> <code>evals/cases/02-outside-window.yaml</code>
+is keyed <code>outside-window</code>. You can number files for reading order without the number
+becoming part of the name.
+</div>
+
+<h2 id="workspace">workspace.yaml <a class="anchor" href="#workspace">#</a></h2>
+
+<p>The root document. Its 25 fields are mostly the collections above — each is a map whose
+entries you normally write as folders.</p>
+
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Tier</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>name</code></td><td>text</td><td><span class="tier core">core</span></td><td>What this workspace is called.</td></tr>
+<tr><td><code>workspace-id</code></td><td>text</td><td><span class="tier core">core</span></td><td>Stable identifier used in addresses.</td></tr>
+<tr><td><code>description</code></td><td>text</td><td><span class="tier core">core</span></td><td>One line on what it is for.</td></tr>
+<tr><td><code>owner</code></td><td>text</td><td><span class="tier core">core</span></td><td>Who is responsible for it.</td></tr>
+<tr><td><code>allow-egress</code></td><td>list of one-of</td><td><span class="tier core">core</span></td><td><strong>The air-gap switch.</strong> Which classes of traffic may leave the box. <code>[]</code> means nothing may — including hosted models.</td></tr>
+<tr><td><code>pact-version</code></td><td>text</td><td><span class="tier expert">expert</span></td><td>Which specification version this tree targets.</td></tr>
+<tr><td><code>durability</code></td><td>one-of</td><td><span class="tier expert">expert</span></td><td>How much of a run survives a restart.</td></tr>
+<tr><td colspan="4" style="padding-top:.9rem;color:var(--muted);font-size:.8rem">— the collections, each normally a folder —</td></tr>
+<tr><td><code>agents</code></td><td>map of agent</td><td><span class="tier core">core</span></td><td>Every agent in this workspace.</td></tr>
+<tr><td><code>tools</code></td><td>map of tool</td><td><span class="tier core">core</span></td><td>Callable actions.</td></tr>
+<tr><td><code>resources</code></td><td>map of resource</td><td><span class="tier core">core</span></td><td>MCP servers the tools connect through.</td></tr>
+<tr><td><code>knowledge</code></td><td>map of knowledge</td><td><span class="tier core">core</span></td><td>Document corpora to answer from.</td></tr>
+<tr><td><code>skills</code></td><td>map of skill</td><td><span class="tier core">core</span></td><td>Written procedures.</td></tr>
+<tr><td><code>policies</code></td><td>map of policy</td><td><span class="tier core">core</span></td><td>What needs a person's approval.</td></tr>
+<tr><td><code>questions</code></td><td>map of question</td><td><span class="tier core">core</span></td><td>The questions people get asked.</td></tr>
+<tr><td><code>redaction</code></td><td>redaction</td><td><span class="tier core">core</span></td><td>Values never shown or stored.</td></tr>
+<tr><td><code>evals</code></td><td>evals</td><td><span class="tier core">core</span></td><td>The checks agents must pass.</td></tr>
+<tr><td><code>learning</code></td><td>learning</td><td><span class="tier core">core</span></td><td>Self-improvement, and its approval rules.</td></tr>
+<tr><td><code>ports</code></td><td>map of port</td><td><span class="tier core">core</span></td><td>How the outside world reaches the agents.</td></tr>
+<tr><td><code>context-policies</code></td><td>map of context-policy</td><td><span class="tier core">core</span></td><td>Tidying rules for long conversations.</td></tr>
+<tr><td><code>watch</code></td><td>map of watch</td><td><span class="tier core">core</span></td><td>Which events are written down.</td></tr>
+<tr><td><code>loops</code></td><td>map of loop</td><td><span class="tier expert">expert</span></td><td>Named thinking shapes.</td></tr>
+<tr><td><code>interceptors</code></td><td>map of interceptor</td><td><span class="tier expert">expert</span></td><td>Rules that may change what happens as it runs.</td></tr>
+<tr><td><code>bundles</code></td><td>map of bundle</td><td><span class="tier expert">expert</span></td><td>Reusable packs brought in from elsewhere.</td></tr>
+<tr><td><code>models</code></td><td>catalog</td><td><span class="tier expert">expert</span></td><td>Extra models this machine can serve.</td></tr>
+</tbody>
+</table>
+
+<div class="note warn">
+<strong>One field currently does nothing.</strong> <code>workspace.profile</code> is in the
+schema but nothing reads it, and <code>pact check</code> emits a warning saying so. It is
+slated for deletion. Do not write it.
+</div>
+
+<h2 id="agent">The agent <a class="anchor" href="#agent">#</a></h2>
+
+<p>22 fields. Only <code>name</code> and <code>description</code> are required; a useful agent
+usually adds <code>instructions</code> and one or two more.</p>
+
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Tier</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>name</code></td><td>text</td><td><span class="tier core">core</span></td><td>What it is called.</td></tr>
+<tr><td><code>description</code></td><td>text</td><td><span class="tier core">core</span></td><td>What it does, in one line. Published on its A2A card.</td></tr>
+<tr><td><code>instructions</code></td><td>text / folder</td><td><span class="tier core">core</span></td><td>The system prompt. Usually <code>instructions.md</code>.</td></tr>
+<tr><td><code>uses</code></td><td>list of text</td><td><span class="tier core">core</span></td><td>Tools, skills and knowledge corpora it may use.</td></tr>
+<tr><td><code>team</code></td><td>map of text</td><td><span class="tier core">core</span></td><td>Other agents it may ask, and what each is for.</td></tr>
+<tr><td><code>teamwork</code></td><td>teamwork</td><td><span class="tier core">core</span></td><td>How it waits for them and shares the budget.</td></tr>
+<tr><td><code>accepts</code></td><td>map of shape</td><td><span class="tier core">core</span></td><td>What you may send it.</td></tr>
+<tr><td><code>answers-with</code></td><td>map of shape</td><td><span class="tier core">core</span></td><td>What it hands back.</td></tr>
+<tr><td><code>run-inputs</code></td><td>map of shape</td><td><span class="tier core">core</span></td><td>Values the system supplies every run (customer id, locale). The model never chooses these.</td></tr>
+<tr><td><code>needs</code></td><td>needs</td><td><span class="tier core">core</span></td><td>What the model behind it must be capable of.</td></tr>
+<tr><td><code>limits</code></td><td>limits</td><td><span class="tier core">core</span></td><td>How fast, how cheap, how long.</td></tr>
+<tr><td><code>settings</code></td><td>settings</td><td><span class="tier core">core</span></td><td>How the model is asked to behave.</td></tr>
+<tr><td><code>policy</code></td><td>text</td><td><span class="tier core">core</span></td><td>Which policy file governs approvals.</td></tr>
+<tr><td><code>evals</code></td><td>text</td><td><span class="tier core">core</span></td><td>Which checks it must pass.</td></tr>
+<tr><td><code>model</code></td><td>text</td><td><span class="tier core">core</span></td><td>Pin one exact model. Leave it out and PACT picks.</td></tr>
+<tr><td><code>context-policy</code></td><td>text</td><td><span class="tier core">core</span></td><td>Tidying rules for a long conversation.</td></tr>
+<tr><td><code>remembers</code></td><td>map of state</td><td><span class="tier core">core</span></td><td>What it keeps between messages, and for how long.</td></tr>
+<tr><td><code>answers-with-mode</code></td><td>one-of</td><td><span class="tier expert">expert</span></td><td>How the answer is constrained on the wire.</td></tr>
+<tr><td><code>model-for-checking</code></td><td>text</td><td><span class="tier expert">expert</span></td><td>A better model for the stages that check work. Needs a <code>loop:</code>.</td></tr>
+<tr><td><code>loop</code></td><td>text</td><td><span class="tier expert">expert</span></td><td>How it thinks. See <a href="#loops">Loops</a>.</td></tr>
+<tr><td><code>variants</code></td><td>map of variant</td><td><span class="tier expert">expert</span></td><td>Other ways to run the same agent. See <a href="#variants">Variants</a>.</td></tr>
+<tr><td><code>interceptors</code></td><td>list of text</td><td><span class="tier expert">expert</span></td><td>Rules that may change what happens as it runs.</td></tr>
+</tbody>
+</table>
+
+<h4>A real agent, in full</h4>
+<pre><code><span class="c"># agents/refund-desk/agent.yaml</span>
+<span class="k">name</span>: Refund Desk
+<span class="k">description</span>: Decides whether a customer's refund request should be approved.
+
+<span class="k">team</span>:
+  <span class="k">policy-checker</span>: Checks the request against our written refund policy.
+  <span class="k">fraud-checker</span>: Looks for signs the request is not genuine.
+
+<span class="k">uses</span>:
+  - zendesk
+  - payments
+  - refund-policy
+
+<span class="k">accepts</span>:
+  <span class="k">message</span>: text
+  <span class="k">photos</span>: list of images
+<span class="k">answers-with</span>:
+  <span class="k">decision</span>: one of approved, declined
+  <span class="k">reason</span>: text
+  <span class="k">amount</span>: money
+
+<span class="k">policy</span>: approvals
+<span class="k">evals</span>: /evals/suite.yaml
+<span class="k">context-policy</span>: long-threads
+<span class="k">loop</span>: careful
+<span class="k">interceptors</span>:
+  - stop-runaway-refunds
+
+<span class="k">remembers</span>:
+  <span class="k">what-the-customer-told-us</span>:
+    <span class="k">description</span>: Details already given, so they are not asked twice.
+    <span class="k">lasts</span>: one-conversation
+    <span class="k">forget-after</span>: 30d
+    <span class="k">never-from</span>:
+      - tool output
+</code></pre>
+
+<h2 id="shapes">Input and output shapes <a class="anchor" href="#shapes">#</a></h2>
+
+<p><code>accepts:</code>, <code>answers-with:</code>, <code>run-inputs:</code> and a
+question's <code>answer:</code> all use one small closed vocabulary. Anything outside it is
+refused by name.</p>
+
+<table>
+<thead><tr><th>Shape</th><th>Means</th></tr></thead>
+<tbody>
+<tr><td><code>text</code></td><td>Free text.</td></tr>
+<tr><td><code>yes or no</code></td><td>A boolean.</td></tr>
+<tr><td><code>number</code> / <code>whole number</code></td><td>A quantity.</td></tr>
+<tr><td><code>money</code></td><td>An amount with a currency.</td></tr>
+<tr><td><code>images</code> / <code>audio</code> / <code>file</code></td><td>Attachments.</td></tr>
+<tr><td><code>one of a, b, c</code></td><td>A closed choice between things you name.</td></tr>
+<tr><td><code>list of …</code></td><td>Several of any of the above.</td></tr>
+</tbody>
+</table>
+
+<pre><code><span class="k">accepts</span>:
+  <span class="k">message</span>: text
+  <span class="k">photos</span>: list of images
+<span class="k">answers-with</span>:
+  <span class="k">decision</span>: one of approved, declined
+  <span class="k">amount</span>: money
+</code></pre>
+
+<div class="note">
+<strong>Why this matters for portability.</strong> From the declared shape PACT picks how to
+constrain the answer on the wire — native JSON schema, a tool call, or prompting — and records
+what it picked. <code>answers-with-mode:</code> lets an expert override that choice.
+</div>
+
+<h2 id="tools">Tools and resources <a class="anchor" href="#tools">#</a></h2>
+
+<p>A <strong>tool</strong> is a group of actions. A <strong>resource</strong> is the server it
+connects through. Splitting them means one server can back several tools, and the connection
+details are reviewed in one place.</p>
+
+<h3>The tool</h3>
+<pre><code><span class="c"># tools/payments.yaml</span>
+<span class="k">description</span>: Where refunds are actually issued.
+<span class="k">connect</span>: payments-server        <span class="c"># -> resources/payments-server.yaml</span>
+
+<span class="k">actions</span>:
+  <span class="k">look-up-order</span>:
+    <span class="k">description</span>: Find an order by its number.
+    <span class="k">takes</span>:
+      <span class="k">order-number</span>: text
+    <span class="k">reads-only</span>: yes
+    <span class="k">bind</span>: { <span class="k">customer-id</span>: run-inputs.customer-id }
+
+  <span class="k">issue-refund</span>:
+    <span class="k">description</span>: Send money back to the customer.
+    <span class="k">takes</span>:
+      <span class="k">order-number</span>: text
+      <span class="k">amount</span>: money
+    <span class="k">spends-money</span>: yes
+    <span class="k">same-request-key</span>: order-number   <span class="c"># idempotency</span>
+    <span class="k">bind</span>:     { <span class="k">customer-id</span>: run-inputs.customer-id }
+    <span class="k">inspects</span>: [amount]                <span class="c"># what an approval gate may look at</span>
+</code></pre>
+
+<table>
+<thead><tr><th>Action field</th><th>Tier</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>takes</code></td><td><span class="tier core">core</span></td><td>Arguments, using the shape vocabulary.</td></tr>
+<tr><td><code>reads-only</code></td><td><span class="tier core">core</span></td><td>It changes nothing, so it is safe to retry.</td></tr>
+<tr><td><code>spends-money</code></td><td><span class="tier core">core</span></td><td>Marks it consequential. Governance keys off this.</td></tr>
+<tr><td><code>needs-a-person</code></td><td><span class="tier core">core</span></td><td>Always requires approval.</td></tr>
+<tr><td><code>same-request-key</code></td><td><span class="tier core">core</span></td><td>Which argument makes two calls "the same request" — exactly-once.</td></tr>
+<tr><td><code>same-request-key-across</code></td><td><span class="tier expert">expert</span></td><td>Scope of that key: <code>this-run</code>, <code>the-team</code>, <code>the-workspace</code>.</td></tr>
+<tr><td><code>bind</code></td><td><span class="tier core">core</span></td><td>Fill an argument from a run input, so the model can never choose it.</td></tr>
+<tr><td><code>inspects</code></td><td><span class="tier core">core</span></td><td>Which arguments an approval rule may read.</td></tr>
+</tbody>
+</table>
+
+<div class="note ok">
+<strong><code>bind:</code> is the quiet security feature.</strong> A customer id bound from
+<code>run-inputs</code> is never something the model can invent, substitute, or be talked into
+changing. Anything that must not be model-chosen belongs here.
+</div>
+
+<h3>The resource</h3>
+<pre><code><span class="c"># resources/payments-server.yaml</span>
+<span class="k">description</span>: Our payment system, as the platform team publishes it.
+<span class="k">resource-kind</span>: mcp-server
+<span class="k">endpoint</span>: host/payments-mcp
+<span class="k">auth</span>: { <span class="k">by-reference</span>: host/payments-credential }   <span class="c"># a REFERENCE, never a secret</span>
+<span class="k">asks-to-connect</span>: may-we-connect                     <span class="c"># a question, by name</span>
+</code></pre>
+<p class="small"><code>auth:</code> holds only a <code>by-reference:</code> pointer — the
+workspace never contains a credential, so the tree is safe to commit and to publish.
+<code>asks-to-connect:</code> names a question in <code>questions/</code>, so connecting to a
+new server can itself require a person. The optional tool-snapshot fields pin what the server
+offered and when, so a server growing a new tool overnight becomes a reviewable change rather
+than a silent one.</p>
+
+<h2 id="custom-code">Recipe: your own Python as a tool <a class="anchor" href="#custom-code">#</a></h2>
+
+<p>Short answer: <strong>you wrap your Python in an MCP server, and PACT names it.</strong>
+PACT never executes your code and never holds your address or your credential. Every one of
+those is deliberate, and each is checked.</p>
+
+<div class="note bad">
+<strong>Three dead ends, so you do not lose an afternoon to them.</strong>
+<code>skills/*/scripts/*.py</code> are <em>not</em> run — the schema says so outright:
+<em>"PACT never runs them — it records that they are there."</em> There is no
+<code>command:</code>, <code>run:</code> or <code>exec:</code> field anywhere.
+And <code>resource-kind:</code> accepts exactly one value, <code>mcp-server</code>, and is
+required.
+</div>
+
+<h3>Step 1 — write a normal MCP server</h3>
+<p>Ordinary Python. Nothing PACT-specific about it.</p>
+
+<pre><code><span class="c"># risk_server.py — your code, your repo, not part of the PACT tree</span>
+<span class="k">from</span> mcp.server.fastmcp <span class="k">import</span> FastMCP
+
+app = FastMCP(<span class="s">"risk"</span>)
+
+<span class="n">@app.tool()</span>
+<span class="k">def</span> score_order(order_number: str) -&gt; float:
+    <span class="s">"""Score one order for risk between 0 and 1."""</span>
+    <span class="k">return</span> my_model.predict(order_number)
+
+<span class="k">if</span> __name__ == <span class="s">"__main__"</span>:
+    app.run()
+</code></pre>
+
+<h3>Step 2 — your platform registers it under a name</h3>
+<p>This is the part people trip on. <code>endpoint:</code> is <strong>not a URL and not a
+path</strong> — the field's own help says it is <em>"a name your platform team publishes. Ask
+them which ones this machine already knows about — it is their list, not a file in here."</em>
+Same for the credential. A PACT tree is meant to be safe to commit and to hand to someone else,
+so it may not contain an address or a secret.</p>
+
+<h3>Step 3 — declare the server</h3>
+<pre><code><span class="c"># resources/risk-server.yaml</span>
+<span class="k">description</span>: Our own risk scoring service, written in Python.
+<span class="k">resource-kind</span>: mcp-server
+<span class="k">endpoint</span>: host/risk-mcp                          <span class="c"># a NAME the host publishes</span>
+<span class="k">auth</span>: { <span class="k">by-reference</span>: host/risk-credential }     <span class="c"># a POINTER, never a secret</span>
+<span class="k">asks-to-connect</span>: may-we-connect                   <span class="c"># a question, by name</span>
+</code></pre>
+
+<h3>Step 4 — declare what it may do</h3>
+<pre><code><span class="c"># tools/risk.yaml</span>
+<span class="k">description</span>: Scores how risky an order looks.
+<span class="k">connect</span>: risk-server                <span class="c"># -&gt; resources/risk-server.yaml</span>
+
+<span class="k">actions</span>:
+  <span class="k">score-order</span>:
+    <span class="k">description</span>: Score one order for risk between 0 and 1.
+    <span class="k">takes</span>:
+      <span class="k">order-number</span>: text
+    <span class="k">reads-only</span>: yes
+</code></pre>
+
+<h3>Step 5 — let an agent use it</h3>
+<pre><code><span class="c"># agents/desk/agent.yaml</span>
+<span class="k">uses</span>: [risk]
+</code></pre>
+
+<p>That tree checks clean. You now have a custom Python tool that any agent in the workspace
+may call, with its arguments typed and its permissions reviewable.</p>
+
+<h3>What PACT does with it at run time</h3>
+<div class="grid">
+<div class="card"><h4>Consent before connection</h4>
+<p><code>asks-to-connect:</code> is decided <em>first</em> — before the credential is looked up
+and before a socket is opened. A server nobody has allowed never has its credential fetched.</p></div>
+<div class="card"><h4>Drift is checked against what you wrote</h4>
+<p>An MCP server publishes its own tool list at connect time. PACT compares it to your
+<code>actions:</code> and reports a tool the server does not publish, a tool nobody reviewed, an
+argument that appeared, or an argument whose type moved.</p></div>
+<div class="card"><h4>Absence is deferred, never faked</h4>
+<p>No consent yet, no MCP client installed, or no answer from the host — the tools become
+"the caller fulfils these" and the run ends asking the host, rather than pretending.</p></div>
+</div>
+
+<div class="note warn">
+<strong>The honest limit today.</strong> A <code>connect:</code> line only reaches a real server
+on the <strong>Pydantic AI</strong> transport, which bridges it to that runtime's own MCP client.
+Every other target binds a model and nothing else, so the tool arrives at the model as a name and
+the call comes back <code>error: no tool named …</code>. This is declared in the capability
+lattice rather than discovered at run time — but if you are running custom tools today, Pydantic
+AI is the transport to use.
+</div>
+
+<h2 id="knowledge">Knowledge — answering from documents <a class="anchor" href="#knowledge">#</a></h2>
+
+<p>This is PACT's retrieval story, and it is <span class="tier core">core</span> tier — a
+non-technical author can set it up. <strong>PACT does not retrieve, embed, index or chunk.</strong>
+It describes what a runtime that does all four is told, and what a reviewer can read.</p>
+
+<pre><code><span class="c"># knowledge/staff-handbook/staff-handbook.yaml</span>
+<span class="k">description</span>: The staff handbook everyone asks about.
+
+<span class="k">looked-up-by</span>: words        <span class="c"># words | meaning | meaning-and-words</span>
+<span class="k">passages-at-most</span>: 3
+<span class="k">must-cite</span>: yes
+
+<span class="k">use-when</span>: somebody asks about leave, expenses, working hours or notice periods
+<span class="k">do-not-use-when</span>: somebody asks about their own pay or a personal grievance
+<span class="k">if-unsure</span>: say the handbook does not cover it and point them at the people team
+</code></pre>
+
+<p>The documents sit in <code>documents/</code> beside that file, as files — so a table stays a
+table and a heading stays a heading, and <code>pact show</code> can digest them. That is what
+makes "these are the documents the answer came from" checkable rather than asserted.</p>
+
+<div class="grid">
+<div class="card"><h4><code>looked-up-by: words</code></h4><p>Matches the words somebody typed. Right for clause numbers and policy references — and it needs nothing outside the box.</p></div>
+<div class="card"><h4><code>looked-up-by: meaning</code></h4><p>Matches what a question is <em>about</em>. Needs an embedder, which is a model — so it is refused under <code>allow-egress: []</code>.</p></div>
+<div class="card"><h4><code>passages-at-most</code></h4><p>More is not better: every extra passage is more text a poisoned document could hide in.</p></div>
+<div class="card"><h4><code>must-cite: yes</code></h4><p>An answer with no source fails the turn, rather than answering from what the model already knew.</p></div>
+</div>
+
+<h2 id="skills">Skills — written procedures <a class="anchor" href="#skills">#</a></h2>
+
+<p>A skill is a procedure the agent reads, not a corpus it searches. It is package-shaped:</p>
+
+<div class="tree"><span class="d">skills/refund-policy/</span>
+├── SKILL.md          <span class="cm">the procedure — becomes the `content:` field</span>
+├── <span class="d">references/</span>
+│   └── window-table.md
+└── <span class="d">scripts/</span>
+    └── check_window.py   <span class="cm">deterministic helpers</span>
+</div>
+
+<p>Its metadata is the same triple that governs knowledge — <code>use-when</code>,
+<code>do-not-use-when</code>, <code>if-unsure</code> — plus <code>costs-about</code>, a size hint
+so a context policy can reason about what loading it will cost.</p>
+
+<h2 id="memory">Memory — <code>remembers:</code> <a class="anchor" href="#memory">#</a></h2>
+
+<p>What an agent keeps between messages, stated explicitly, with an expiry and a provenance rule.</p>
+
+<pre><code><span class="k">remembers</span>:
+  <span class="k">what-the-customer-told-us</span>:
+    <span class="k">description</span>: Details already given about the item and the order.
+    <span class="k">lasts</span>: one-conversation
+    <span class="k">forget-after</span>: 30d
+    <span class="k">never-from</span>:
+      - tool output          <span class="c"># never learn this from something a tool said</span>
+
+  <span class="k">payments-was-approved</span>:
+    <span class="k">description</span>: that a person approved this refund
+    <span class="k">lasts</span>: one-conversation
+    <span class="k">survives-shortening</span>: yes    <span class="c"># a summariser may not drop it</span>
+    <span class="k">stops-being-true-when</span>:
+      - the turn ends
+</code></pre>
+
+<div class="note">
+<strong><code>never-from: [tool output]</code> is a prompt-injection control.</strong> It says
+this fact may not be established by something a tool returned — so a poisoned document cannot
+write itself into memory. <code>survives-shortening</code> protects an approval from being
+summarised away.
+</div>
+
+<h2 id="loops">Loops and stages <a class="anchor" href="#loops">#</a></h2>
+
+<p>A loop is how the agent thinks. PACT owns this — not the underlying framework — which is what
+makes behaviour identical across transports. Six shapes ship in the library:</p>
+
+<table>
+<thead><tr><th>Loop</th><th>Shape</th></tr></thead>
+<tbody>
+<tr><td><code>pact:loop/standard</code></td><td>Work, look at what came back, answer. The default.</td></tr>
+<tr><td><code>pact:loop/plan-then-do</code></td><td>Write a plan first, then execute it.</td></tr>
+<tr><td><code>pact:loop/react</code></td><td>Reason and act, interleaved.</td></tr>
+<tr><td><code>pact:loop/reflexion</code></td><td>Answer, critique the answer, revise.</td></tr>
+<tr><td><code>pact:loop/tree-of-thought</code></td><td>Branch, explore, pick.</td></tr>
+<tr><td><code>pact:loop/answer-more-than-once</code></td><td>Several attempts, then choose.</td></tr>
+</tbody>
+</table>
+
+<h3>Writing your own</h3>
+<pre><code><span class="c"># loops/careful.yaml</span>
+<span class="k">description</span>: Look things up, then read the decision back against the policy.
+<span class="k">starts-at</span>: gather
+
+<span class="k">steps</span>:
+  <span class="k">gather</span>:
+    <span class="k">does</span>: use-tools
+    <span class="k">then</span>:
+      <span class="k">used-a-tool</span>: gather      <span class="c"># loop back</span>
+      <span class="k">answered</span>: re-read
+
+  <span class="k">re-read</span>:
+    <span class="k">does</span>: check-its-work
+    <span class="k">may-use</span>: [zendesk, refund-policy]
+    <span class="k">says</span>: &gt;
+      Check the decision you just made against the refund policy, rule by rule.
+      Say which rule allows it, or which rule it breaks.
+    <span class="k">at-most</span>: 2
+    <span class="k">then</span>:
+      <span class="k">used-a-tool</span>: re-read
+      <span class="k">answered</span>: reply
+
+  <span class="k">reply</span>:
+    <span class="k">does</span>: answer
+    <span class="k">then</span>:
+      <span class="k">answered</span>: done
+</code></pre>
+
+<div class="note warn">
+<strong>The three outcomes are closed:</strong> <code>used-a-tool</code>,
+<code>answered</code>, <code>too-many-times</code>. None of them is about <em>what</em> came
+back. Routing on a tool's return value — "if fraud risk is high, escalate" — is deliberately
+not expressible; put it in the instructions, or make it a team member.
+</div>
+
+<h2 id="teams">Teams <a class="anchor" href="#teams">#</a></h2>
+
+<p>A team member is an ordinary agent. The parent names them and says how it waits.</p>
+
+<pre><code><span class="k">team</span>:
+  <span class="k">policy-checker</span>: Checks the request against our written refund policy.
+  <span class="k">fraud-checker</span>: Looks for signs the request is not genuine.
+
+<span class="k">teamwork</span>:
+  <span class="k">waits-for</span>: everyone       <span class="c"># everyone | anyone | enough-of-them |</span>
+                          <span class="c"># the-first-good-answer | whoever-answers-in-time</span>
+  <span class="k">starts</span>: all-at-once      <span class="c"># or one-after-another</span>
+  <span class="k">divides-the-budget</span>: evenly
+</code></pre>
+
+<table>
+<thead><tr><th>Field</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>waits-for</code></td><td>Leave it out and it waits for all of them.</td></tr>
+<tr><td><code>enough-is</code></td><td>Required by <code>enough-of-them</code>. Without it the barrier is unclearable, so it is refused.</td></tr>
+<tr><td><code>gives-up-after</code></td><td>Required by <code>whoever-answers-in-time</code>, else the run waits forever.</td></tr>
+<tr><td><code>divides-the-budget</code></td><td><code>evenly</code>, <code>by-share</code> (see <code>shares:</code>), or <code>as-needed</code>.</td></tr>
+<tr><td><code>if-someone-fails</code></td><td>What happens when a member errors.</td></tr>
+</tbody>
+</table>
+
+<div class="note">
+<strong>One budget, however deep the team goes.</strong> <code>cost-per-request-under</code> is
+what the agent <em>and its whole team</em> may spend on one request. Teamwork divides that pot;
+it does not multiply it. Two agents may not name each other — a team that loops has no bottom.
+</div>
+
+<h2 id="context">Context policies <a class="anchor" href="#context">#</a></h2>
+
+<p>What to do when the conversation outgrows what the model can hold.</p>
+
+<pre><code><span class="c"># context-policies/long-threads.yaml</span>
+<span class="k">description</span>: Keeps a long back-and-forth inside what the model can hold.
+<span class="k">when-full</span>: 85%
+
+<span class="k">always-keep</span>:
+  - anything a person approved or declined
+  - the customer's original request
+  - anything the payments tool said
+
+<span class="k">then</span>:                       <span class="c"># tried in order, until it fits</span>
+  - <span class="k">what</span>: shorten-long-results
+    <span class="k">applies-to</span>: anything a tool returned earlier
+    <span class="k">down-to</span>: 2000 characters
+  - <span class="k">what</span>: summarise-older
+    <span class="k">applies-to</span>: everything before the last few messages
+  - <span class="k">what</span>: drop-parts
+    <span class="k">applies-to</span>: the model's own thinking
+  - <span class="k">what</span>: keep-recent-only
+    <span class="k">down-to</span>: everything since the last approval
+
+<span class="k">summarised-by</span>: qwen2.5-14b-instruct
+<span class="k">if-it-still-does-not-fit</span>: ask-a-person
+<span class="k">asks</span>: too-long-to-send        <span class="c"># which question to ask, by name</span>
+</code></pre>
+
+<div class="note warn">
+<strong>Leave <code>context-policy:</code> out and no tidying happens at all.</strong> That is
+deliberate: a conversation that outgrows the model fails where you can see it, rather than being
+quietly cut down.
+</div>
+
+<h2 id="settings">Model settings <a class="anchor" href="#settings">#</a></h2>
+
+<p>Provider-neutral request parameters. Two are <span class="tier core">core</span>; the rest are
+expert knobs that mean what they mean everywhere.</p>
+
+<table>
+<thead><tr><th>Field</th><th>Tier</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>max-tokens</code></td><td><span class="tier core">core</span></td><td>Ceiling on the answer's length.</td></tr>
+<tr><td><code>thinking</code></td><td><span class="tier core">core</span></td><td><code>none | low | medium | high</code> — how hard to think first, <em>where the model supports it</em>.</td></tr>
+<tr><td><code>temperature</code>, <code>top-p</code>, <code>top-k</code></td><td><span class="tier expert">expert</span></td><td>Sampling.</td></tr>
+<tr><td><code>seed</code></td><td><span class="tier expert">expert</span></td><td>Reproducibility, where offered.</td></tr>
+<tr><td><code>stop-sequences</code></td><td><span class="tier expert">expert</span></td><td>Where to cut generation.</td></tr>
+<tr><td><code>presence-penalty</code>, <code>frequency-penalty</code></td><td><span class="tier expert">expert</span></td><td>Repetition control.</td></tr>
+<tr><td><code>tool-choice</code>, <code>parallel-tool-calls</code></td><td><span class="tier expert">expert</span></td><td>How tools are offered.</td></tr>
+<tr><td><code>service-tier</code></td><td><span class="tier expert">expert</span></td><td>Provider service class.</td></tr>
+</tbody>
+</table>
+
+<h2 id="limits">Limits — the termination algebra <a class="anchor" href="#limits">#</a></h2>
+
+<p>Every way a run is allowed to end, in one table, all enforced the same way and all reported
+by the name you typed.</p>
+
+<pre><code><span class="c"># agents/refund-desk/limits.yaml</span>
+<span class="k">feel</span>: interactive              <span class="c"># supplies the two latency promises</span>
+<span class="k">cost-per-request-under</span>: 0.05 USD
+<span class="k">steps-at-most</span>: 8
+<span class="k">when-it-runs-out</span>: stop-and-say-so
+</code></pre>
+
+<table>
+<thead><tr><th>Field</th><th>Tier</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>feel</code></td><td><span class="tier core">core</span></td><td><code>voice | interactive | conversational | background | batch</code>. One word supplying <code>first-reply-within</code> and <code>finishes-within</code>. Anything you write yourself wins.</td></tr>
+<tr><td><code>finishes-within</code></td><td><span class="tier core">core</span></td><td>The promise to whoever waits — and also a ceiling.</td></tr>
+<tr><td><code>cost-per-request-under</code></td><td><span class="tier core">core</span></td><td>Most one request may cost, team included.</td></tr>
+<tr><td><code>steps-at-most</code></td><td><span class="tier core">core</span></td><td>Thinking steps before it must stop.</td></tr>
+<tr><td><code>tool-calls-at-most</code></td><td><span class="tier core">core</span></td><td>Ceiling on tool calls.</td></tr>
+<tr><td><code>runs-for-at-most</code></td><td><span class="tier core">core</span></td><td>Hard wall-clock stop.</td></tr>
+<tr><td><code>tokens-at-most</code></td><td><span class="tier core">core</span></td><td>Token ceiling.</td></tr>
+<tr><td><code>when-it-runs-out</code></td><td><span class="tier core">core</span></td><td><strong>Required by any ceiling.</strong> <code>stop-and-say-so | ask-a-person | answer-with-what-it-has</code>.</td></tr>
+<tr><td><code>first-reply-within</code></td><td><span class="tier expert">expert</span></td><td>Time to first words.</td></tr>
+<tr><td><code>per-word-under</code></td><td><span class="tier expert">expert</span></td><td>Streaming rate.</td></tr>
+<tr><td><code>measured-at</code></td><td><span class="tier expert">expert</span></td><td><code>p50 | p90 | p95 | p99 | mean | max</code>.</td></tr>
+</tbody>
+</table>
+
+<div class="note bad">
+<strong>A ceiling without <code>when-it-runs-out</code> is refused, not guessed at.</strong>
+Stopping silently, asking a person, and answering as if finished are three different governance
+decisions, and none of them is a default. There is <em>one</em> action for all ceilings, because
+what to do when the budget is gone is a property of the work, not of which meter emptied first.
+</div>
+
+<h2 id="policies">Approvals — putting a person in the loop <a class="anchor" href="#policies">#</a></h2>
+
+<p>Two pieces: a <strong>policy</strong> says what needs approval; a <strong>question</strong> is
+what the person is actually asked.</p>
+
+<pre><code><span class="c"># policies/approvals.yaml</span>
+<span class="k">applies-to</span>: every-agent
+<span class="k">ask-a-person</span>:
+  - <span class="k">when</span>:
+      - { <span class="k">tool</span>: payments/issue-refund, <span class="k">arg</span>: amount, <span class="k">more-than</span>: 200 USD }
+    <span class="k">because</span>: a refund over 200 USD is a management decision
+    <span class="k">question</span>: is-this-ok
+
+  - <span class="k">when</span>:
+      - { <span class="k">tool</span>: payments/issue-refund, <span class="k">arg</span>: amount, <span class="k">more-than</span>: 500 USD }
+    <span class="k">because</span>: above 500 USD a person sets the figure, rather than approving one the model chose
+    <span class="k">question</span>: how-much-to-refund
+
+  - <span class="k">when</span>:
+      - { <span class="k">tool</span>: zendesk/reply }
+    <span class="k">because</span>: nothing goes to a customer without a person seeing it first
+    <span class="k">question</span>: is-this-ok
+</code></pre>
+
+<pre><code><span class="c"># questions/how-much-to-refund.yaml</span>
+<span class="k">description</span>: Asks a person to set the refund figure themselves, above 500 USD.
+<span class="k">says</span>: How much should we refund on this order?
+<span class="k">answer</span>:                    <span class="c"># what comes BACK from the person</span>
+  <span class="k">amount</span>: money
+  <span class="k">because</span>: text
+<span class="k">shows</span>:                     <span class="c"># what they are shown to decide with</span>
+  - amount
+  - order-number
+<span class="k">asked-of</span>: [support-leads]
+<span class="k">answer-within</span>: 4h
+<span class="k">if-nobody-answers</span>: decline   <span class="c"># silence is not consent</span>
+</code></pre>
+
+<div class="note">
+<strong>A gate reads arguments, not results.</strong> It sees the values going <em>into</em> a
+call it is about to make, and its only outcome is to ask a person. It is a pause, not a branch.
+<code>inspects:</code> on the action controls what it is allowed to look at.
+</div>
+
+<h2 id="evals">Evals — how you know it works <a class="anchor" href="#evals">#</a></h2>
+
+<pre><code><span class="c"># evals/suite.yaml</span>
+<span class="k">description</span>: Checks the Refund Desk makes the right call and explains itself.
+<span class="k">population</span>: authored-enumeration   <span class="c"># where these cases came from</span>
+<span class="k">must-pass</span>: 70%
+
+<span class="k">rules</span>:                            <span class="c"># must hold of EVERY answer</span>
+  - <span class="k">must-say-one-of</span>: [approved, declined]
+    <span class="k">because</span>: the customer needs a clear answer
+  - <span class="k">must-not-contain</span>: ["refund by", "arrive on"]
+    <span class="k">because</span>: we must never promise a date we do not control
+  - <span class="k">must-call-before</span>: { <span class="k">call</span>: payments/issue-refund, <span class="k">first</span>: payments/look-up-order }
+    <span class="k">because</span>: issuing money without looking up the order is the expensive mistake
+  - <span class="k">judged</span>: gives the reason in one sentence a customer can understand
+    <span class="k">because</span>: a wall of policy text reads as a refusal even when we approve
+
+<span class="k">metrics</span>:
+  - <span class="k">uri</span>: pact:at_most_words
+    <span class="k">threshold</span>: 80%
+    <span class="k">with</span>: { <span class="k">words</span>: 60 }
+
+<span class="k">graded-by</span>: qwen2.5-14b-instruct
+</code></pre>
+
+<h4>One case</h4>
+<pre><code><span class="c"># evals/cases/02-outside-window.yaml</span>
+<span class="k">when</span>: |
+  A customer bought headphones 45 days ago. They say they never really liked
+  them and would like a refund.
+<span class="k">expect</span>:
+  <span class="k">decision</span>: declined
+<span class="k">because</span>: More than 30 days have passed, and change of mind is not covered after that.
+<span class="k">must-also</span>:
+  - <span class="k">must-contain</span>: ["30 days"]
+    <span class="k">because</span>: the customer needs to know which rule applied
+  - <span class="k">must-not-contain</span>: ["your fault", "you should have"]
+    <span class="k">because</span>: a decline is not an accusation
+</code></pre>
+
+<p>The five rule shapes are closed: <code>must-say-one-of</code>, <code>must-contain</code>,
+<code>must-not-contain</code>, <code>must-call-before</code>, <code>judged</code>. Anything else
+is refused by name rather than accepted and quietly ignored.</p>
+
+<div class="note">
+<strong><code>population:</code> is required, and it is honesty machinery.</strong>
+<code>authored-enumeration</code> means "I wrote down the situations I thought of" — a fine place
+to start, and reports say so out loud rather than letting 90% read as a population statistic.
+</div>
+
+<h2 id="interceptors">Interceptors <a class="anchor" href="#interceptors">#</a></h2>
+
+<p>Rules that may change what happens as a run proceeds. Deliberately narrow: six sentence shapes
+exist and they are the only six.</p>
+
+<pre><code><span class="c"># interceptors/stop-runaway-refunds.yaml</span>
+<span class="k">description</span>: Stops the run if it tries to issue more than one refund per request.
+<span class="k">when</span>: step.tool.before          <span class="c"># the event it watches</span>
+<span class="k">may</span>:
+  - stop-the-run                <span class="c"># the powers it is allowed to use</span>
+<span class="k">rules</span>:
+  - &gt;-
+    if payments is called more than 1 time in one run, stop and say "A second
+    refund in one conversation needs a person. Nothing further has been done."
+</code></pre>
+
+<pre><code><span class="c"># interceptors/redact-card-numbers.yaml</span>
+<span class="k">description</span>: Stops card numbers reaching the model, a tool, or the transcript.
+<span class="k">applies-to</span>: every-agent
+<span class="k">when</span>:
+  - step.message.before
+  - step.tool.before
+<span class="k">may</span>:
+  - hide-values
+<span class="k">rules</span>:
+  - replace anything that looks like a card number with "[card number removed]"
+  - do the same for anything that looks like a bank account
+</code></pre>
+
+<p><code>may:</code> declares the powers a rule is allowed to use —
+<code>hide-values</code>, <code>stop-the-run</code>, <code>send-elsewhere</code> — so what an
+interceptor <em>could</em> do is reviewable without reading its rules.
+<code>applies-to:</code> is either <code>every-agent</code> or
+<code>the-agents-that-name-it</code>; the latter is the default, and is why the first example
+above appears in the refund desk's own <code>interceptors:</code> list.</p>
+
+<div class="note warn">
+<strong>Conditions here count, they do not read values.</strong> The one rule that can send a
+run elsewhere counts calls to a named tool. No interceptor can branch on what a tool
+<em>returned</em> — the same deliberate limit as <a href="#loops">loop outcomes</a>.
+</div>
+
+<h2 id="learning">Learning <a class="anchor" href="#learning">#</a></h2>
+
+<p>What an agent may improve about itself, and what a person must approve first.</p>
+
+<pre><code><span class="c"># learning.yaml</span>
+<span class="k">enabled</span>: propose-only         <span class="c"># no | propose-only | applies-safe-changes-itself</span>
+
+<span class="k">may-improve-on-its-own</span>:
+  - phrasing
+  - examples
+  - skill-notes
+
+<span class="k">needs-a-person-to-approve</span>:
+  - tools
+  - permissions
+  - team
+  - limits
+  - evals
+  - policy-clauses
+
+<span class="k">keep-only-if</span>: a-person-approves-it   <span class="c"># or scores-higher-on-evals</span>
+<span class="k">review</span>: weekly
+
+<span class="k">cycle-limits</span>: { <span class="k">per-cycle</span>: 4, <span class="k">per-month</span>: 20 USD, <span class="k">evals</span>: 2000 }
+<span class="k">models</span>:
+  <span class="k">execution</span>:  { <span class="k">role</span>: llm }
+  <span class="k">reflection</span>: { <span class="k">role</span>: reflector }
+</code></pre>
+
+<p class="small"><code>cycle-limits:</code> bounds self-improvement itself — how many cycles,
+how much money, how many eval runs. An optimiser with no budget is how a learning system quietly
+spends a month's tokens overnight.</p>
+
+<div class="note ok">
+<strong>The split is the point.</strong> Wording and examples are safe to tune automatically.
+Tools, permissions, budgets and policy clauses are governance, and a machine may propose but
+never apply them.
+</div>
+
+<h2 id="needs">Portability I — <code>needs:</code>, the model floor <a class="anchor" href="#needs">#</a></h2>
+
+<p>What the model behind this agent must be capable of, stated independently of any particular
+model. A model that cannot meet it is refused <em>before anything runs</em>.</p>
+
+<pre><code><span class="c"># agents/refund-desk/needs.yaml</span>
+<span class="k">reasoning</span>: careful        <span class="c"># simple &lt; steady &lt; careful &lt; deep</span>
+<span class="k">tool-calling</span>: parallel    <span class="c"># no | yes | parallel</span>
+<span class="k">images</span>: yes
+<span class="k">context-at-least</span>: 32k
+<span class="k">because</span>: it reads a photo of the item and applies a written policy to it.
+</code></pre>
+
+<table>
+<thead><tr><th>Field</th><th>Tier</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>reasoning</code></td><td><span class="tier core">core</span></td><td>Four ordered rungs. A model whose rung is unmeasured still binds — it just ranks last.</td></tr>
+<tr><td><code>tool-calling</code></td><td><span class="tier core">core</span></td><td><code>no</code> widens the candidate set; <code>parallel</code> rules out many local models.</td></tr>
+<tr><td><code>images</code> / <code>audio</code> / <code>computer-use</code></td><td><span class="tier core">core</span></td><td>Modality requirements.</td></tr>
+<tr><td><code>context-at-least</code></td><td><span class="tier core">core</span></td><td><code>32k</code>, <code>128k</code>, <code>1m</code>, or a number.</td></tr>
+<tr><td><code>because</code></td><td><span class="tier core">core</span></td><td><strong>Required.</strong> Printed under every rejection — write it for whoever reads the failure.</td></tr>
+<tr><td><code>scores</code></td><td><span class="tier expert">expert</span></td><td>Benchmark bars. See the warning below.</td></tr>
+</tbody>
+</table>
+
+<h4>Benchmark bars, and why there is no <code>&amp;&amp;</code></h4>
+<pre><code><span class="k">scores</span>:
+  <span class="k">MMLU</span>: "&gt; 80"
+  <span class="k">SWE-Verified</span>: "&gt; 40"
+</code></pre>
+<p>Two lines, both of which must hold. <strong>The conjunction is the map</strong> — there is no
+<code>&amp;&amp;</code>, because an expression language has precedence and parentheses, and
+<code>a &amp;&amp; b || c</code> meaning something you did not intend is the one thing a
+non-coder must never have to debug. Always write the comparison: a bare <code>80</code> is
+refused, because on a latency or an error rate you meant the other direction.</p>
+
+<div class="note bad">
+<strong>Known limitation:</strong> no catalogue row currently publishes a
+<code>benchmarks:</code> block, and the field is not yet legal on a model row — so
+<code>scores:</code> can only empty the candidate set today. It is expert tier for exactly
+that reason.
+</div>
+
+<h2 id="catalog">Portability II — the model catalogue <a class="anchor" href="#catalog">#</a></h2>
+
+<p>PACT ships knowledge of the models it knows — what each holds, which runtimes serve it, what
+it costs. <strong>You never write this file.</strong> A workspace-local
+<code>models/catalog.yaml</code> is an optional override layer for a model your machine serves
+that the distribution has never heard of.</p>
+
+<pre><code><span class="c"># models/catalog.yaml — the override layer</span>
+<span class="k">models</span>:
+  <span class="k">qwen2.5-7b-instruct</span>:
+    <span class="k">family</span>: qwen2.5
+    <span class="k">tier</span>: small
+    <span class="k">also-known-as</span>: ["qwen2.5:7b-instruct"]
+    <span class="k">served-by</span>:
+      - { <span class="k">runtime</span>: ollama, <span class="k">endpoint</span>: local }
+      - { <span class="k">runtime</span>: vllm,   <span class="k">endpoint</span>: local }
+    <span class="k">capabilities</span>:
+      <span class="k">tool-calling</span>: parallel
+      <span class="k">modality-in</span>:  [text]
+      <span class="k">modality-out</span>: [text]
+      <span class="k">context-window</span>:
+        <span class="k">value</span>: 32768
+        <span class="k">provenance</span>:
+          <span class="k">source</span>: published config.json (max_position_embeddings)
+          <span class="k">as-of</span>: 2026-07-28
+          <span class="k">recorded-by</span>: you@example.com
+    <span class="k">reasoning</span>: { <span class="k">value</span>: steady, <span class="k">provenance</span>: { ... } }
+    <span class="k">cost</span>: { <span class="k">input-per-mtok</span>: 0 USD, <span class="k">output-per-mtok</span>: 0 USD }
+</code></pre>
+
+<div class="note">
+<strong>Provenance is per figure, and <code>unknown</code> is a legal value.</strong> A figure
+nobody can source is written <code>unknown</code> rather than guessed — which makes the ceiling
+it feeds report as unenforced, where you can see it. Pricing an unsourced row at zero would give
+you a spend cap that can never fire, which is worse than having none.
+</div>
+
+<h3>Egress decides what may bind</h3>
+<p>With <code>allow-egress: []</code>, only rows some runtime serves <em>on this machine</em>
+are bindable. Pin a hosted model anyway and the check refuses it, naming a locally-served model
+to write instead.</p>
+
+<h2 id="variants">Portability III — variants <a class="anchor" href="#variants">#</a></h2>
+
+<p>Other ways to run the same agent, for models that need more help or less. Each is tried in
+the order written, after the agent as you authored it, and <strong>the first that passes the
+evals is the one that runs</strong>. Nobody declares which variant a model needs — it is measured.</p>
+
+<pre><code><span class="k">variants</span>:
+  <span class="k">decomposed</span>:
+    <span class="k">when</span>: the model is smaller and skips steps
+    <span class="k">says</span>: Always look the order up with the ticket tool before deciding anything.
+    <span class="k">steps-at-most</span>: 6
+
+  <span class="k">minimal</span>:
+    <span class="k">when</span>: the model is very small and too many tools confuse it
+    <span class="k">may-use</span>: [ticket-lookup]
+    <span class="k">steps-at-most</span>: 8
+</code></pre>
+
+<table>
+<thead><tr><th>Field</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>when</code></td><td>Why this way of working is worth trying. Prose, printed beside the result.</td></tr>
+<tr><td><code>says</code></td><td>An extra line <em>appended</em> to the instructions — the sentence that makes a smaller model reliable.</td></tr>
+<tr><td><code>instructions</code></td><td><em>Replaces</em> the instructions entirely.</td></tr>
+<tr><td><code>steps-at-most</code></td><td>A model that must be walked through the work needs more turns.</td></tr>
+<tr><td><code>may-use</code></td><td>Narrow the tools and procedures, for this way of working only.</td></tr>
+</tbody>
+</table>
+
+<div class="note">
+<strong>A variant changes <em>how</em>, never <em>what</em>.</strong> It cannot alter
+<code>accepts:</code>, <code>answers-with:</code> or the <code>limits:</code> promises — those
+are the contract. If two models genuinely need different contracts, that is two agents.
+</div>
+
+<h3>Fail, then recommend</h3>
+<pre><code>$ pact check .
+PORTABILITY: FAIL for qwen2.5-7b-instruct (strategy exhausted)
+  score: 58% against a bar of 70%
+RECOMMENDED: claude-haiku-4-5 — passes at 100% using the 'decomposed' strategy, 0.80 USD/Mtok
+</code></pre>
+<p>A refusal that names no alternative is a dead end, so the resolver ranks every qualifying
+model cheapest-first and reports the first that passes. If nothing qualifies, it says that too,
+with the line you would have to change.</p>
+
+<h2 id="per-model">Recipe: a different architecture per model <a class="anchor" href="#per-model">#</a></h2>
+
+<p>There are <strong>two levels</strong>, and the boundary between them is enforced by the
+checker rather than left to taste. Pick by asking one question: <em>am I changing how the agent
+is prompted and budgeted, or am I changing its shape?</em></p>
+
+<h3>Level 1 — same shape, tuned per model → <code>variants:</code></h3>
+<p>Use this when a smaller model needs more hand-holding, more turns, or fewer tools. You do
+<strong>not</strong> write a condition — the resolver runs your eval suite against the authored
+agent, then each variant in written order, and binds the first that passes.</p>
+
+<pre><code><span class="c"># agents/desk/agent.yaml</span>
+<span class="k">loop</span>: pact:loop/react
+<span class="k">limits</span>: { <span class="k">steps-at-most</span>: 6, <span class="k">when-it-runs-out</span>: stop-and-say-so }
+
+<span class="k">variants</span>:
+  <span class="k">decomposed</span>:
+    <span class="k">when</span>: the model is smaller and skips steps
+    <span class="k">says</span>: Always look the order up with the risk tool before deciding anything.
+    <span class="k">steps-at-most</span>: 10
+
+  <span class="k">minimal</span>:
+    <span class="k">when</span>: the model is very small and too many tools confuse it
+    <span class="k">may-use</span>: [risk]        <span class="c"># narrow the tool list right down</span>
+    <span class="k">steps-at-most</span>: 12
+</code></pre>
+
+<div class="note bad">
+<strong>A variant has exactly five fields, and the checker will tell you so.</strong> Try to put
+a <code>loop:</code> in one and you get:
+<pre style="margin:.6rem 0 0"><code>error: 'loop' is not something a variant can have.
+  fix: Remove it, or use one of: when, instructions, says, steps-at-most, may-use.
+  rule: schema/unknown-field</code></pre>
+</div>
+
+<h3>Level 2 — genuinely different shape → a second agent + <code>based-on:</code></h3>
+<p>Use this when the <em>architecture</em> differs: a different loop, a different team, a
+different context policy, a different model. Write a second agent that inherits everything and
+restates only what changes.</p>
+
+<pre><code><span class="c"># agents/desk-big/agent.yaml — the base, and a working agent in its own right</span>
+<span class="k">name</span>: Order Desk
+<span class="k">description</span>: Answers a customer's question about their order.
+<span class="k">instructions</span>: Answer the customer's question. Check the order before you answer.
+<span class="k">uses</span>: [risk]
+<span class="k">accepts</span>: { <span class="k">message</span>: text }
+<span class="k">answers-with</span>: { <span class="k">reply</span>: text }
+<span class="k">loop</span>: pact:loop/react                <span class="c"># a strong model can interleave</span>
+<span class="k">model</span>: claude-haiku-4-5
+<span class="k">limits</span>: { <span class="k">steps-at-most</span>: 6, <span class="k">when-it-runs-out</span>: stop-and-say-so }
+</code></pre>
+
+<pre><code><span class="c"># agents/desk-small/agent.yaml — same contract, different shape</span>
+<span class="k">based-on</span>: desk-big
+<span class="k">name</span>: Order Desk (small model)
+<span class="k">description</span>: Answers a customer's question about their order, on a local model.
+<span class="k">loop</span>: pact:loop/plan-then-do        <span class="c"># plan first — a small model needs the scaffold</span>
+<span class="k">model</span>: qwen2.5-7b-instruct
+<span class="k">limits</span>: { <span class="k">steps-at-most</span>: 12, <span class="k">when-it-runs-out</span>: stop-and-say-so }
+</code></pre>
+
+<p>Measured with <code>pact show</code>, <code>desk-small</code> comes out carrying the base's
+<code>instructions</code>, <code>uses</code>, <code>accepts</code>, <code>answers-with</code> and
+<code>variants</code>, with its own <code>loop</code>, <code>model</code> and
+<code>limits</code>. One contract, two architectures.</p>
+
+<div class="note warn">
+<strong>Two traps with <code>based-on:</code>.</strong> First, a restated block
+<em>replaces</em> the base's whole block — it is not a deep merge. Restating
+<code>limits:</code> with two keys drops a <code>cost-per-request-under:</code> the base had,
+and the checker does not currently warn. Restate everything you meant to keep. Second, a base
+entry is still a runnable agent and is published to <code>pact discover</code>; there is no
+"this is only a base" marker yet.
+</div>
+
+<h3>How the right one gets chosen</h3>
+<table>
+<thead><tr><th></th><th>Level 1 — variants</th><th>Level 2 — two agents</th></tr></thead>
+<tbody>
+<tr><td>Can change</td><td>instructions, extra sentence, step budget, tool subset</td><td>anything except the shared contract</td></tr>
+<tr><td>Chosen by</td><td><strong>measurement</strong> — first to pass the evals</td><td><strong>you</strong> — pin <code>model:</code>, and point a port at the one you want</td></tr>
+<tr><td>Effort to add a model</td><td>none, if a variant already passes</td><td>one file</td></tr>
+</tbody>
+</table>
+
+<div class="note">
+<strong>The honest gap.</strong> Level 1 is automatic; level 2 is not. Nothing today inspects
+the bound model and picks between two <em>agents</em> — you choose, by pinning <code>model:</code>
+and by which agent a <a href="#ports">port</a> answers with, or by giving a parent agent both as
+<code>team:</code> members. Making architecture switch automatically means letting a variant
+carry a <code>loop:</code>, which is designed and unbuilt; the proposal is in
+<code>docs/26-BINDING-ACROSS-MODELS-AND-MACHINES.md</code>.
+</div>
+
+<h2 id="ports">Ports — how the world reaches an agent <a class="anchor" href="#ports">#</a></h2>
+
+<pre><code><span class="c"># ports/slack.yaml</span>
+<span class="k">description</span>: Where customers reach us — the #support channel in Slack.
+<span class="k">kind</span>: conversation
+<span class="k">through</span>: slack
+<span class="k">answers</span>: refund-desk
+<span class="k">same-conversation-when</span>:
+  - they are in the same thread    <span class="c"># what counts as "still talking"</span>
+<span class="k">who-can-reach-it</span>:
+  - people in our Slack workspace
+</code></pre>
+
+<pre><code><span class="c"># ports/weekly-review.yaml — a schedule is a port too</span>
+<span class="k">description</span>: Summarise the week's refund decisions for the team.
+<span class="k">kind</span>: schedule
+<span class="k">every</span>: Friday at 4pm
+<span class="k">answers</span>: refund-desk
+<span class="k">says</span>: |
+  Summarise this week's refund decisions. How many approved, how many
+  declined, and anything a person had to step in on.
+<span class="k">if-still-running</span>: skip
+</code></pre>
+
+<p class="small">A scheduled run needs nothing but an <code>every:</code> line to be a port. The
+same agent answers a customer in Slack and a cron tick on Friday, with one set of limits and one
+policy governing both.</p>
+
+<h2 id="bundles">Bundles and watch <a class="anchor" href="#bundles">#</a></h2>
+
+<div class="two">
+<div>
+<h4>Bundles — reusable packs</h4>
+<pre><code><span class="k">bundles</span>:
+  <span class="k">support-basics</span>:
+    <span class="k">description</span>: Shared support tooling.
+    <span class="k">version</span>: 1.2.0
+    <span class="k">from</span>: ./bundles/support-basics
+    <span class="k">brings</span>: [tools, questions, skills]
+</code></pre>
+<p class="small"><code>brings:</code> declares what a bundle may contribute, so what it can add
+is reviewable before you read it.</p>
+</div>
+<div>
+<h4>Watch — what gets written down</h4>
+<pre><code><span class="c"># watch/tool-calls.yaml</span>
+<span class="k">description</span>: Record every tool call.
+<span class="k">when</span>: step.tool.completed
+<span class="k">writes-to</span>: tool-calls.jsonl
+</code></pre>
+<p class="small">One rule, one event address, one file. The run ledger is built from these.</p>
+</div>
+</div>
+
+<h2 id="ir">The IR — what actually gets loaded <a class="anchor" href="#ir">#</a></h2>
+
+<p><code>pact show</code> prints the loaded document as JSON. This <em>is</em> the intermediate
+representation: every adapter receives exactly this, and nothing else.</p>
+
+<pre><code>$ pact show examples/refund-desk
+
+{
+  "name": "Refund Desk workspace",
+  "workspace-id": "refund-desk",
+  "description": "...",
+  "owner": "...",
+  "allow-egress": [],
+
+  "agents":           { "refund-desk": {...}, "policy-checker": {...}, "fraud-checker": {...} },
+  "tools":            { "payments": {...}, "zendesk": {...} },
+  "resources":        { "payments-server": {...}, "zendesk-server": {...} },
+  "skills":           { "refund-policy": {...} },
+  "policies":         { "approvals": {...} },
+  "questions":        { "is-this-ok": {...}, "how-much-to-refund": {...}, ... },
+  "evals":            { "description": ..., "must-pass": "70%", "rules": [...], "cases": {...} },
+  "loops":            { "careful": {...} },
+  "context-policies": { "long-threads": {...} },
+  "interceptors":     { "redact-card-numbers": {...}, "stop-runaway-refunds": {...} },
+  "ports":            { "email": {...}, "slack": {...}, "weekly-review": {...} },
+  "watch":            { "tool-calls": {...} },
+  "redaction":        { "description": ..., "hide": [...] },
+  "learning":         { "enabled": "propose-only", ... }
+}
+</code></pre>
+
+<h3>Four properties worth knowing</h3>
+<div class="grid">
+<div class="card"><h4>Flat and tree are identical</h4>
+<p>A workspace written as one file and the same one expanded into folders produce byte-identical
+JSON. That is the Expansion Rule paying off.</p></div>
+<div class="card"><h4>Names, never paths</h4>
+<p>Everything cross-references by name — <code>connect: payments-server</code>, not a relative
+path. A name that is not there is refused, and the message lists the ones that are.</p></div>
+<div class="card"><h4>The digest moves under every change</h4>
+<p>A canonical form is hashed into a content digest. Any change to a value, a list order, or the
+set of fields produces a different digest — which is what makes "did this agent change?"
+answerable.</p></div>
+<div class="card"><h4><code>x-</code> blocks are preserved, never projected</h4>
+<p>Unknown <code>x-</code> keys survive into the IR so nothing is lost, but they are never emitted
+into any substrate. Preservation, not passthrough.</p></div>
+</div>
+
+<h2 id="cli">Command line <a class="anchor" href="#cli">#</a></h2>
+
+<pre><code>pact check    [PATH]   Load the agent tree and report any problems
+pact show     [PATH]   Print the loaded document as JSON
+pact waits    [PATH]   Print every wait this tree can produce, with the deadline
+                       a runtime must set a timer for
+pact discover [PATH]   Find every PACT workspace under PATH and print an
+                       inventory a runtime can index (no build step)
+pact card &lt;agent&gt; [PATH]
+                       Print one agent's A2A Agent Card
+pact help              Show this message
+
+OPTIONS
+  --quiet              Only print problems, not the summary
+  --deny-warnings      Fail on a warning too — for pipelines, where a run with
+                       warnings and one without are the same green tick
+  --unsafe-spec        Validate against $PACT_SPEC instead of the compiled
+                       specification. Development builds only.
+</code></pre>
+
+<h3>What a good error looks like</h3>
+<pre><code>$ pact check .
+error: 'benchmarks' is not something a model can have.
+  --&gt; models/catalog.yaml:13:5
+   |
+13 |     benchmarks:
+   |     ^^^^^^^^^^
+  fix: Remove it, or use one of: description, family, tier, also-known-as,
+       served-by, capabilities, reasoning, cost.
+  rule: schema/unknown-field
+</code></pre>
+<p>Every diagnostic carries a location, a fix you can type, and a rule id. No stack traces and
+no implementation jargon — the reader is assumed to be the person who wrote the YAML.</p>
+
+<h2 id="adapters">Adapters <a class="anchor" href="#adapters">#</a></h2>
+
+<p>PACT owns the loop; a framework is demoted to a transport for models and tools. Eight ship:</p>
+
+<div class="grid">
+<div class="card"><h4>Direct</h4><p>Anthropic API · Ollama</p></div>
+<div class="card"><h4>Frameworks</h4><p>LangChain · LangGraph · AutoGen · Pydantic AI · OpenAI Agents SDK</p></div>
+<div class="card"><h4>Protocol</h4><p>A2A (agent-to-agent)</p></div>
+</div>
+
+<p>There is also a mock transport for tests. Because the harness — not the framework — decides
+what a step is, when a tool runs and when a run stops, the same tree behaves the same way on all
+of them. Fidelity is chosen over idiomatic generated code, deliberately.</p>
+
+<h2 id="kinds">All 44 kinds <a class="anchor" href="#kinds">#</a></h2>
+
+<p>280 fields across 44 groups. Most are small records nested inside the ones above.</p>
+
+<table>
+<thead><tr><th>Group</th><th>Where it appears</th></tr></thead>
+<tbody>
+<tr><td><code>workspace</code></td><td>The root.</td></tr>
+<tr><td><code>agent</code>, <code>variant</code>, <code>teamwork</code>, <code>state</code></td><td>Agents and how they run.</td></tr>
+<tr><td><code>needs</code>, <code>limits</code>, <code>settings</code></td><td>The three blocks on every agent.</td></tr>
+<tr><td><code>tool</code>, <code>action</code>, <code>resource</code>, <code>credential-reference</code></td><td>Callable things.</td></tr>
+<tr><td><code>knowledge</code>, <code>skill</code></td><td>What it may read.</td></tr>
+<tr><td><code>policy</code>, <code>question-rule</code>, <code>when-this</code>, <code>question</code></td><td>Approvals.</td></tr>
+<tr><td><code>evals</code>, <code>eval-rule</code>, <code>metric</code>, <code>call-order</code>, <code>case</code></td><td>Checks.</td></tr>
+<tr><td><code>loop</code>, <code>stage</code>, <code>outcome</code></td><td>Thinking shapes.</td></tr>
+<tr><td><code>context-policy</code>, <code>tidy-step</code></td><td>Long conversations.</td></tr>
+<tr><td><code>interceptor</code>, <code>redaction</code>, <code>watch</code></td><td>Run-time rules and recording.</td></tr>
+<tr><td><code>learning</code>, <code>learning-model</code>, <code>cycle-limits</code>, <code>drift</code></td><td>Self-improvement.</td></tr>
+<tr><td><code>port</code></td><td>Inbound surfaces.</td></tr>
+<tr><td><code>bundle</code></td><td>Reusable packs.</td></tr>
+<tr><td><code>catalog</code>, <code>model</code>, <code>served-by</code>, <code>model-can</code>, <code>model-cost</code>, <code>figure</code>, <code>provenance</code></td><td>The model catalogue.</td></tr>
+</tbody>
+</table>
+
+<h2 id="status">Honest status <a class="anchor" href="#status">#</a></h2>
+
+<p>This project is emphatic that a specification which overstates itself is worse than one with
+gaps. A few things in this guide describe fields that exist and do not yet fully bind:</p>
+
+<table>
+<thead><tr><th>Thing</th><th>State</th></tr></thead>
+<tbody>
+<tr><td><code>needs.scores:</code></td><td>Parses and compares correctly on both ports, but <code>benchmarks:</code> is not yet a legal catalogue field, so it can only empty the candidate set.</td></tr>
+<tr><td><code>settings.thinking:</code></td><td>Core tier, but no catalogue row records whether a model supports extended thinking.</td></tr>
+<tr><td><code>workspace.profile</code></td><td>Read by nothing. Warns. Slated for deletion.</td></tr>
+<tr><td><code>model.tier</code></td><td>Parsed, and read by no shipped code path.</td></tr>
+<tr><td>Hardware fitness</td><td>No field anywhere. An agent that cannot meet its SLO on a slow box finds out at run time. Design work in <code>docs/26-BINDING-ACROSS-MODELS-AND-MACHINES.md</code>.</td></tr>
+<tr><td><code>pact explain</code>, <code>pact.lock</code></td><td>Designed, not built. The CLI has five verbs.</td></tr>
+</tbody>
+</table>
+
+<div class="note">
+<strong>Where to look next.</strong> <code>docs/00-THESIS.md</code> for why the format is shaped
+this way · <code>docs/30-FRD.md</code> for the numbered requirements and their build state ·
+<code>spec/schema.yaml</code> for the authoritative field list, where nearly every field carries
+a comment explaining what going wrong caused it to exist · <code>examples/</code> for two
+complete working trees.
+</div>
+
+<p class="small" style="margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--rule)">
+Generated from this repository — 44 groups, 280 fields, 5 CLI verbs, 8 transports, 2 example
+workspaces. Field names, tiers and examples are taken from <code>spec/schema.yaml</code> and the
+shipped examples rather than written from memory.
+</p>
+
+</main>
+</div>
+<script>
+function tt(){
+  var r=document.documentElement;
+  var cur=r.getAttribute('data-theme');
+  if(!cur){cur=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}
+  r.setAttribute('data-theme', cur==='dark'?'light':'dark');
+}
+</script>
+</body>
+</html>

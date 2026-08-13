@@ -1,4 +1,4 @@
-"""`allow-egress:` offers six roles. Five of them were read by nothing.
+"""`allow-egress:` offers six model roles. Five of them were read by nothing.
 
 Measured before this file existed: every egress check in the repository asked
 the same question — `"llm" in allow-egress:` — in `resolve.needs_of`,
@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -119,6 +120,67 @@ def test_a_grant_for_the_grader_admits_the_grader(doc) -> None:
 
     assert why_no_judge(hosted, EXAMPLE) == "", (
         "`judge` is the role that names grading and it must admit the grader"
+    )
+
+
+def test_a_grant_for_the_words_admits_the_grader(doc) -> None:
+    """And the general grant covers it, because grading is a model call over
+    words. A workspace that has already decided model calls may leave is not
+    asked to decide about its grader a second time — `egress.WORDS` is the rule
+    that says so, and this is the one check in the Python port that reaches it.
+
+    Mutation: delete `"judge"` from `egress.WORDS`. Red here and in the parity
+    check below; every other check in the adapter suite stays green (measured:
+    `3 failed, 1382 passed`, the third being the pre-existing README count
+    drift). It did NOT bite before `why_no_judge` stopped passing `"llm"` beside
+    `"judge"`: with that call site as it was, `WORDS = ()` — the whole table
+    emptied — left every behavioural check green and only the parity check red
+    (measured: `2 failed, 1383 passed`). That is the fact this test was written
+    from, and the reason the fix was to the call site and not to this file.
+    """
+    hosted = copy.deepcopy(doc)
+    hosted["evals"]["graded-by"] = HOSTED
+    hosted["allow-egress"] = ["llm"]
+
+    assert why_no_judge(hosted, EXAMPLE) == "", (
+        "`llm` is the grant for words leaving the box and grading is a model "
+        "call over words, so it must admit the grader without `judge` beside it"
+    )
+
+
+def test_both_ports_carry_the_same_words_under_a_grant_for_words() -> None:
+    """The list is written twice, so something has to read both copies.
+
+    `crates/pact-cli/src/egress.rs` holds the same rule at `pact check` time and
+    keeps its own `WORDS`, because neither port can derive this one from the
+    schema: `spec/schema.yaml` says which roles exist and no line in it says
+    which of them a grant for words carries. Two written lists are tolerable
+    only while a check fails when they disagree — the alternative is `ROLES`
+    again, a copy of the specification with no gate depending on it.
+
+    This is also what holds `embedder` and `reflector` down on the Python side:
+    no caller in this port plays either role yet, and Rust reaches both through
+    a learning model's `role:` line.
+
+    Mutation: drop `"reflector"` from `egress.WORDS`. Red here, and green
+    everywhere else in the adapter suite.
+    """
+    from pact_adapters import egress  # noqa: PLC0415
+
+    source = (REPO / "crates" / "pact-cli" / "src" / "egress.rs").read_text()
+    written = re.search(r'const WORDS: &\[&str\] = &\[(.*?)\];', source, re.S)
+    assert written, (
+        "`crates/pact-cli/src/egress.rs` no longer declares `const WORDS` — the "
+        "Rust half of this rule moved, and this check is now reading nothing"
+    )
+    rust = tuple(re.findall(r'"([^"]+)"', written.group(1)))
+
+    assert rust == egress.WORDS, (
+        f"the two ports disagree about which roles a grant for words carries:\n"
+        f"  crates/pact-cli/src/egress.rs: {rust}\n"
+        f"  adapters/python/.../egress.py: {egress.WORDS}\n"
+        f"one workspace would be admitted by `pact check` and refused by the "
+        f"suite, or the other way round"
     )
 
 

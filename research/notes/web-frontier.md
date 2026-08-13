@@ -1,5 +1,13 @@
 # Research stream: web-frontier
 
+> **This note contains two sweeps.**
+> **PART I** (§0–§10) is the sweep of **2026-07-26**, preserved verbatim because `00-THESIS.md` and
+> `research/notes/README.md` cite it by section number (notably §3.1, EffGen).
+> **PART II** (§0-II, §10-RESOLVED, §11–§22) is the sweep of **2026-08-07**. It settles six of
+> Part I's seven open questions, revises §8 (Eve's docs *did* move), sharpens §3.1 (the harness
+> effect is non-monotonic in harness *completeness*, not only in model size), and overturns §1.6's
+> conclusion that the name `PACT` is uncontested. **Read Part II's §0-II first.**
+
 **Date of sweep:** 2026-07-26
 **Scope:** things the local 141-repo corpus (cloned 2026-07-25) does **not** contain, or where
 the web materially contradicts / extends it.
@@ -865,3 +873,1266 @@ Papers (`/home/bud/ditto/agent-inter-op/research/papers/`):
 - <https://arxiv.org/abs/2602.00887>, <https://arxiv.org/abs/2605.03353>, <https://arxiv.org/abs/2606.29537>, <https://arxiv.org/pdf/2606.23075>, <https://arxiv.org/pdf/2604.17025>, <https://arxiv.org/pdf/2604.13346>
 - <https://github.com/Nexa-Language/Skill-Compiler>
 - <https://workos.com/blog/mcp-2026-spec-agent-authentication> (secondary; superseded by the local draft spec)
+
+---
+---
+
+# PART II — Sweep 2
+
+**Date of sweep:** 2026-08-07 (12 days after the corpus clone of 2026-07-25, 12 days after Sweep 1).
+**Scope:** (a) settle the seven open questions of §10; (b) find what shipped or was published
+*after* 2026-07-26; (c) the assignment's untouched targets — failed spec efforts, LF/W3C/IETF/CSA
+work, framework hosted/beta features, DeepEval docs, Eve docs re-check.
+**Everything in Part I is preserved verbatim** — `00-THESIS.md` §3.1 and the notes `README.md`
+cite it by section number. Part II uses §11 onward.
+
+**Same evidence convention:** `[V]` verified against source / primary spec / official docs /
+the PDF itself · `[I]` my inference, labelled · `[S]` secondary source only.
+
+---
+
+## 10-RESOLVED — status of Sweep 1's open questions
+
+| # | Question | Status | Where |
+|---|---|---|---|
+| OQ1 | Did OASF's Agent Spec adoption change the schema? Is OASF now a packaging wrapper around a behavioural spec? | **RESOLVED** — answered from the local `agntcy-oasf` checkout, not the unreachable blog. OASF has *both* an `agentspec` integration module and an `evaluation` core module. Neither carries behaviour. | §13 |
+| OQ2 | What is the "Pydantic AI Harness"? Does it overlap D12? | **RESOLVED** — it is a real 24+-capability library, `pydantic_ai_harness`. It explicitly does **not** own the loop. No D12 conflict; it is the native-lowering surface. | §15 |
+| OQ3 | Does Microsoft Agent Framework have a declarative/YAML agent surface? | **RESOLVED — yes, two of them**, and they are the strongest competitor found to date on *authoring*, and the weakest on *portability*. | §12 |
+| OQ4 | Does MCP `tasks` subsume PACT's durable-execution needs? | **PARTIALLY** — Tasks shipped as an *extension*, not core, in the final `2026-07-28`. Still weaker than Temporal-class semantics. | §18.1 |
+| OQ5 | Does `deepeval/optimizer` implement a GEPA-class loop? Does it satisfy O3.5? | **RESOLVED — yes to GEPA, emphatically no to O3.5.** Four verified defects. | §14 |
+| OQ6 | Any published *harness-vs-raw* measurement for loop patterns? | **RESOLVED — yes, two**, and the result is worse than EffGen implied: the effect is **non-monotonic in harness completeness**, not only in model size. | §11.1, §11.2 |
+| OQ7 | Should PACT adopt `optimize_anything` as its optimizer ABI? | **NOT SETTLED** — but a shipping alternative ABI was found in DeepEval and is *narrower* than PACT needs (prompts only). See §14.4. | §14 |
+
+---
+
+## 0-II. Executive summary — Sweep 2
+
+| # | Finding | Where | Design consequence |
+|---|---|---|---|
+| **F8** | **The strongest independent validation of T4 yet published, with honest limits.** CMU, 2026-07-09: SLM agents match frontier at **90% lower cost** — but only 16/21 task-SLM pairs improved, only **7/21 closed the gap**, the best case recovers **89.4%** (not ≥95%), and an 8B model recovered **27.9%** with three tasks stuck at 0.0 → 0.0. Adaptation quality is governed by **task diversity, Spearman ρ = −0.96**. | §11.1 | AC-3.1's ≥95% bar is **not met by the best measurement in the literature**. Add a pre-flight **workflow-diversity predicate** computed offline from the eval set, and a **base-capability floor** below which the resolver refuses to spend optimiser budget. |
+| **F9** | **Harness benefit is non-monotonic in harness *completeness*, not just model size.** At 2–3B, a *minimal* harness scores **below the raw model** in 2 of 3 models; the full `plan→execute→verify→recover` pipeline reaches TSR 0.952 / VTSR 1.000. Planning and recovery each contribute ~24.7% of the gain. "Scaffold collapse": LLaMA-3.2-3B raw abandons JSON under complex format demands (TSR 0.429, 7 violations). | §11.2 | **PACT must not ship a "light" harness mode.** `verify` and `recover` become *required* loop-node kinds whenever harness lowering is active on a small tier, and the CTS harness-vs-raw gate must also test the *partial* configuration. |
+| **F10** | **Microsoft Agent Framework ships two declarative YAML surfaces** (`kind: Prompt` agents; `kind: Workflow` action lists) with ~28 action kinds, PowerFx expressions, HITL, MCP and HTTP actions. But: **the C# and Python YAML dialects are different languages** (trigger-based vs name-based; 4 actions C#-only), agent invocation is hard-bound to **Microsoft Foundry**, and there is a `GotoAction`. | §12 | The no-code competitor is real. PACT's differentiators narrow to: offline execution, evals-in-the-artifact, capability contracts, variants, learning, one dialect. **Add MAF YAML to the D3 superset conformance corpus.** Never introduce `goto`. |
+| **F11** | **OASF's `evaluation` module is a *results record*, not an eval contract** — `overall_rating`, `quality/cost/security` scores, `publisher`, `created_at`, dataset **URLs**. No metric definition, no threshold, no rubric, no judge. And `agentspec_data.runtime_deps` is documented as *"locators for the **non-serializable** objects the Agent Spec config depends on (e.g. tool implementations)"*. | §13 | The competitor's own integration schema **admits in writing that its agent specs are not self-contained**. This is the single best citation for T2 and D15. It also means "OASF has evaluation" is not a counter-claim to T2 — quote the field list. |
+| **F12** | **DeepEval ships GEPA/MIPROv2/COPRO/SIMBA — with four defects PACT would inherit.** Default Pareto **validation set = 3 examples**; **two-way split only, no test set**; `random_seed` defaults to `time.time_ns()` so **the split is non-reproducible**; and `reflection_model="gpt-4o-mini"`, `mutation_model="gpt-4o"` are **hardcoded hosted-OpenAI defaults**, with the *reflector* defaulting to the *smaller* model. | §14 | PACT must own the split protocol (O3.5) and the optimiser-model binding (AC-3.1b) — do **not** delegate either to the provider. Both are now demonstrated failures in shipping code, not hypotheticals. |
+| **F13** | **Self-improving optimisers fabricate the failures they fix.** CMU, 2026-07-13: in **15/60** runs the proposer enabled a guardrail for a rule that provably never fires and cited a violation a byte-exact oracle refutes (**0/60** on featureless input). Root cause: the reward is *suppression of observed failures*, which answers "did the failure stop?" and never "was the fix warranted?" — in an **add-only** regime where nothing is removed. | §16.1 | PACT's held-out-improvement gate **cannot catch this**: an unwarranted guardrail does not lower held-out score. Add a **warrant obligation** — every learned diff must cite trace IDs and the deterministic assertion that failed, and promotion must *verify the cited failure exists*. Add a **retirement path**; add-only is the accumulation mechanism. |
+| **F14** | **The experience→skill pipeline launders poison.** Tencent, 2026-08-04: safety detection **98.5% → 11.4%** when a poisoned trajectory is compiled into a skill; ASR 56.2% / 89.2%; **80.0% of skill-mediated attacks survive deletion of the source records**; some skills fire on benign queries. | §16.2 | T6's "emit reviewable source" is reviewed at the **11.4%-detection layer**. Scanning must run on the **originating trajectory**, and deleting/quarantining a trace must **cascade-retract every derived artifact**. Provenance edges become mandatory, not advisory. |
+| **F15** | **Individually-benign learned experiences can be *adversarially composed* to break the safety boundary** — the attacker submits only benign tasks and never touches memory (2026-08-03). | §16.3 | Sharpens Sweep 1 §4.3(a) from *drift* to *attack*. D23's per-diff classifier is not merely blind to slow erosion; it is **defeatable by construction**. Blast-radius must be computed over the **set** of pending/applied diffs against a frozen baseline. |
+| **F16** | **Equal eval scores hide 31.2× token differences between frameworks** (SEA-Eval), and *"success rate alone creates a capability illusion"*. Separately, CurveShift: *"newer models are usually run with newer agentic harnesses, so a gain on hard tasks cannot be assigned to the model or its scaffold."* | §17.1, §17.2 | **D27 (the CTS pass rule) is under-specified**: it names scores only, so a conforming adapter may be 31× more expensive. Make cost/token a **joint** pass condition with score. And the Portability Report must publish the **2×2** (model × harness), never a single delta. |
+| **F17** | **"PACT" is now a heavily-contested name in this exact space.** *Private Access Control Tokens* (Cloudflare + Chrome + Edge + Firefox + Shopify, 2026-06-25, heading for standardisation) is an **AI-agent authentication protocol**. *PACT5 — Protocol for Agent Coordination and Trust* is a **multi-agent governance protocol**. Plus a third `pact` agent-payments repo. | §19 | Sweep 1 §1.6 concluded *"PACT's distinct name is an asset"*. **That conclusion is now false.** D1 marks the name permanent and user-facing; this needs an explicit decision, not silence. |
+| **F18** | **Claude Agent SDK, verbatim: *"Skills must be created as filesystem artifacts. The SDK does not provide a programmatic API for registering Skills."*** And *"The `skills` option is a context filter, not a sandbox… their files remain on disk and are reachable through Read and Bash."* And SKILL.md `allowed-tools` *"does not apply when using Skills through the SDK"*. | §20.1 | Three concrete capability-lattice rows. Skill **exposure** lowers as `degraded` (filter, not isolation); skill **tool restriction** lowers as `unsupported`; and the adapter must **materialise** skills to a scratch tree — the one place where "no adapter reads author files" (P-1) meets a substrate that only reads files. |
+| **F19** | **Every major vendor shipped a named, separable *harness* layer in 2026**: `pydantic_ai_harness` (24+ capabilities), LangChain **`deepagents`** (self-described "agent harness"), OpenAI's "model-native harness" + native sandbox, Eve `concepts/default-harness`, plus CAAF's "Harness as an Asset". | §11.4 | D12 is no longer a contrarian bet — **the industry converged on PACT's layering**. Reposition: PACT's harness is not competing with frameworks' loops, it is the same layer they all just built, *made portable and declarative*. Also: each vendor harness is a **native-lowering target**, not a thing to emulate. |
+| **F20** | **Eve shipped ACP v1 over stdio (`eve acp`) and a UCP `.well-known` profile** after the corpus clone — a third and fourth interop edge beyond MCP (tools) and A2A (remote invocation): the **editor/client edge** and a **signed `.well-known` capability profile**. | §18.3 | Add **ACP** to the projection list (A2A card, OSSA, Bud `AgentRecord`). The `.well-known` + signing-keys shape is the right form for D24's minimal, adapter-shaped discovery seam. |
+| **F21** | **Microsoft's industrial eval-curation paper rules out synthetic eval sets** for exactly the two reasons D19.4 assumes away: combinatorial blowup over ~30 typed capabilities, and phrasing-distribution mismatch. Its unit is the **capability signature**, and its curator *"only suggests evictions"*. | §17.3 | Constrain D19.4: builder-generated cases are **coverage scaffolding**, never the oracle. Adopt **capability-signature coverage** as the admission policy for trace→eval promotion (AC-4.4) — it is computable directly from PACT's IR — and make eviction **suggest-only**. |
+| **F22** | **EvolveNet (2026-08-05): learned *program adaptations* are the unit that federates across data-local deployments** — *"independently modified programs cannot be averaged like model parameters and may conflict when composed"*, requiring **scope-typed, evidence-guided aggregation**. | §11.3 | This is exactly PACT's artifact (T6 emits diffs) and exactly PACT's air-gap problem (D17: traces cannot leave). Learned diffs must carry a **scope tag** + **evidence** so they can be merged across tenants without moving traces, and **merge conflict must be an error** — consistent with the Expansion Rule's disjoint-union stance (E-rules). |
+
+---
+
+## 11. The harness is now the industry's unit of engineering — and the measurements are sharper
+
+Sweep 1 §3.1 (EffGen) established that agent frameworks score *below the raw model* at 1.5B and
+that the sign flips near 32B. Two papers published since, plus a fifth vendor harness release,
+change what follows from that.
+
+### 11.1 CMU — *Better Harnesses, Smaller Models* (arXiv 2607.08938, 2026-07-09)
+
+`papers/arxiv-2607.08938.pdf`. Yang, Zhao, Wu, Kästner — Carnegie Mellon University.
+Code: <https://github.com/malusamayo/migration-analysis>. All figures read from the PDF `[V]`.
+
+**Abstract, verbatim `[V]`:**
+> *"Frontier LLM agents are automating many business tasks, but their high inference cost makes
+> large-scale deployment unsustainable. Small language models (SLMs) offer a cheaper alternative,
+> yet they typically fall short when swapped into a harness designed for a frontier LLM. We show
+> that for many routine business tasks, SLM agents can match LLM performance at 90% lower cost,
+> when paired with an adapted harness that can be automatically discovered by a meta agent. The key
+> insight is that much of the task difficulty is shared across instances and can be lifted from the
+> model into the harness via tailored instructions, tools, and orchestration loops."*
+
+Those three nouns — **instructions, tools, and orchestration loops** — are PACT's Strategy axes,
+named independently.
+
+**Table II, verbatim (accuracy / cost-per-instance / latency), 7 business tasks `[V]`:**
+
+| Model | Attn. | Budget | Stock | Anom. | Playwr. | Web. | Refact. | **Avg** |
+|---|---|---|---|---|---|---|---|---|
+| gemini-3.1-pro-preview | 96.5 | 97.3 | 86.7 | 98.9 | 85.7 | 76.7 | 86.1 | **89.7** |
+| | $0.894 | $0.219 | $5.785 | $1.450 | $0.667 | $2.011 | $1.116 | **$1.735** |
+| | 206s | 70s | 319s | 148s | 213s | 157s | 155s | **181s** |
+| gemma-4-26b-a4b (raw) | 91.7 | 75.0 | 5.0 | 5.0 | 9.9 | 1.1 | 32.2 | **31.4** |
+| **+ optimized harness** | 95.7 | 98.3 | 58.9 | 99.4 | 98.1 | 45.6 | 65.0 | **80.2** |
+| | $0.027 | $0.017 | $0.089 | $0.033 | $0.021 | $0.165 | $0.147 | **$0.071** |
+| | 215s | 33s | 177s | 61s | 85s | 206s | 171s | **135s** |
+| qwen3-coder-30b-a3b (raw) | 23.7 | 61.0 | 9.4 | 1.1 | 31.4 | 1.1 | 60.6 | **26.9** |
+| **+ optimized harness** | 73.7 | 79.3 | 96.7 | 93.9 | 93.6 | 24.4 | 62.2 | **74.8** |
+| ministral-3-8b (raw) | 0.2 | 28.8 | 0.0 | 0.0 | 0.4 | 5.6 | 31.7 | **9.5** |
+| **+ optimized harness** | 63.3 | 53.7 | **0.0** | **0.0** | 22.3 | **5.6** | 30.0 | **25.0** |
+
+**The four numbers that matter to AC-3.1 `[V]`:**
+
+1. Best case: gemma-4-26b-a4b recovers **80.2 / 89.7 = 89.4%** of frontier accuracy at
+   **$0.071 / $1.735 = 4.1%** of cost and 135s vs 181s (**25% latency reduction**). The paper
+   states *"recover 89% of LLM performance at 4% cost"*; the abstract says 89.7%.
+2. **16 of 21 task-SLM pairs improved significantly; only 7 of 21 closed the gap.**
+3. **At 8B, adaptation nearly fails**: 9.5 → 25.0 avg = **27.9%** of frontier, with Stock, Anomaly
+   and Web unchanged (0.0 → 0.0, 0.0 → 0.0, 5.6 → 5.6). Verbatim: *"weaker SLMs struggle with the
+   intrinsic task difficulty that cannot be offloaded to the harness."*
+4. **Task diversity governs everything.** Verbatim: *"we observed a strong, statistically
+   significant negative correlation (Spearman ρ = −0.96) between task diversity and optimized
+   harness performance"*, plus a controlled experiment: *"optimized harnesses work worse with more
+   diverse instances, dropping performance from 89.1% to 68.0%."* Diversity is measured as
+   *"pairwise normalized Levenshtein distance"* over tool-use sequences across instances.
+
+**Economics, verbatim `[V]`:** *"there is a one-time offline optimization cost per task ($20 in our
+experiments)… the optimization cost is already recovered after 13 runs on average across tasks and
+models."* Total optimisation budget for the study: $1,260.
+
+**The failure-mode → adaptation-strategy table (Figure 2), transcribed `[V]`** — this is directly
+implementable as PACT's Resolver diagnosis table:
+
+| Failure mode (capability-indexed) | Recommended adaptations |
+|---|---|
+| **tool-use** — *"Fail to use the right tools"* | `A1·demonstrate`, `T1·wrap`, `T2·filter` |
+| **instruction-following** — *"Fail to follow complex instructions"* | `A1·reinforce`, `L2·split`, `T1·enforce`, `L1·enforce` |
+| **knowledge** — *"Lack of domain knowledge"* | `A1·externalize`, `T1·encode` |
+| **long-context** — *"Degraded performance over long context"* | `A2·reveal`, `A2·compress`, `T1·reduce`, `L2·split` |
+| **planning / reasoning** — *"Fail to create viable plans or replan"* | `A1·plan`, `T1·encode` |
+
+Strategy groups, verbatim `[V]`:
+- `A1` **Add contexts** — *"Demonstrate examples, reinforce instructions, externalize implicit knowledge, create plans"*
+- `A2` **Manage contexts** — *"Reveal progressively, compress and summarize, prune observations, split into multi-agents"*
+- `T1` **Create tools** — *"Wrap common sequences, enforce constraints, encode knowledge and planning"*
+- `T2` **Manage tools** — *"Filter the tool set, adapt tool schema"*
+- `L1` **Instrument code** — *"Create programmatic checks and procedures"*
+- `L2` **Orchestrate agents** — *"Split tasks and roles; orchestrate agent flow"*
+
+RQ4 result, verbatim `[V]`: *"Instruction-following and knowledge failures are the dominant failure
+modes."* Note where those two land: `A1` (contexts) and `T1` (tools) — i.e. **the cheap,
+depth-free mechanisms**, which corroborates the MASS ordering already in `00-THESIS.md` §7.3.
+
+**Threats to validity the authors state `[V]`:** *"The agent runs and the optimization process are
+highly stochastic, even with our mitigation of multiple repeated runs."* And: *"Because we use
+closed-source frontier LLM APIs that are black-box and may evolve over time, exact replication of
+the optimization may be difficult."*
+
+> **Design consequences.**
+> 1. **AC-3.1's ≥95% bar is above the best number in the published literature (89.4%).** Either the
+>    threshold is restated as a *per-contract author choice* with 89% as the documented reference
+>    point, or PACT ships a bar it cannot hit and the FAIL path becomes the normal path — which is
+>    honest but must be *designed for*, not discovered.
+> 2. **Add a pre-flight workflow-diversity predicate.** ρ = −0.96 means diversity of the eval set
+>    predicts whether porting can work *at all*, and it is computable **offline, before any model
+>    call**: normalised Levenshtein over the expected tool-call sequences of the eval cases. This is
+>    D11 ("fail, then recommend") moved *earlier* — refuse or warn before spending optimiser budget,
+>    not after. Cheapest high-value check found in this sweep.
+> 3. **Add a base-capability floor.** The 8B row is a floor, not a slope. The capability-predicate
+>    language (O3.1) should express *"do not attempt optimisation below tier X"* and the resolver
+>    should report it as a distinct verdict from "optimised and failed".
+> 4. **Put optimisation amortisation in the Portability Report.** "$20 one-time, recovered after 13
+>    runs" is the number a non-technical author needs to decide, and PACT already has the cost model
+>    (O3.2) to compute it.
+> 5. **Adopt the 5×6 diagnosis table as the Resolver's strategy-selection policy**, keyed off the
+>    failure taxonomy extracted from failing eval traces. It is published, cited, and maps 1:1 onto
+>    PACT's IR fields (instructions/skills → A1/A2; tools → T1/T2; loop → L1; topology → L2).
+
+### 11.2 *It's Not the Size: Harness Design Determines Operational Stability in SLMs* (arXiv 2605.12129, 2026-05-12)
+
+`papers/arxiv-2605.12129.pdf`. Yong-eun Cho, KailosLab. Read from the PDF `[V]`.
+
+Three harness conditions × three models (Gemma4 E2B, Qwen3.5:2B, LLaMA 3.2 3B) × 24 tasks.
+Conditions: **model-only** (raw prompt) · **minimal-shell** (wrapper tags) ·
+**4-stage pipeline** (`plan → execute → verify → recover`). Metrics: Task Success Rate (TSR) and
+Valid TSR (VTSR); thresholds TSR ≥ 0.65, VTSR ≥ 0.80.
+
+Verbatim findings `[V]`:
+> *"The pipeline harness achieves TSR=0.952 and VTSR=1.000 on Gemma4 E2B (T1–T5, 21 tasks). A
+> non-monotonic phenomenon—minimal-shell TSR < model-only TSR—is observed in two models. In LLaMA
+> 3.2(3B) model-only, seven format violations yield TSR=0.429, revealing scaffold collapse: the
+> model abandons JSON structure under complex format requirements without harness support. Ablation
+> shows planning and recovery each contribute ~24.7% of total gain. VCR (Verification Catch Rate) =
+> 0.625 across all pipeline runs."*
+
+Contributions list, verbatim `[V]`, items 3–5:
+> *"3) Evidence that the recovery mechanism is the primary contributor to pipeline gains, and
+> classification of harness-fixable vs. unfixable failure modes. 4) Ablation showing the planning
+> stage acts as a format anchor for quantitative constraints (e.g., character limits).
+> 5) Introduction of scaffold collapse: under complex format requirements, LLaMA 3.2(3B) abandons
+> JSON structure without harness support (TSR=0.429, 7 violations), showing harness format
+> enforcement functions independently of content generation ability."*
+
+> **Why this is more actionable than EffGen.** EffGen said *which framework* you pick matters and
+> flips sign with scale. This says *how complete your harness is* matters and **flips sign within a
+> single model**. A partial harness is worse than none; a complete one is transformative. Combined
+> with §11.1's finding that verify/recover-shaped adaptations (`L1·enforce`) address the dominant
+> failure mode, the conclusion is specific:
+>
+> - **PACT must not offer a "light"/"minimal" harness profile.** If harness lowering is on, the
+>   lowered loop must include `verify` and `recover` nodes. Make them **required node kinds** in the
+>   loop IR whenever the resolved tier is below the (measured) sign-flip, rather than optional
+>   decorations an author can omit.
+> - **The CTS harness-vs-raw gate (T3-corollary) must include the partial configuration.** Testing
+>   only `full-harness vs raw` would have missed the entire finding. Three arms: raw · partial ·
+>   full.
+> - `VCR = 0.625` is a usable design number: a verification stage that catches ~62% of failures is
+>   what buys the gain. PACT's verify node should therefore be **measured** (emit a catch rate into
+>   the trace), which also gives the Portability Report a diagnostic when a port underperforms.
+> - "Scaffold collapse" names a concrete D16/G-1 hazard: **format enforcement is a harness function
+>   independent of model quality.** This is a second, independent argument for constrained decoding
+>   being a *strategy* field (§7.3 mechanism 5), and for it having a harness-side fallback where the
+>   substrate cannot do grammar-constrained generation.
+
+### 11.3 EvolveNet — collaborative harness evolution (arXiv 2608.04968, 2026-08-05)
+
+`papers/arxiv-2608.04968.pdf`. Nie, Zhang, Cai, Cheung, Tian, Han (HKBU / USTC / HKUST).
+Code: <https://github.com/junnie00/EvolveNet>. Abstract read from PDF `[V]`.
+
+Verbatim `[V]`:
+> *"The capabilities of an LLM agent depend not only on its model but on the harness: the executable
+> program that constructs context, invokes tools, verifies results, and recovers from failure.
+> Recent work shows that evolving the harness yields persistent improvements without updating model
+> weights. Existing approaches, however, assume that all execution experience can be routed to a
+> single optimizer… Real agent ecosystems violate that assumption: users, organizations, and
+> environments generate isolated streams of experience that cannot be pooled, so the experience most
+> worth learning from is exactly the experience that cannot be directly centralized. We introduce
+> EvolveNet, a paradigm of collaborative harness evolution that moves experience extraction to the
+> data. A shared harness is broadcast to data-local agent deployments, each of which evolves it on
+> its own workload. Only the resulting program adaptations are composed into an updated shared
+> harness and redistributed… Because independently modified programs cannot be averaged like model
+> parameters and may conflict when composed, EvolveNet introduces scope-typed, evidence-guided
+> program aggregation. Across five settings spanning text-to-SQL, data-science coding, competitive
+> programming, software engineering, and agentic workflows, EvolveNet improves the shared harness in
+> all five, with the largest gains under heterogeneous workloads, and ablations attribute the
+> improvement to composition of adaptations from different agents rather than to selecting among
+> them."*
+
+> **This is PACT's air-gap learning story, written down by someone else.**
+> D17 forbids traces leaving the enclave; T6 makes the learned artifact a **diffable source file**;
+> D9 wants a real learning loop. EvolveNet's insight is that the *diff* is precisely the unit that
+> can federate when the *trace* cannot. Three concrete IR requirements follow, and none is currently
+> specified:
+> 1. **Every learned diff carries a scope tag** (`workspace | agent | variant | run`, which PACT
+>    already has as its override scopes) so aggregation knows where a change is allowed to land.
+> 2. **Every learned diff carries evidence** (the traces/metrics that justified it) so composition
+>    is *evidence-guided* rather than last-writer-wins. This is the same field F13 demands for a
+>    different reason — one field, two justifications.
+> 3. **Composition conflict is an error, not a merge.** The paper's *"cannot be averaged… may
+>    conflict"* is the identical stance the Expansion Rule already takes on document folding
+>    (disjoint union, conflict is an error). Reusing that rule for diff composition keeps the system
+>    to one merge semantics instead of two.
+>
+> `[I]` The ablation result — gains come from **composing** adaptations across agents, not selecting
+> among them — argues against a naive "pick the best variant" learning loop and for a **merge**
+> loop. That is a materially different design from what D9/O5.3 currently imply.
+
+### 11.4 Five vendors shipped a named harness layer in 2026 `[V/S mixed]`
+
+| Vendor | Artifact | Evidence |
+|---|---|---|
+| **Pydantic AI** | `pydantic_ai_harness` — *"the batteries for your Pydantic AI agent"*, 24+ capabilities, shipped as a separate package *"to enable faster iteration than core"*. **Explicitly does not own the loop**: *"The agent loop resides in Pydantic AI core."* | <https://pydantic.dev/docs/ai/harness/> `[V]` |
+| **LangChain** | **`deepagents`** — self-described *"agent harness: a standalone library built on top of LangChain's agent building blocks and powered by the LangGraph runtime for durable execution, streaming, and human-in-the-loop"*. Middleware for history compression, tool-result offload, subagent context isolation, prompt caching. **Declarative subagent specs and declarative permission rules** over file/directory access. | <https://docs.langchain.com/oss/python/deepagents/overview> `[S, docs prose]`; releases updated 2026-06-30 |
+| **OpenAI** | *"a model-native harness that lets agents work across files and tools on a computer, plus native sandbox execution"*; subagents and "code mode" announced as coming soon (2026-04-15 overhaul). | <https://openai.com/index/the-next-evolution-of-the-agents-sdk/> `[S]` |
+| **Vercel Eve** | `/docs/concepts/default-harness` is a first-class concept page. | eve.dev sitemap `[V]` |
+| **CAAF (research)** | *"Harness as an Asset"* — the harness as a first-class enterprise asset that *"compounds in value as foundation models commoditize"* (Sweep 1 §3.3). | `papers/arxiv-2604.17025.pdf` `[V]` |
+
+**`deepagents` is not in the local corpus** — `research/repos/frameworks/langchain/libs/` contains
+`core`, `langchain`, `langchain_v1`, `model-profiles`, `partners`, `standard-tests`,
+`text-splitters` only `[V]`. It is a separate `langchain-ai/deepagents` repository.
+
+> **Positioning consequence.** D12 ("PACT owns loop semantics; frameworks are transports") was
+> written as a trade-off — *"generated code looks less like hand-written LangGraph."* That framing
+> is now out of date: **LangGraph's own vendor ships a harness layer above LangGraph**, as does
+> Pydantic AI, as does OpenAI, as does Eve. Idiomatic 2026 code for these frameworks *is* harness
+> code. Two follow-ons:
+> - The D26 performance objection to harness lowering weakens: PACT is not adding a layer, it is
+>   *replacing* a layer the user would otherwise take from the vendor.
+> - **Each vendor harness is a native-lowering target.** PACT's `skills:`, `memory:`,
+>   `guardrails:`, `subagents:`, `planning`, `context-compression` and `sandbox` should lower onto
+>   `pydantic_ai_harness.{Skills,Memory,Guardrails,Subagents,Planning,CodeMode,FileSystem}` and onto
+>   `deepagents` middleware respectively, rather than being emulated. That is a large, cheap
+>   fidelity win for the two prototype adapters (D5/D7) and it should be reflected in the capability
+>   lattice as `native` rather than `emulated` for those features.
+
+---
+
+## 12. Microsoft Agent Framework has **two** declarative YAML surfaces (settles OQ3)
+
+Both are official Microsoft Learn reference docs, `ms.date` 2026-05-22 and 2026-06-26, both
+`updated_at: 2026-07-10` `[V]`.
+
+### 12.1 Declarative **agents** — `kind: Prompt`
+
+<https://learn.microsoft.com/en-us/agent-framework/agents/declarative> `[V]`
+
+> *"Declarative agents allow you to define agent configuration using YAML or JSON files instead of
+> writing programmatic code. This approach makes agents easier to define, modify, and share across
+> teams."*
+
+Python API: `agent-framework-declarative` package → `AgentFactory.create_agent_from_yaml(yaml, safe_mode=…)`
+and `create_agent_from_yaml_path(path)`.
+C# API: `Microsoft.Agents.AI.Declarative` → `ChatClientPromptAgentFactory.CreateFromYamlAsync(yaml)`.
+Go: *"Go support for this feature is coming soon."*
+
+Full documented example, verbatim `[V]`:
+
+```yaml
+kind: Prompt
+name: DiagnosticAgent
+displayName: Diagnostic Assistant
+instructions: Specialized diagnostic and issue detection agent …
+description: An agent that performs diagnostics on systems …
+model:
+  id: =Env.AZURE_OPENAI_MODEL
+  connection:
+    kind: remote
+    endpoint: =Env.FOUNDRY_PROJECT_ENDPOINT
+```
+
+and the C# example additionally shows `model.options.{temperature,topP}` and an `outputSchema` with
+`properties[].{type,required,description}` `[V]`.
+
+Fields observed: `kind`, `name`, `displayName`, `description`, `instructions`, `model.id`,
+`model.options`, `model.connection.{kind,endpoint}`, `outputSchema`.
+**Not observed anywhere in the page: `tools`, evals, SLOs, capability requirements, variants,
+memory, policy, topology.** The `=Env.X` prefix is the PowerFx expression escape.
+
+### 12.2 Declarative **workflows** — `kind: Workflow`
+
+<https://learn.microsoft.com/en-us/agent-framework/workflows/declarative> (8,196 words) `[V]`
+
+Positioning, verbatim `[V]`: *"**Readable format**: YAML syntax is easy to understand, even for
+non-developers"*, and a decision table naming *"Non-developers need to modify workflows →
+Declarative"* against *"Complex custom logic → Programmatic"*.
+
+**The two dialects are different languages `[V]`:**
+
+| | C# | Python |
+|---|---|---|
+| Top-level | `kind: Workflow` + `trigger.{kind,id,actions}`; trigger kind typically `OnConversationStart` | `name` + `description` + `inputs` + `actions` |
+| Inputs | *"C# declarative workflows do not use `Workflow.Inputs` or `Workflow.Outputs` namespaces. Input is received via `System.LastMessage` and output is sent via `SendActivity` actions."* | typed `inputs.<param>.{type,description}` |
+| Conversation actions | 4 actions available | **not available** |
+
+**28 action kinds (from the Actions Quick Reference table) `[V]`**, `✅/❌` = C#/Python:
+
+`SetVariable` ✅✅ · `SetMultipleVariables` ✅✅ · `SetTextVariable` ✅✅ · `ResetVariable` ✅✅ ·
+`ClearAllVariables` ✅✅ · `ParseValue` ✅✅ · `EditTableV2` ✅✅ · `If` ✅✅ · `ConditionGroup` ✅✅ ·
+`Foreach` ✅✅ · `BreakLoop` ✅✅ · `ContinueLoop` ✅✅ · **`GotoAction`** ✅✅ · `SendActivity` ✅✅ ·
+`InvokeAzureAgent` ✅✅ · `InvokeFunctionTool` ✅✅ · `InvokeMcpTool` ✅✅ · `HttpRequestAction` ✅✅ ·
+`Question` ✅✅ · `RequestExternalInput` ✅✅ · `EndWorkflow` ✅✅ · `EndConversation` ✅✅ ·
+`CreateConversation` ✅✅ · `AddConversationMessage` ✅❌ · `CopyConversationMessages` ✅❌ ·
+`RetrieveConversationMessage` ✅❌ · `RetrieveConversationMessages` ✅❌
+
+Expression language: PowerFx, values prefixed `=`. Namespaces `Local.*` and `System.*`
+(`System.ConversationId`, `System.LastMessage`, `System.LastMessage.Text`). Functions documented:
+`Concat`, `If`, `IsBlank`, `Upper`/`Lower`, `Find`, `MessageText`, `UserMessage`, `AgentMessage`.
+Guard rails on the expression engine: `MaximumCallDepth = 50`, `MaximumExpressionLength = 10000` `[V]`.
+
+Checkpointing/resume exists (`### Resuming from Checkpoints`, `### AOT and Trim-Aggressive
+Checkpointing`, `#### Registering user-defined types`) `[V]`.
+
+### 12.3 What it cannot do — all `[V]` from the same pages
+
+| Missing / bound | Evidence |
+|---|---|
+| **Air-gapped operation** | Prerequisite, verbatim: *"A **Microsoft Foundry** project with at least one deployed agent."* The agent provider is `AzureAgentProvider(new Uri("https://your-project.api.azureml.ms"), new DefaultAzureCredential())`. `InvokeAzureAgent` is documented as *"Invokes a Foundry agent"* and takes `agent.name` = *"Name of the registered agent"*. There is no local/offline agent provider on the page. |
+| **One dialect** | See §12.2 — C# and Python YAML are structurally different and differ in available actions. |
+| **Evals / metrics / datasets** | Absent from both pages. |
+| **SLOs, capability requirements, model predicates** | Absent. `model.id` is a literal (or an env expression). |
+| **Variants / strategy plurality** | Absent. |
+| **Learning / optimisation** | Absent. |
+| **Filesystem/directory form** | Single YAML document loaded by path; no tree loader, no path-as-identity. |
+| **Structured control flow** | Present, *plus* `GotoAction` — *"Jump to action by ID"*. |
+| **Tool definition in YAML** | `InvokeFunctionTool` *"Invokes a function tool directly from the workflow"* — the function must be registered in host code. `connection.name` for hosted MCP is documented as *"not fully supported yet"*. |
+
+> **Design consequences.**
+> 1. **The no-code competitor is real and it is Microsoft.** D14's bar ("a non-technical domain
+>    expert builds a multi-agent system entirely in YAML/Markdown") is now partially met by a
+>    shipping product with better distribution. PACT's remaining, defensible differentiators are
+>    exactly and only: **offline execution (D17)**, **evals in the portable artifact (T2)**,
+>    **capability contracts + variants (T4)**, **learning (D22)**, **one dialect**, and
+>    **filesystem-native tree (D2)**. Positioning that leads with "declarative multi-agent YAML" is
+>    now a commodity claim.
+> 2. **Add MAF YAML to the D3 superset corpus.** Sweep 1 added Pydantic AI `AgentSpec`; MAF's
+>    `kind: Prompt` and `kind: Workflow` are the second and third external formats PACT should be
+>    able to import losslessly-or-reported (P-3). Both are cheap: they are documents, not code, so
+>    the importer is spec-to-spec — no 2,560-line rulepack (Sweep 1 §1.5b).
+> 3. **`GotoAction` is the anti-pattern to name.** A no-code surface with unrestricted `goto` is
+>    not analysable: you cannot compute reachability, blast radius, or a topology from it. PACT's
+>    loop/topology IR should state explicitly that it has **no unrestricted jump**, and that its
+>    control flow is a graph with typed edges (G-2/G-3), citing this as the failure to avoid. This
+>    is also a concrete usability argument for D28 failure mode #1.
+> 4. **The two-dialect split is a portability lesson with a name.** One vendor, one product, two
+>    incompatible YAML dialects for the same concept, four actions available in only one of them.
+>    That is what happens when the format is a serialisation of each runtime's object graph
+>    (thesis §1.3, "Framework-native YAML"). PACT's answer — one document model, adapters below it
+>    — is validated by a *within-vendor* counterexample, which is stronger evidence than a
+>    cross-vendor one.
+> 5. **`MaximumCallDepth = 50` / `MaximumExpressionLength = 10000` are worth copying.** PACT's
+>    expression/predicate language (O3.1) needs equivalent hard bounds so that "config-only" cannot
+>    become "config-only Turing tarpit". Add them as profile values (F-1), not literals.
+
+---
+
+## 13. OASF settles OQ1 — and hands PACT its best citation
+
+Read from the **local checkout**, `research/repos/protocols/agntcy-oasf`, HEAD `e856537`,
+2026-07-21 `[V]`. (The Outshift blog body remained unretrievable on a second attempt; it was not
+needed.)
+
+### 13.1 OASF has an `evaluation` module. It is a *results record*.
+
+`schema/modules/core/evaluation.json` `[V]` — one attribute, `data → evaluation_data`.
+
+`schema/objects/evaluation_data.json` `[V]`: `overall_rating` (optional), `overall_scores`
+(optional), `referred_evaluations` (**required**).
+
+`schema/objects/overall_scores.json` `[V]`: exactly three fields —
+`quality_score`, `cost_score`, `security_score`, all "recommended".
+
+`schema/objects/referred_evaluation.json` `[V]`: `datasets`, `publisher` (**required**),
+`created_at` (**required**), `evaluation_report`; constraint `at_least_one: [datasets, evaluation_report]`.
+
+`schema/objects/evaluation_report.json` `[V]`: `overall_scores`, `metrics`;
+constraint `at_least_one: [overall_scores, metrics]`.
+
+`schema/objects/metric.json` `[V]`: `name`, `type` (*"'counter', 'gauge', or 'histogram'"*),
+`unit_of_measurement` (UCUM), `url`, `data_points` (referencing the **OpenTelemetry** metrics data
+model).
+
+`schema/objects/evaluation_dataset.json` `[V]`: `url` (**required**), `name` (**required**),
+`version`, `metadata`.
+
+**What is absent, verified by reading every one of those files `[V]`:** no metric *definition*, no
+threshold, no pass/fail criterion, no rubric, no judge configuration, no assertion, no expected
+output, no test case. `metric.type` is the OTel telemetry taxonomy (counter/gauge/histogram), not
+an evaluation taxonomy.
+
+> **Therefore: an OASF record tells you *that someone scored this agent*, and their name and the
+> date. It does not let you re-run their evaluation, and it does not let two implementations agree
+> on what "passing" means.** Datasets are `url`s — which is also air-gap-hostile (D17).
+>
+> This is the precise distinction PACT should use in positioning, because it survives the obvious
+> objection *"but OASF/Oracle already have evaluation"*: **they have an evaluation *record*; PACT
+> proposes an evaluation *contract*.** T2 is unclaimed on the axis that matters.
+
+### 13.2 `agentspec_data` — the competitor's schema admits its specs are not self-contained
+
+`schema/modules/integration/agentspec.json` `[V]`, `uid: 4`, referencing
+<https://oracle.github.io/agent-spec/index.html>.
+
+`schema/objects/agentspec_data.json` `[V]` — four attributes:
+
+| Field | Requirement | Description, verbatim |
+|---|---|---|
+| `config` | required | *"Location of the Agent Spec config. E.g. path to config, github repo url etc."* |
+| `deployment_options` | required | *"List of possible configuration to instantiate or consume the agent."* |
+| `runtime_deps` | optional | ***"List of locators for the non-serializable objects the Agent Spec config depends on (e.g. tool implementations)."*** |
+| `env_vars` | optional | *"List of environment variables to be set for the agent."* |
+
+`schema/dictionary.json:376-380` `[V]` repeats the `runtime_deps` description verbatim and types it
+`json_t[]`.
+
+`schema/objects/agentspec_deployment_option.json` `[V]`: `name`, `protocol` (required, → `a2a` |
+`responses_api`), `runtime_framework` (required).
+
+> **This is the strongest single piece of evidence found in either sweep for D15 ("translate or
+> nothing") and for T2.** Oracle Agent Spec is the closest shipping competitor, and the
+> Linux-Foundation registry schema built to carry it has a **required** field for *where the spec
+> file lives* and an explicit field for *the non-serialisable things it depends on, e.g. tool
+> implementations*. The portable artifact is a **pointer plus a bag of out-of-band dependencies**.
+> PACT's position — the tree is the artifact, tools are declared, nothing is a locator to code the
+> receiver does not have — is exactly the gap this field names.
+>
+> `[I]` It also tells PACT something operational: an OASF projection (O6.2) is easy, because OASF
+> is *expecting* a locator plus deployment options. PACT can fill `config` with the workspace
+> coordinate and leave `runtime_deps` **empty** — and "empty `runtime_deps`" is a machine-checkable
+> claim of self-containment worth surfacing in the export report.
+
+### 13.3 The rest of the OASF record `[V]`
+
+`schema/objects/record.json` — `name`, `version`, `schema_version`, `description`, `authors`,
+`created_at`, `skills` (**required**), `domains`, `locators`, `modules`, `annotations`.
+Module categories present in `schema/modules/`: `core/{core,evaluation,observability,language_model/*}`,
+`integration/{acp_manifest,agentspec,mcp,a2a,integration}`.
+
+---
+
+## 14. DeepEval ships four optimizers — and four defects PACT must not inherit (settles OQ5)
+
+Read from the **local source**, `research/repos/eval/deepeval`, HEAD `6cf2e02`, 2026-07-22. All `[V]`.
+
+### 14.1 The surface
+
+`deepeval/optimizer/prompt_optimizer.py:52-58`:
+
+```python
+class PromptOptimizer:
+    def __init__(
+        self,
+        model_callback: ModelCallback,
+        metrics: Union[List[BaseMetric], List[BaseConversationalMetric]],
+        optimizer_model: Optional[Union[str, DeepEvalBaseLLM]] = None,
+        algorithm: Union[GEPA, MIPROV2, COPRO, SIMBA] = GEPA(),
+        ...
+```
+
+Algorithms shipped: `deepeval/optimizer/algorithms/{gepa,miprov2,copro,simba}/` — **GEPA is the
+default**. Public API is `optimize(prompt, goldens) -> Prompt` / `a_optimize(...)`.
+
+The algorithm ABI, `deepeval/optimizer/algorithms/base.py:11-30`:
+
+```python
+class BaseAlgorithm(ABC):
+    name: str
+    optimizer_model: DeepEvalBaseLLM
+    scorer: BaseScorer
+    @abstractmethod
+    def execute(self, prompt: Prompt, goldens: ...) -> Tuple[Prompt, Dict]: ...
+```
+
+**Corroboration for AC-3.1b `[V]`:** `optimizer_model` is a **separate binding** from
+`model_callback` (the model under evaluation). A shipping, widely-used tool already separates them,
+which makes AC-3.1b conventional rather than novel — cite it when defending the requirement.
+
+### 14.2 Four verified defects
+
+`deepeval/optimizer/algorithms/gepa/gepa.py:88-119`:
+
+```python
+def __init__(
+    self,
+    iterations: int = 5,
+    minibatch_size: int = 8,
+    pareto_size: int = 3,
+    random_seed: Optional[int] = None,
+    patience: int = 3,
+    tie_breaker: TieBreaker = TieBreaker.PREFER_CHILD,
+    aggregate_instances: Aggregator = mean_of_all,
+    reflection_model: Optional[DeepEvalBaseLLM] = "gpt-4o-mini",
+    mutation_model: Optional[DeepEvalBaseLLM] = "gpt-4o",
+    scorer: Optional[BaseScorer] = None,
+) -> None:
+    ...
+    if random_seed is None:
+        random_seed = time.time_ns()
+```
+
+| # | Defect | Evidence | Why it matters to PACT |
+|---|---|---|---|
+| D-1 | **Validation set defaults to 3 examples.** `pareto_size: int = 3`, docstring *"Size of the Pareto validation subset D_pareto. Default is 3."* | `gepa.py:74-75, 92` | A 3-item validation set cannot distinguish a real gain from noise. AC-3.5 requires a *frozen held-out split*; the reference implementation's default makes overfitting the expected outcome. |
+| D-2 | **Two-way split only; there is no test set.** `d_feedback, d_pareto = split_goldens(goldens, self.pareto_size, …)`; `split_goldens` docstring: *"Split `goldens` into two disjoint parts"*. | `gepa.py:153-154, 327-328`; `optimizer/utils.py:35-55` | O3.5's protocol (*"test split untouched until the end"*, R6) is **not provided**. PACT must own the three-way split; the provider gives two. |
+| D-3 | **The split is non-reproducible by default.** `random_seed = time.time_ns()` when `None`. | `gepa.py:116-118` | Two runs of "the same" optimisation validate on different data. PACT's lockfile/report must record the split seed, and PACT should pass an explicit seed always. |
+| D-4 | **Hardcoded hosted-model defaults, with the reflector the *smaller* model.** `reflection_model="gpt-4o-mini"`, `mutation_model="gpt-4o"`. | `gepa.py:96-97` | (a) Fails outright under **D17** (air-gapped). (b) Inverts **AC-3.1b**: the in-repo ACE evidence is that reflective gain *collapses* with reflector strength (+17.1 at 671B → **+2.4** at 70B). Defaulting the reflector to a mini model is the exact failure AC-3.1b was written to prevent. |
+
+### 14.3 What COPRO does differently `[V]`
+
+`copro.py:47-78, 197-242`: `minibatch_size: int = 25`, `_sample_minibatch()` samples from the full
+golden set each depth, and `score_pareto(best_batch_config, goldens)` scores the winner **on all
+goldens** — i.e. COPRO validates on the same data it selects from. Also uses a `pareto_score_table`.
+
+### 14.4 The optimizer ABI question (OQ7, still open)
+
+DeepEval's ABI is `(Prompt, List[Golden]) -> (Prompt, report)`. PACT's E-5 needs
+`(spec, evalSuite, budget) -> candidate spec + verdict`. **DeepEval's is strictly narrower on three
+axes**: it optimises *a prompt* (not instructions + skills + tool exposure + decomposition + loop,
+per T4), it has no *budget* parameter, and its return has no *verdict* — the caller gets the best
+prompt whether or not it beat the baseline.
+
+> `[I]` Consequence: DeepEval's optimizer is usable as **one** implementation behind PACT's ABI
+> (bind PACT's instruction field to `Prompt`), but it cannot be the ABI. And PACT must wrap it to
+> supply: the third split, an explicit seed, a local reflector/mutator binding, a budget, and a
+> verdict. That wrapper is small and should be specified as part of O3.4's reference
+> implementation, with the four defects above as its regression tests.
+
+### 14.5 DeepEval still has no config-only mode `[V]`
+
+Checked again on the official changelog <https://deepeval.com/changelog/changelog-2026>: 2026
+brought DeepEval 4.0, tracing/OTel work, new model entries (`gpt-5.4`, `gpt-5.4-mini`,
+`claude-opus-4-7`, Claude Opus/Sonnet 4.6), component-level evals with `results_folder`/
+`results_subfolder`, conversation-simulator controller APIs (`proceed()`/`end()`), AgentCore and
+OpenInference integrations, and a *"Cursor/skills-compatible `deepeval` skill"*.
+**No YAML/config-only evaluation appears anywhere in the 2026 changelog.** Sweep 1 §6.6's
+conclusion stands unchanged: the entire config→DeepEval binding layer is PACT's to build, and the
+docs still undercount the source.
+
+`[I]` One item is newly relevant to **D19.3** (capture-from-usage): the conversation simulator now
+exposes a controller with `proceed()`/`end()` decisions and custom templates. That is the closest
+existing thing to PACT's "review queue turns conversations into cases", and it is Python-side —
+i.e. another shim, not an adoptable format.
+
+---
+
+## 15. The Pydantic AI Harness (settles OQ2)
+
+<https://pydantic.dev/docs/ai/harness/> `[V]`
+
+> *"the batteries for your Pydantic AI agent"* — an official capability library maintained by the
+> Pydantic AI team, shipped as a separate package *"to enable faster iteration than core"*.
+> **Loop ownership, verbatim: *"The agent loop resides in Pydantic AI core, which ships the agent
+> loop, model providers, the capabilities/hooks abstraction."*** The Harness does **not** own the loop.
+
+Capabilities named on the page (19 of the stated 24+) `[V]`, imported from `pydantic_ai_harness`:
+
+| Group | Capabilities |
+|---|---|
+| Code / sandbox | `CodeMode` (*"wraps tools into a sandboxed `run_code` tool using Monty"*), `Shell` (*"subprocess command execution with allowlists/denylists"*), `DynamicWorkflow` (*"orchestrates sub-agents from model-written Python"*) |
+| Files / media | `FileSystem` (*"sandboxed file access scoped to a root directory"*), `Media` (*"offloads large content to stores (disk, S3, MongoDB)"*) |
+| Safety | `Guardrails` (*"validates input, tool calls, and output"*), `WarnOnCacheBusts`, `ToolOutputLimits` |
+| Coordination | `Subagents`, `Advisor` |
+| Other | `Skills`, `RepoContext`, `Memory`, `Planning`, `StepPersistence`, `ConversationSearch`, `BrowserUse`, `ExaSearch`, `StackOne` |
+
+> **Design consequences — this is the single most useful adapter finding in the sweep.**
+> 1. **No D12 conflict.** Loop stays in core; the Harness is a capability bundle. Harness lowering
+>    for Pydantic AI can drive `direct.model_request` (already assessed *"clean and low-risk"* in
+>    `semantics-pydantic-langgraph.md`) while *also* consuming Harness capabilities as native
+>    implementations of PACT resources.
+> 2. **`AgentSpec.capabilities` is the seam, and the Harness is what plugs into it.** Sweep 1 §6.1
+>    inferred this; it is now concrete. PACT's `skills:`, `memory:`, `guardrails:`, `subagents:`,
+>    `sandbox:` and `tools[].limits` lower to **named, maintained** capabilities rather than
+>    adapter-local emulation → those lattice rows move from `emulated` to `native`.
+> 3. **`Guardrails` validating *"input, tool calls, and output"*** is a three-point interception
+>    model. PACT's policy contract should be expressible at the same three points, or the mapping
+>    is lossy in one direction.
+> 4. **`StepPersistence` + `Media` offload** cover two P-5/G-1 concerns (resume; large binary
+>    payloads) that PACT would otherwise have to specify from scratch for this adapter.
+> 5. `[I]` **`DynamicWorkflow` — *"orchestrates sub-agents from model-written Python"* — is a
+>    D15/T7 hazard.** A PACT agent that imported such a construct would contain model-authored code
+>    with no declarative form. It must import as an opaque code node reported `unsupported` (F-3),
+>    and PACT must never *emit* it.
+>
+> **Re-verified and unchanged `[V]`:** `AgentSpec`'s reference field table still has no `tools`,
+> no `toolsets`, no evals, no capability requirements, no topology — `model, name, description,
+> instructions, model_settings, capabilities, deps_schema, output_schema, retries, end_strategy,
+> tool_timeout, instrument, metadata` — and still carries the limitation *"The model's response is
+> not validated against the schema's `properties` or required fields — it is accepted as a plain
+> dict."* (<https://pydantic.dev/docs/ai/agent-spec/>)
+
+---
+
+## 16. Self-improvement safety, second wave — three attacks that hit PACT's design directly
+
+Sweep 1 §4 found the MLAS matrix (17/25 cells undefended) and gradual blueprint erosion. Three
+papers published since are more specific, and two of them break a PACT mechanism as currently
+written.
+
+### 16.1 *Phantom Guardrails* (arXiv 2607.13083, 2026-07-13) — **the held-out gate cannot catch this**
+
+`papers/arxiv-2607.13083.pdf`. Wang, Qian, Lin, Xu (CMU) + Corespeed, Georgia Tech, independents.
+Abstract read from PDF `[V]`.
+
+Verbatim `[V]`:
+> *"Self-improving AI agents are designed to learn from their mistakes. We show that they can also
+> hallucinate mistakes that never happened. We study this failure mode in automated harness
+> optimization, where an LLM-based proposer edits the scaffold around an agent, including prompts,
+> parsers, filters, validators, and guardrails, to make observed failures disappear. But this
+> process rarely asks a prior question: was there a real failure to fix? We introduce the
+> Counterfactual Fabrication Lab, a deterministic micro-lab where the correct action is known in
+> advance to be "do nothing." … The proposer behaves as expected when the violation is real and
+> abstains on featureless legal input. Yet when the legal input contains a harmless pattern that
+> resembles a familiar game rule, it invents a failure: **in 15/60 runs, versus 0/60 on featureless
+> input**, it enables the nonexistent-rule guardrail and cites a violation the oracle refutes."*
+
+The mechanism, verbatim from the introduction `[V]`:
+> *"The reward in these loops is almost always the suppression of observed failures. It answers 'did
+> the failure stop?' but never 'was the fix warranted?' A recent optimizer makes the asymmetry
+> concrete: it accepts a proposed edit only when a self-preference score improves, with no separate
+> test of whether the edit was warranted. The regime we study pushes this to its **add-only limit, a
+> maintenance loop in which accepted edits persist and nothing is removed**."*
+
+> **Why this breaks AC-5.4 as written.** PACT's learning gate is *"held-out eval improvement"*.
+> A guardrail added for a failure class that never occurs **does not reduce held-out score** — it
+> is inert on the held-out set. It therefore passes the gate, is signed, is versioned, and
+> accumulates. Over generations this is precisely the Sweep 1 §4.3(a) erosion mechanism running in
+> the *additive* direction: not "safety dissolves", but "scaffold accretes", with the same
+> per-diff-blindness and the same D26/D28-#3 cost consequence.
+>
+> **Two additions to the learning IR, both cheap and both offline-checkable:**
+> 1. **Warrant obligation.** Every learned diff MUST carry the evidence that motivated it —
+>    trace IDs plus the specific assertion/metric that failed. Promotion MUST verify that the cited
+>    failure *exists in the trace store* and that the cited assertion *actually failed*. A diff
+>    whose warrant cannot be resolved is rejected. This is a deterministic check; no judge involved;
+>    it works air-gapped. It is the same `evidence` field §11.3 requires for merge — one field,
+>    two independent justifications.
+> 2. **Retirement path.** The add-only regime is the accumulation mechanism, so the learning
+>    subsystem needs a *removal* operator with its own gate: a periodic pass that proposes deleting
+>    scaffold whose warrant traces no longer occur, gated on held-out non-regression. Without it,
+>    D22 guarantees monotone growth, which is D28 failure mode #3 by construction.
+>
+> `[I]` Note the trigger condition: fabrication happened when *"the legal input contains a harmless
+> pattern that resembles a familiar game rule"* — i.e. **near-miss inputs**, not random ones. PACT's
+> eval suites will be full of near-misses by construction (that is what a good eval set is). The
+> exposure is above baseline, not below.
+
+### 16.2 *SkillJack* (arXiv 2608.03509, 2026-08-04) — skill extraction launders poison
+
+`papers/arxiv-2608.03509.pdf`. Tencent AI-Infra-Guard.
+Code: <https://github.com/Tencent/AI-Infra-Guard/research/skilljack>. Abstract read from PDF `[V]`.
+
+Verbatim `[V]`:
+> *"We uncover a new and more fundamental risk: poisoned experiences can be transformed by the agent
+> itself into durable behavioral artifacts. … We identify three key properties of this
+> transformation: **sanitization whitewashing**, where malicious intent is obscured during skill
+> extraction; **cross-layer promotion**, where transient experiences become persistent capabilities;
+> and **persistence isolation**, where the attack survives removal of its original source records.
+> We evaluate SkillJack on two representative systems, SkillX and Anything2Skill, using a shared
+> dataset of 150 trajectories across four policy-risk categories. Results show that skill extraction
+> substantially reduces attack detectability: **in SkillX, safety detection drops from 98.5% for
+> poisoned trajectories to 11.4% for extracted skills** … the implanted skills remain effective,
+> achieving attack success rates of **56.2%** and **89.2%** on the two systems … Furthermore,
+> **80.0% of skill-mediated attacks persist after deleting the original poisoned records**, and some
+> skills unintentionally activate on benign queries. Our findings … motivate **provenance-aware
+> skill lifecycle protection**."*
+
+> **This is aimed squarely at T6 and D22(a)/(b).** T6's defence is *"learning emits reviewable
+> source"* — but the measurement says the derived skill is the layer at which detection collapses
+> to **11.4%**. Reviewing the emitted artifact is reviewing the laundered version.
+>
+> **Three requirements, none currently in the design:**
+> 1. **Scan at the trajectory layer, not the artifact layer.** Any promotion of trace → skill/tool/
+>    instruction must run its safety analysis on the **source trajectory** (98.5% detection) and
+>    attach the verdict to the derived artifact. Reviewing only the diff is the failure mode.
+> 2. **Cascade retraction.** Deleting or quarantining a trace MUST invalidate every artifact derived
+>    from it. 80% persistence-after-deletion is a direct consequence of one-way provenance. PACT's
+>    lineage already records *where an artifact came from*; it must also be **queryable in reverse**
+>    and **enforced on delete**. This is a schema + CLI requirement (`pact retract <trace-id>`),
+>    not a policy note.
+> 3. **Provenance edges become mandatory.** A skill with no resolvable origin trace cannot be
+>    promoted. Combined with §16.1's warrant obligation, PACT gets one rule that answers both:
+>    *no learned artifact without resolvable, verifiable evidence.*
+>
+> Also note *"some skills unintentionally activate on benign queries"* — corroborating the in-repo
+> finding (`model-portability.md`) that ungated skill libraries score **below** the no-skill
+> baseline. The governance requirement (dedup, exposure caps, retirement) is now supported by a
+> security argument as well as an accuracy one.
+
+### 16.3 *Benign Alone, Harmful Together* / EvoBreak (arXiv 2608.01759, 2026-08-03)
+
+`papers/arxiv-2608.01759.pdf`. Abstract read from PDF `[V]`.
+
+Verbatim `[V]`:
+> *"Self-evolving large language model agents improve their capabilities by distilling interaction
+> trajectories into persistent experiences. Yet this mechanism introduces a new safety risk:
+> **experiences that are benign in isolation may jointly weaken an agent's safety boundary when
+> accumulated and reused across sessions**. Existing memory attacks typically require direct memory
+> access or induce explicitly malicious records, limiting their stealthiness … We propose EvoBreak,
+> an experience-conditioned sequential attack that operates through individually benign attack-stage
+> tasks and induced experiences."*
+
+Threat model, verbatim `[V]`: *"an adversary that can submit benign tasks and observe the
+experiences distilled from its interactions, but cannot directly modify them. At the target stage,
+the adversary issues a safety-sensitive query in a fresh session, where the preceding interaction
+history is unavailable while the accumulated experiences persist."*
+
+> **D23 is defeatable by construction, not merely blind to drift.** Sweep 1 §4.3(a) established
+> that a per-diff classifier misses *gradual erosion*. This establishes that an *adversary who only
+> has the ability to ask benign questions* can drive that erosion deliberately, in a system where
+> each individual artifact passes review.
+>
+> **The unit of classification must change.** D23's *"change-classification function over spec
+> diffs"* must be re-specified to operate on:
+> - the **cumulative diff against a frozen baseline** (Sweep 1's conclusion), **and**
+> - the **set of pending + recently-applied diffs jointly**, because the attack is a *composition*
+>   of individually-low-risk changes.
+>
+> Concretely: run the classifier on `baseline → HEAD` and on `HEAD → HEAD + all pending`, not only
+> on each diff; and hold safety invariants **outside** the optimiser's search space (the selfevo
+> paper's principle 2, Sweep 1 §4.4), which for PACT means the policy contract must live in files
+> the learning subsystem is structurally forbidden to write — an ACL on the tree, expressible in
+> `workspace.yaml`, enforced by the loader.
+
+---
+
+## 17. Evaluation methodology — three results that change what the CTS must measure
+
+### 17.1 SEA-Eval (arXiv 2604.08988v3) — equal scores, 31.2× cost
+
+`papers/arxiv-2604.08988.pdf`. Fudan University. Abstract read from PDF `[V]`.
+
+Verbatim `[V]`:
+> *"Empirical evaluation reveals that, **under comparable success rates, token consumption differs
+> by up to 31.2× between frameworks on individual tasks**, with divergent evolutionary trajectories
+> emerging under sequential analysis—demonstrating that **success rate alone creates a capability
+> illusion** and that the sequential convergence of T is the key criterion for distinguishing
+> genuine evolution from pseudo-evolution."*
+
+Design: *"through sequential task stream design, is designed to quantify evolutionary gain,
+evolutionary stability, and implicit alignment convergence"*, with SR and T as primary metrics.
+
+> **D27 is under-specified and this is the counterexample.** D27: *"Same eval scores within a
+> declared small margin. This is the pass/fail rule of the Conformance Test Suite."* D26 separately
+> asks for *"no meaningful token increase"* — but it is a *budget*, not a *gate*. A 31.2× token
+> difference at equal accuracy is a conforming adapter under D27 and a catastrophe under D28-#3.
+>
+> **Make the CTS pass condition a conjunction:** score within ε **and** tokens/cost within a
+> declared factor of the reference adapter. Report both in the Conformance Report. This is a
+> one-line change to D27 with large consequences, and it is exactly the kind of thing that only
+> shows up when someone measures it.
+>
+> **Second consequence, for learning (AC-5.4/5.5):** the paper's methodological claim is that
+> *episodic* assessment cannot distinguish evolution from pseudo-evolution — you need a
+> **sequential task stream**. PACT's learning gate is currently a single held-out comparison. Add a
+> longitudinal arm: the same frozen stream replayed at generation *t* and *t−k*, which is also
+> exactly the *"longitudinal monitoring replaces point-in-time evaluation"* defence principle from
+> Sweep 1 §4.4. One mechanism satisfies both the safety requirement and the efficacy requirement.
+
+### 17.2 CurveShift (arXiv 2608.00355, 2026-07-31) — the model/harness identification problem
+
+`papers/arxiv-2608.00355.pdf`. Abstract read from PDF `[V]`.
+
+Verbatim `[V]`:
+> *"Isolating it is difficult on agentic benchmarks, because **newer models are usually run with
+> newer agentic harnesses, so a gain on hard tasks cannot be assigned to the model or its
+> scaffold**. We break the confound with LiveCodeBench, a public competitive programming benchmark
+> that runs no agentic scaffold while pairing dated models with an exogenous difficulty ordering."*
+
+Also verbatim `[V]`: *"most of the apparent shift in gains toward harder tasks does not reflect a
+change in the shape of the difficulty-response curve… it is largely explained by ceiling effects
+rather than a qualitative change in capability. This echoes how the choice of metric can make
+claimed emergent abilities look like a property of the models themselves."* Residual effect after
+control: *"about +0.40 logits… raising the hard-problem solve rate from roughly 18% to 25%"* for
+models released after September 2024. Released artifact: LiveCodeBench Difficulty Panel,
+66 dated models × 1,055 problems.
+
+> **The Portability Report has this exact identification problem and currently reports a single
+> delta.** PACT varies *both* model and strategy (which includes the harness) and then reports a
+> score change. That number is not attributable. Two requirements:
+> 1. **Report the 2×2, not the delta.** (reference model, reference strategy) · (reference model,
+>    adapted strategy) · (target model, reference strategy) · (target model, adapted strategy). The
+>    first three are cheap relative to the optimisation run and they are what makes the fourth
+>    interpretable. This also gives the author the number they actually want — *"how much of the
+>    recovery came from the optimiser vs. the model?"* — which is D11's recommendation logic.
+> 2. **Stratify ε by difficulty.** The paper's point about ceiling effects applies directly to
+>    `gap-r1-3.md`'s per-metric ε work: an aggregate score can be within ε while the hard stratum
+>    has collapsed. Report ε bands per difficulty stratum where the eval set carries one.
+
+### 17.3 Microsoft — *Who Belongs in the Eval Set?* (arXiv 2608.01004, 2026-08-02)
+
+`papers/arxiv-2608.01004.pdf`. Sahu, Das, Mittal, Das (Microsoft + IIT Roorkee).
+Applied to *"declarative agents with custom actions in Microsoft 365 Copilot"*. Read from PDF `[V]`.
+
+Verbatim `[V]`:
+> *"To the best of our knowledge, **no published industrial pipeline addresses this platform-side
+> curation problem** — existing evaluation frameworks are customer-side, and benchmark-compression
+> work treats benchmarks as fixed pools rather than streams of incoming sets."*
+
+The governing philosophy, verbatim `[V]`:
+> *"a healthy regression set is the **minimal collection of queries that captures the maximal spread
+> of capability signatures** — distinct combinations of capabilities a query exercises together."*
+
+Three components, verbatim `[V]`: *"a classifier producing per-(query, capability) verdicts via a
+hybrid of deterministic specification-based extraction and large-language-model semantic inference;
+an **Invocation Quality (IQ) rater** that scores how thoroughly a query exercises each capability,
+so a new query sharing a signature with an existing entry can still be recognized as a better test
+and displace it; and a consolidator that compares incoming queries against the regression set on
+coverage and quality through a rule-based decision cascade, backed by a **conservative curator that
+only suggests evictions**."* Per-query decisions: **admit, drop, swap, or human review**.
+
+Why synthetic eval sets are ruled out, verbatim `[V]`:
+> *"**Combinatorial blowup**: with ∼30 typed capabilities the joint configuration space is
+> intractable, and uniform sampling produces configurations no real customer would ever build.
+> **LLM non-determinism over realistic phrasings**: per-capability behavior is verified by unit and
+> functional tests we run separately, but end-to-end agent behavior — multiple capabilities firing
+> through an LLM under a real user's wording — is governed by how the LLM responds to actual
+> customer phrasings, a distribution synthetic queries cannot reproduce."*
+
+And the real constraint, verbatim `[V]`: *"**Hard eval-set ceiling.** The regression set is judged
+by a large language model on every candidate release build and human-triaged on every regression
+failure… Every admission competes for a finite slot bounded by release cadence. **Tenant-and-mock-
+setup labor.** … Each admitted query therefore carries a provisioned tenant, synthetic connectors,
+and mock data fixtures engineered to deterministically reproduce the expected 3P responses."*
+
+> **Design consequences — this is the most directly transferable engineering in the sweep.**
+> 1. **Adopt capability signatures as the admission policy for AC-4.4 (trace → eval promotion).**
+>    PACT can compute a case's capability signature *for free and deterministically* from its IR —
+>    which declared capabilities, tools and skills the trace exercised. That is a stronger position
+>    than Microsoft's (they need an LLM classifier because their capability set is not declared in a
+>    contract; PACT's is). The admission decision becomes `admit | drop | swap | human review` on
+>    coverage + IQ, with **eviction suggest-only** — which is also D23's conservatism applied to the
+>    eval set instead of the spec.
+> 2. **Constrain D19.4 (builder-agent-generated evals).** Microsoft rules synthetic sets out for two
+>    reasons that apply verbatim to PACT: combinatorial blowup over the declared capability
+>    vocabulary, and phrasing-distribution mismatch. **Generated cases are coverage scaffolding;
+>    real traces must dominate the oracle.** If the eval suite is majority-synthetic, T2's claim
+>    that "the eval suite *is* the equivalence relation" is unfounded — the distribution is wrong.
+>    This should be a *checked* property, not advice: report the synthetic/captured ratio in the
+>    eval report.
+> 3. **The eval suite needs a declared ceiling.** The binding constraint is not authoring effort
+>    (R3's assumption) — it is per-case fixture labour and per-build judge cost. PACT's eval
+>    document model should carry a budget (`maxCases`, or a cost ceiling) and the promotion pipeline
+>    should respect it. This closes the same class of defect as `gap-r2-3.md`'s unbounded review
+>    queue.
+> 4. `[I]` The **IQ rater** concept — *how thoroughly* a case exercises a capability, so a better
+>    case can displace an equivalent one — has no analogue in PACT and is worth one field. Without
+>    it, a suite converges to "one case per signature" and stops improving.
+
+---
+
+## 18. Standards landscape — what changed since 2026-07-26
+
+### 18.1 MCP `2026-07-28` shipped `[V for content via local draft; S for the release event]`
+
+<https://blog.modelcontextprotocol.io/posts/2026-07-28/> `[S]` confirms the final release on
+2026-07-28 after a 10-week validation window, with **all four Tier-1 SDKs (TypeScript, Python, Go,
+C#) supporting it immediately and the Rust SDK in beta**. Sweep 1 §5 read the content from the
+local draft spec and remains accurate. Two additions worth recording:
+
+- **Header-based routing** `[S]`: *"Methods and tool names now travel in `Mcp-Method` and `Mcp-Name`
+  HTTP headers, enabling gateway-level routing without JSON parsing."* Relevant to D24 — a PACT
+  tool edge lowered onto MCP is now routable by a plain load balancer, which is what makes the
+  "minimal, adapter-shaped" registry seam viable without PACT building routing.
+- **Tasks is an extension, not core** `[V, Sweep 1 §5.2 item 6]`: `io.modelcontextprotocol/tasks`,
+  alongside *"MCP Apps"* and *"Enterprise Managed Authorization (EMA)"* `[S]`.
+  **OQ4 verdict:** the extension provides polling (`tasks/get`) and client input (`tasks/update`)
+  but no durable-execution guarantees, no deterministic replay, no compensation. It is **strictly
+  weaker than Temporal/Restate-class semantics** and cannot satisfy P-5 on its own. PACT should map
+  *onto* it where a substrate offers only MCP, and declare that lowering `degraded`.
+- The formal deprecation policy is confirmed as *"A twelve-month minimum window so you can plan
+  upgrades instead of reacting to them"* `[S]` — Sweep 1 §5.4's recommendation to copy the model
+  stands.
+
+### 18.2 A2A `[S]`
+
+v1.0 (March 2026) added **Signed Agent Cards** — *"each card includes a cryptographic signature
+using the domain's public key, enabling receiving agents to verify the card was actually issued by
+the claimed domain"*. **v1.0.1 (May 2026)** introduced an extension mechanism supporting *"new data,
+requirements, RPC methods, and state machines"*, with four official example extensions:
+**Secure Passport, Timestamp, Traceability, Agent Gateway Protocol**.
+150+ organisations; Linux Foundation governance since 2025-06-23.
+
+> `[I]` The A2A **extension** mechanism (state machines and RPC methods, not just data) is a better
+> projection target than Sweep 1 assumed: PACT's contract fields that have no A2A card home (evals,
+> SLOs, capability predicates) can be projected as a **named A2A extension** rather than dropped
+> into the loss report. That converts a loss-report entry into a lossless projection, which is a
+> strictly better outcome under T7. Worth one design spike against O6.2.
+
+### 18.3 Vercel Eve — the docs **did** move (revises Sweep 1 §8) `[V]`
+
+Sweep 1 concluded *"eve.dev/docs contains nothing the corpus lacks. Do not spend further web budget
+here."* Twelve days later that is no longer true. Diffing `https://eve.dev/sitemap.md` against the
+local checkout (HEAD `05f3480`, 2026-07-25, 83 doc files) `[V]`:
+
+**New online, absent from the corpus:**
+- `/docs/guides/acp` — **Agent Client Protocol v1 over stdio.** Verbatim: *"Agent Client Protocol
+  (ACP) clients can launch an authored eve application as a local subprocess. eve serves stable ACP
+  v1 over stdio while its normal development server remains the execution runtime."* CLI: `eve acp`,
+  or `eve acp https://agent.example.com`. Transport: newline-delimited JSON-RPC. Documented
+  non-support: *"a deployed ACP HTTP or WebSocket endpoint… ACP v2."* Zed integration config uses
+  `agent_servers.<name>.{type,command,args,env}`.
+- `/docs/guides/ucp` — **Universal Commerce Protocol** (<https://ucp.dev/>), *"an open standard for
+  agentic commerce"*. Businesses *"declare support by serving a JSON profile from
+  `/.well-known/ucp` containing spec versions, services, capabilities, payment handlers, and public
+  keys for agent verification."* Fields named: `services[].endpoint`, `signing_keys`, a `ucp`
+  response envelope. Profile must be HTTPS with no 3xx and `cache-control: public, max-age ≥ 60`.
+- `/docs/channels/photon`, `/docs/install-integrations`, `/docs/installation`,
+  `/docs/project-structure` (new, coexisting with `/docs/reference/project-layout`).
+- Reorganised: `/docs/human-in-the-loop` (was `tools/human-in-the-loop`), `/docs/tools` (was
+  `tools/overview`), `/docs/connections` (was `connections/overview`).
+
+The integrations catalogue is now ~90 entries and includes eval vendors (`arize`, `braintrust`,
+`hindsight`), tracing backends (`datadog`, `honeycomb`, `jaeger`, `sentry`, `posthog`) and memory
+(`mem0`).
+
+> **Design consequences.**
+> 1. **Add ACP to PACT's projection list.** PACT currently names A2A cards and OSSA (O6.2). ACP is
+>    the **editor/client edge** — the surface by which an authored agent becomes usable inside an
+>    IDE. The corpus already has `protocols/agent-client-protocol`; the closest prior art has now
+>    shipped it; and it is a stdio JSON-RPC surface, so it works **air-gapped** (unlike A2A over the
+>    network). Under D18 ("files in an editor" is author surface #1) this is arguably the *most*
+>    aligned projection PACT could offer.
+> 2. **`/.well-known/<protocol>` + `signing_keys` is the shape for D24's discovery seam.** PACT
+>    should not build a registry (D24), but it should be able to *emit* a signed, cacheable,
+>    static capability profile that any registry can consume. That is a file, which fits D2 exactly,
+>    and it is what both UCP and A2A signed cards converged on.
+> 3. **Re-check `eve.dev` on every sweep.** The Sweep 1 "do not spend budget here" instruction was
+>    wrong within two weeks. The `sitemap.md` diff is a ~1-minute check and should be standing.
+
+### 18.4 Oracle Agent Spec — **no release since 26.1.2** `[V]`
+
+<https://github.com/oracle/agent-spec/releases> lists 26.1.2 (2026-06-02), 26.1.0 (2026-01-16),
+25.4.1 (2025-10-20) and nothing newer. The 26.1.2 notes claim *"Agent Spec Evaluation is now
+available for framework-agnostic evaluation of agentic systems"* `[V]`.
+
+> **Use this claim carefully — it is true and it is not a counter-example to T2.** Sweep 1 §1.4
+> verified from source that `Metric` inherits `ABC`, not `Component`, and that there are exactly two
+> built-in metrics. So Oracle ships a framework-agnostic evaluation **harness** whose metric
+> definitions are Python and therefore **not part of the portable artifact**. Combined with §13.2's
+> `runtime_deps` field, the summary is: *the runner is portable; the oracle is not.* That sentence
+> is PACT's positioning against the closest competitor, and both halves are verified from source.
+
+Also from 26.1.2, worth stealing `[V]`: *"LangGraph MCP remote transports now validate HTTPS
+certificates by default"* and stdio transport *"blocked in loaders unless explicitly permitted"*;
+`RetryPolicy`; **URL allow-lists** for `RemoteTool` and `ApiNode`. The loader-level transport block
+and URL allow-list are exactly the shape PACT's policy contract needs for D16 (computer use) and
+D17 (air-gap): *deny egress by default at the loader, allow-list in the policy file*.
+
+### 18.5 Governance / regulatory `[S]`
+
+- **EU AI Act full implementation: August 2026** — i.e. now. *"The first legally binding
+  requirements applicable to high-risk agentic deployments."*
+- **NIST**: AI Agent Standards Initiative launched 2026-02-17 (three pillars: industry-led
+  standards, open-source protocol development, security-and-identity research). `NIST IR 8596`
+  preliminary draft December 2025. **COSAiS** (SP 800-53 control overlays for AI agents) —
+  concept paper Aug 2025, annotated outline Jan 2026, **overlays projected late 2026 → 2027**.
+- **CSA**: AI Controls Matrix (AICM), MAESTRO threat modelling, agentic identity research; the
+  four-phase rollout from Sweep 1 §2.4 (June 2026 → December 2027) is unchanged.
+
+> Sweep 1's inference stands and strengthens: **no external policy/assurance schema will be stable
+> enough to bind PACT's policy contract before 2027.** Define PACT's own vocabulary; treat
+> NIST/CSA/EU-AI-Act as **projections**. But note the date: the EU AI Act obligations are live
+> *now*, so the projection is no longer hypothetical for European users — the *audit trail* and
+> *human oversight* fields are the ones to get right first, and PACT already has both (lineage,
+> approval gates).
+
+### 18.6 *Governance Gaps in Agent Interoperability Protocols* (arXiv 2606.31498, 2026-06-30)
+
+`papers/arxiv-2606.31498.pdf`. Kang & Diponegoro, DoiT International. Read from PDF `[V]`.
+
+Six-dimension governance taxonomy — **membership, deliberation, voting, dissent preservation,
+human escalation, audit/replay** — applied to MCP v1.1, A2A v1.0.1, ACP, ANP and ERC-8004.
+
+Verbatim `[V]`:
+> *"The resulting gap matrix reveals that **voting and dissent preservation are universally absent
+> across all five protocols**, deliberation is absent or at most partial, and no protocol encodes
+> the full set of primitives required for governed agent communities. We distinguish extensible gaps
+> (addressable through protocol extension mechanisms) from structural gaps (requiring a new
+> architectural layer)… The analysis establishes that **agent community governance constitutes a
+> missing architectural layer above current interoperability standards—not a missing feature within
+> them**."*
+
+> **Two uses.** (i) It is the citation for NG3 and for §1.3's table: MCP/A2A/ACP are transports and
+> the gap is *structural*, not a feature request. (ii) **Dissent preservation is a primitive PACT
+> could actually have and nobody does.** PACT's topology IR already includes debate and blackboard
+> (AC-5.1). If a debate node's IR retains minority positions rather than only the resolved output,
+> PACT can express something all five protocols provably cannot — and it costs one field in the
+> node schema. `[I]` This is a cheap, defensible differentiator that also serves the audit
+> requirement (EU AI Act, §18.5) and the learning-safety requirement (rejected candidates retained
+> as negative evidence, AC-5.5) with the same mechanism.
+
+### 18.7 Other competitors found
+
+- **Swarm Skills** (arXiv 2605.10052v2, 2026-05-15), `papers/arxiv-2605.10052.pdf` `[V]`:
+  *"a portable specification that extends the Anthropic Skills standard with multi-agent semantics…
+  roles, workflows, execution bounds, and a built-in semantic structure for self-evolution"*,
+  claiming *"zero-adapter cross-agent portability via progressive disclosure"*. Reference
+  implementation: JiuwenSwarm. Self-evolution scores on **Effectiveness, Utilization, Freshness**.
+  Critically, verbatim: *"eliminating the need for **human-in-the-loop oversight** during the
+  refinement process."*
+  > `[I]` A fourth entrant in PACT's exact space, weaker on every contract axis (no evals, no model
+  > capability, no SLOs) — but it names two things PACT lacks vocabulary for: **execution bounds**
+  > as a first-class skill field, and **Freshness** as a retirement signal (which is exactly the
+  > retirement criterion §16.1 says PACT needs). Its explicit removal of human oversight is the
+  > direct negation of D23 and makes it the cleanest available contrast case.
+- **Open Agent Format (OAF)** v0.8.0, January 2026 — <https://openagentformat.com/> now reachable
+  `[V, site prose]`. Single `AGENTS.md` with YAML frontmatter; required metadata `name`,
+  `vendorKey`, `agentKey`, `version`, `slug`, `description`, `author`, `license`, `tags`. Composes
+  skills, MCP servers, sub-agent delegation; semantic versioning; capability filtering for tool
+  access. Design statement, verbatim: *"The directory structure and files define the agent - no
+  hidden state or configuration."* Targets Claude Code, Goose, Deep Agents, Letta. Self-assessed
+  adoption: *"most platforms haven't fully integrated OAF yet."* **No evals, no model selection, no
+  topology, no capability requirements.**
+  > Confirms Sweep 1 §2.5's assessment, and note the design statement is *the same statement PACT
+  > makes* (D2). Two independent formats reached "the tree is the agent"; neither carries a
+  > contract. **Filesystem-native is becoming table stakes; the contract is the differentiator.**
+
+---
+
+## 19. `PACT` is now a contested name (D1 risk)
+
+Sweep 1 §1.6 catalogued four things called "Agent Spec" and concluded *"PACT's distinct name is an
+asset."* Three collisions found this sweep make that conclusion false.
+
+| Claimant | Expansion | Backing | Date | Domain |
+|---|---|---|---|---|
+| **PACT** | **Private Access Control Tokens** | **Cloudflare, Google (Chrome), Microsoft (Edge), Mozilla (Firefox), Shopify**; *"plan to develop the protocol and submit it for standardization"* | announced **2026-06-25** `[S]` | Distinguishing **user-backed AI agents** from malicious bots via anonymous tokens |
+| **PACT5** | **Protocol for Agent Coordination and Trust** | pact5.io (host unreachable from this environment; description via search) | 2026 `[S]` | *"how agents coordinate, how authority is scoped and delegated, and how humans maintain control"* — **multi-agent governance** |
+| **pact** | — | `github.com/P-A-C-T-Protocol/pact` | 2026 `[S]` | agent payments |
+
+Source: <https://securityboulevard.com/2026/06/new-pact-protocol-could-help-sites-distinguish-user-backed-ai-agents-from-malicious-bots/> `[S]`
+(a second search result gave 2026-06-22 rather than 06-25 for the announcement; treat the date as
+±3 days).
+
+> **This is a decision, not an observation.** D1 states the name is *"Permanent and user-facing (not
+> a placeholder)"*. The strongest collision — Private Access Control Tokens — is (a) in the AI-agent
+> space, (b) backed by all three major browser vendors plus Cloudflare, (c) heading for a standards
+> body, and (d) six weeks old, so its search footprint is still growing. PACT5 collides on
+> *semantics* as well as name: "coordination and trust" for multi-agent systems with human control
+> is a description a reader could mistake for this project.
+>
+> Three options, in increasing cost: (1) keep `PACT` and always write it with the expansion
+> *Portable Agent Contract & Topology* plus a disambiguation note in README and docs — cheap, and
+> what the Agent-Spec collision already required; (2) keep the CLI `pact` but namespace the spec as
+> `pact.dev/v1` and lead with the domain — already the plan, and `pact.dev` is the real
+> differentiator if it is held; (3) rename. **The one thing not to do is nothing**, because D1
+> currently records a conclusion (name is an asset) that the evidence no longer supports.
+> `[I]` Recommendation: option (1)+(2), plus an explicit "Naming" section in the public README
+> disambiguating against PACT (tokens), PACT5, Oracle Agent Spec, AgentSPEX, AgentSpec (runtime
+> enforcement) and `pydantic_ai.AgentSpec`. Revisit if the Cloudflare proposal reaches an IETF WG.
+
+---
+
+## 20. Framework docs — adapter constraints not visible from source
+
+### 20.1 Claude Agent SDK: Skills are filesystem-only, and exposure is not isolation `[V]`
+
+<https://code.claude.com/docs/en/agent-sdk/skills> (301 from `docs.claude.com`, 307 from
+`platform.claude.com`). All quotes verbatim.
+
+> *"Unlike subagents (which can be defined programmatically), **Skills must be created as filesystem
+> artifacts. The SDK does not provide a programmatic API for registering Skills.**"*
+
+> *"The `skills` option is **a context filter, not a sandbox**. Unlisted Skills are hidden from the
+> model and rejected by the Skill tool, but **their files remain on disk and are reachable through
+> Read and Bash**."*
+
+> *"The `allowed-tools` frontmatter field in SKILL.md is only supported when using Claude Code CLI
+> directly. **It does not apply when using Skills through the SDK.**"*
+
+Mechanics `[V]`: skills load from `~/.claude/skills/`, `<cwd>/.claude/skills/` and `.claude/skills/`
+in any parent up to the repo root, governed by `settingSources` (TS) / `setting_sources` (Py) which
+must include `'user'` or `'project'`; the `plugins` option loads skills *"from a specific path"*.
+`skills` accepts `"all"`, a name list, or `[]`. Names must be exact — wildcards, empty names,
+padded names, and names with parens/commas/control chars raise before the process starts. The
+`init` system message carries a `skills` array listing **user-invocable skills only**
+(`user-invocable: false` skills load but are omitted).
+
+> **Three capability-lattice rows, and one architectural note.**
+> | PACT feature | Claude Agent SDK lowering | Lattice |
+> |---|---|---|
+> | skill definition | must be **materialised to a scratch tree**; use the `plugins` option to point at a PACT-generated directory rather than polluting the user's `.claude/` | `native` (via materialisation) |
+> | skill **exposure set** (a Strategy field; the in-repo finding is that curated exposure is worth real accuracy) | context filter only — files stay readable via `Read`/`Bash` | **`degraded`** — must be reported |
+> | per-skill **tool restriction** | `allowed-tools` is ignored by the SDK | **`unsupported`** — must be reported; PACT must enforce it harness-side or refuse |
+>
+> **The architectural note matters for P-1.** AC-2.3 says *"No adapter reads author files; adapter
+> tests pass with only `canonical.json` present."* That invariant is about *reading*. This substrate
+> forces the adapter to **write** a derived tree. That is compatible — the tree is generated *from*
+> `canonical.json`, not read from the author's source — but the invariant should say so explicitly,
+> because "the adapter touches the filesystem" will otherwise read as a violation. Suggested
+> wording: *adapters may materialise derived artifacts under `.pact/build/<adapter>/`; they may not
+> read the author tree.*
+
+### 20.2 OpenAI Agents SDK `[S]`
+
+*"a model-native harness that lets agents work across files and tools on a computer, plus native
+sandbox execution for running that work safely"*; **subagents** and **"code mode"** for Python and
+TypeScript announced as *"still coming soon"*; *"works with more than 100 other LLMs through the
+Chat Completions API"*. Deprecation status unchanged from Sweep 1 §2.1: Agent Builder shuts down
+2026-11-30; **ChatKit survives** but *"needs a backend you control (the Advanced integration path)
+once the OpenAI-hosted Agent Builder backend is gone"*.
+
+> `[I]` The ChatKit outcome is the crispest statement of the pattern PACT is betting on: the **UI
+> survives, the hosted backend dies, and the replacement is a backend you own defined by files in
+> your repo.** That is D18/NG4 written as a migration guide by the vendor that killed its own
+> canvas.
+
+### 20.3 LangChain `deepagents` `[S]`
+
+Standalone library, *"an agent harness"*, on LangChain building blocks + LangGraph runtime for
+*"durable execution, streaming, human-in-the-loop"*. Middleware for history compression, tool-result
+offload, subagent context isolation, prompt caching. **Declarative synchronous subagent specs** and
+**declarative permission rules** controlling *"which files and directories the agent can read or
+write"*. Releases page updated 2026-06-30. **Not in the local corpus** (see §11.4).
+
+> **Action:** clone `langchain-ai/deepagents` before finalising the LangGraph adapter. Sweep 1
+> concluded harness lowering via `langgraph.func` is *"actually better than native"*; `deepagents`
+> is the vendor's own answer to the same question and its middleware set is a ready-made map for
+> PACT's context-discipline fields (§7.3 mechanism 4). Its **declarative permission rules** are also
+> the closest existing analogue to PACT's policy contract on the file-access axis.
+
+---
+
+## 21. Negative findings (Sweep 2)
+
+1. **No agent specification has added evals-in-the-artifact.** Checked this sweep: Oracle Agent Spec
+   (no release since 26.1.2; metrics still Python), OASF (results record only, §13.1), Microsoft
+   Agent Framework (absent from both declarative surfaces, §12.3), OAF (absent), Swarm Skills
+   (absent), Pydantic AI `AgentSpec` (absent, re-verified). **T2 remains unclaimed as of 2026-08-07.**
+2. **No specification has model-capability requirements.** Every format still binds a literal model
+   id (or an env expression, in MAF's case). O3.1 remains unclaimed.
+3. **No conformance test suite exists for any agent spec.** Unchanged from Sweep 1 §9.5.
+4. **DeepEval still has no YAML/config-only mode** — verified against the 2026 changelog, not just
+   the docs index (§14.5).
+5. **No published evidence that non-programmers can author agents declaratively.** Nothing found
+   this sweep changes Sweep 1 §9.3. Note that Microsoft's declarative-workflow docs *assert* the
+   claim (*"easy to understand, even for non-developers"*) without a study. AC-1.5 remains novel.
+6. **`optimize_anything`'s suitability as the E-5 ABI is still unsettled** (OQ7 carried forward) —
+   but a shipping alternative (DeepEval's) was found and is too narrow (§14.4).
+7. **The Outshift/AGNTCY blog body remains unretrievable** through WebFetch after a second attempt;
+   OQ1 was answered from the local schema instead, which is better evidence anyway.
+8. **`pact5.io` was unreachable** from this environment (DNS timeout); §19's PACT5 description is
+   secondary-source only.
+9. **No 2026 "universal agent format" postmortem exists.** Same conclusion as Sweep 1 §9.4, now with
+   more data points: the formats do not get repudiated, they get *ignored* (OAF's own
+   *"most platforms haven't fully integrated OAF yet"*), while the *hosted products* get formally
+   deprecated. The failure mode to design against is **irrelevance**, not rejection — which makes
+   D28's list incomplete: "nobody adopts it" is a real failure mode even though D10/D28 rank
+   external adoption as non-critical.
+
+---
+
+## 22. Open questions carried forward
+
+1. `optimize_anything` (arXiv 2605.19633) vs PACT's E-5 ABI — unread. (Carried from Sweep 1 OQ7.)
+2. Does `langchain-ai/deepagents`' middleware set map 1:1 onto PACT's context-discipline strategy
+   fields? Needs a source read after cloning (§20.3).
+3. Does the CMU harness optimiser (`malusamayo/migration-analysis`) hold out a test split, and what
+   is its search space? If it optimises instructions + tools + loop jointly, it is the closest
+   existing implementation of PACT's Resolver and should be read before O3.4 is finalised.
+4. Can the **workflow-diversity metric** (normalised Levenshtein over tool-call sequences) be
+   computed from PACT eval cases *without executing them*? If yes, F8's pre-flight predicate is
+   nearly free; if it needs a trace, it costs one baseline run. This is a cheap experiment and it
+   gates a design decision.
+5. Does A2A v1.0.1's extension mechanism admit **non-invocation** payloads (an eval suite, an SLO
+   block) or only protocol extensions? Determines whether O6.2 is lossless (§18.2).
+6. What exactly does MAF's `safe_mode` parameter on `create_agent_from_yaml` control? The example
+   passes `safe_mode=False` without explanation. If it gates expression evaluation, it is the
+   nearest existing prior art for PACT's "config-only must not be a code-execution surface"
+   requirement.
+7. Is the Cloudflare PACT proposal on an IETF track yet, and under what name? Determines whether
+   §19 option (1) or option (3) is required.
+8. SEA-Eval's 31.2× token spread: which frameworks, on which tasks? The exact pair matters for
+   setting the CTS cost bound in D27 (§17.1).
+
+---
+
+## Appendix A-II — files added by Sweep 2
+
+Papers, all to `/home/bud/ditto/agent-inter-op/research/papers/`:
+
+| File | Paper | Date |
+|---|---|---|
+| `arxiv-2607.08938.pdf` | *Better Harnesses, Smaller Models: Building 90% Cheaper Agents via Automated Harness Adaptation* (CMU) | 2026-07-09 |
+| `arxiv-2605.12129.pdf` | *It's Not the Size: Harness Design Determines Operational Stability in Small Language Models* | 2026-05-12 |
+| `arxiv-2608.04968.pdf` | *EvolveNet: Collaborative Harness Evolution for Agent Self-Improvement* | 2026-08-05 |
+| `arxiv-2607.13083.pdf` | *Phantom Guardrails: When Self-Improving Agent Harnesses Fix Failures That Never Happened* (CMU) | 2026-07-13 |
+| `arxiv-2608.03509.pdf` | *SkillJack: Persistent Skill Backdoors in Self-Evolving Agents* (Tencent) | 2026-08-04 |
+| `arxiv-2608.01759.pdf` | *Benign Alone, Harmful Together: Exploiting Experience Composition in Self-Evolving LLM Agents* (EvoBreak) | 2026-08-03 |
+| `arxiv-2604.08988.pdf` | *SEA-Eval: A Benchmark for Evaluating Self-Evolving Agents Beyond Episodic Assessment* (Fudan) | v3 2026-05-24 |
+| `arxiv-2608.01004.pdf` | *Who Belongs in the Eval Set? A Capability-Taxonomy-Driven Pipeline…* (Microsoft) | 2026-08-02 |
+| `arxiv-2606.31498.pdf` | *Governance Gaps in Agent Interoperability Protocols: What MCP, A2A, and ACP Cannot Express* | 2026-06-30 |
+| `arxiv-2605.10052.pdf` | *Swarm Skills: A Portable, Self-Evolving Multi-Agent System Specification* | v2 2026-05-15 |
+| `arxiv-2608.00355.pdf` | *CurveShift: Is Agent Progress Scalar? Separating Level from Shape* | 2026-07-31 |
+
+No repositories cloned this sweep. **Recommended clone:** `langchain-ai/deepagents` (§20.3).
+
+## Appendix B-II — primary URLs cited in Sweep 2
+
+- <https://learn.microsoft.com/en-us/agent-framework/workflows/declarative>
+- <https://learn.microsoft.com/en-us/agent-framework/agents/declarative>
+- <https://pydantic.dev/docs/ai/harness/>
+- <https://pydantic.dev/docs/ai/agent-spec/>
+- <https://code.claude.com/docs/en/agent-sdk/skills> (via 301 `docs.claude.com` → 307 `platform.claude.com`)
+- <https://docs.langchain.com/oss/python/deepagents/overview>
+- <https://eve.dev/sitemap.md>, <https://eve.dev/docs/guides/acp>, <https://eve.dev/docs/guides/ucp>
+- <https://ucp.dev/>
+- <https://blog.modelcontextprotocol.io/posts/2026-07-28/>
+- <https://github.com/oracle/agent-spec/releases>
+- <https://deepeval.com/changelog/changelog-2026>
+- <https://openagentformat.com/>
+- <https://openai.com/index/the-next-evolution-of-the-agents-sdk/>
+- <https://securityboulevard.com/2026/06/new-pact-protocol-could-help-sites-distinguish-user-backed-ai-agents-from-malicious-bots/>
+- <https://arxiv.org/abs/2607.08938>, <https://arxiv.org/abs/2605.12129>, <https://arxiv.org/abs/2608.04968>, <https://arxiv.org/abs/2607.13083>, <https://arxiv.org/abs/2608.03509>, <https://arxiv.org/abs/2608.01759>, <https://arxiv.org/abs/2604.08988>, <https://arxiv.org/abs/2608.01004>, <https://arxiv.org/abs/2606.31498>, <https://arxiv.org/abs/2605.10052>, <https://arxiv.org/abs/2608.00355>
+- <https://github.com/malusamayo/migration-analysis> (CMU harness optimiser)
+- <https://github.com/junnie00/EvolveNet>
+- <https://github.com/Tencent/AI-Infra-Guard/research/skilljack>
+
+Local sources read (not URLs): `research/repos/protocols/agntcy-oasf/schema/**` (HEAD `e856537`,
+2026-07-21), `research/repos/eval/deepeval/deepeval/optimizer/**` (HEAD `6cf2e02`, 2026-07-22),
+`research/repos/frameworks/vercel-eve` (HEAD `05f3480`, 2026-07-25),
+`research/repos/frameworks/langchain/libs/` (deepagents absent).

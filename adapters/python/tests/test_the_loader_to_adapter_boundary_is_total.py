@@ -233,6 +233,14 @@ def test_every_spec_field_that_holds_authored_state_is_filled_from_the_document(
         # Authored and deliberately absent: the example pins no `model:`, which is
         # how it binds a locally-served row rather than naming one. `_bind` decides.
         "model",
+        # NOT authored at all, and no document can fill it: this is what an MCP
+        # server said about its own tools, which arrives over a live connection
+        # on the host's machine AFTER `pact check` has finished. That is the
+        # whole of AD-71 — the text is not in the tree a reviewer read, so it is
+        # quarantined rather than trusted, and a run that has connected to
+        # nothing carries `()`. Every run in this repository is in that state,
+        # which is why the worked example leaves it empty and always will.
+        "external_prose",
     }
     empty: list[str] = []
     for f in dataclass_fields(spec):

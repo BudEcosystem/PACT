@@ -1,0 +1,5 @@
+base: yes
+description: The shape of a desk — a spend cap and a stop rule — for real desks to be based on.
+limits:
+  cost-per-request-under: 0.05 USD
+  when-it-runs-out: stop-and-say-so

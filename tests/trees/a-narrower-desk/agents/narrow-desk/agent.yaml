@@ -1,0 +1,6 @@
+based-on: desk-pattern
+instructions: >
+  Answer the question, briefly.
+limits:
+  steps-at-most: 4
+  when-it-runs-out: stop-and-say-so

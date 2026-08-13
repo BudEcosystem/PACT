@@ -18,16 +18,159 @@ from .context_policy import ContextPolicy, Summariser, Tidier
 from .delegation import Teamwork
 from .interceptors import Chain
 from .limits import Limits, steps_at_most
+from .limits import seconds as _seconds
 from .slo import Slo
 from .loops import STANDARD, Loop
 from .questions import Gate, questions_for
 from .suspension import PauseRule
 from .watches import Watches
+from .yes_no import said_yes
 
 #: Used when the author wrote no `steps-at-most`. A bound is never absent: an
 #: unbounded loop is Eve's behaviour, and its consequence is a run that stops
 #: only once a token budget is gone.
 DEFAULT_STEPS = 8
+
+#: Which keys of the author's `settings:` block `spec/schema.yaml` types
+#: `yes-no`. Read once, HERE, where the document becomes a spec — not per
+#: transport, and the reason is the reason this whole predicate was collapsed:
+#: whether `parallel-tool-calls: enabled` is a tick is a fact about the SCHEMA,
+#: identical on every target, and six transports each deciding it privately is
+#: `_yes` written six more times.
+#:
+#: What it cost while the value went through raw. `pact show` renders a `yes-no`
+#: as the author's own word (`"enabled"`, `"no"`), and `settings:` was the one
+#: group carried into `AgentSpec` verbatim, so the WORD reached the SDKs:
+#:
+#: * `agents.model_settings.ModelSettings` is a pydantic dataclass typed
+#:   `parallel_tool_calls: bool | None`. Measured on openai-agents 0.19.1,
+#:   `enabled` and `disabled` raise `ValidationError` — a line `pact check`
+#:   printed `OK` for, killing the run. The other eight spellings worked only by
+#:   pydantic's own `bool_parsing` coincidence, which is not a decision this
+#:   repository made and not one it can rely on.
+#: * `pydantic_ai.settings.ModelSettings` is a `TypedDict` and validates
+#:   nothing, which is worse. `parallel-tool-calls: no` travelled to
+#:   `chat.completions.create(parallel_tool_calls="no")` as the STRING `"no"` —
+#:   truthy everywhere it is read, i.e. the opposite of what the author wrote.
+#:
+#: Pinned against the schema by
+#: `tests/test_one_word_for_yes_means_one_thing_to_every_reader.py`, which reads
+#: the `settings` group out of `spec/schema.yaml` and fails if a second `yes-no`
+#: key is added there without being added here — the same drift guard the
+#: vocabulary itself has, because a one-entry table is exactly the kind that
+#: goes stale unnoticed.
+TICKS_IN_SETTINGS = frozenset({"parallel-tool-calls"})
+
+#: The three lines that say where a tool reaches, in the order the schema writes
+#: them — the same order, and the same three names, as `WAYS` in
+#: `crates/pact-loader/src/reach.rs`.
+#:
+#: A table rather than three branches for the reason that file gives: a fourth
+#: transport should cost a row here and a row in the schema, never a new shape
+#: of reader. It is also what makes "which kinds survive the boundary" a
+#: question a test can ask exhaustively instead of naming the three it happens
+#: to remember.
+WAYS_A_TOOL_REACHES = ("connect", "url", "says")
+
+
+@dataclass(frozen=True)
+class ResourceSpec:
+    """One connected system, as `resources/<name>.yaml` publishes it.
+
+    Carried on the tool that reaches it rather than looked up again later, for
+    the reason invariant P-1 gives: an adapter is handed the loaded document and
+    never the tree, so anything that had to re-walk `resources:` would be doing
+    the loader's job without the loader's guarantees — and the middle hop is the
+    one `tools/payments.yaml` argues at length is load-bearing (`uses:` names a
+    TOOL, `connect:` names a SERVER, and they are deliberately spelled
+    differently).
+
+    Never a credential, only where one is kept. The schema refuses
+    `bearer-token:` by name, and this keeps that distinction across the
+    boundary: `auth_by_reference` is a name the platform team publishes and
+    resolving it is theirs, so a bridge can hand it back to the host without
+    this process ever holding a secret.
+    """
+
+    #: The key in `resources:` — what the tool's `connect:` line named.
+    name: str
+    #: `resource-kind:`. One choice today (`mcp-server`), carried rather than
+    #: assumed: a bridge that built an MCP client for whatever it was handed
+    #: would be reading a field that does not say what it thinks it says the
+    #: first time a second kind returns.
+    kind: str = ""
+    #: `endpoint:` — a name the platform team publishes, not an address this
+    #: process resolves.
+    endpoint: str = ""
+    #: `auth.by-reference:` — where the credential is kept.
+    auth_by_reference: str = ""
+    #: `asks-to-connect:` — the question a person answers before anything goes
+    #: over this connection. Already a `Rule` in the gate (`questions_for`), and
+    #: carried here as well because the gate answers *"does this call stop?"*
+    #: and a bridge has the different question *"may I open this connection at
+    #: all?"* about the same line.
+    asks_to_connect: str = ""
+    #: `tool-snapshot-digest:` — one digest over everything this server published
+    #: when somebody reviewed it, prose included. AD-71's injection is a sentence
+    #: rewritten under a byte-identical `tools/list`, which is precisely the
+    #: change `check_against_authored` cannot see: it holds tool NAMES and
+    #: ARGUMENT SCHEMAS and never a description. `""` means the author pinned
+    #: nothing, which is a different fact from a pin that failed and is reported
+    #: as one — see `mcp_bridge.check_snapshot`.
+    tool_snapshot_digest: str = ""
+    #: `tool-snapshot-taken-at:` — the day that digest was taken, as `2026-08-06`.
+    #: Carried as the author's own text rather than parsed here: what a date
+    #: means is `mcp_bridge`'s question and `ir` is the boundary, not a clock.
+    tool_snapshot_taken_at: str = ""
+    #: `tool-snapshot-max-age:` — how old the pin may be before the connection is
+    #: refused, in SECONDS, read through `limits.seconds` so `30d` means here
+    #: what it means in every other duration field this port reads. A second
+    #: spelling table would be a second opinion about what `1m30s` is, and the
+    #: field it would disagree about is a security window.
+    #:
+    #: `None` means the author wrote no ceiling; `0.0` would mean they wrote one
+    #: of zero, and the two must not collapse into each other.
+    tool_snapshot_max_age: "float | None" = None
+    description: str = ""
+
+
+@dataclass(frozen=True)
+class Reach:
+    """Where one tool goes: which of `connect:`, `url:` and `says:` the author
+    wrote, and what they wrote on it.
+
+    A named shape rather than a `(kind, value)` pair, and the reason is that the
+    pair is not enough on two of the three kinds: `url:` owes a `method:`
+    beside it (the schema says so with `needs-also:`) and `connect:` owes the
+    resource it named. A tuple would have to grow to four positions nobody can
+    remember the order of, and `reach[0]` reads as nothing where `reach.kind`
+    reads as what it is.
+    """
+
+    #: One of `WAYS_A_TOOL_REACHES`, spelled as the author's own field name so
+    #: a diagnostic can quote the line they would open the file and change.
+    kind: str
+    #: What that line says: a server name, an address, or the wording put to a
+    #: model.
+    value: str
+    #: `method:` — only for a `url:` tool. A `method:` written beside a
+    #: `connect:` is governed by nothing (`needs-also:` runs one way, from
+    #: `url:`), so carrying it there would tell a reader it means something.
+    method: str = ""
+    #: The resource a `connect:` names, resolved from the document's
+    #: `resources:`. `None` for the other two kinds — and also for a `connect:`
+    #: naming a server this workspace has not got, which `names: resources`
+    #: refuses at check time. Kept as an absence rather than an empty
+    #: `ResourceSpec` because "no endpoint" and "no such server" are different
+    #: facts and only one of them is a typo.
+    resource: "ResourceSpec | None" = None
+    #: The OTHER reach lines written on the same tool, which is always empty for
+    #: a document that passed the loader — `reach.rs` makes two of the three an
+    #: error, because nothing anywhere decides which of them a call goes to.
+    #: Recorded instead of dropped so that a reader handed a document from
+    #: somewhere else refuses it rather than silently picking the first, which
+    #: is the one behaviour a portable artifact may not have.
+    also_written: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -45,6 +188,21 @@ class ToolSpec:
     #: and never `customer-id`, so the identity of whoever the run was for never
     #: reached the call, and `RunResult.unenforced` said nothing.
     binds: dict[str, dict[str, str]] = field(default_factory=dict)
+    #: WHERE this tool reaches — the one of `connect:`, `url:` and `says:` the
+    #: author wrote, with the server a `connect:` names already resolved.
+    #:
+    #: Read by nothing for as long as `ToolSpec` has existed. A tool arrived at
+    #: the executing side as a name, a sentence and an argument list, and the
+    #: three lines that say where a call GOES were dropped at this boundary — so
+    #: `connect: payments-server` reached the model as a tool name and reached
+    #: nothing else. That is why an MCP bridge could not be written: the half of
+    #: the tool that names the server was not on this side of the wall.
+    #:
+    #: `None` means the document named none of the three, which
+    #: `crates/pact-loader/src/reach.rs` refuses as an error at check time. It is
+    #: carried as an absence rather than filled in with a guess, because a reader
+    #: that assumed `connect:` would send a refund to a server nobody wrote down.
+    reaches: "Reach | None" = None
 
 
 def _document_names(written: Any) -> tuple[str, ...]:
@@ -331,6 +489,22 @@ class AgentSpec:
     #: same way `skills` is — off the agent's own `uses:` line — so a corpus
     #: nobody named reaches no run, exactly like a skill nobody named.
     knowledge: tuple[KnowledgeSpec, ...] = ()
+    #: Text somebody OUTSIDE this tree wrote, already fenced by
+    #: `mcp_bridge.quarantined` — today an MCP server's own prose (AD-71).
+    #:
+    #: The one field on this object that `from_document` never fills in, and
+    #: deliberately: there is nothing in the workspace to fill it from. A server's
+    #: `instructions` string arrives at connect time, on a machine, after the
+    #: review — which is the entire reason AD-71 exists. A host that has connected
+    #: puts it here; a host that has not gets `()`, which is the state every run
+    #: in this repository is in.
+    #:
+    #: It is on the SPEC rather than passed to `run()` so that it travels with
+    #: everything else a transport is handed, and so `_system_for` — the one
+    #: place a system message is built — can place it after the authored
+    #: procedures and refuse it if it is not fenced. Raw text stored here reaches
+    #: a `ValueError` and never a model.
+    external_prose: tuple[str, ...] = ()
 
     @property
     def skill_names(self) -> tuple[str, ...]:
@@ -404,6 +578,11 @@ class AgentSpec:
                 description=_text(t.get("description", "")),
                 parameters=_takes(t),
                 binds=_binds(t),
+                # The whole `resources:` map is handed over, not the workspace:
+                # the resolution happens HERE, once, so that what crosses the
+                # boundary is a server an adapter can reach rather than a name it
+                # would have to look up in a document it does not have (P-1).
+                reaches=_reaches(t, doc.get("resources")),
             )
             for n, t in sorted((doc.get("tools") or {}).items())
             if n in set(_as_list(a.get("uses")))
@@ -427,7 +606,7 @@ class AgentSpec:
             KnowledgeSpec(
                 name=n,
                 description=_text(k.get("description", "")),
-                must_cite=str(k.get("must-cite", "")).strip().lower() in ("yes", "true", "on", "y"),
+                must_cite=said_yes(k.get("must-cite")),
                 passages_at_most=(
                     int(k["passages-at-most"])
                     if isinstance(k.get("passages-at-most"), int)
@@ -455,7 +634,10 @@ class AgentSpec:
             max_steps=steps_at_most(written, DEFAULT_STEPS),
             limits=Limits.from_mapping(written),
             slo=Slo.from_mapping(written),
-            settings={k: v for k, v in (a.get("settings") or {}).items()},
+            settings={
+                k: (said_yes(v) if k in TICKS_IN_SETTINGS else v)
+                for k, v in (a.get("settings") or {}).items()
+            },
             answers_with={
                 str(k): str(v) for k, v in (a.get("answers-with") or {}).items()
             },
@@ -559,6 +741,87 @@ def _binds(tool: dict[str, Any]) -> dict[str, dict[str, str]]:
         if isinstance(bind, dict) and bind:
             out[str(name)] = {str(k): str(v) for k, v in bind.items()}
     return out
+
+
+def _reaches(tool: Any, resources: Any) -> "Reach | None":
+    """Where one tool goes, read off the tool's own three candidate lines.
+
+    `crates/pact-loader/src/reach.rs` guarantees that exactly one of them is
+    written — a tool with none and a tool with two are both errors, and it
+    reproduces on the shipped example what each cost before it existed. This
+    still counts rather than trusting the count, because the guarantee belongs
+    to the loader and this function's argument is a document, which is not the
+    same thing: a host may hand `AgentSpec.from_document` a document it built
+    itself, and "the checker would have caught it" is not a property of the
+    object in front of you.
+
+    So both wrong shapes survive as facts a reader can act on. None written is
+    `None`, which a bridge refuses; more than one keeps the first in schema
+    order AND names the rest on `also_written`, so refusing is possible without
+    the reader re-deriving what was in the file.
+    """
+    if not isinstance(tool, Mapping):
+        return None
+    written: list[tuple[str, str]] = []
+    for way in WAYS_A_TOOL_REACHES:
+        said = tool.get(way)
+        # `connect:` with nothing after it is the commonest half-finished line
+        # there is, and `reach.rs` refuses it for that reason. Reading it as an
+        # answer here would put an empty server name on the far side of the
+        # boundary, where the failure is a call to nowhere rather than a message.
+        if isinstance(said, str) and said.strip():
+            written.append((way, said.strip()))
+    if not written:
+        return None
+    kind, value = written[0]
+    entry = resources.get(value) if kind == "connect" and isinstance(resources, Mapping) else None
+    return Reach(
+        kind=kind,
+        value=value,
+        method=_text(tool.get("method", "")) if kind == "url" else "",
+        resource=_resource(value, entry) if isinstance(entry, Mapping) else None,
+        also_written=tuple(way for way, _ in written[1:]),
+    )
+
+
+def _resource(name: str, entry: Mapping[str, Any]) -> "ResourceSpec":
+    """One entry of `resources:`, as the tool that connects to it needs it.
+
+    Read here rather than wherever a bridge happens to want it, because
+    `endpoint:` and `auth.by-reference:` are references a HOST resolves and the
+    only thing this side may do with them is carry them intact. A reader that
+    went back to the document for them would be a second copy of this walk, and
+    two walks over `resources:` is how `connections_needing_permission` came to
+    take the first entry with an `asks-to-connect:` line and hand it to an agent
+    that could not reach that server.
+    """
+    auth = entry.get("auth")
+    return ResourceSpec(
+        name=name,
+        kind=_text(entry.get("resource-kind", "")),
+        endpoint=_text(entry.get("endpoint", "")),
+        # `auth:` is a `group:credential-reference` with one required key. The
+        # value never travels — a spec file may not contain a credential, ever —
+        # so what crosses is the NAME the platform team publishes for where it
+        # is kept.
+        auth_by_reference=(
+            _text(auth.get("by-reference", "")) if isinstance(auth, Mapping) else ""
+        ),
+        asks_to_connect=_text(entry.get("asks-to-connect", "")),
+        # AD-71. Read here beside the other four for the reason this function
+        # exists at all: a bridge that went back to the document for them would
+        # be a second walk over `resources:`, and the pin has to arrive on the
+        # same object as the endpoint it is a pin ON. Absence is carried as
+        # absence — `""` and `None` — because "no pin" and "a pin that no longer
+        # matches" are different facts and only one of them is an attack.
+        tool_snapshot_digest=_text(entry.get("tool-snapshot-digest", "")),
+        tool_snapshot_taken_at=_text(entry.get("tool-snapshot-taken-at", "")),
+        # Through `limits.seconds`, not a table here: `30d` is the same length of
+        # time in this field as in `runs-for-at-most`, and two readers of one
+        # grammar drift the moment nobody is looking.
+        tool_snapshot_max_age=_seconds(entry.get("tool-snapshot-max-age")),
+        description=_text(entry.get("description", "")),
+    )
 
 
 def _text(v: Any) -> str:

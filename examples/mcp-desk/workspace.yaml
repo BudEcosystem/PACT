@@ -1,0 +1,30 @@
+# The smallest workspace that reaches a system PACT does not own.
+#
+# One agent, one tool, one server, one question — and nothing else, because the
+# subject here is a single hop that `examples/refund-desk/` buries among forty
+# other files: `tools/incidents.yaml` says `connect: incident-server`,
+# `resources/incident-server.yaml` says where that server is and where its
+# credential is kept, and `asks-to-connect:` says which person has to agree
+# before either of those references is ever resolved.
+name: mcp-desk
+description: Reads incidents out of the platform team's MCP server, once somebody has allowed it.
+owner: platform-operations
+
+# Nothing about this system may talk to anything outside this box, and that is
+# not in tension with the MCP server this workspace connects to.
+# `endpoint: host/incidents-mcp` is a NAME the platform team publishes and the
+# runtime looks up — writing an address there instead, `https://…`, is what this
+# line refuses. (§6.5a)
+allow-egress: []
+
+# ONE AGENT, AND NO `team:`. Two reasons, and the second is measured rather than
+# argued. The first is the subject: a teammate would be a second thing to read
+# in a workspace whose whole point is the connection.
+#
+# The second is that every workspace under `examples/` is enrolled by existing
+# into the set both runtimes are compared on — `pact show` over each
+# `workspace.yaml`, run on seven Python targets and on Node. The TypeScript port
+# publishes `durable_resume: unsupported` (§7.28), so an agent whose script calls
+# a teammate suspends in Python and errors in Node. The consent gate below is
+# safe in that set for the opposite reason: it fires on a tool CALL, and the
+# comparison is of the first model call on a run that makes none.

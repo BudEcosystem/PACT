@@ -1,0 +1,8 @@
+description: Checks a draft and may send it back.
+instructions: >
+  Check the draft. Send it back to the drafter only when something must change.
+team:
+  drafter: redrafts when the check finds something.
+limits:
+  asks-itself-at-most: 2
+  when-it-runs-out: stop-and-say-so

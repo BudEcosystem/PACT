@@ -134,9 +134,37 @@ class RunResult:
     #: alternative is an answer that cites a document it never opened, which is
     #: the worst outcome available and the one that looks most like success.
     unretrieved: tuple[str, ...] = ()
-    #: Ceilings this transport cannot measure, so this run did not enforce them.
-    #: Reported rather than dropped: an author who wrote a spend cap and got no
-    #: enforcement and no message has been told something untrue.
+    #: Ceilings this transport cannot promise to measure, so this run does not
+    #: guarantee them. Reported rather than dropped: an author who wrote a spend
+    #: cap and got no enforcement and no message has been told something untrue.
+    #:
+    #: *"Cannot promise"* and not *"did not enforce"*, because of one case that
+    #: is real and would otherwise put this list at odds with `halted`. A
+    #: transport bound to an **agent** rather than a model can be TOLD a figure
+    #: it can never itself price: `A2ATransport` declares `prices_money = False`
+    #: because no row in `models/catalog.yaml` can ever price somebody else's
+    #: agent — and if that agent volunteers a cost anyway, `_meter_usage` adds
+    #: it and `Limits.reached` fires on it like any other. So
+    #: `cost-per-request-under` can appear here on a run that stopped at
+    #: `cost-limit`. **That pair is the intended report, not an accident**: the
+    #: ceiling bound this one exchange because somebody else chose to say what it
+    #: cost, and this run could not promise it would bind the next. Dropping the
+    #: stop to make the two lists agree would be the worse report — an author
+    #: told at the END of a run that their cap was unmeasurable, having already
+    #: gone through it. Pinned by
+    #: `tests/test_a_remote_agents_bill_is_not_a_ceiling_we_hold.py`.
+    #:
+    #: One member is not about the transport at all: a spend cap NO spend can
+    #: ever be at or above (`cost-per-request-under: NaN USD`, `inf USD`), which
+    #: `Limits.__post_init__` refuses to carry as a ceiling, whichever of the
+    #: four ways of building one it arrived by. It is here rather
+    #: than on `never_reached` because that field is a fact about the BINDING —
+    #: built out of the bound model's catalogue price — and this one is known
+    #: from the written line before a transport is chosen; and because it exists
+    #: in one port, so reporting it there would need a third channel invented in
+    #: the second. *"Cannot promise"* is exactly what is true of it. Argued at
+    #: `limits._nothing_can_reach`, pinned by
+    #: `tests/test_a_spend_cap_nothing_can_reach_holds_nothing_and_says_so.py`.
     unmetered: tuple[str, ...] = ()
     #: Rules the author wrote that this run could not decide, each a sentence
     #: naming the file, the line, what was not applied and a line to type. A
@@ -252,7 +280,11 @@ class Transport(Protocol):
     * `prices_money` — whether the catalogue prices the bound model. A plain
       attribute rather than a method, because it is decided once at construction
       and never changes; absent means "the same as whether `usage()` exists",
-      which is what a stand-in bound to no model honestly is.
+      which is what a stand-in bound to no model honestly is. **Every transport
+      that has a `usage()` should declare this**, and one that binds an AGENT
+      rather than a model must: it has a `usage()` and can never have a row in
+      `models/catalog.yaml`, so leaving it absent reported a spend cap over a
+      remote agent as enforced and metered 0.00 forever.
     * `context_window()` — how many tokens this model can hold, which is what a
       `context-policy:` is measured against. A scripted stand-in has no window
       and no tokeniser, and a required field most implementers would have to
@@ -313,6 +345,22 @@ _DEFAULT_ASKS: Mapping[str, str] = {
 }
 
 
+#: What PACT picks when the author left `answers-with-mode:` out. Its help
+#: promises exactly this — *"PACT picks from the shape you declared above, and
+#: records what it picked"* — and for a round nothing picked anything.
+#:
+#: `prompted` and not `native-json-schema`, for two reasons that are the same
+#: reason: it is the only mode all seven transports can honour, and the only one
+#: that needs nothing off this machine (D17).
+CHOSEN_ANSWER_MODE = "prompted"
+
+#: Modes that constrain the answer at the provider rather than in the prompt.
+#: No transport here implements either, so they are REPORTED rather than
+#: silently served as prose — a run that used prompting where the author asked
+#: for a schema is the silent degradation T7 forbids.
+MODES_NOTHING_HERE_DELIVERS = ("native-json-schema", "tool")
+
+
 #: Every `run()` parameter that has an AUTHORED source, and the expression in
 #: `run` that derives it. This is the register the root cause needed.
 #:
@@ -334,25 +382,6 @@ _DEFAULT_ASKS: Mapping[str, str] = {
 #: `test_the_boundary_between_a_document_and_a_run_is_declared` makes it total:
 #: **a new parameter that is in neither this map nor `SUPPLIED_BY_THE_HOST` fails
 #: the suite**, so adding a mechanism forces the decision to be written down.
-#: The four answers `answers-with-mode:` takes, in the schema's own spelling.
-ANSWER_MODES = ("text", "prompted", "native-json-schema", "tool")
-
-#: What PACT picks when the author left `answers-with-mode:` out. Its help
-#: promises exactly this — *"PACT picks from the shape you declared above, and
-#: records what it picked"* — and for a round nothing picked anything.
-#:
-#: `prompted` and not `native-json-schema`, for two reasons that are the same
-#: reason: it is the only mode all seven transports can honour, and the only one
-#: that needs nothing off this machine (D17).
-CHOSEN_ANSWER_MODE = "prompted"
-
-#: Modes that constrain the answer at the provider rather than in the prompt.
-#: No transport here implements either, so they are REPORTED rather than
-#: silently served as prose — a run that used prompting where the author asked
-#: for a schema is the silent degradation T7 forbids.
-MODES_NOTHING_HERE_DELIVERS = ("native-json-schema", "tool")
-
-
 DERIVED_FROM_THE_DOCUMENT: dict[str, str] = {
     "chain": "spec.chain",
     "teamwork": "spec.teamwork",
@@ -376,6 +405,12 @@ SUPPLIED_BY_THE_HOST: frozenset[str] = frozenset({
     "transport", "user_input", "tool_impls", "bus", "now", "clock",
     "resume", "answer", "approved", "needs_approval", "gates",
     "ask_member", "run_inputs",
+    # The activation meter behind `limits.asks-itself-at-most:`. The FIGURE is
+    # authored and reaches `Limits.asks_itself_at_most`; this parameter is the
+    # count of what already happened on this request, which no document can
+    # know. It exists as a parameter so `delegate_by_running` can hand the
+    # root's meter to the runs it starts — a host passes nothing.
+    "at_work",
     # The transport serving `model-for-checking:`. The MODEL NAME is authored;
     # which transport serves it is not something any document can say, for the
     # same reason `transport` itself is here.
@@ -426,6 +461,13 @@ async def run(
     asking: "Gate | Mapping[str, Question] | None" = None,
     run_inputs: Mapping[str, Any] | None = None,
     checking_transport: Transport | None = None,
+    #: How many times this request has already put each agent to work, by name —
+    #: the meter `limits.asks-itself-at-most:` is spent against. Created fresh
+    #: at the root run and shared down through `delegate_by_running`, so a
+    #: circle spends one figure per ACTIVATION rather than one per level of
+    #: nesting. Hosts pass nothing; a document that never writes the line fills
+    #: the dict and nothing ever reads it.
+    at_work: dict[str, int] | None = None,
 ) -> RunResult:
     """Drive `spec` to completion over `transport`.
 
@@ -516,6 +558,26 @@ async def run(
     )
     supplied: dict[str, Any] = dict(run_inputs or {})
     bus = bus or Bus()
+    # `asks-itself-at-most:`'s meter. Counting is unconditional — one increment
+    # per activation of this spec, the root's own being the first — and reading
+    # it is not: only `delegate_by_running` consults it, and only for a member
+    # whose author wrote the figure. A dict rather than anything on the call
+    # stack, because sequential re-asks must spend too: a member that returned
+    # and is asked again is a new activation at the same depth.
+    at_work = {} if at_work is None else at_work
+    at_work[spec.name] = at_work.get(spec.name, 0) + 1
+    if ask_member is not None:
+        # `Asker` takes one argument, and the spend check belongs where the
+        # member's own `limits:` is read — inside `delegate_by_running.ask`,
+        # which this function never sees. The meter rides the grant to get
+        # there; an asker handed a grant it never looks at behaves as before.
+        inner_ask = ask_member
+
+        async def sharing_the_meter(grant: Grant) -> str:
+            grant.at_work = at_work
+            return await inner_ask(grant)
+
+        ask_member = sharing_the_meter
     # The author's own rules, unless a caller supplied its own set. Read from
     # the agent's `interceptors:` line the same way its loop and its context
     # policy are — for a round this line said `chain or Chain()`, so the two
@@ -817,15 +879,79 @@ async def run(
     # "still bites when there is no price list". A transport that says nothing
     # about pricing is taken to be as silent about money as it is about tokens,
     # which is exactly what the stand-in bound to no model is.
-    prices_money = bool(getattr(transport, "prices_money", reports_usage))
+    #
+    # **The default is `False`, and it used to be `reports_usage`.** Reading the
+    # money answer off the TOKEN answer meant a transport that has a `usage()`
+    # and can never be priced was taken to price its calls. `A2ATransport` is
+    # exactly that: bound to an agent rather than a model, so no row in
+    # `models/catalog.yaml` can ever describe it, and its own `usage()` says the
+    # answer is "almost always None". A spend cap over a remote agent was
+    # therefore reported as ENFORCED and metered 0.00 for the life of the
+    # workspace — the outcome `transports/_metering.py` opens by forbidding.
+    #
+    # Declaring `prices_money = False` on that one transport fixed the INSTANCE.
+    # It did not fix the class, and the class is where the reachable surface is:
+    # nothing in `src/` constructs a transport, so every transport that ever runs
+    # is written by a host or copied from the out-of-tree exemplar — and that
+    # exemplar shipped the same `usage()`-without-a-declaration for a round,
+    # measured, after the instance fix landed. A default that grants a capability
+    # to everyone who has not thought about it hands the cost of not having
+    # thought about it to the AUTHOR, who wrote a spend cap and cannot read this
+    # file. D14: *"expert users write code for this" is not an acceptable answer
+    # for any capability in the core.*
+    #
+    # **`False` is not the mirror-image lie, and that is what changed.** The
+    # objection to it was that four stand-ins in this suite return a real money
+    # figure from `usage()` and declare nothing, so they would report a cap as
+    # unmeasurable while the meter ticked. That objection was written against
+    # `RunResult.unmetered`'s OLD wording, *"did not enforce"* — under which it
+    # holds. The field now says *"could not promise to measure"*, which is
+    # exactly and only what is true of a transport that never said it could
+    # price: the harness has no promise, because nobody made it one. The four
+    # stand-ins now declare `prices_money = True` (`Costing` in
+    # tests/test_termination.py and tests/test_a_months_spend_on_improving_is_held.py,
+    # `Spending` in tests/test_a_spend_cap_that_can_never_be_reached.py and
+    # tests/test_a_spend_cap_nothing_can_reach_holds_nothing_and_says_so.py), which
+    # is the declaration a real host-written transport that CAN price would make
+    # anyway — and those four were the whole cost, measured: flipping the default
+    # with nothing else changed reddened exactly four tests out of 1930.
+    # `transports/mock.py` is unaffected either way because it has no `usage()`.
+    #
+    # The seam itself is filed in
+    #   tests/test_no_default_decides_a_capability_in_secret.py
+    # under `OPTIONAL_ON_THE_TRANSPORT`, which is the ledger that exists because
+    # this default was a capability decision the AC-7.2 audit structurally could
+    # not see: it walks module-level upper-case NUMBERS, and this is an inline
+    # boolean fallback on a `getattr`.
+    prices_money = bool(getattr(transport, "prices_money", False))
     result.unmetered = spec.limits.unmeterable(reports_usage, prices_money)
+    # A ceiling that is not a figure any reading can be at or above — `NaN USD`,
+    # `inf USD`, and `runs-for-at-most` carrying `inf` through the constructor.
+    # Same door, and it is the door rather than `never_reached` because that
+    # field is a fact about the BINDING (built out of the bound model's catalogue
+    # price) and this is a fact about the written line, known before a transport
+    # is chosen. `Limits.__post_init__` has already refused to carry it as a
+    # ceiling; without this it would be refused in silence, which is the same T7
+    # breach one step further on. Argued in full at `limits._nothing_can_reach`
+    # and pinned by
+    # `tests/test_a_spend_cap_nothing_can_reach_holds_nothing_and_says_so.py`.
+    held_nothing = spec.limits.nothing_can_reach
+    result.unmetered = result.unmetered + held_nothing
     # The two latency promises nothing on this run measures. `slo.py` carried a
     # `Budget` that would have — `note_first_token`, `check_elapsed`, `add_cost`
     # — and nothing in `src/` ever constructed one, so `first-reply-within` and
     # `per-word-under` were held by no run and said so nowhere. The `Budget` is
     # deleted (it duplicated `Limits`); the reporting is here, so an author who
     # wrote a latency promise is told it is holding nothing.
+    #
+    # `Slo` also answers for the spend cap it read, which `Limits` read too — the
+    # two take the same authored `limits:` block on the authored path, so this is
+    # the one place in the concatenation where two sources can name one field.
+    # Deduplicated below rather than by asking either side to stay quiet: each is
+    # right to report what it read, and it is the LIST that must say a thing once.
     result.unmetered = result.unmetered + spec.slo.unmetered()
+    if spec.slo.cap_nothing_can_reach is not None:
+        held_nothing = tuple(dict.fromkeys(held_nothing + ("cost-per-request-under",)))
     # The author's `settings:` block, handed to the transport that can take it —
     # and named on the result when it cannot, or when it can take only some of
     # it. For a round the whole group crossed no boundary at all: twelve fields,
@@ -836,6 +962,15 @@ async def run(
         take = getattr(transport, "apply_settings", None)
         left_over = tuple(spec.settings) if take is None else tuple(take(spec.settings))
         result.unmetered = result.unmetered + tuple(f"settings.{k}" for k in left_over)
+    # Once, in the order it was first said. Two objects read
+    # `cost-per-request-under:` off one authored block and both are right to
+    # report a figure nothing can reach, so without this an author reading a
+    # scored run is shown `cost-per-request-under, cost-per-request-under` and a
+    # `watches:` subscriber gets the name twice in one payload. `dict.fromkeys`
+    # rather than a `set`, because the order here is `ceilings()`' order and a
+    # report that shuffles between runs is the instability `ceilings()` fixes
+    # one file over.
+    result.unmetered = tuple(dict.fromkeys(result.unmetered))
     # A money ceiling measured against a model that is FREE. Different from
     # `unmetered` and so a different field: nothing failed to measure — the meter
     # works perfectly and reads 0.00 on every call, for the life of the
@@ -907,11 +1042,21 @@ async def run(
     # `retrieved_by` is what a host that DOES retrieve hands in. Absent, every
     # declared set is unretrieved, which is the honest reading: nothing here
     # fetched anything.
+    #
+    # The name is wrapped in typed single quotes and NOT in `!r`. `!r` spells a
+    # name one way and a name with an apostrophe in it the other — `'handbook'`
+    # against `"bob's-handbook"` — and `pact check` accepts both names, so the
+    # spelling would depend on the name. Every other place a corpus name reaches
+    # a person already types the quotes: `_and_list` two hundred lines above (the
+    # `must-cite` refusal), `crates/pact-cli/src/main.rs` (*"is a set of documents
+    # with no documents in it"*), and `neverLookedIn` in the second port, whose
+    # sentence must match this one word for word. `!r` was one file spelling one
+    # name two ways and two ports spelling one absence two ways.
     for corpus in spec.knowledge:
         if corpus.name in (retrieved_by or {}):
             continue
         result.unretrieved = result.unretrieved + (
-            f"{corpus.name!r} is a set of documents and nothing in this run looked "
+            f"'{corpus.name}' is a set of documents and nothing in this run looked "
             f"anything up in it, so the answer comes from what the model already "
             f"knew. fix: run this where a retrieval runtime serves "
             f"`knowledge/{corpus.name}/documents/`, or take `{corpus.name}` off "
@@ -944,6 +1089,25 @@ async def run(
         bus.emit(
             "session.limit.failed",
             limits=list(result.unmetered),
+            # WHICH of those the transport had nothing to do with. `unmetered`
+            # carries two reasons and this payload carried one, beside the
+            # transport's name — so a subscriber was handed the right field with
+            # the wrong cause, which is the defect `scoring._unmetered_caveats`
+            # splits the prose to avoid, surviving on the machine-readable half.
+            # Measured, both reasons through the real bus before this line::
+            #
+            #   figure-nothing-can-reach -> {'limits': ['cost-per-request-under'],
+            #                                'transport': 'spending', ...}
+            #   transport-cannot-price   -> {'limits': ['cost-per-request-under'],
+            #                                'transport': 'unpriced',  ...}
+            #
+            # byte-identical apart from the transport name, and the transport is
+            # named in the case where the transport is innocent. `session.limit
+            # .failed` is an address an author may subscribe a `watch:` to
+            # (`watches.EMITTED`, `spec/schema.yaml`), and B6 requires this event
+            # to carry the same list and the same wording as `unmetered`; T7
+            # requires the machine-readable report, not only the prose.
+            held_nothing=list(held_nothing),
             transport=getattr(transport, "name", "this transport"),
             pinned=spec.model,
             bound=bound,
@@ -1280,6 +1444,12 @@ async def run(
                     # what the answer must contain cannot check it against
                     # that, which is the one thing it is for.
                     answers_with=shape_to_ask_for,
+                    # Anything an MCP server said about itself, already fenced.
+                    # On EVERY stage, for the same reason the shape is: a stage
+                    # that cannot see what a server claims cannot notice the
+                    # claim is being made — and a region that appeared on only
+                    # some stages would be a fence with a gap in it.
+                    external=spec.external_prose,
                 ),
                 history,
                 step_tools,
@@ -2595,6 +2765,20 @@ def _never_reached(
     `handoff.spent` and is charged here too, but the child binds its own
     transport and this process cannot see that binding — so the wording is about
     the calls this run makes for itself, which is what was actually checked.
+
+    **"Asked and got zero" is not "never asked", and this used to say the
+    second in the words of the first.** The sentence below asserts a fact about
+    the author's own tree — *"the model catalogue publishes that row at 0 USD in
+    and 0 USD out"* — and then D11 hangs a recommendation off it. On a transport
+    with no `.model` and a spec with no `model:`, `models` is `[""]`: the loop
+    `continue`d past every lookup, `total` stayed at its initial `0.0`, and
+    `Limits.priced_at_nothing(0.0)` reported every money ceiling as priced at
+    nothing, having asked the catalogue nothing. The `None` guard that exists for
+    exactly this is INSIDE the loop and never ran. So a claim about a catalogue
+    row was fabricated for an empty model name, and the `tokens-at-most: 200000`
+    fix beside it was sized from a price nobody published — a recommendation
+    founded on an invented row, which inverts D11 rather than meeting it.
+    `asked` is therefore counted rather than inferred from `total`.
     """
     if not prices_money or not spec.limits.ceilings():
         return ()
@@ -2607,6 +2791,10 @@ def _never_reached(
     #: A million tokens in and a million out, on every model this run can bill
     #: for itself. Anything above zero and the ceiling is reachable.
     total = 0.0
+    #: How many of those models the catalogue was actually asked about. Zero
+    #: means nothing here knows which model runs, so there is no row to make a
+    #: claim about and `total`'s `0.0` is an initial value rather than a price.
+    asked = 0
     for name in models:
         if not name:
             continue
@@ -2614,6 +2802,9 @@ def _never_reached(
         if priced is None:
             return ()  # unpriced is `unmetered`'s business, not this one
         total += priced
+        asked += 1
+    if not asked:
+        return ()  # nothing was looked up, so nothing can be said about a row
 
     out: list[str] = []
     # A spec built in code carries no key and no tree, and `locate` then names
@@ -2801,6 +2992,27 @@ def delegate_by_running(
 
     async def ask(grant: Grant) -> str:
         member = AgentSpec.from_document(document, grant.member)
+        # `asks-itself-at-most:` is spent per ACTIVATION, against the meter the
+        # requesting run shares down (`run.at_work`, riding the grant). The
+        # refusal is this member's failure — the same path `OverBudget` takes —
+        # so the author's `if-someone-fails:` decides what happens next rather
+        # than the whole run crashing. A grant that carries no meter (an asker
+        # called outside `run`) has nothing to count against and spends nothing.
+        figure = member.limits.asks_itself_at_most
+        at_work: dict[str, int] | None = getattr(grant, "at_work", None)
+        if (
+            figure is not None
+            and at_work is not None
+            # The meter is keyed by AgentSpec.name (what run() increments),
+            # which is the `name:` line when the author wrote one and the map
+            # key otherwise. Reading by the map key here would let an agent
+            # whose `name:` differs from its key recurse past its own figure.
+            and at_work.get(member.name, 0) >= figure
+        ):
+            raise RuntimeError(
+                f"'{grant.member}' has already been put to work {figure} time(s) "
+                f"on this request — `asks-itself-at-most: {figure}` is spent."
+            )
         # The share is the child's ceiling, not merely a number the parent
         # remembers. A member that writes its own tighter `limits:` keeps it —
         # the smaller of the two binds, because inheriting a budget downward
@@ -2808,19 +3020,36 @@ def delegate_by_running(
         allowed = grant.allowance
         own = member.limits.cost_per_request_under
         if allowed < math.inf:
+            granted = allowed if own is None else min(own, allowed)
+            # BOTH readers of `cost-per-request-under:`, and not just the one
+            # that enforces. `Limits` and `Slo` are built from the same authored
+            # block, so a member that wrote `NaN USD` has the figure recorded in
+            # two places; replacing one left the other saying the cap held
+            # nothing while the run was being held to the join policy's real
+            # 0.10 USD share — the same stale-claim defect `Limits.__post_init__`
+            # clears, one object over. `Slo` enforces nothing either way, and its
+            # `__post_init__` drops the record the moment a real figure arrives.
             member = replace(
                 member,
-                limits=replace(
-                    member.limits,
-                    cost_per_request_under=allowed if own is None else min(own, allowed),
-                ),
+                limits=replace(member.limits, cost_per_request_under=granted),
+                slo=replace(member.slo, cost_per_request_under=granted),
             )
         # `one-after-another` earns its latency only if a later member can read
         # what an earlier one said. Eve pays the latency and hands over nothing.
         prior = "\n".join(f"{a.member} said: {a.text}" for a in grant.so_far if a.ok)
         asked = f"{prior}\n\n{grant.request}".strip() if prior else grant.request
         out = await run(
-            member, transport_for(member), asked, tool_impls or {}, bus=bus
+            member, transport_for(member), asked, tool_impls or {}, bus=bus,
+            # The parent's meter, so the member's activation is the same
+            # request's spending and not a fresh count. Inert when no figure is
+            # written anywhere: the dict fills and nothing reads it.
+            at_work=at_work,
+            # Recursion exactly where it is budgeted: a member that wrote the
+            # figure may ask its own team — itself included — through this same
+            # asker, and the meter above is what bounds it. A member without
+            # the line keeps the old behaviour to the byte: a teammate is work
+            # happening elsewhere, and its run suspends for it.
+            ask_member=ask if figure is not None else None,
         )
         # What it cost comes off its share. `OverBudget` is raised as this
         # member's failure rather than allowed out of the join, so the author's
@@ -2899,6 +3128,7 @@ def _system_for(
     phase: Phase,
     skills: tuple[SkillSpec, ...] = (),
     answers_with: "Mapping[str, str] | None" = None,
+    external: tuple[str, ...] = (),
 ) -> str:
     """The system text for one stage.
 
@@ -2913,6 +3143,17 @@ def _system_for(
     by a long document, and so `may-use:` narrows the procedures a stage reads
     the same way it narrows the tools a stage may call — see
     `Phase.skills_offered` for the one asymmetry between the two.
+
+    Then, and only then, `external` — text somebody outside this tree wrote, which
+    today is an MCP server's own prose. AD-71 says it *"may never precede authored
+    instructions"*, and the placement here is what makes that true of the whole
+    system message rather than of one field of it: after the procedures, because
+    AD-78 is explicit that a `SKILL.md` body IS the refund policy, so external
+    text placed between `instructions:` and the procedures would sit in front of
+    the policy it must never outrank. Unfenced text is REFUSED rather than fenced
+    here as a kindness — a caller that got this far with raw server prose has a
+    bug one level up, and quietly fixing it would hide whichever other path is
+    handling the same text unfenced.
     """
     stage = phase.instruction()
     parts = [p for p in (instructions, stage) if p]
@@ -2923,9 +3164,21 @@ def _system_for(
             "These are the rules of this work. Follow them exactly, and quote "
             "them when they decide something.\n\n" + body
         )
-    # LAST, after the procedures, because it is what to do with the answer once
-    # the rules have decided it — and because a shape stated before a long
-    # document is the part a model forgets.
+    if external:
+        # The fence is checked by `mcp_bridge.fenced_regions`, not here. The
+        # PLACING is this function's decision and differs from every other
+        # caller's — after the procedures, because AD-78 says a `SKILL.md` body
+        # IS the refund policy and external text in front of it would outrank
+        # the policy. Whether the text may reach a model at all is not this
+        # function's decision, and it was written twice before it was written
+        # once: the same loop and the same `ValueError` in two wordings, which
+        # is a fence that grows a gap the day one copy learns a case.
+        from .mcp_bridge import fenced_regions
+
+        parts.extend(fenced_regions(external))
+    # LAST, after the procedures and after anything external, because it is what
+    # to do with the answer once the rules have decided it — and because a shape
+    # stated before a long document is the part a model forgets.
     if answers_with:
         parts.append(_answer_shape_in_words(answers_with))
     return "\n\n".join(parts)

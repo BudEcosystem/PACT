@@ -1,0 +1,174 @@
+# What a comparison in `needs.scores:` means — in BOTH ports, from one file.
+#
+# An author writes a bar their model has to clear:
+#
+#     needs:
+#       scores:
+#         MMLU: "> 80"
+#
+# The Rust checker parses that line (`crates/pact-schema/src/coerce.rs`) and the
+# Python resolver decides it (`adapters/python/src/pact_adapters/resolve.py`).
+# Two pieces of code answering one question is how they come to disagree, and
+# they had: the Rust side called `= 80` met only by a figure that was bit-for-bit
+# 80, the Python side by anything within 0.000000000001 of it. Four orders of
+# magnitude apart, under a comment in the Python file claiming the two mirrored
+# each other. This file is that claim written down where both can read it, and
+# both have a test that fails when their answer stops matching these rows.
+#
+# `tolerance` is how close `=` counts as equal. It is 0.000000001 — a billionth.
+#
+#   - Bigger than the noise. A number that has been written down as text, read
+#     back, divided by a hundred or added up lands a few billion-billionths away
+#     from where it started. Around a score of 80 the smallest step a computer
+#     can even take is about 0.00000000000001, so a billionth leaves room for
+#     several hundred such steps. A catalogue publishing 80 and one publishing
+#     79.999999999999 have published the same score, and an author who typed the
+#     figure printed on the leaderboard must not be told their model misses it
+#     by an amount no one can see.
+#   - Smaller than any real difference. Benchmarks are published to two decimal
+#     places, occasionally more. 79.99 is a DIFFERENT score from 80 and is
+#     refused, and so is anything ten million times further out than the noise.
+#
+# The Rust side used `f64::EPSILON`, which is not a general-purpose closeness at
+# all: it is the gap between 1 and the next number a computer can hold, and at a
+# score of 80 that gap is sixty-four times too small to be reachable. It meant
+# `= 80` was an exact-bits test wearing a tolerance's clothes.
+
+tolerance: "0.000000001"
+
+# Every row: the bar the author wrote, the figure the catalogue published, and
+# whether the model clears it. Both ports parse `written` with their own reader,
+# compare with their own comparison, and must reach `holds` on every line.
+#
+# Figures are quoted so that each side reads the DECIMAL TEXT with its own
+# number reader, which is the thing being pinned. An unquoted number would be
+# two YAML parsers agreeing instead.
+cases:
+  - written: "= 80"
+    published: "80"
+    holds: "yes"
+    because: "the plain case: the same figure, written the same way"
+
+  - written: "= 80"
+    published: "79.999999999999"
+    holds: "yes"
+    because: >-
+      a millionth of a millionth below — noise from writing a number down and
+      reading it back, not a different score. This is the row the Rust side
+      refused: `f64::EPSILON` is about two hundred times too narrow to reach it.
+
+  - written: "= 80"
+    published: "80.0000000001"
+    holds: "yes"
+    because: >-
+      a ten-billionth above, and the same argument. This is the row the PYTHON
+      side refused: its `1e-12` is a hundred times too narrow to reach it. The
+      two rows above and here are why neither figure was right, and why the two
+      ports disagreed about which models met the bar.
+
+  - written: "= 80"
+    published: "80.00000001"
+    holds: "no"
+    because: "ten billionths out — further than any rounding puts a figure"
+
+  - written: "= 80"
+    published: "79.99"
+    holds: "no"
+    because: "a real difference at the precision benchmarks publish"
+
+  - written: "== 80"
+    published: "79.999999999999"
+    holds: "yes"
+    because: "`==` is the same comparison as `=`, spelled the way a programmer would"
+
+  - written: "= 90%"
+    published: "0.9"
+    holds: "yes"
+    because: "a percentage is a share of the whole, so `90%` is the figure 0.9"
+
+  - written: "> 80"
+    published: "80.5"
+    holds: "yes"
+    because: "above the bar"
+
+  - written: "> 80"
+    published: "80"
+    holds: "no"
+    because: "`>` is above, not at — the reason `>=` is a separate thing to write"
+
+  - written: ">= 80"
+    published: "80"
+    holds: "yes"
+    because: "at the bar is clearing it"
+
+  - written: "< 5"
+    published: "4.999"
+    holds: "yes"
+    because: "below the ceiling"
+
+  - written: "< 5"
+    published: "5"
+    holds: "no"
+    because: "at the ceiling is not below it"
+
+  - written: "<= 5"
+    published: "5"
+    holds: "yes"
+    because: "at the ceiling is within it"
+
+  - written: "<= 5"
+    published: "5.001"
+    holds: "no"
+    because: "over the ceiling by a thousandth is still over it"
+
+# And the other half of the same agreement: what neither port may read as a
+# comparison at all.
+#
+# `cases:` above pins the rows both ports must answer THE SAME WAY. This pins the
+# rows both must REFUSE, which is a separate claim and was the one that had come
+# apart. `coerce::threshold` has always answered `None` to a bare number — "a bare
+# number states no comparison" — and `resolve._threshold` read `MMLU: 80` as
+# `> 80`, under a docstring saying that is "what every author who wrote one
+# meant".
+#
+# Nobody could reach the disagreement: `pact check` refuses the document before
+# the resolver is handed anything, so the generous arm was unreachable rather than
+# wrong. It is refused in both ports now anyway, because the guess is not
+# obviously right. `< 5` is a real bar to want on a latency or a hallucination
+# rate, and there the assumed `>` is the wrong way round — it would bind exactly
+# the models the author wrote the line to exclude, silently. The checker's own
+# refusal names both shapes:
+#
+#     'scores' should be a comparison, like `> 80`, but it is a whole number.
+#     fix: Write it like `> 80` or `>= 0.8`.
+#
+# An author gets that sentence. A guess is not better than that sentence.
+not-comparisons:
+  - written: "80"
+    because: >-
+      a bare number states no comparison. Read as `> 80` it is a floor, and half
+      the metrics anyone bars on — latency, cost, hallucination rate — want a
+      ceiling, so the guess is wrong for them and says nothing while it is.
+
+  - written: "0.8"
+    because: "a bare decimal is the same mistake with a smaller figure"
+
+  - written: "80%"
+    because: >-
+      the `%` scales the figure, it does not supply the comparison. `>= 80%` is
+      the line that was meant.
+
+  - written: "quite high"
+    because: "words where a figure goes — the refusal an author is likeliest to meet"
+
+  - written: "> "
+    because: "a comparison with nothing to compare against"
+
+  - written: "> inf"
+    because: >-
+      a word spelled where a figure goes. `> 1e999` is NOT here: that is a figure
+      that ran off the end of the number line, which is a different mistake and is
+      carried up so the ceiling can name it.
+
+  - written: "=> 80"
+    because: "the arrow written backwards — `>=` is the spelling both ports read"

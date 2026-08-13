@@ -230,6 +230,22 @@ impl Diagnostic {
         Self::new(Severity::Warning, rule, span, message, fix)
     }
 
+    /// Neutral information: something happened that the reader is entitled to
+    /// know about and that is not a mistake.
+    ///
+    /// Its whole point is that it does NOT fail `--deny-warnings`
+    /// ([`Diagnostics::warning_count`] counts warnings alone), so a lossy
+    /// operation the author asked for can still be reported — which is what
+    /// EXP-11 and FR-8.1.1 require of every one of them.
+    pub fn note(
+        rule: &'static str,
+        span: Span,
+        message: impl Into<String>,
+        fix: impl Into<String>,
+    ) -> Self {
+        Self::new(Severity::Note, rule, span, message, fix)
+    }
+
     #[must_use]
     pub fn with_related(mut self, span: Span, message: impl Into<String>) -> Self {
         self.related.push(Related { span, message: message.into() });

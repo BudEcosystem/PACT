@@ -75,10 +75,18 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
     // only the ones an agent can reach.
     a_lookup_does_not_also_spend(document, diags);
     money_that_moves_with_nobody_asked(document, diags);
+    // Before the shape check, because "this is not a figure" is the more
+    // fundamental complaint and the shape check stays quiet about anything this
+    // one has already spoken about. One mistake gets one message.
+    a_threshold_that_is_not_a_figure(document, diags);
     compared_in_the_shape_the_argument_has(document, diags);
 
-    let Some(agents) = document.get("agents").and_then(Node::as_map) else { return };
-    let Some(tools) = document.get("tools").and_then(Node::as_map) else { return };
+    let Some(agents) = document.get("agents").and_then(Node::as_map) else {
+        return;
+    };
+    let Some(tools) = document.get("tools").and_then(Node::as_map) else {
+        return;
+    };
     let policies = document.get("policies").and_then(Node::as_map);
 
     // Keyed by the action, not by the agent: a tool used by three agents that
@@ -88,13 +96,21 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
     let mut ungated: BTreeMap<(String, String), Ungated> = BTreeMap::new();
 
     for (agent, entry) in agents {
-        let Some(guarded) = guarded_by(&entry.node, policies) else { continue };
+        let Some(guarded) = guarded_by(&entry.node, policies) else {
+            continue;
+        };
         for tool in uses(&entry.node) {
-            let Some(found) = tools.get(tool) else { continue };
-            let Some(actions) = found.node.get("actions").and_then(Node::as_map) else { continue };
+            let Some(found) = tools.get(tool) else {
+                continue;
+            };
+            let Some(actions) = found.node.get("actions").and_then(Node::as_map) else {
+                continue;
+            };
             for (action, spec) in actions {
                 same_request_key_is_an_argument(tool, action, &spec.node, diags);
-                let Some((span, written)) = moves_money(&spec.node) else { continue };
+                let Some((span, written)) = moves_money(&spec.node) else {
+                    continue;
+                };
                 // `needs-a-person: yes` IS a rule naming this action — see the
                 // module note. It is asked here rather than folded into
                 // `guarded_by` because it is a fact about the ACTION and not
@@ -108,7 +124,11 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
                 }
                 ungated
                     .entry((tool.to_string(), action.clone()))
-                    .or_insert_with(|| Ungated { span, written, who: BTreeSet::new() })
+                    .or_insert_with(|| Ungated {
+                        span,
+                        written,
+                        who: BTreeSet::new(),
+                    })
                     .who
                     .insert(agent.clone());
             }
@@ -223,14 +243,20 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
 /// `spends-money: no` is the line that says so. What must never happen is
 /// silence, because the silent case and the correct case look identical.
 fn money_that_moves_with_nobody_asked(document: &Node, diags: &mut Diagnostics) {
-    let Some(tools) = document.get("tools").and_then(Node::as_map) else { return };
+    let Some(tools) = document.get("tools").and_then(Node::as_map) else {
+        return;
+    };
     for (tool, entry) in tools {
-        let Some(actions) = entry.node.get("actions").and_then(Node::as_map) else { continue };
+        let Some(actions) = entry.node.get("actions").and_then(Node::as_map) else {
+            continue;
+        };
         for (action, spec) in actions {
             if spec.node.get("spends-money").is_some() {
                 continue;
             }
-            let Some(takes) = spec.node.get("takes").and_then(Node::as_map) else { continue };
+            let Some(takes) = spec.node.get("takes").and_then(Node::as_map) else {
+                continue;
+            };
             let Some((argument, at)) = takes
                 .iter()
                 .find(|(_, v)| v.node.as_str().map(str::trim) == Some("money"))
@@ -256,6 +282,282 @@ fn money_that_moves_with_nobody_asked(document: &Node, diags: &mut Diagnostics) 
     }
 }
 
+/// What is wrong with a threshold that carries no figure — or `None`, which is
+/// every threshold anybody writes on purpose.
+///
+/// **The test is inverted, and that inversion is the whole of the second round.**
+/// The first version asked *"is one of these words a spelling of a NON-figure?"*
+/// and knew four: `NaN`/`inf` (Rust's float grammar) and `.nan`/`.inf` (YAML's).
+/// Everything it had never heard of went through, and the class behind those
+/// four is open. MEASURED on a copy of `examples/refund-desk`, one `more-than:`
+/// rewritten per run, against the binary this crate builds:
+///
+/// ```text
+/// more-than: TBD USD            OK — … loaded cleanly (498 settings).   exit 0
+/// more-than: abc USD            OK — … loaded cleanly (498 settings).   exit 0
+/// more-than: two hundred USD    OK — … loaded cleanly (498 settings).   exit 0
+/// more-than: <amount> USD       OK — … loaded cleanly (498 settings).   exit 0
+/// more-than: NaN$ USD           OK — … loaded cleanly (498 settings).   exit 0
+/// ```
+///
+/// Every one of those produces the identical run-time state this check exists
+/// to refuse — `questions._amount` returns `None`, `_atom_stops` answers `True`,
+/// and every call to the action parks for a person however small. And
+/// `<amount> USD` is not a hypothetical: it is verbatim what the neighbouring
+/// `loader/currency-nothing-can-price` fix line hands the author
+/// (*"Write the amount in USD … — `more-than: <amount> USD`"*), and `NaN$ USD`
+/// is verbatim what `loader/compared-in-the-wrong-shape` used to hand them for
+/// `more-than: NaN$`. A refusal an author can be walked into by the tool's own
+/// advice is not a refusal.
+///
+/// So the question is the positive one: **can a figure be read out of this?**
+/// That subsumes all four original spellings and closes the class behind them,
+/// and it is the same question the reader on the other side asks — see
+/// [`figure_slot`] for what "read out of" means and why the two grammars have to
+/// agree.
+///
+/// Two sentences, because `1e400` and `NaN` are two mistakes. `1e400` parses,
+/// and overflows: a real figure past the end of what can be counted. A reader
+/// told that `1e400` "is not a figure" would go hunting a typo that is not
+/// there.
+pub(crate) fn no_figure_in(written: &str) -> Option<&'static str> {
+    let slot = figure_slot(written);
+    match slot.parse::<f64>() {
+        Ok(n) if n.is_finite() => None,
+        // `inf` and `NaN` parse and are not figures; `1e400` parses to the same
+        // `f64::INFINITY` and IS one, written too large. The digits tell them
+        // apart, and only in this arm — a parse FAILURE is never "too large".
+        Ok(_) => Some(if slot.chars().any(|c| c.is_ascii_digit()) {
+            "is a larger figure than this can keep track of"
+        } else {
+            "is not a figure at all"
+        }),
+        Err(_) => Some("is not a figure at all"),
+    }
+}
+
+/// The figure slot of a threshold: what is left once the currency it is written
+/// in has been taken off, spelled the way the reader on the other side spells
+/// it.
+///
+/// **This has to agree with `questions._amount`**, because that is the function
+/// that decides at run time which calls the gate stops, and a checker that
+/// accepts a spelling the reader then reads as a different number is worse than
+/// no checker — the author sees "loaded cleanly" over a gate that means
+/// something else. So the strips here are the strips there:
+///
+/// * a currency code at either end, because `200 USD`, `USD 200` and `$25` are
+///   one amount to `coerce::money` and therefore have to be one amount here;
+/// * `,`, `_` and spaces, which is exactly `questions._GROUPING` — `1,500.00
+///   USD` is a figure an author writes on purpose and once read as **1.0**.
+///
+/// What is deliberately NOT stripped is anything else, which is the point: the
+/// remainder has to be a whole number and nothing else. `TBD`, `<amount>`,
+/// `NaN$` and `two hundred` all fail that, and all four used to load clean.
+///
+/// The currency strip is also what stops the false second message on
+/// `more-than: 200 NaN`. `no_figure_in` used to inspect every whitespace-
+/// separated word INCLUDING the currency slot, so a value that plainly contains
+/// a figure was told it "is not a figure at all" while
+/// `loader/currency-nothing-can-price` was simultaneously offering to price NAN
+/// as a currency — two messages for one token, contradicting each other about
+/// what was wrong.
+fn figure_slot(written: &str) -> String {
+    let mut slot = written.trim();
+    if let Some((head, last)) = slot.rsplit_once(char::is_whitespace)
+        && is_a_currency_code(last)
+    {
+        slot = head.trim_end();
+    } else if let Some((first, rest)) = slot.split_once(char::is_whitespace)
+        && is_a_currency_code(first)
+    {
+        slot = rest.trim_start();
+    }
+    let cleaned: String = slot
+        .trim()
+        .trim_start_matches('$')
+        .chars()
+        .filter(|c| !c.is_whitespace() && *c != ',' && *c != '_')
+        .collect();
+    // And a currency written with no space in front of it. `200USD` is not
+    // money to `coerce::money` or to `compared_in_the_shape_the_argument_has`,
+    // and it is that check's complaint to make — telling somebody who wrote
+    // `200USD` that it "is not a figure at all" would be the wrong sentence
+    // about the right line. Three letters, and only where a letter does not
+    // already run into them, so `Infinity` is not read as `Infin` + `ity`.
+    //
+    // COUNTED IN CHARACTERS, not bytes. The first draft of this line sliced the
+    // string at `len() - 3` and PANICKED on `more-than: ≥5 USD` — *"start byte
+    // index 1 is not a char boundary; it is inside '≥'"*, exit 101 out of
+    // `pact check`, which is B4's defect reintroduced in the file that refuses
+    // figures. `more-than:` is free text an author types, so it holds whatever
+    // they typed.
+    let letters: Vec<char> = cleaned.chars().collect();
+    let Some(cut) = letters.len().checked_sub(3) else { return cleaned };
+    let runs_on = cut.checked_sub(1).is_some_and(|i| letters[i].is_ascii_alphabetic());
+    if !runs_on && letters[cut..].iter().all(char::is_ascii_alphabetic) {
+        return letters[..cut].iter().collect();
+    }
+    cleaned
+}
+
+/// Three letters, which is how every currency this project prices is spelled.
+///
+/// The same test `compared_in_the_shape_the_argument_has` makes about the last
+/// word of a threshold, so a value that looks like money to one of them looks
+/// like money to the other.
+fn is_a_currency_code(word: &str) -> bool {
+    word.len() == 3 && word.chars().all(|c| c.is_ascii_alphabetic())
+}
+
+/// An approval gate whose threshold is not a figure — `more-than: NaN USD`.
+///
+/// B3 put a floor under money in the SCHEMA, where the two ceilings priced in
+/// money live (`limits.cost-per-request-under`, `learning.cycle-limits.per-month`),
+/// and deliberately left `more-than:` out of it: a gate is not a ceiling, so
+/// `more-than: 0 USD` — "stop for a person on ANY spend" — is a strict rule
+/// rather than a broken one, and nothing ever runs out against a threshold.
+///
+/// **A non-finite threshold is not that.** It is not a strict gate or a loose
+/// one, it is a gate with nothing to compare against, and it cannot be caught
+/// in the schema at all: A3 made this field `type: text` so a score could be
+/// gated by a score, so it never coerces to money and `Schema::check_floor`
+/// never sees one. That is why it is here, in the only file that already reads
+/// this field as a figure.
+///
+/// MEASURED, before this, on a copy of `examples/refund-desk` with the first
+/// rule's `more-than: 200 USD` changed to `more-than: NaN USD`:
+///
+/// ```text
+/// $ pact check rd
+/// OK — rd loaded cleanly (498 settings).
+/// ```
+///
+/// And what that document then does, measured through the reader rather than
+/// guessed from the arithmetic — because `amount > NaN` is never evaluated:
+/// `questions._amount('NaN USD')` finds no digits and returns `None`, and
+/// `questions._atom_stops` answers `True` for a threshold it cannot read, on
+/// purpose ("a malformed `more-than:` is a mistake, and refusing to ask because
+/// of one would turn a typo into a disabled gate"). So the gate does not vanish
+/// — it swallows the figure, and EVERY call to that action parks for a person
+/// however small. A refund desk that asks about a 1 USD refund is a desk nobody
+/// keeps using, and the line that did it reads like a threshold.
+///
+/// Its own rule and its own sentence, not `loader/compared-in-the-wrong-shape`:
+/// the shape is fine — `NaN USD` is spelled like the money argument it gates —
+/// and being told to "write the figure the way the argument is declared" when
+/// that is exactly what was done is a dead end.
+///
+/// # What the rule id promises, and what it now keeps
+///
+/// *"is not a figure at all"* names a CLASS, and the first round enforced a
+/// list: four spellings of non-finite, and silence for `TBD USD`, `abc USD`,
+/// `two hundred USD`, `<amount> USD` and `NaN$ USD` — all of which load the same
+/// gate that stops every call. [`no_figure_in`] now asks the positive question
+/// instead, so the check enforces the class its own sentence names. The
+/// placeholder spellings are the ones an author mid-edit actually leaves behind,
+/// and one of them is what the neighbouring diagnostic types for them.
+///
+/// # The half this does NOT hold, and where it is held instead
+///
+/// A threshold can carry a figure and still not be the figure the author wrote.
+/// `more-than: .50 USD` loaded clean here and `questions._amount` read it as
+/// **50.0** — a gate written at fifty cents that does not fire on a 40 USD
+/// refund, off by 100x, with no diagnostic anywhere; `more-than: -.5 USD` read
+/// back as **+5.0**, a gate written to stop on every refund that stops on none
+/// under five dollars. Neither is a non-figure, so no refusal here could have
+/// caught them. The repair is in the READER — `questions._NUMBER` required a
+/// digit before the decimal point — and the invariant is pinned where it can be
+/// measured, in
+/// `adapters/python/tests/test_a_spend_cap_that_can_never_be_reached.py`:
+/// for every threshold this file lets through, the figure the runtime reads back
+/// is the figure that was written. [`figure_slot`] is this side of that
+/// agreement.
+fn a_threshold_that_is_not_a_figure(document: &Node, diags: &mut Diagnostics) {
+    every_gate(document, &mut |when| {
+        let Some(figure) = when.get("more-than") else {
+            return;
+        };
+        let Some(written) = figure.as_str() else {
+            return;
+        };
+        let written = written.trim();
+        let Some(says) = no_figure_in(written) else {
+            return;
+        };
+        // The tool is required by the schema, so it is normally there —
+        // but a rule missing it is already being told so, and this
+        // sentence must still read when it is.
+        let about = when
+            .get("tool")
+            .and_then(Node::as_str)
+            .map(|t| {
+                format!(
+                    "this rule asks a person when `{}` is called, and ",
+                    t.trim()
+                )
+            })
+            .unwrap_or_default();
+        diags.push(Diagnostic::error(
+            "loader/threshold-is-not-a-figure",
+            figure.span.clone(),
+            format!(
+                "{about}`more-than: {written}` {says} — so the rule has no figure \
+                 to hold a call against, and which calls it stops is nobody's \
+                 decision."
+            ),
+            "Write the figure a person should be asked above, the way that \
+             argument is declared in the tool's `takes:` — `more-than: 200 USD` \
+             for an amount of money, `more-than: 80` for a score."
+                .to_string(),
+        ));
+    });
+}
+
+/// Every map in the document that carries a `more-than:`, wherever it is
+/// written.
+///
+/// **Not a path.** Both checks below used to walk
+/// `policies -> ask-a-person -> when -> more-than` by hand, and the growth guard
+/// in `currency.rs` was written to catch the field this crate would forget. It
+/// could not: it asserts the set of `may-be-money` FIELD NAMES is `{more-than}`,
+/// and a second route to the SAME field adds no field name. MEASURED, with a
+/// copy of `spec/schema.yaml` carrying one extra line on the `agent` group —
+/// `ask-a-person: {type: list of group:question-rule}` — and an agent carrying
+/// `- {tool: payments/issue-refund, arg: amount, more-than: NaN USD}`:
+///
+/// ```text
+/// $ PACT_SPEC=…/schema-2ndpath.yaml pact check … --unsafe-spec
+/// OK — … loaded cleanly (507 settings).   exit 0
+/// ```
+///
+/// while every test in the tree, the growth guard included, stayed green. One
+/// line of YAML reopened the whole defect.
+///
+/// So the walk is a derivation over the DOCUMENT instead: `more-than:` is
+/// checked wherever the schema lets it be written, and the growth guard is left
+/// pinning the only dimension it can actually see — the NAME. A future
+/// `may-be-money` field called something else is still invisible to this, and
+/// that is exactly what `currency.rs` now says.
+///
+/// `currency.rs::walk` already made this call for the currency half, for the
+/// same reason and in the same words: *"A walk that knew where to look would
+/// have to be updated for the next one."*
+fn every_gate(node: &Node, seen: &mut dyn FnMut(&Node)) {
+    if let Some(map) = node.as_map() {
+        if map.get("more-than").is_some() {
+            seen(node);
+        }
+        for (_, entry) in map {
+            every_gate(&entry.node, seen);
+        }
+    } else if let Some(items) = node.as_list() {
+        for item in items {
+            every_gate(item, seen);
+        }
+    }
+}
+
 /// A gate that compares an argument in a shape the argument does not have (A3).
 ///
 /// `more-than:` used to be `type: money`, which was right while money was the
@@ -270,92 +572,159 @@ fn money_that_moves_with_nobody_asked(document: &Node, diags: &mut Diagnostics) 
 /// only place that reads both, which is why the check is here and the schema is
 /// permissive rather than the other way round.
 fn compared_in_the_shape_the_argument_has(document: &Node, diags: &mut Diagnostics) {
-    let Some(policies) = document.get("policies").and_then(Node::as_map) else { return };
-    let Some(tools) = document.get("tools").and_then(Node::as_map) else { return };
+    let Some(tools) = document.get("tools").and_then(Node::as_map) else {
+        return;
+    };
 
-    for (_, policy) in policies {
-        let Some(rules) = policy.node.get("ask-a-person").and_then(Node::as_list) else { continue };
-        for rule in rules {
-            let Some(whens) = rule.get("when").and_then(Node::as_list) else { continue };
-            for when in whens {
-                let Some(named) = when.get("tool").and_then(Node::as_str) else { continue };
-                let Some(argument) = when.get("arg").and_then(Node::as_str) else { continue };
-                let Some((tool, action)) = named.split_once('/') else { continue };
-                let Some(declared) = tools
-                    .get(tool)
-                    .and_then(|t| t.node.get("actions"))
-                    .and_then(|a| a.get(action))
-                    .and_then(|a| a.get("takes"))
-                    .and_then(|t| t.get(argument.trim()))
-                    .and_then(Node::as_str)
-                    .map(str::trim)
-                else {
-                    continue;
-                };
-                // Only `more-than:` compares a magnitude; `is:` and `is-one-of:`
-                // compare a value, and any shape can be equal to something.
-                let Some(figure) = when.get("more-than") else { continue };
-                // A bare `200` parses as an integer, and that is exactly the
-                // half of the mismatch worth catching: a money argument gated by
-                // a number with no currency. Reading only strings would have
-                // caught the score-gated-by-dollars direction and silently
-                // missed its mirror.
-                let written = match &figure.value {
-                    pact_doc::Value::Str(s) => s.trim().to_string(),
-                    pact_doc::Value::Int(n) => n.to_string(),
-                    pact_doc::Value::Float(n) => n.to_string(),
-                    _ => continue,
-                };
-                let written = written.as_str();
-                let looks_like_money = written
-                    .split_whitespace()
-                    .last()
-                    .is_some_and(|w| w.len() == 3 && w.chars().all(|c| c.is_ascii_alphabetic()))
-                    || written.starts_with('$');
-                let is_money = declared == "money";
-                if is_money == looks_like_money {
-                    continue;
-                }
-                let (says, fix) = if is_money {
-                    (
-                        format!(
-                            "`{argument}` is an amount of money and `more-than: {written}` \
-                             is not"
-                        ),
-                        format!("Write the figure the way the argument is declared, like `{written} USD`."),
-                    )
-                } else {
-                    (
-                        format!(
-                            "`{argument}` is {declared} and `more-than: {written}` is an \
-                             amount of money"
-                        ),
-                        "Write the figure the way the argument is declared — a bare number \
-                         for a number, with no currency after it."
-                            .to_string(),
-                    )
-                };
-                diags.push(Diagnostic::error(
-                    "loader/compared-in-the-wrong-shape",
-                    figure.span.clone(),
-                    format!(
-                        "this rule asks a person when `{named}` is called, and {says} — so \
-                         the gate compares two different kinds of thing."
-                    ),
-                    fix,
-                ));
-            }
+    every_gate(document, &mut |when| {
+        let Some(named) = when.get("tool").and_then(Node::as_str) else {
+            return;
+        };
+        let Some(argument) = when.get("arg").and_then(Node::as_str) else {
+            return;
+        };
+        let Some((tool, action)) = named.split_once('/') else {
+            return;
+        };
+        let Some(declared) = tools
+            .get(tool)
+            .and_then(|t| t.node.get("actions"))
+            .and_then(|a| a.get(action))
+            .and_then(|a| a.get("takes"))
+            .and_then(|t| t.get(argument.trim()))
+            .and_then(Node::as_str)
+            .map(str::trim)
+        else {
+            return;
+        };
+        // Only `more-than:` compares a magnitude; `is:` and `is-one-of:`
+        // compare a value, and any shape can be equal to something.
+        let Some(figure) = when.get("more-than") else {
+            return;
+        };
+        // A bare `200` parses as an integer, and that is exactly the
+        // half of the mismatch worth catching: a money argument gated by
+        // a number with no currency. Reading only strings would have
+        // caught the score-gated-by-dollars direction and silently
+        // missed its mirror.
+        let written = match &figure.value {
+            pact_doc::Value::Str(s) => s.trim().to_string(),
+            pact_doc::Value::Int(n) => n.to_string(),
+            pact_doc::Value::Float(n) => n.to_string(),
+            _ => return,
+        };
+        let written = written.as_str();
+        // `a_threshold_that_is_not_a_figure` has already spoken about
+        // this line, and "write the figure the way the argument is
+        // declared" is a dead end for somebody who wrote `NaN USD` on a
+        // score: the shape is not what is wrong with it.
+        if no_figure_in(written).is_some() {
+            return;
         }
+        let looks_like_money = written
+            .split_whitespace()
+            .last()
+            .is_some_and(is_a_currency_code)
+            || written.starts_with('$');
+        let is_money = declared == "money";
+        if is_money == looks_like_money {
+            return;
+        }
+        let (says, fix) = if is_money {
+            (
+                format!("`{argument}` is an amount of money and `more-than: {written}` is not"),
+                add_a_currency_to(written),
+            )
+        } else {
+            (
+                format!(
+                    "`{argument}` is {declared} and `more-than: {written}` is an \
+                     amount of money"
+                ),
+                "Write the figure the way the argument is declared — a bare number \
+                 for a number, with no currency after it."
+                    .to_string(),
+            )
+        };
+        diags.push(Diagnostic::error(
+            "loader/compared-in-the-wrong-shape",
+            figure.span.clone(),
+            format!(
+                "this rule asks a person when `{named}` is called, and {says} — so \
+                 the gate compares two different kinds of thing."
+            ),
+            fix,
+        ));
+    });
+}
+
+/// The fix line for a money argument gated by a figure with no currency on it —
+/// and the reason it is a function rather than a `format!`.
+///
+/// It used to be `format!("… like `{written} USD`.")`, which builds its advice
+/// out of the author's own token and therefore inherits whatever is wrong with
+/// it. MEASURED, two `pact check` runs over a copy of `examples/refund-desk`:
+///
+/// ```text
+/// $ pact check t          # more-than: NaN$
+/// error: … `amount` is an amount of money and `more-than: NaN$` is not …
+///   fix: Write the figure the way the argument is declared, like `NaN$ USD`.
+///   rule: loader/compared-in-the-wrong-shape
+///
+/// $ pact check t          # more-than: NaN$ USD  — the author did what it said
+/// OK — t loaded cleanly (498 settings).                              exit 0
+/// ```
+///
+/// and `questions._atom_stops` then answered `True` for a 1 USD refund: the fix
+/// line manufactured the exact state `a_threshold_that_is_not_a_figure` exists
+/// to refuse. `no_figure_in` now catches `NaN$` before this is reached, so that
+/// particular walk is closed at the other end too — but a diagnostic that echoes
+/// an unchecked token stays one grammar change away from doing it again, which
+/// is why the echo is CONDITIONAL and not merely re-checked.
+///
+/// The line this proposes is therefore built, then put back through the same
+/// grammar that would have to accept it, and only offered if it survives TWO
+/// tests: the proposal has a readable finite figure in it, and the author's own
+/// token was NOTHING BUT a figure — nothing was taken off it to find one. The
+/// second test is what stops `more-than: 200USD` being answered with
+/// *"like `200USD USD`"*, which is well formed, means the right number, and is
+/// still not a line to tell a person to type.
+///
+/// Anything else gets the literal example, which is what the sibling diagnostic
+/// `loader/threshold-is-not-a-figure` has always given.
+fn add_a_currency_to(written: &str) -> String {
+    let written = written.trim();
+    // What the author wrote with only the separators taken out — so `1,000`
+    // still gets its own figure back, and `USD 200` does not.
+    let bare: String = written
+        .chars()
+        .filter(|c| !c.is_whitespace() && *c != ',' && *c != '_')
+        .collect();
+    let candidate = format!("{written} USD");
+    if no_figure_in(&candidate).is_none() && figure_slot(written) == bare {
+        format!("Write the figure the way the argument is declared, like `{candidate}`.")
+    } else {
+        "Write the figure the way the argument is declared — an amount of money, \
+         with the currency after it, like `200 USD`."
+            .to_string()
     }
 }
 
 fn a_lookup_does_not_also_spend(document: &Node, diags: &mut Diagnostics) {
-    let Some(tools) = document.get("tools").and_then(Node::as_map) else { return };
+    let Some(tools) = document.get("tools").and_then(Node::as_map) else {
+        return;
+    };
     for (tool, entry) in tools {
-        let Some(actions) = entry.node.get("actions").and_then(Node::as_map) else { continue };
+        let Some(actions) = entry.node.get("actions").and_then(Node::as_map) else {
+            continue;
+        };
         for (action, spec) in actions {
-            let Some((looks_up, said)) = only_looks_things_up(&spec.node) else { continue };
-            let Some((spends, ticked)) = moves_money(&spec.node) else { continue };
+            let Some((looks_up, said)) = only_looks_things_up(&spec.node) else {
+                continue;
+            };
+            let Some((spends, ticked)) = moves_money(&spec.node) else {
+                continue;
+            };
             diags.push(
                 Diagnostic::error(
                     "loader/looks-things-up-and-spends",
@@ -418,14 +787,13 @@ fn only_looks_things_up(action: &Node) -> Option<(Span, String)> {
 ///
 /// Whether at-most-once is ENFORCED is a separate, runtime question. This is the
 /// half that is decidable where the author is.
-fn same_request_key_is_an_argument(
-    tool: &str,
-    action: &str,
-    spec: &Node,
-    diags: &mut Diagnostics,
-) {
-    let Some(entry) = spec.as_map().and_then(|m| m.get("same-request-key")) else { return };
-    let Some(key) = entry.node.as_str().map(str::trim) else { return };
+fn same_request_key_is_an_argument(tool: &str, action: &str, spec: &Node, diags: &mut Diagnostics) {
+    let Some(entry) = spec.as_map().and_then(|m| m.get("same-request-key")) else {
+        return;
+    };
+    let Some(key) = entry.node.as_str().map(str::trim) else {
+        return;
+    };
     if key.is_empty() {
         return;
     }
@@ -474,7 +842,11 @@ struct Ungated {
 /// answer and a real one — an empty set, because nothing guards anything.
 fn guarded_by(agent: &Node, policies: Option<&Map>) -> Option<BTreeSet<String>> {
     let mut guarded = BTreeSet::new();
-    let named = agent.get("policy").and_then(Node::as_str).map(str::trim).unwrap_or("");
+    let named = agent
+        .get("policy")
+        .and_then(Node::as_str)
+        .map(str::trim)
+        .unwrap_or("");
     let Some(all) = policies else {
         return Some(guarded);
     };
@@ -492,7 +864,9 @@ fn guarded_by(agent: &Node, policies: Option<&Map>) -> Option<BTreeSet<String>> 
             continue;
         };
         for rule in rules {
-            let Some(whens) = rule.get("when").and_then(Node::as_list) else { continue };
+            let Some(whens) = rule.get("when").and_then(Node::as_list) else {
+                continue;
+            };
             for when in whens {
                 if let Some(tool) = when.get("tool").and_then(Node::as_str) {
                     guarded.insert(tool.trim().to_string());
@@ -513,7 +887,11 @@ pub(crate) fn covers(policy: &Node, key: &str, named_by_the_agent: &str) -> bool
     if key == named_by_the_agent {
         return true;
     }
-    policy.get("applies-to").and_then(Node::as_str).map(str::trim) == Some("every-agent")
+    policy
+        .get("applies-to")
+        .and_then(Node::as_str)
+        .map(str::trim)
+        == Some("every-agent")
 }
 
 /// The tools and skills an agent's `uses:` line lists.
@@ -526,7 +904,13 @@ fn uses(agent: &Node) -> Vec<&str> {
         Some(n) if n.as_str().is_some() => vec![n.as_str().unwrap_or("").trim()],
         Some(n) => n
             .as_list()
-            .map(|items| items.iter().filter_map(Node::as_str).map(str::trim).collect())
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(Node::as_str)
+                    .map(str::trim)
+                    .collect()
+            })
             .unwrap_or_default(),
         None => Vec::new(),
     }
@@ -633,7 +1017,12 @@ policies:
     }
 
     fn only(d: &Diagnostics) -> &Diagnostic {
-        assert_eq!(d.items().len(), 1, "expected exactly one warning:\n{}", d.render());
+        assert_eq!(
+            d.items().len(),
+            1,
+            "expected exactly one warning:\n{}",
+            d.render()
+        );
         &d.items()[0]
     }
 
@@ -648,12 +1037,27 @@ policies:
 
     #[test]
     fn an_action_that_moves_money_with_no_rule_naming_it_is_warned_about() {
-        let d = check_text(&WORKSPACE.replace("tool: payments/issue-refund", "tool: zendesk/reply"));
+        let d =
+            check_text(&WORKSPACE.replace("tool: payments/issue-refund", "tool: zendesk/reply"));
         let e = only(&d);
         assert_eq!(e.rule, "loader/money-moves-with-nobody-asked");
-        assert_eq!(e.severity, pact_diag::Severity::Warning, "an ungated spend may be intended");
-        assert!(e.message.contains("money moves without anybody being asked"), "{}", e.message);
-        assert!(e.fix.contains("`- when: [{ tool: payments/issue-refund }]`"), "{}", e.fix);
+        assert_eq!(
+            e.severity,
+            pact_diag::Severity::Warning,
+            "an ungated spend may be intended"
+        );
+        assert!(
+            e.message
+                .contains("money moves without anybody being asked"),
+            "{}",
+            e.message
+        );
+        assert!(
+            e.fix
+                .contains("`- when: [{ tool: payments/issue-refund }]`"),
+            "{}",
+            e.fix
+        );
     }
 
     #[test]
@@ -672,13 +1076,21 @@ policies:
         // one". Warning about `look-up-order` would teach an author to write
         // rules that gate reads.
         let d = check_text(&WORKSPACE.replace("    policy: approvals\n", ""));
-        assert!(!only(&d).message.contains("look-up-order"), "{}", only(&d).message);
+        assert!(
+            !only(&d).message.contains("look-up-order"),
+            "{}",
+            only(&d).message
+        );
     }
 
     #[test]
     fn a_money_moving_tool_no_agent_uses_moves_no_money() {
         let d = check_text(&WORKSPACE.replace("    uses: [payments]\n", ""));
-        assert!(d.is_empty(), "an unused tool is never called: {}", d.render());
+        assert!(
+            d.is_empty(),
+            "an unused tool is never called: {}",
+            d.render()
+        );
     }
 
     #[test]
@@ -726,7 +1138,9 @@ policies:
             let said = check_text(&text);
             assert_eq!(said.items().len(), 1, "'{tick}' was read as a no");
             assert!(
-                said.items()[0].message.contains(&format!("`spends-money: {quoted}`")),
+                said.items()[0]
+                    .message
+                    .contains(&format!("`spends-money: {quoted}`")),
                 "the sentence must quote what was typed: {}",
                 said.items()[0].message
             );
@@ -741,22 +1155,36 @@ policies:
 
     #[test]
     fn several_agents_reaching_one_ungated_action_are_one_sentence_not_three() {
-        let text = WORKSPACE.replace("tool: payments/issue-refund", "tool: zendesk/reply").replace(
-            "tools:\n",
-            "  night-desk:\n    description: Out of hours.\n    uses: [payments]\n\
+        let text = WORKSPACE
+            .replace("tool: payments/issue-refund", "tool: zendesk/reply")
+            .replace(
+                "tools:\n",
+                "  night-desk:\n    description: Out of hours.\n    uses: [payments]\n\
              tools:\n",
-        );
+            );
         let said = check_text(&text);
         let e = only(&said);
-        assert!(e.message.contains("`night-desk` and `refund-desk`"), "{}", e.message);
-        assert!(e.message.contains("in their approval policies"), "plural agrees: {}", e.message);
+        assert!(
+            e.message.contains("`night-desk` and `refund-desk`"),
+            "{}",
+            e.message
+        );
+        assert!(
+            e.message.contains("in their approval policies"),
+            "plural agrees: {}",
+            e.message
+        );
     }
 
     #[test]
     fn the_underline_covers_the_setting_the_sentence_quotes() {
-        let d = check_text(&WORKSPACE.replace("tool: payments/issue-refund", "tool: zendesk/reply"));
+        let d =
+            check_text(&WORKSPACE.replace("tool: payments/issue-refund", "tool: zendesk/reply"));
         let rendered = d.render();
-        assert!(rendered.contains("        spends-money: yes"), "the line is shown:\n{rendered}");
+        assert!(
+            rendered.contains("        spends-money: yes"),
+            "the line is shown:\n{rendered}"
+        );
         assert!(
             rendered.contains(&"^".repeat("spends-money: yes".len())),
             "the whole setting is underlined, not just the word 'yes':\n{rendered}"

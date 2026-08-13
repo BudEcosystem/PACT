@@ -297,19 +297,47 @@ USAGE = """\
 pact-import — turn a framework's own artifact into a PACT agent
 
 USAGE:
-    pact-import FILE [--as a2a-card|anthropic-request]
+    pact-import FILE [--as a2a-card|anthropic-request|pydantic-ai-spec]
 
 Prints the agent as YAML, and the ImportReport underneath it. Nothing is
 written: what comes back is a STUB, because these formats carry less than a PACT
 agent does, and the report says exactly what you still have to write.
+
+`pydantic-ai-spec` reads a Pydantic AI agent spec — the YAML or JSON that
+`Agent.from_file()` loads. It is the one source here that is a real agent
+SPECIFICATION rather than a facade or a single request, so what comes back is a
+working agent short of its ceilings, policy and tools. A Pydantic AI agent
+defined in Python instead has no file to read: hand the live object to
+`pact_adapters.pydantic_ai_interop.from_pydantic_ai_agent()` from your own
+process, which reads the object and still executes nothing of yours.
 """
 
+
+def _from_pydantic_ai_spec(
+    artifact: Mapping[str, Any],
+) -> tuple[dict[str, Any], "ImportReport"]:
+    """`pydantic_ai_interop.from_pydantic_ai_spec`, imported where it is used.
+
+    Deferred rather than imported at module top for one reason: this module is
+    what `pact-import` runs, and two of its three readers need nothing installed.
+    A top-level `from .pydantic_ai_interop import ...` would make reading an A2A
+    card fail on a machine with no Pydantic AI, which is the dependency creep
+    that turns an offline tool into an online one (constraint 2).
+    """
+    from .pydantic_ai_interop import from_pydantic_ai_spec
+
+    return from_pydantic_ai_spec(artifact)
+
+
 #: What each `--as` reads, so the refusal can name them.
-READERS = {"a2a-card": from_a2a_card, "anthropic-request": from_anthropic_request}
+READERS = {
+    "a2a-card": from_a2a_card,
+    "anthropic-request": from_anthropic_request,
+    "pydantic-ai-spec": _from_pydantic_ai_spec,
+}
 
 
 def main(argv: "list[str] | None" = None) -> int:
-    import json
     import sys
 
     args = list(sys.argv[1:] if argv is None else argv)
@@ -332,14 +360,28 @@ def main(argv: "list[str] | None" = None) -> int:
         sys.stderr.write("error: no file was given\n  fix: name one\n")
         return 1
 
+    import yaml
+
     try:
-        artifact = json.loads(Path(args[0]).read_text())
-    except (OSError, ValueError) as trouble:
+        # `yaml.safe_load` and not `json.loads`, because JSON is a subset of YAML
+        # and one of the three sources is written in YAML far more often than in
+        # JSON: `Agent.from_file()` infers the format from the extension and
+        # every example in `agent-spec.md` is a `.yaml`. Reading only JSON here
+        # would refuse the commonest spelling of the one artifact this reader
+        # exists for, with a parse error that named the wrong problem.
+        artifact = yaml.safe_load(Path(args[0]).read_text())
+    except (OSError, ValueError, yaml.YAMLError) as trouble:
         sys.stderr.write(f"error: {args[0]} could not be read: {trouble}\n")
+        return 1
+    if not isinstance(artifact, Mapping):
+        sys.stderr.write(
+            f"error: {args[0]} is not an object — it parsed to a "
+            f"{type(artifact).__name__}.\n  fix: an agent artifact is a mapping "
+            "at the top level\n"
+        )
         return 1
 
     agent, report = READERS[kind](artifact)
-    import yaml
 
     sys.stdout.write(yaml.safe_dump(agent, sort_keys=False, allow_unicode=True))
     sys.stdout.write("\n" + report.in_words() + "\n")

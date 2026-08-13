@@ -36,6 +36,8 @@ validator exists to catch, so `steps_at_most` is passed in instead.
 
 from __future__ import annotations
 
+import math
+import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -168,6 +170,114 @@ class Meter:
         )
 
 
+#: Every ceiling a `Limits` carries, in `ceilings()` order, as
+#: `(the attribute, the authored line, what the row would read)`.
+#:
+#: A TABLE and not a hand-kept pair of field names, because the pair was wrong
+#: twice. `__post_init__` walked `cost_per_request_under` alone for a round, and
+#: `wall_clock_s` carried the identical pathology in silence; it then walked the
+#: two floats, and `tokens_at_most` and `tool_calls_at_most` carried it in
+#: silence. Measured on the six-step 1000-USD-a-call harness, with the two-float
+#: guard in place and no other edit::
+#:
+#:     Limits(tokens_at_most=inf)     halted='final' spent=1000.0
+#:                                    unmetered=() rows=['tokens-at-most']
+#:     Limits(tool_calls_at_most=inf) halted='final' spent=1000.0
+#:                                    unmetered=() rows=['tool-calls-at-most']
+#:
+#: — a row built, `reached()` answering `None` with the meter holding 1e12 of
+#: each, and every honesty channel empty. That is the before-picture verbatim,
+#: two fields over, and it was reachable because the guard was enumerated over
+#: FIELDS when the thing being guarded against is a property of the FIGURE. The
+#: authored route is shut on all four (`whole('1e999') is None`,
+#: `seconds('inf') is None`, and `Schema::check_floor` refuses a money figure
+#: below the floor before this module ever sees it), so the constructor is the
+#: only door — which is the door this whole guard exists for.
+#:
+#: `None` for the authored line means "ask `wall_clock_field`": that ceiling can
+#: have come off either `runs-for-at-most` or `finishes-within`, and the report
+#: has to quote the line the author actually wrote.
+#:
+#: `steps-at-most` is deliberately absent, because it is not a field of this
+#: object — `ceilings()` takes it as an argument, from `AgentSpec.max_steps`,
+#: and the module docstring says why it lives there and not here.
+_CEILING_FIELDS: tuple[tuple[str, str | None, str], ...] = (
+    ("tool_calls_at_most", "tool-calls-at-most", "tool_calls"),
+    ("wall_clock_s", None, "seconds"),
+    ("cost_per_request_under", "cost-per-request-under", "money"),
+    ("tokens_at_most", "tokens-at-most", "tokens"),
+)
+
+#: The only two authored lines a wall-clock ceiling can have come off.
+#:
+#: A CLOSED vocabulary, and not tidiness. `held_nothing()` reports
+#: `wall_clock_field` verbatim into an author's report, and that field is a
+#: free-form constructor string — so an ARBITRARY name could be forged into it.
+#: Measured on the tree before this, no other edit::
+#:
+#:     Limits(wall_nothing_can_reach=inf,
+#:            wall_clock_field='anything-the-caller-likes').held_nothing()
+#:       -> (('anything-the-caller-likes', 'seconds'),)
+#:     -> "these ceilings held nothing … : anything-the-caller-likes.
+#:         fix: write a length of time on that line, like `runs-for-at-most: 30s`."
+#:
+#: a report sending an author to a line that appears nowhere in their document.
+#: `from_mapping` sets one of these two and nothing else ever should.
+_WALL_CLOCK_FIELDS: tuple[str, ...] = ("runs-for-at-most", "finishes-within")
+
+
+@dataclass(frozen=True)
+class _HeldNothing:
+    """The ceiling figures a `Limits` was handed that nothing can be at or above.
+
+    **PRIVATE, and that is the whole of its job.** The claim *"this ceiling held
+    nothing"* used to be spellable at the constructor: `cap_nothing_can_reach`
+    and `wall_nothing_can_reach` were ordinary public fields of the frozen
+    dataclass, and `__post_init__` refused only a record its own predicate
+    disagreed with — so ANY figure the predicate agrees with was accepted on
+    trust, with no evidence this object had ever held it. Measured on the tree
+    before this, no edits::
+
+        Limits(cap_nothing_can_reach=inf).nothing_can_reach
+          -> ('cost-per-request-under',)        <- and no cost line anywhere
+        Limits(tool_calls_at_most=1, wall_nothing_can_reach=inf,
+               wall_clock_field='tool-calls-at-most')
+          -> halted='tool-call-limit'  unmetered=('tool-calls-at-most',)
+             "these ceilings held nothing, because no length of time can ever be
+              at or above the figure written: tool-calls-at-most.
+              fix: write a length of time on that line …"
+
+    which is the ORIGINAL wrong-diagnosis defect verbatim — a ceiling that
+    demonstrably STOPPED the run, named on the channel whose wording is *"cannot
+    promise"*, with a remedy for a line that has no length of time on it —
+    reached through the very field the redesign added in order to remove it.
+    Both docstrings claimed *"there is no constructor argument that spells this
+    claim"*, and that sentence was false where nothing looked.
+
+    It is true now, and by TYPE rather than by predicate: this class is module
+    private, `__post_init__` answers anything else in that slot with a
+    `TypeError`, and it refuses a row naming a line no ceiling of this object
+    could have come off. A caller cannot forge a claim they cannot name.
+
+    `dataclasses.replace` still carries it, which is required rather than
+    tolerated: `harness._delegating` replaces ONE field of a member's `Limits`
+    and every other field has to survive that untouched. A field declared
+    `init=False` would not — `replace` does not copy those — and the figure has
+    by then been moved off its ceiling field, so the record would be silently
+    lost and the run would go quiet again on the very path this guard is for.
+
+    The FIGURE is stored and not merely the name, for the reason the record
+    exists at all: a name is an assertion carrying nothing to check it against,
+    and the figure the author wrote is the only thing that can justify the
+    report made about it.
+    """
+
+    #: `(the authored line, what the row would have read, the figure written)`,
+    #: in `ceilings()` order — the order the rows themselves would have come in,
+    #: so a report naming them is not a second ordering to keep straight.
+    rows: tuple[tuple[str, str, float], ...] = ()
+
+
 @dataclass(frozen=True)
 class Limits:
     """The ceilings one agent declared, and the one action they share.
@@ -180,7 +290,10 @@ class Limits:
     tool_calls_at_most: int | None = None
     wall_clock_s: float | None = None
     #: Which setting the wall-clock ceiling came from, so the report can quote
-    #: the line the author actually wrote.
+    #: the line the author actually wrote. One of `_WALL_CLOCK_FIELDS`, checked
+    #: in `__post_init__` — this string is reported verbatim to an author, and
+    #: while it was free-form an arbitrary name could be forged into their
+    #: report. The measurement is on `_WALL_CLOCK_FIELDS`.
     wall_clock_field: str = "runs-for-at-most"
     cost_per_request_under: float | None = None
     #: Which currency the spend cap was written in — `USD` for
@@ -190,9 +303,214 @@ class Limits:
     #: number, which only a spec built in code can carry — see [`Ceiling.unit`].
     cost_currency: str = ""
     tokens_at_most: int | None = None
+    #: how many times one request may put this agent to work, counting the
+    #: first. Not a Ceiling row — like `steps-at-most`, it bounds the shape of
+    #: the run, and `delegate` is where it is spent.
+    asks_itself_at_most: int | None = None
     when_it_runs_out: Action = Action.STOP
     #: The named question to put to a person when the action is `ask-a-person`.
     asks: str = ""
+    #: The ceilings this object was handed that no reading can ever be at or
+    #: above — `cost-per-request-under: NaN USD`, `runs-for-at-most: inf`,
+    #: `tokens-at-most: inf`. The FIGURES, moved off the ceiling fields rather
+    #: than deleted, because the figure is the only thing that can justify the
+    #: report made about it.
+    #:
+    #: ONE private record and not one public float per ceiling, and both halves
+    #: of that matter. Private, because the two public slots this replaces were
+    #: forgeable — see `_HeldNothing`, which carries the measurement. One,
+    #: because there are four ceiling fields and the hand-kept list of them was
+    #: wrong twice; `_CEILING_FIELDS` is the list now, and it carries the two
+    #: fields that were silent under the previous shape.
+    #:
+    #: It was a tuple of FIELD NAMES before it was a figure, and that shape could
+    #: be forged too. Its own comment said *"DERIVED, not accepted … passing it
+    #: in by hand does not make it true"*, and measured against that claim::
+    #:
+    #:     Limits(tool_calls_at_most=1, nothing_can_reach=('tool-calls-at-most',))
+    #:       -> ceilings=['tool-calls-at-most']  halted='tool-call-limit'
+    #:          unmetered=('tool-calls-at-most',)
+    #:          "these ceilings held nothing, because no amount of money can ever
+    #:           be at or above the figure written: tool-calls-at-most.
+    #:           fix: write an amount of money on that line …"
+    #:
+    #: — a ceiling that demonstrably STOPPED the run, reported on the channel
+    #: whose wording is *"cannot promise"*, with a money remedy for a tool-call
+    #: ceiling. That is the wrong-diagnosis failure `scoring._unmetered_caveats`
+    #: was written to remove, reintroduced by the field that was meant to remove
+    #: it. A name is an assertion about a figure and carries no figure, so
+    #: nothing could check it.
+    #:
+    #: B10 owns the rest of that family — a meter poisoned by a remote agent's
+    #: `"cost": NaN`, a price list resolving to `nan`, a resume through
+    #: `Meter.restored`. None of those is a figure inside a `Limits`, so none of
+    #: them meets here; the four ceiling fields do, and are the whole of what did.
+    _held_nothing: "_HeldNothing | None" = None
+
+    def __post_init__(self) -> None:
+        """A ceiling nothing can be at or above is not carried, HOWEVER it arrived.
+
+        This lives on the VALUE and not on the reader, and that is the whole
+        point of it being here rather than in `from_mapping`. `from_mapping` is
+        one of the ways a `Limits` comes to exist and it is not the common one
+        in code: `Limits(cost_per_request_under=0.05)` is written directly at
+        twenty-one sites in `adapters/python/tests` alone, and `harness` itself
+        reaches for `dataclasses.replace` when a join policy grants a member its
+        share. Guarding the parser left the identical hole open on both — measured
+        after the parser-only guard, with a transport pricing every call at 1000
+        USD::
+
+            Limits(cost_per_request_under=float('nan'), cost_currency='USD')
+                -> spent=6000.0 halted='step-limit' unmetered=()
+                   ceilings=['cost-per-request-under']
+            replace(parsed_005, cost_per_request_under=float('inf'))
+                -> cap=inf  nothing_can_reach=()  money rows=['cost-per-request-under']
+
+        which is the before-picture verbatim, reached by a different door. A
+        `Limits` is frozen, so there is exactly one moment at which every route
+        into it meets, and this is it.
+
+        **EVERY CEILING THIS OBJECT CARRIES, off `_CEILING_FIELDS`, and not a
+        hand-kept list of the fields somebody remembered.** That list was wrong
+        twice, and the second time was inside the fix for the first: for a round
+        this walked the money field only and `wall_clock_s` was silent, and then
+        it walked the two floats and `tokens_at_most` and `tool_calls_at_most`
+        were silent — measured, `Limits(tokens_at_most=inf)` building a row,
+        `reached()` answering `None` at 1e12 tokens, and every honesty channel
+        empty. The defect is a property of the FIGURE and enumerating FIELDS is
+        how it kept escaping; `_CEILING_FIELDS` carries the measurement.
+
+        Three directions per ceiling, because a record that only ever goes ON is
+        a record that outlives what it describes and a record nothing checks is
+        one anybody can write:
+
+        * a figure nothing can reach is MOVED off the ceiling field onto the
+          record, so no row is built for it and the figure that justifies the
+          report is still there to be pointed at;
+        * a real figure arriving where an unreachable one was CLEARS that
+          ceiling's row — it is simply not carried forward. `harness._delegating`
+          does exactly this: a member whose own cap is `NaN USD` is handed the
+          join policy's share with `replace(member.limits,
+          cost_per_request_under=allowed)`, and `replace` copies every field it
+          is not given across untouched. That member then enforced a real
+          `0.10 USD` ceiling and reported `cost-per-request-under` as a cap it
+          could not promise — a run that can halt at `cost-limit` on the very
+          field it just said held nothing;
+        * a row whose ceiling field is still empty is CARRIED, and that direction
+          is as load-bearing as the other two. `replace(l, cost_currency='EUR')`
+          on an object whose `NaN USD` has already been moved onto the record
+          must still say what it said — the figures are gone from the ceiling
+          fields by then, so a rebuild from the figures alone would lose the
+          claim and the run would go quiet again. The row is only carried when
+          it names the same ceiling, reads the same meter, and is still a figure
+          `_nothing_can_reach` agrees with.
+
+        The record's TYPE is what makes it unforgeable, and the predicate never
+        was: `cap_nothing_can_reach` and `wall_nothing_can_reach` were public
+        floats, so any figure the predicate agreed with was believed —
+        `Limits(cap_nothing_can_reach=inf)` reported `cost-per-request-under` on
+        `unmetered` for an object with no cost line anywhere. `_HeldNothing`
+        carries that measurement and the reasoning.
+
+        THE CURRENCY IS NOT DESTROYED, and it used to be. `cost_currency` is the
+        half of the authored line that parsed perfectly, and clearing it lost
+        information the clearing arm above then could not give back — measured on
+        this guard's own motivating path, reconstructing `_delegating` with
+        `allowed=0.10`::
+
+            member wrote 'NaN USD'  -> cap=0.1 currency=''    `cost-per-request-under` (0.11 of 0.1)
+            member wrote '0.50 USD' -> cap=0.1 currency='USD' `cost-per-request-under` (0.11 of 0.1 USD)
+
+        Two members in the same team, handed the same share by the same policy,
+        stopped by the same ceiling, printing different sentences — and the
+        second port keeps the currency through the same spread (`spend("NaN USD")
+        -> amount=NaN currency="USD"`), so this was also the two ports printing
+        different `stoppedBy.unit`, which is the pair `run-trace.ts` projects in
+        order to be compared. Nothing reads a currency without an amount:
+        `ceilings()` builds a money row only when the amount is there.
+
+        `object.__setattr__` is what a frozen dataclass gives `__post_init__`;
+        there is no other way to normalise one at construction.
+        """
+        if self.wall_clock_field not in _WALL_CLOCK_FIELDS:
+            raise ValueError(
+                f"a wall-clock ceiling comes off one of "
+                f"{', '.join(_WALL_CLOCK_FIELDS)}, and this one says "
+                f"{self.wall_clock_field!r} — which would be reported to an "
+                f"author as a line to go and fix in a document that has no such "
+                f"line in it"
+            )
+        if self._held_nothing is not None and not isinstance(
+            self._held_nothing, _HeldNothing
+        ):
+            raise TypeError(
+                "`_held_nothing` is the record this object writes about figures "
+                "it was handed, not a claim a caller can hand in: "
+                f"{self._held_nothing!r}"
+            )
+        carried = {} if self._held_nothing is None else {
+            field: (field, reads, figure)
+            for field, reads, figure in self._held_nothing.rows
+        }
+        rows: list[tuple[str, str, float]] = []
+        for attr, line, reads in _CEILING_FIELDS:
+            named = self.wall_clock_field if line is None else line
+            figure = getattr(self, attr)
+            if figure is not None and _nothing_can_reach(float(figure)):
+                object.__setattr__(self, attr, None)
+                rows.append((named, reads, float(figure)))
+            elif figure is None and named in carried:
+                # Carried, so that `replace(l, cost_currency='EUR')` on an object
+                # whose figure has already been moved off keeps saying what it
+                # said. `harness._delegating` replaces one field and nothing else.
+                held = carried[named]
+                if held[1] == reads and _nothing_can_reach(held[2]):
+                    rows.append(held)
+        object.__setattr__(
+            self, "_held_nothing", _HeldNothing(tuple(rows)) if rows else None
+        )
+
+    def held_nothing(self) -> tuple[tuple[str, str], ...]:
+        """The ceilings this object was handed that nothing can ever be at or
+        above, as `(the line the author wrote, what it counts)`.
+
+        Two readers want two different things and one of them is a SENTENCE.
+        `harness` wants the names, for `RunResult.unmetered`; `scoring` wants to
+        know whether the remedy to print is *"write an amount of money on that
+        line"* or *"write a length of time on that line"*, and a list of bare
+        names cannot answer that. The second element is `Ceiling.reads` — the
+        same word the row would have carried had one been built — so the two can
+        never fall out of step. Four values reach here and not two, because four
+        ceilings can carry a figure nothing reaches: `scoring._unmetered_caveats`
+        has a remedy for each, and a `reads` with no remedy there falls through
+        to *"nothing to type"*, which is the wrong-diagnosis failure this pair of
+        elements exists to prevent.
+
+        In `ceilings()` order, because these are the rows that order would have
+        held and a report that names them in a different sequence than the live
+        ones is a second ordering to keep straight.
+        """
+        record = self._held_nothing
+        if record is None:
+            return ()
+        return tuple((field, reads) for field, reads, _ in record.rows)
+
+    @property
+    def nothing_can_reach(self) -> tuple[str, ...]:
+        """Just the field names, for `RunResult.unmetered`.
+
+        A read-only view and not a field, which is the point: there is no
+        constructor argument that spells this claim, so `Limits(...,
+        nothing_can_reach=('tool-calls-at-most',))` is a `TypeError` at the call
+        site rather than a lie that reaches an author's report.
+
+        The two public float slots this used to be a view over were the same
+        lie one level down — `Limits(cap_nothing_can_reach=inf)` came back
+        `('cost-per-request-under',)` for an object with no cost line anywhere —
+        and the record is a private type for that reason. `_HeldNothing` carries
+        the measurement.
+        """
+        return tuple(field for field, _ in self.held_nothing())
 
     @staticmethod
     def from_mapping(m: dict[str, Any]) -> "Limits":
@@ -207,6 +525,14 @@ class Limits:
         # Both halves of the cap, off one read. Two reads would be two chances
         # for the amount and the currency to come from different lines.
         cap = money(m.get("cost-per-request-under"))
+        # The figure also has to be one a run can actually spend up to — and
+        # that check is NOT here. It is on the value, in `__post_init__`, which
+        # every route into a `Limits` goes through and this one does not: guarding
+        # the reader left `Limits(cost_per_request_under=float('nan'))` and
+        # `dataclasses.replace(..., cost_per_request_under=float('inf'))` running
+        # six thousand dollars out under `unmetered=()`, which is the same
+        # before-picture through a different door. See `__post_init__` for the
+        # measurement and `_nothing_can_reach` for which figures qualify.
         return Limits(
             tool_calls_at_most=whole(m.get("tool-calls-at-most")),
             wall_clock_s=wall,
@@ -214,6 +540,7 @@ class Limits:
             cost_per_request_under=None if cap is None else cap[0],
             cost_currency="" if cap is None else cap[1],
             tokens_at_most=whole(m.get("tokens-at-most")),
+            asks_itself_at_most=whole(m.get("asks-itself-at-most")),
             when_it_runs_out=action(m.get("when-it-runs-out")),
             asks=str(m.get("asks") or ""),
         )
@@ -297,6 +624,16 @@ class Limits:
         to name, so whatever is left over is reported rather than dropped: the
         author believing they capped their spend is precisely the situation a
         spend cap is for.
+
+        What comes back is *"this run could not promise to hold these"*, which is
+        not quite *"these held nothing"*. A transport bound to an AGENT rather
+        than a model — `A2ATransport`, `prices_money=False`, because no
+        catalogue row can price somebody else's agent — may still be TOLD a cost
+        by that agent, and `harness._meter_usage` adds what it is told. So a
+        money ceiling named here can also be the one that stopped the run. That
+        pair is argued in full at `harness.RunResult.unmetered` and pinned by a
+        test; the distinction matters because collapsing it in either direction
+        loses something true.
         """
         if prices_money is None:
             prices_money = counts_tokens
@@ -334,6 +671,35 @@ class Limits:
         if per_million is None or per_million > 0.0:
             return ()
         return tuple(c.field for c in self.ceilings() if c.reads == "money")
+
+
+def _nothing_can_reach(cap: float) -> bool:
+    """Is this a ceiling NO reading can ever be at or above?
+
+    Written for a money cap and true of every ceiling in the table, because the
+    comparison is one comparison: `wall_clock_s` reads elapsed seconds through
+    the same `at >= c.limit` and fails on `nan` and `inf` for exactly the same
+    two arithmetic reasons. `Limits.__post_init__` therefore asks it about both
+    float ceilings, and `learning.Permissions` asks it about a monthly spend.
+
+    Every ceiling is compared as `spent >= limit`, so there are exactly two such
+    figures and they fail for different arithmetic reasons:
+
+    * `nan` — every comparison against a NaN is false, so the row is skipped at
+      every spend there is, including `inf`;
+    * `inf` — the comparison works perfectly and nothing can be larger.
+
+    **`-inf` is deliberately not one of them, and this is a test rather than
+    `not math.isfinite`.** `spent >= -inf` is true of every spend, so a cap of
+    `-inf USD` fires on the FIRST step and stops the run loudly at
+    `(0 of -inf USD)`. That is a wrong ceiling, not an absent one, and
+    `tests/test_both_ports_read_every_way_a_spend_cap_is_written.py` pins it as
+    *"the one non-finite cap a run can reach"* and compares that sentence across
+    the two ports byte for byte. Dropping it here would delete the only value
+    that exercises the non-finite arm of both reporters. All three are refused
+    where an author writes one: `Schema::check_floor` puts a floor under money.
+    """
+    return math.isnan(cap) or cap == math.inf
 
 
 def step_ceiling(limit: int) -> Ceiling:
@@ -400,9 +766,19 @@ def whole(raw: Any) -> int | None:
 def seconds(raw: Any) -> float | None:
     """`30s`, `500ms`, `1m30s`, `2 minutes`, or a bare number of seconds.
 
-    Mirrors the Rust coercer rather than approximating it: an author who writes
-    `1m30s` and gets 1.0 back would have a ceiling ninety times tighter than the
-    one they wrote, and nothing would say so.
+    Reads the same SPELLINGS as the Rust coercer rather than approximating
+    them: an author who writes `1m30s` and gets 1.0 back would have a ceiling
+    ninety times tighter than the one they wrote, and nothing would say so.
+
+    The two do not accept the same SET, and the difference runs one way only:
+    the Rust side is stricter at both ends. It refuses a bare `90` as
+    `schema/wrong-type` (ninety what?) and a length of time past the
+    milliseconds it counts in as `schema/too-long-to-count`; this counts in
+    Python floats, has no such end, and takes both. That is safe in the
+    direction it runs — `pact check` is the gate, and nothing it refuses ever
+    reaches a run — but it is a deliberate parting and not an oversight, so
+    read this as "every spelling that gets through is read the same way here",
+    not as "these two agree on what gets through".
     """
     if raw is None or isinstance(raw, bool):
         return None
@@ -419,19 +795,33 @@ def seconds(raw: Any) -> float | None:
         "d": 86400.0, "day": 86400.0, "days": 86400.0,
     }
     total, num, unit, any_part = 0.0, "", "", False
-    for ch in text + " ":
+    chars = text + " "
+    i = 0
+    while i < len(chars):
+        ch = chars[i]
         if ch.isdigit() or ch == ".":
             if unit:
                 if (part := _part(num, unit, units)) is None:
                     return None
                 total, num, unit, any_part = total + part, "", "", True
             num += ch
+        elif _exponent_at(chars, i, num, unit):
+            # `1e6s` — the `e` belongs to the figure, not to a unit called `e`.
+            # Both readers took the other view for a round and both refused the
+            # whole line for it; the Rust coercer takes this one now, so this
+            # one does too, or a spelling `pact check` passes would be read here
+            # as no ceiling at all.
+            num += "e"
+            if chars[i + 1] in "+-":
+                i += 1
+                num += chars[i]
         elif ch.isalpha():
             unit += ch
         elif ch.isspace():
-            continue
+            pass
         else:
             return None
+        i += 1
     if num:
         if (part := _part(num, unit, units)) is None:
             return None
@@ -439,6 +829,20 @@ def seconds(raw: Any) -> float | None:
     elif unit:
         return None
     return total if any_part else None
+
+
+def _exponent_at(chars: str, i: int, num: str, unit: str) -> bool:
+    """Whether `chars[i]` is the `e` of an exponent rather than a unit's first
+    letter. `coerce::is_exponent_at`'s rule, in the same words: a figure has
+    been written, no unit has started, and digits (with an optional sign)
+    follow. No unit read here begins with `e`, so `2 seconds` is untouched —
+    its unit starts at the `s`."""
+    if i >= len(chars) or chars[i] != "e" or not num or unit:
+        return False
+    j = i + 1
+    if j < len(chars) and chars[j] in "+-":
+        j += 1
+    return j < len(chars) and chars[j].isdigit()
 
 
 def _part(num: str, unit: str, units: dict[str, float]) -> float | None:
@@ -449,6 +853,53 @@ def _part(num: str, unit: str, units: dict[str, float]) -> float | None:
         return float(num) * mult
     except ValueError:
         return None
+
+
+# What separates the amount from the currency, and what counts as a number.
+# Both are `coerce::money`'s, spelled out, because for a round this function read
+# a WIDER language than the validator and the TypeScript port read a NARROWER
+# one, so a string could be a ceiling here, no ceiling there, and no document at
+# all — three answers to one line.
+#
+# `str.split()` and `float()` were the reference before, and each is one class
+# too wide:
+#
+#   * `str.split()` splits on `U+001C`–`U+001F`, which `char::is_whitespace` does
+#     not, so `5<US>USD` was five dollars here and a type error at the gate. This
+#     set is `char::is_whitespace` exactly — measured: `0.05<NEL>USD` and
+#     `0.05<NBSP>USD` both give `pact check` rc=0, `0.05<US>USD` and
+#     `0.05<BOM>USD` both give rc=1 `schema/wrong-type`.
+#   * `float()` takes digit-group underscores and any Unicode decimal digit —
+#     `1_0` is ten, `١٢` and `１２` are twelve — and `parse::<f64>()` takes none
+#     of them. Measured, each was a cap here and no cap in the TypeScript port,
+#     and `pact check` refuses all three (`1_0 USD`, `０.05 USD`, `٠.05 USD` ->
+#     rc=1 `schema/wrong-type`).
+#
+# The rule is therefore stated ONCE and in one direction: both readers read what
+# `coerce::money` reads. Where they are still deliberately looser, `money` says
+# so by name below.
+_SEPARATOR = re.compile(
+    "[\t\n\v\f\r\u0020\u0085\u00a0\u1680\u2000-\u200a"
+    "\u2028\u2029\u202f\u205f\u3000]+"
+)
+
+#: A whole token `parse::<f64>()` reads as a number, and nothing else. `[0-9]`
+#: rather than `\d`, because Python's `\d` is every Unicode decimal digit and
+#: that is one of the two widenings this exists to have closed.
+_FIGURE = re.compile(
+    r"[+-]?(?:(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:e[+-]?[0-9]+)?|inf(?:inity)?|nan)",
+    re.IGNORECASE,
+)
+
+
+def _figure(token: str) -> "float | None":
+    """The token as a number, or `None` — never a prefix of it.
+
+    `float(token)` after the pattern has passed is safe and gives the same
+    double `parse::<f64>()` gives: both are correctly rounded, and every form
+    the pattern admits is one `float()` also reads.
+    """
+    return float(token) if _FIGURE.fullmatch(token) else None
 
 
 def money(raw: Any) -> "tuple[float, str] | None":
@@ -475,20 +926,62 @@ def money(raw: Any) -> "tuple[float, str] | None":
     a file. It is empty rather than `USD` because inventing one is exactly the
     defaulting FR-1.4.5 rules out — and a run that quietly names a currency the
     author never chose is how this began.
+
+    **Where this reader is looser than `coerce::money`, and where it is not.**
+    The line above is the whole of it, and it is worth being exact, because a
+    comment claiming this reader takes *"exactly what the gate lets through"*
+    was measurably false in five directions at once. This reads what
+    `coerce::money` reads — the same separators, the same number grammar, at
+    most two tokens, `$` as a PREFIX and not as a character that may appear
+    anywhere — with exactly two deliberate widenings, each of which costs the
+    CURRENCY and never invents one:
+
+    * a bare number is a cap with no currency, which is the paragraph above;
+    * a second token that is not three ASCII letters is dropped rather than
+      refusing the line, so `0 DOLLARS` is zero of nothing rather than no
+      ceiling at all. `coerce::money` refuses the whole value there.
+
+    Everything else the validator refuses is refused here, in both ports and for
+    the same reason: a ceiling the gate would not accept, enforced silently by
+    the run, is the silent degradation T7 forbids — and the `$` substitution
+    that used to be global was that defect exactly. Measured through the shipped
+    binary, all of these are `pact check` rc=1 `schema/wrong-type`, and all of
+    them are now `None` in both ports: `0.05$`, `5 U$D`, `$0.05 USD`,
+    `5 USD 7`, `0.1 usd 0.2`, `0.05 USD JPY`, `1_0 USD`, `０.05 USD`,
+    `٠.05 USD`, `0.05<US>USD`.
     """
     if raw is None or isinstance(raw, bool):
         return None
     if isinstance(raw, (int, float)):
         return (float(raw), "")
+    tokens = [t for t in _SEPARATOR.split(str(raw)) if t]
+    # `$` is a PREFIX and the rest of the line must be one whole number —
+    # `s.strip_prefix('$')` then `rest.trim().parse::<f64>().ok()?`, mirrored.
+    # A global `replace("$", " USD ")` was here instead, and it invented a
+    # currency out of a dollar sign anywhere in the string: `0.05$` and `5 U$D`
+    # both came back as USD, and `$0.05 USD` — which the validator refuses
+    # outright — came back as five pence. Splitting on the first token is enough
+    # to find the prefix, because the first token starts at the first character
+    # `trim()` would have kept.
+    if tokens and tokens[0].startswith("$"):
+        rest = [t for t in (tokens[0][1:], *tokens[1:]) if t]
+        if len(rest) != 1:
+            return None
+        amount = _figure(rest[0])
+        return None if amount is None else (amount, "USD")
+    # Two tokens at most: `coerce::money` returns `None` on a third, and a
+    # reader that dropped the surplus in silence enforced a ceiling the gate had
+    # already refused — `5 USD 7` was five dollars in both ports.
+    if not tokens or len(tokens) > 2:
+        return None
     amount: float | None = None
     currency = ""
-    for part in str(raw).replace("$", " USD ").split():
+    for part in tokens:
         if amount is None:
-            try:
-                amount = float(part)
+            found = _figure(part)
+            if found is not None:
+                amount = found
                 continue
-            except ValueError:
-                pass
         # Three ASCII letters is what the validator accepts as a currency
         # (`coerce::money` refuses anything else), so it is what is looked for
         # here. Reading it lexically rather than positionally is what lets one

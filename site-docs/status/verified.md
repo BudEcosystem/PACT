@@ -12,20 +12,20 @@ from an earlier document.
 
 | Claim | Value | How to check |
 |---|---|---|
-| Rust tests | **690** | `cargo test --workspace` |
-| Adapter tests | **1207** | `cd adapters/python && uv run pytest tests/ -q` |
-| Total | **1,897** | both of the above |
+| Rust tests | **994** | `cargo test --workspace` |
+| Adapter tests | **1966** | `cd adapters/python && uv run pytest tests/ -q` |
+| Total | **2,960** | both of the above |
 | TypeScript type-checks | clean | `cd adapters/typescript && npx tsc --noEmit` |
 | Lints | clean | `cargo clippy --all-targets` |
 | Worked example loads | 498 settings | `cargo run -p pact-cli -- check examples/refund-desk` |
 | Schema kinds | **44** | `python3 -c "import yaml;print(len(yaml.safe_load(open('spec/schema.yaml'))['groups']))"` |
-| Fields that resolve a name | **26** | `grep -cE '^\s*names:' spec/schema.yaml` |
+| Fields that resolve a name | **27** | `grep -cE '^\s*names:' spec/schema.yaml` |
 
 ## What is proven, and what "proven" means
 
 ### Framework portability
 
-**29 agents across 10 workspaces**, loaded by the Rust CLI, execute over **seven
+**30 agents across 11 workspaces**, loaded by the Rust CLI, execute over **seven
 targets** across two language runtimes and produce byte-identical traces, tool
 sequences and model-call counts. The set is generated from `examples/`, so an
 agent added to the tree joins it by existing rather than by somebody remembering.

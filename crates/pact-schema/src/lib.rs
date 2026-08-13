@@ -49,7 +49,9 @@ pub enum Ty {
     /// (`5 minutes`, `1d`) worked and were undiscoverable. Both [`Ty::describe`]
     /// and the fix in [`wrong_type`] now name the whole grammar.
     ///
-    /// It is always more than nothing: see [`Schema::check_floor`].
+    /// It is always more than nothing: see [`Schema::check_floor`]. And it is
+    /// never longer than the milliseconds it is counted in, which used to crash
+    /// the checker rather than say so: see [`Schema::check_ceiling`].
     Duration,
     /// An amount of money: `0.05 USD`.
     Money,
@@ -65,6 +67,10 @@ pub enum Ty {
     /// `context-at-least: quite a lot really` loaded clean and was then compared
     /// against a real context window by the resolver. Every other quantity in
     /// PACT has a type.
+    ///
+    /// And it is never more than the whole number it is counted in, which used
+    /// to saturate to the largest number there is and load clean: see
+    /// [`Schema::check_ceiling`].
     Size,
     /// A plain file name: no folders, no climbing out, no leading dot.
     ///
@@ -663,7 +669,10 @@ impl Schema {
                 // wrong about something, so it reads as carelessness at exactly
                 // the wrong moment. `must have` is what lets one spelling serve
                 // `an agent` and `evals` both; `needs` cannot agree with both.
-                [] if f.required && !already_named && !settings_incomplete => {
+                [] if f.required
+                    && !already_named
+                    && !settings_incomplete
+                    && !declares_itself_a_base(map, g) => {
                     let noun = noun_for(g);
                     let mut subject = format!("{}{noun}", article(&noun));
                     if let Some(head) = subject.get_mut(..1) {
@@ -1536,10 +1545,16 @@ impl Schema {
                         None => self.check_name(node, field, &s, diags, at),
                     },
                     // One door for "the value fits the type and is still not a
-                    // usable value". `check_floor` returns for the kinds that
-                    // have no floor, so a second route would only be a second
-                    // place to forget.
-                    Some(c) => self.check_floor(node, field, &c, diags),
+                    // usable value", and both ends of every quantity go through
+                    // it. Each half returns for the kinds that have no floor
+                    // and no ceiling, so a second route would only be a second
+                    // place to forget. Nothing can be under the floor and over
+                    // the ceiling at once — a value that does not fit carries no
+                    // number to compare — so they never both speak.
+                    Some(c) => {
+                        self.check_floor(node, field, &c, diags);
+                        self.check_ceiling(node, field, &c, diags);
+                    }
                 }
             }
         }
@@ -1566,6 +1581,82 @@ impl Schema {
     /// the author believed they were being generous with. `answer-within: 0s` is
     /// a deadline that expires before anybody is asked; `forget-after: 0s`
     /// discards what it remembers on the way in.
+    ///
+    /// **Money is the same argument**, and for a round it was the one quantity
+    /// here with no bottom at all: `Ty::Money` got its currency and neither a
+    /// range nor a check that the figure is a figure.
+    ///
+    /// `NaN USD` and `inf USD` are the hole from the far end, and worse than a
+    /// zero: in IEEE-754 every comparison against a NaN is false, so a cap of
+    /// `NaN USD` is not a loose cap, it is **no cap at all**, on a run that
+    /// reports itself fully metered. That is the outcome
+    /// `Limits.priced_at_nothing` already names as the one to avoid — *"a spend
+    /// cap that can never be reached, under an author who believes they capped
+    /// their spend"* — arriving by a route nothing was watching. That half of
+    /// the argument holds on any comparison and needs nothing else said about
+    /// it.
+    ///
+    /// **The ZERO half is per field, because the two money ceilings are not
+    /// compared the same way.** This doc said *"the same comparison"* and it was
+    /// measurably wrong about the second of them:
+    ///
+    /// * `limits.cost-per-request-under` really is the `0s` case exactly.
+    ///   `Limits.reached` is `at >= c.limit` (`adapters/python/src/pact_adapters/limits.py`),
+    ///   so `0 USD` is reached before the first step and every run stops
+    ///   instantly, reporting a ceiling its author believed they were being
+    ///   generous with.
+    /// * `learning.cycle-limits.per-month` is compared `would_reach > amount`
+    ///   (`learning.py`, `Learner._decide`), and `MonthlySpend.per_run` is
+    ///   `0.0` until something has been scored — *"the honest forecast for the
+    ///   first cycle of a month"*. So on the first cycle `0.0 > 0.0` is false.
+    ///   MEASURED, three real cycles at 8.00 USD each against a real
+    ///   `.pact/learning/` ledger with `per-month: 0 USD`: cycle 1 RUNS and
+    ///   spends 8.00, cycles 2 and 3 are refused. `0 USD` there is not "every
+    ///   cycle stopped instantly" — it is "one cycle's worth of spending, then
+    ///   nothing", which is not what its author meant by zero either, and is a
+    ///   ceiling that lets through exactly the spend it was written to prevent.
+    ///   It is refused for THAT reason, not for a borrowed one. Held by
+    ///   `adapters/python/tests/test_a_monthly_ceiling_nothing_can_reach_refuses_the_cycle.py`,
+    ///   which pins the measurement so this paragraph stays checkable.
+    ///
+    /// `-5 USD` is the `0s` case on both, and on both it is the sentence *"less
+    /// than nothing"* rather than a comparison argument: a ceiling below zero is
+    /// not a budget under any reading.
+    ///
+    /// This is here rather than in [`coerce::money`] on purpose.
+    /// `pact-loader`'s `currency.rs` re-runs `coerce::check(.., &Ty::Money)` to
+    /// read the currency off a value it is not otherwise judging — including
+    /// off `models/catalog.yaml`, where `input-per-mtok: 0 USD` is how a
+    /// locally-served model DECLARES a currency and is a legitimate zero. A
+    /// floor inside the coercer would make that row unreadable and close the
+    /// only door out of the currency check. It cannot be an `at-least:` line
+    /// either: [`Field::at_least`] is a whole number, and the floor a spend cap
+    /// needs is "more than nothing", not "at least one".
+    ///
+    /// **Which money fields.** Both ceilings — `limits.cost-per-request-under`
+    /// and `learning.cycle-limits.per-month` — and deliberately NOT
+    /// `question-rule.more-than`, the figure above which a person is asked.
+    /// That one is a GATE and not a ceiling: `more-than: 0 USD` means "stop for
+    /// a person on ANY spend", which is a strict rule rather than a broken one,
+    /// and nothing ever runs out against it. It stays out by construction and
+    /// not by an exception listed here — A3 made it `type: text` so a score
+    /// could be gated by a score, so it never coerces to `Money` and never
+    /// reaches this function. A non-finite threshold is a different matter and
+    /// is `money.rs`'s to hold, beside the rest of what it says about that
+    /// field; see the concerns note on this change.
+    ///
+    /// That "by construction" is load-bearing and is now checked rather than
+    /// asserted. `may-be-money: yes` is the escape hatch A3 created and the
+    /// specification recommends for money-shaped fields, and a field carrying it
+    /// gets `pact-loader`'s CURRENCY check (derived from the schema) and no
+    /// floor from here (it is `type: text`). So the day a second such field
+    /// appears it would be price-checked and figure-unchecked, which is the
+    /// defect this whole function exists to close, in a new slot.
+    /// `currency::tests::every_field_this_check_selects_is_also_held_to_being_a_figure`
+    /// fails where somebody is adding it: it enumerates every field the
+    /// specification types `money`, validates `NaN USD` into it and requires
+    /// `schema/below-the-floor` back, and pins the `may-be-money` set to the one
+    /// field `money.rs` reaches by hand.
     fn check_floor(&self, node: &Node, f: &Field, value: &coerce::Coerced, diags: &mut Diagnostics) {
         let (what, fix) = match value {
             coerce::Coerced::Integer(n) => match f.at_least {
@@ -1589,6 +1680,78 @@ impl Schema {
                     placeholder(&Ty::Duration)
                 ),
             ),
+            // The same mistake in the same shape one type over: a count of
+            // tokens that reads as a size and is not one. `context-at-least:
+            // 0.0004k` is 0.4 tokens and `"0.5"` is half of one — figures an
+            // `f64` holds to the last bit — and both TRUNCATE to nothing at
+            // `coerce::size`'s `as u64`, leaving a requirement no model has to
+            // meet out of a line that was asking for one. For one round they
+            // were sent to the ceiling instead and told they were "closer to
+            // zero than this can keep track of", which is false about a figure
+            // that was held exactly, with a fix (*"any number further from
+            // zero"*) that `0.0004k` already satisfies.
+            //
+            // It is asked of the FIGURE AS WRITTEN, and that is what keeps a
+            // zero somebody MEANT out of it: `0` and `0k` carry no non-zero
+            // digit. A figure that never underflowed is the only thing here —
+            // `1e-999` and `1e-999m` are `coerce::Coerced::SizeTooSmall` and are
+            // refused at the ceiling by name.
+            //
+            // It asked `node.as_str()` until `coerce::size` learned to read a
+            // figure the document layer had held as a number, and then a bare
+            // `context-at-least: 0.5` had no text to answer with and loaded
+            // CLEANLY as a context window of zero — the exact silence this arm
+            // exists to break, let back in by the door beside it. Measured
+            // through the shipped binary: `"0.5"` in quotes was
+            // `schema/below-the-floor` and `0.5` without them was `OK — loaded
+            // cleanly`.
+            coerce::Coerced::Size(0)
+                if as_written(node).chars().any(|c| c.is_ascii_digit() && c != '0') =>
+            {
+                (
+                    format!("'{}' is {}, which is no tokens at all.", f.name, as_written(node)),
+                    format!(
+                        "Write `{}: {}`, or any size above zero, or remove the line.",
+                        f.name,
+                        placeholder(&Ty::Size)
+                    ),
+                )
+            }
+            // An amount of money that is not one to spend. Three sentences
+            // rather than one, because they are three different mistakes and a
+            // reader told that infinity is "too small" would go looking for a
+            // bigger number to write.
+            coerce::Coerced::Money { amount, .. }
+                if (!amount.is_finite() || *amount <= 0.0)
+                    && !money_past_counting(*amount, node) =>
+            {
+                let written = node.as_str().unwrap_or_default().trim();
+                (
+                    format!(
+                        "'{}' is {written}, which is {}.",
+                        f.name,
+                        if amount.is_nan() || (amount.is_infinite() && !has_a_digit(written)) {
+                            // `NaN` and `inf` are spelled the way a number is
+                            // spelled and are not amounts, so the sentence says
+                            // so rather than ranking them. A figure that
+                            // OVERFLOWED to infinity — `1e400` — is a real
+                            // amount and is not here; it is over the ceiling,
+                            // and being told it is not a figure would send its
+                            // author hunting for a typo that is not there.
+                            "not an amount of money"
+                        } else if *amount < 0.0 {
+                            "less than nothing"
+                        } else {
+                            "no money at all"
+                        }
+                    ),
+                    format!(
+                        "Write `{}: {}`, or any amount above zero, or remove the line.",
+                        f.name,
+                        placeholder(&Ty::Money)
+                    ),
+                )
+            }
             _ => return,
         };
         diags.push(Diagnostic::error(
@@ -1596,6 +1759,282 @@ impl Schema {
             node.span.clone(),
             what,
             format!("{fix} — {}", f.help.trim()),
+        ));
+    }
+
+    /// The far end of [`Schema::check_floor`]: a quantity bigger than the whole
+    /// number it is counted in — a length of time past the milliseconds, a
+    /// count of tokens past the count.
+    ///
+    /// `finishes-within: 99999999999999999999h` is spelled the way the help
+    /// says to spell it, and it asks for more milliseconds than a whole number
+    /// here can hold. That used to be added up anyway, and the addition went
+    /// over the top: `pact check` on a debug build — the build `cargo run` and
+    /// the README both give an author — died with *"attempt to add with
+    /// overflow"*, no file, no line, no field. A release build did not die; it
+    /// wrapped, and kept a ceiling with no relation to the line that was
+    /// written, which is the worse of the two because nothing says so.
+    ///
+    /// Refused here rather than in [`coerce`] for the reason `0s` is: the line
+    /// is not misspelled, and *"'finishes-within' is not a length of time"*
+    /// would send its author hunting for a typo that is not there. Here the
+    /// field's name and line are known and the sentence can be the true one.
+    ///
+    /// **A count of tokens is the same cast and the same answer.**
+    /// `context-at-least: 99999999999999999999m` multiplies in floating point
+    /// and casts once, with no addition after it to overflow — so it never
+    /// crashed, it was only ever quietly wrong: the cast saturated, the field
+    /// became a requirement no model on earth meets, and `pact check` said
+    /// *"OK — loaded cleanly"*. That is exactly the half of the duration defect
+    /// a release build had, sitting one function away in the same file, so it
+    /// is closed by the same door rather than left as a lesson the comments
+    /// claim and the code does not apply.
+    fn check_ceiling(
+        &self,
+        node: &Node,
+        f: &Field,
+        value: &coerce::Coerced,
+        diags: &mut Diagnostics,
+    ) {
+        // Two quantities, two sentences: told that a number of tokens is "a
+        // longer time than this can keep track of", a reader would have no idea
+        // what to change. Each names its own kind and offers its own type's
+        // placeholder.
+        let (rule, what, shorter, ty) = match value {
+            // THE SET THIS OFFERS HAS TO HOLD. For one round these two arms
+            // said *"any shorter length of time"* and *"any smaller number"*,
+            // which is the false-set sentence [`HELD`] was written to replace
+            // and which reached `Ty::Number` and `Ty::Threshold` only. Measured
+            // through the shipped binary: `finishes-within: 1e999s` was refused
+            // with *"any shorter"* and the SHORTER `1e300h` was refused by the
+            // identical rule; `context-at-least: 1e19` was refused with *"any
+            // smaller"* and the SMALLER `1e16` was refused with it. The refused
+            // set is `|v| >= bound`, so from a figure that is already past the
+            // bound every step downward the author is invited to take lands
+            // inside it again.
+            //
+            // A length of time cannot use [`HELD`] as it stands, because the
+            // digits do not settle it: `999999999999999ms` and `…s` load and
+            // `…h` and `…d` do not. So it names a length instead — one this
+            // holds with room to spare (`1000d` is 8.64e10 milliseconds against
+            // a `u64` ceiling of 1.8e19) and one an author can type.
+            coerce::Coerced::DurationTooLong => (
+                "schema/too-long-to-count",
+                "a longer time than this can keep track of",
+                "any length of time up to `1000d`",
+                Ty::Duration,
+            ),
+            coerce::Coerced::SizeTooBig => (
+                "schema/too-big-to-count",
+                "more than this can keep track of",
+                HELD,
+                Ty::Size,
+            ),
+            // An amount of money is the same overflow one type over, and it
+            // arrives here rather than at the floor for the same reason `0s`
+            // goes to the floor and `99999999999999999999h` does not: the two
+            // are one `f64::INFINITY` after the parse and two different edits.
+            // `cost-per-request-under: 1e400 USD` is a figure somebody meant,
+            // and telling them it "is not an amount of money" — the floor's
+            // sentence for `NaN` and `inf`, which are spelled the way a number
+            // is spelled — would send them hunting a typo that is not there.
+            coerce::Coerced::Money { amount, .. } if money_past_counting(*amount, node) => (
+                "schema/too-much-to-count",
+                "a larger amount than this can keep track of",
+                "any smaller amount",
+                Ty::Money,
+            ),
+            // A plain number is the same overflow with none of money's shape,
+            // and it arrives here rather than being refused as text for the
+            // reason above: `temperature: 1e999` is spelled exactly the way a
+            // number is spelled. `coerce::number` keeps a figure that overflowed
+            // and drops a WORD that never did — `inf` and `nan` carry no digit
+            // and stay `schema/wrong-type`, which is the true sentence for them.
+            //
+            // Both ends get their own sentence, which money does not need: an
+            // amount below zero is refused at the floor as "less than nothing"
+            // before its size is ever in question, while `-1e999` on a plain
+            // number is a real figure at the bottom of the scale. Told it was
+            // "more than this can keep track of", its author would go looking
+            // for a smaller number and find the one they had already written.
+            // THE SPELLING NO `is_finite` GUARD CAN SEE, WHICH IS WHY THIS ASKS
+            // THE FIGURE AND NOT THE TEXT. `temperature: 99999999999999999999`
+            // parses to a perfectly finite `1e20`, so an `is_finite` arm alone
+            // passed over it, `pact check` said *"OK — loaded cleanly"*, and the
+            // runtime was handed `1e20`: a figure nobody wrote, with no report
+            // and exit 0, which is the silent degradation T7 and FR-8.1.1
+            // forbid. Three documents saying `99999999999999999999`, `…98` and
+            // `100000000000000000000` also digested to one hash.
+            //
+            // For a round the extra arm asked `parse::<i64>()` of the author's
+            // TEXT, and that was a question about spelling: `temperature: 1e19`
+            // loaded while `temperature: 10000000000000000000` — the same `f64`
+            // to the last bit — was refused as *"more than this can keep track
+            // of"*, a sentence the first line proves false, and one `.` was
+            // enough to walk past it (`99999999999999999999.0` loaded and
+            // shipped `1e+20` to the runtime). [`coerce::PAST_COUNTING`] is the
+            // figure the sentence has always been about: past 2^53 a double
+            // cannot tell one whole number from the next, so it cannot keep
+            // track of the one that was written, whatever it was punctuated
+            // with.
+            coerce::Coerced::Number(n) if coerce::past_counting_figure(*n) => {
+                past_counting(*n, Ty::Number)
+            }
+            // A whole number field that was handed a whole number too big to be
+            // one. `tool-calls-at-most: 9223372036854775808` used to be
+            // *"should be a whole number, but it is a number"*; see
+            // [`coerce::Coerced::IntegerTooBig`].
+            coerce::Coerced::IntegerTooBig(n) => past_counting(*n, Ty::Integer),
+            // THE BOTTOM OF THAT SAME FIELD, which C12 left open and, worse,
+            // made read wrongly. `steps-at-most: 1e999` is refused by name one
+            // line above; measured before this arm, `steps-at-most: 1e-999` was
+            // *"should be a whole number, but it is some text"* — byte for byte
+            // the sentence `steps-at-most: abc` gets — because keeping an
+            // underflowing scalar as text is what stops `pact show` losing it
+            // and `wrong_type` reads its noun off the value. The same figure one
+            // order up the scale got a sentence naming it; this one was told it
+            // was not a figure at all. See [`coerce::Coerced::IntegerTooSmall`].
+            coerce::Coerced::IntegerTooSmall(_) => (
+                "schema/too-small-to-count",
+                "closer to zero than this can keep track of",
+                "any number further from zero",
+                Ty::Integer,
+            ),
+            // A comparison is that same figure with an operator in front of it.
+            // `MMLU: "> 1e999"` became a bar of `> inf` — one no published score
+            // can ever clear, so the `needs:` block it belongs to could never be
+            // met by any model — and loaded clean.
+            // `MMLU: "> 99999999999999999999"` is a bar of `> 1e20` — not the
+            // bar that was written — and `past_counting`'s own note says the two
+            // types must not drift into two different sentences for the same
+            // figure, so the comparison's figure is asked the question the plain
+            // number's figure is asked, in the same words.
+            coerce::Coerced::Threshold { value, .. } if coerce::past_counting_figure(*value) => {
+                past_counting(*value, Ty::Threshold)
+            }
+            // THE BOTTOM OF THE SAME SCALE. `temperature: 1e-999` parses to a
+            // number this can hold — `0.0` — and it is not the number that was
+            // written. `yaml::resolve_scalar` keeps the author's text rather
+            // than the zero, which is what stops `pact show` and the digest
+            // losing it; this is the other half, for the fields where the
+            // specification says a figure is wanted. Without it the document
+            // layer hands the text on, `coerce::number` reads `0.0` back out of
+            // it, and a spend of nothing is checked against a setting the author
+            // never wrote — silently, which is the whole complaint.
+            //
+            // One sentence for both signs, unlike `past_counting`: `-1e-999`
+            // arrives as `-0.0` and "closer to zero than this can keep track of"
+            // is the true and useful thing to say about either end, because the
+            // edit both authors need is the same one — write a bigger figure.
+            coerce::Coerced::Number(n) if underflowed_to_zero(*n, node) => (
+                "schema/too-small-to-count",
+                "closer to zero than this can keep track of",
+                "any number further from zero",
+                Ty::Number,
+            ),
+            coerce::Coerced::Threshold { value, .. } if underflowed_to_zero(*value, node) => (
+                "schema/too-small-to-count",
+                "closer to zero than this can keep track of",
+                "any number further from zero",
+                Ty::Threshold,
+            ),
+            // THE SHARE-OF-THE-WHOLE SPELLING OF THE COMPARISON ABOVE, and the
+            // one type this pass reached and did not close for a round.
+            // `must-pass: 1e-999%` is `> 1e-999` written the way an eval suite
+            // writes a bar: `coerce::percent` parses it, divides by a hundred,
+            // finds `0.0` inside `0.0..=1.0` and hands back `Percent(0.0)` — a
+            // bar every suite on earth clears, out of a line that was setting
+            // one. Measured before this arm: `OK — rd loaded cleanly (498
+            // settings)`, exit 0, on `examples/refund-desk` with its `must-pass:
+            // 70%` replaced. `when-full: 1e-999%` is the same silence one field
+            // over, and tidies a conversation that has nothing in it yet.
+            //
+            // It is asked of the TEXT for the reason every other arm here is:
+            // `0.0` is what arrived and `0.0` says nothing about what was
+            // written. `0%`, `0.0` and `-0.0` carry no non-zero digit and are
+            // shares somebody meant, so they are none of its business — and
+            // `0.0000001%` is `1e-9`, held exactly, not zero, and never here.
+            coerce::Coerced::Percent(p) if underflowed_to_zero(*p, node) => (
+                "schema/too-small-to-count",
+                "closer to zero than this can keep track of",
+                "any number further from zero",
+                Ty::Percent,
+            ),
+            // AND THE TOP OF THAT SAME FIELD, which the round that closed the
+            // bottom left open — so one field read correctly at one end only.
+            // Measured through the shipped binary with the bottom closed:
+            // `when-full: 1e-999%` was named (`schema/too-small-to-count`) and
+            // `when-full: 1e999%` was *"should be a percentage, like `90%`, but
+            // it is some text"* about a line that is a figure. The fix is not
+            // *"any smaller number"* here, because a share is not made right by
+            // being smaller — `-1e999%` is smaller and `1e-999%` is smaller
+            // still. It is the range, which is the thing that makes a share a
+            // share.
+            coerce::Coerced::PercentPastHolding(p) => (
+                "schema/too-big-to-count",
+                if p.is_sign_positive() {
+                    "more than this can keep track of"
+                } else {
+                    "further below zero than this can keep track of"
+                },
+                "any share between `0%` and `100%`",
+                Ty::Percent,
+            ),
+            // THE BOTTOM OF THE SCALE FOR A COUNT OF TOKENS, and it arrived by
+            // the top's own door. Keeping an underflowing scalar as text is what
+            // stops `pact show` losing it — and it also handed `coerce::size` a
+            // `Value::Str` where a `Value::Float(0.0)` used to be refused
+            // outright, so `context-at-least: 1e-999` and
+            // `context-at-least: 0.0000001k` started loading CLEANLY as a
+            // context window of zero, indistinguishable from an authored
+            // `context-at-least: 0`. A requirement no model has to meet, out of
+            // a line asking for one, silently.
+            //
+            // For one round this arm was `Size(0) if underflowed_to_zero(0.0,
+            // node)` — a hard-coded zero, which never asked whether anything
+            // had underflowed and only asked whether the text carried a figure.
+            // So it said "closer to zero than this can keep track of" about
+            // `context-at-least: "0.5"` and `"0.9"`, which an `f64` holds to the
+            // last bit, and offered the fix *"any number further from zero"* to
+            // `0.0004k`, which already is one. Three different things reached it
+            // as one `Size(0)`: a zero somebody meant, a real figure that
+            // TRUNCATED to no tokens at the `as u64` cast, and a figure that was
+            // never held. `coerce::size` now tells them apart while it still
+            // can — before the multiplier — and only the third arrives here.
+            // The second is `check_floor`'s, beside `Duration(0)`.
+            coerce::Coerced::SizeTooSmall => (
+                "schema/too-small-to-count",
+                "closer to zero than this can keep track of",
+                "any number further from zero",
+                Ty::Size,
+            ),
+            _ => return,
+        };
+        diags.push(Diagnostic::error(
+            rule,
+            node.span.clone(),
+            format!("'{}' is {}, which is {what}.", f.name, as_written(node)),
+            match ty {
+                // A comparison is the one of these that is normally a line
+                // INSIDE a map — `scores:` is `map of threshold`, and every
+                // entry of a map is checked against the map's own field, so
+                // `f.name` there is `scores` and not `MMLU`. *"Write `scores:
+                // > 80`"* is then a fix that fails if it is typed, which is
+                // worse than no fix at all. `wrong_type` leaves the name out
+                // for this type for the same reason — *"Write it like `> 80`"*
+                // — so the comparison is offered on its own here too.
+                Ty::Threshold => format!(
+                    "Write `{}`, or {shorter}, or remove the line. — {}",
+                    placeholder(&ty),
+                    f.help.trim()
+                ),
+                _ => format!(
+                    "Write `{}: {}`, or {shorter}, or remove the line. — {}",
+                    f.name,
+                    placeholder(&ty),
+                    f.help.trim()
+                ),
+            },
         ));
     }
 
@@ -1898,6 +2337,21 @@ impl<'a> Where<'a> {
             None => (self.root.get(want).and_then(Node::as_map), true),
         }
     }
+}
+
+/// Whether this block says `base: yes` — and its kind even HAS a `base:`
+/// field. Keyed off the group's own declaration so the hole exists only where
+/// the specification put it (today: agents); giving another kind the word is
+/// a YAML edit, not an edit here.
+fn declares_itself_a_base(map: &Map, g: &Group) -> bool {
+    if !g.fields.iter().any(|fld| fld.name == "base") {
+        return false;
+    }
+    map.get("base").is_some_and(|e| match &e.node.value {
+        Value::Bool(b) => *b,
+        Value::Str(s) => matches!(s.trim(), "yes" | "true" | "on"),
+        _ => false,
+    })
 }
 
 /// What to call a group in a diagnostic: its own sentence if it has one.
@@ -2271,11 +2725,88 @@ fn article(name: &str) -> &'static str {
     "a "
 }
 
+/// What to call the thing the author actually wrote, for the *"but it is …"*
+/// half of [`wrong_type`].
+///
+/// **A figure is never text, however it had to be carried.** The noun used to
+/// come straight off `Value::kind_name`, and that stopped being the same
+/// question the day a figure this cannot hold started being KEPT as the
+/// author's text: `1e999` and `99999999999999999999` at the top of the scale,
+/// `1e-999` at the bottom, all of them `Value::Str` so that `pact show` and the
+/// digest do not lose them, and all of them therefore *"some text"*. Measured
+/// on the build before this function, `finishes-within: 1e-999` and
+/// `finishes-within: abc` gave byte-identical reports, and `steps-at-most: 0.5`
+/// — one order up the same scale, held exactly, still a `Value::Float` — said
+/// *"a number"*. An author with a figure on the page was told they had not
+/// written one and sent hunting for a typo that is not there, which is the harm
+/// `coerce::number`, `coerce::size` and `underflowed_to_zero` are each written
+/// to prevent, appearing in the one place that reads none of them.
+///
+/// So the noun is read off the TEXT, and it answers exactly what the value
+/// kinds would have answered had the tree been able to hold the figure: a run
+/// of digits is *"a whole number"* (what `Value::Int` says), anything else that
+/// parses as a figure is *"a number"* (what `Value::Float` says).
+///
+/// **Unless there is no digit in it.** `.inf`, `.nan` and `lots` are words
+/// spelled where a figure goes — `".inf".parse::<f64>()` fails and `inf` alone
+/// carries no digit — and *"some text"* is the true sentence for them. That is
+/// the same line `coerce::integer` and `coerce::size` draw, drawn once more for
+/// the sentence rather than the rule.
+/// The figure a diagnostic quotes back, for a node that may not be text.
+///
+/// Every value the ceiling refuses used to be a `Value::Str` — a figure past
+/// holding was kept as the author's text — so `node.as_str()` was enough. It
+/// stopped being enough the moment the ceiling started asking about the FIGURE
+/// rather than the spelling: `temperature: 1e19` is a number the document layer
+/// holds exactly, and quoting `node.as_str()` for it would have printed
+/// *"'temperature' is , which is more than this can keep track of"*, an empty
+/// space where the value goes.
+///
+/// A double is written back the way the rest of this format writes one, so the
+/// sentence names the same figure the author wrote even where it does not name
+/// the same notation: `1e19` is quoted as `10000000000000000000`. The caret
+/// under the line is what points at the notation.
+///
+/// Except where writing it out in full would bury the sentence. `1e308` in full
+/// is three hundred and nine digits, and *"'finishes-within' is 1000…000, which
+/// is a longer time than this can keep track of"* is a message with a paragraph
+/// of zeros in the middle of it — measured, in the shipped binary, before this
+/// line. Past twenty-one digits (which is `1e20`, and covers every figure a
+/// person plausibly types out) the exponent form is the readable one and it is
+/// the form such a figure was written in anyway.
+fn as_written(node: &Node) -> String {
+    match &node.value {
+        Value::Str(s) => s.trim().to_string(),
+        Value::Int(i) => i.to_string(),
+        Value::Float(x) => {
+            let full = format!("{x}");
+            if full.len() > 21 { format!("{x:e}") } else { full }
+        }
+        other => other.kind_name().to_string(),
+    }
+}
+
+fn kind_as_written(node: &Node) -> &'static str {
+    let Value::Str(written) = &node.value else {
+        return node.value.kind_name();
+    };
+    let written = written.trim();
+    if !has_a_digit(written) || written.parse::<f64>().is_err() {
+        return node.value.kind_name();
+    }
+    let digits = written.strip_prefix(['-', '+']).unwrap_or(written);
+    if digits.bytes().all(|b| b.is_ascii_digit()) {
+        "a whole number"
+    } else {
+        "a number"
+    }
+}
+
 fn wrong_type(node: &Node, field: &str, ty: &Ty) -> Diagnostic {
     Diagnostic::error(
         "schema/wrong-type",
         node.span.clone(),
-        format!("'{field}' should be {}, but it is {}.", ty.describe(), node.value.kind_name()),
+        format!("'{field}' should be {}, but it is {}.", ty.describe(), kind_as_written(node)),
         match ty {
             Ty::OneOf(v) => format!("Change it to one of: {}.", v.join(", ")),
             // Every spelling an author can type, because for a round the fix
@@ -2381,6 +2912,95 @@ fn note_companions(
 /// applies-safe-changes-itself` is exactly that pairing — the setting that puts
 /// wording changes live with nobody reading them — and picking one of four
 /// blind, on that line, is the wrong governance decision made by accident.
+/// Whether the figure an author actually typed carried a digit.
+///
+/// The only thing that tells `1e400 USD` apart from `inf USD` once it is parsed,
+/// because both are `f64::INFINITY` by the time anything here sees them — and
+/// they are two different mistakes: one is a real amount past the end of what
+/// can be counted, the other is not an amount.
+fn has_a_digit(written: &str) -> bool {
+    written.chars().any(|c| c.is_ascii_digit())
+}
+
+/// Which end of the number line a figure ran off, in the four parts
+/// [`Schema::check_ceiling`] builds its sentence from.
+///
+/// One function and not two arms, because the two types that use it — a number
+/// and a comparison against one — are the same figure and must not drift into
+/// two different sentences for it.
+///
+/// **Both ends, and each with its own words.** `temperature: 1e999` is more
+/// than can be kept track of; `temperature: -1e999` is not — it is further
+/// BELOW zero than can be kept track of, and an author told that the smallest
+/// number they could write is "more than" something would go looking for a
+/// smaller one and find the one they had already written. This is where a
+/// number parts company with money, which needs only the top end: an amount
+/// below zero is refused at [`Schema::check_floor`] as "less than nothing"
+/// before its size is ever in question, while `-1e999` on a plain number is a
+/// real figure at the bottom of a scale that runs both ways.
+/// A figure that ran off the BOTTOM of the scale: written with a digit that is
+/// not zero, arrived as zero.
+///
+/// The mirror of [`past_counting`], and it has to read the text rather than the
+/// figure because the figure is the one thing that no longer says anything —
+/// `1e-999`, `0.0` and `0` all arrive here as the same `0.0`. What tells them
+/// apart is what the author wrote, and `yaml::resolve_scalar` is the reason it
+/// is still there to read: a scalar that parses to zero while carrying a figure
+/// is kept as text, so `as_str` answers for exactly the values this is about and
+/// answers `None` for an honest `0` or `0.0`, which are `Int` and `Float`.
+///
+/// The same significand rule as the document layer, and for the same reason:
+/// `0e10` is a zero somebody meant, `1e-999` is not.
+fn underflowed_to_zero(n: f64, node: &Node) -> bool {
+    if n != 0.0 {
+        return false;
+    }
+    let Some(written) = node.as_str() else {
+        return false;
+    };
+    let written = written.trim();
+    let significand = written.split(['e', 'E']).next().unwrap_or(written);
+    significand.chars().any(|c| c.is_ascii_digit() && c != '0')
+}
+
+/// **The fix names a set the author can actually write in, which for a round it
+/// did not.** It said *"or any smaller number"*, and the accepted set does not
+/// run downward: measured through the shipped binary, `temperature:
+/// 1e999` was refused with that fix and `temperature: 9223372036854775808` — a
+/// smaller number, obediently written — was refused by the identical rule. A fix
+/// that fails when it is followed is worse than no fix, and the test that
+/// guarded this line only checked that the sentence was PRESENT, never that it
+/// was true.
+///
+/// Fifteen digits is the largest count that is true whatever the type asking:
+/// every whole number under 10^15 is inside [`coerce::PAST_COUNTING`] (2^53,
+/// sixteen digits) and inside `i64` (nineteen), so a reader who follows this
+/// sentence lands somewhere every one of these fields accepts. It is
+/// deliberately a bound this can promise rather than the exact edge of what is
+/// held — an author edits a file, and `9007199254740991` is not something to ask
+/// them to type.
+const HELD: &str = "any figure of fifteen digits or fewer";
+
+fn past_counting(n: f64, ty: Ty) -> (&'static str, &'static str, &'static str, Ty) {
+    if n.is_sign_positive() {
+        ("schema/too-big-to-count", "more than this can keep track of", HELD, ty)
+    } else {
+        ("schema/too-big-to-count", "further below zero than this can keep track of", HELD, ty)
+    }
+}
+
+/// An amount that overflowed to infinity on the way in: written with digits,
+/// arrived as `+inf`.
+///
+/// The one money value that belongs to [`Schema::check_ceiling`] rather than to
+/// [`Schema::check_floor`], and the only thing telling the two apart for money.
+/// A NEGATIVE overflow is deliberately not here: `-1e400 USD` is less than
+/// nothing before it is large, and "less than nothing" is the sentence that gets
+/// its author to the right edit.
+fn money_past_counting(amount: f64, node: &Node) -> bool {
+    amount == f64::INFINITY && has_a_digit(node.as_str().unwrap_or_default())
+}
+
 fn choices_clause(ty: &Ty) -> String {
     match ty {
         Ty::OneOf(v) => format!(" The choices are: {}.", v.join(", ")),

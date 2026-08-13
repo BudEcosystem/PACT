@@ -49,6 +49,28 @@ class ReferenceTransport:
             "parallel_tool_calls": "native",
             "streaming": "unsupported",
             "durable_resume": "unsupported",
+            # Whether a tool's `connect:` line — the one of `ir.WAYS_A_TOOL_
+            # REACHES` that names a SYSTEM in `resources:` rather than an
+            # address or a wording — becomes a call that leaves this process on
+            # this runtime. Spelled for the IR feature and not for a protocol,
+            # because `ResourceSpec.kind` is carried rather than assumed and a
+            # key named after today's one choice would be a portability
+            # instrument that has already picked a wire format.
+            #
+            # `emulated`, in this lattice's own sense of the word — PACT
+            # provides it ABOVE the transport. `pact_adapters/mcp/` is PACT's
+            # own client and `mcp.calling.tool_impls_for` turns a `connect:`
+            # tool into the `harness.ToolFn` the loop already executes, so the
+            # reaching belongs to PACT and not to whatever binds the model.
+            # That makes the word the same on every harness-driven target,
+            # including this inert one: being bound to no model is a fact about
+            # METERING here, and executing a tool was never the transport's job.
+            #
+            # The two targets that are `unsupported` are unsupported for reasons
+            # that are not about the client — `a2a_transport.py` hands the loop
+            # to somebody else, and the TypeScript port has no PACT client at
+            # all — which is what keeps this column from being decoration.
+            "connected_tools": "emulated",
         }
 
     async def model_call(

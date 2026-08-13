@@ -23,13 +23,14 @@
 import {
   type Action, type Limits, type Meter, type Reached,
   ceilings, limitsFrom, limitsNotRead, newMeter, reached, sentence, stepCeiling,
-  stepsAtMost, unmeterable,
+  stepsAtMost, unmeterable, ceilingsNothingCanReach,
 } from "./limits.ts";
 import {
   type Does, type Loop, type Phase, DONE, LoopError, OUTCOMES,
   checkAgainst, instruction, resolve, route, skillsOffered, stageToRun, systemFor,
   toolsOffered,
 } from "./loops.ts";
+import { saidYes } from "./yes-no.ts";
 
 export type ToolCall = { name: string; args: Record<string, unknown> };
 export type Turn = { text: string; toolCalls?: ToolCall[] };
@@ -56,9 +57,13 @@ export interface Transport {
   // is a different question from whether tokens can be counted. A locally-served
   // row may publish a window and no `cost:` block — the air-gapped case — and
   // running the two together cost `tokens-at-most` its enforcement in the Python
-  // port before `Limits.unmeterable` was split. Absent means "the same as
-  // `usage`", which is what a transport that only knows one thing is honestly
-  // saying.
+  // port before `Limits.unmeterable` was split.
+  //
+  // Absent means `false` — a transport that never said it can price its calls is
+  // not taken to have. It used to mean "the same as `usage`", and that is B6:
+  // a transport with a `usage()` and no catalogue row was taken to price its
+  // calls, so an author's spend cap was reported as enforced against a money
+  // meter that never left zero.
   pricesMoney?: boolean;
 }
 
@@ -189,11 +194,19 @@ export function undeclaredIn(payload: object): string[] {
   return Object.keys(payload).filter((k) => !declared.includes(k)).sort();
 }
 
-//: The four answers `answers-with-mode:` takes, and the one PACT picks when the
-//: author left it out. Same values and same choice as `harness.py`: `prompted`
+//: The answer `answers-with-mode:` gets when the author left it out, and the
+//: ones this port cannot deliver. Same two choices as `harness.py`: `prompted`
 //: is the only mode all seven targets can honour and the only one that needs
 //: nothing off this machine (D17).
-export const ANSWER_MODES = ["text", "prompted", "native-json-schema", "tool"] as const;
+//:
+//: There was an `ANSWER_MODES` here listing all four spellings, the twin of a
+//: table in `harness.py` that this round deleted. Neither port read either one —
+//: `spec/schema.yaml`'s `choices:` block is what decides which words load, and a
+//: second copy of it with no gate depending on it is the shape that goes stale
+//: quietly. `adapters/python/tests/test_a_table_nothing_reads_is_not_a_source_of_truth.py`
+//: is the check that found it; there is no TypeScript twin of that check yet,
+//: which is why this note says what happened rather than leaving the next reader
+//: to wonder where the list went.
 export const CHOSEN_ANSWER_MODE = "prompted";
 export const MODES_NOTHING_HERE_DELIVERS = ["native-json-schema", "tool"] as const;
 
@@ -213,6 +226,24 @@ export type RunResult = {
   // while Python halted `stopped-by-rule` on the second refund with the card
   // masked. Silence about that is the T7 breach.
   unenforced: string[];
+  // Sets of documents this run could not consult, each a sentence naming the
+  // entry, what it means for the answer, and a line to type (A7).
+  //
+  // A FIFTH channel and not a fifth use of `unenforced`, which is the same
+  // distinction `harness.py` draws and for the same reason: *the rule could not
+  // be evaluated* sends the reader to the rule, *the corpus was never read*
+  // sends them to whoever runs the thing. Every sentence on `unenforced` invites
+  // an edit to the author's own document, and there is nothing here to edit —
+  // the document is right and the runtime is smaller.
+  //
+  // It did not exist here, so `must-cite: yes` was refused in the same words as
+  // the reference port and a corpus WITHOUT it ran, answered out of the model's
+  // own memory, and said nothing: measured on `examples/answers-from-documents`
+  // with `must-cite: no`, both ports answered *"25 days."* and only one of them
+  // said where that came from. A fifth channel living in one port only is the
+  // T7 breach, on the port whose whole justification is that it says what it is
+  // smaller by.
+  unretrieved: string[];
   // Which stage of the authored loop ran at each step, in order. Deliberately
   // NOT part of the trace: the trace is the cross-runtime contract seven
   // transports are held to byte-for-byte, and folding the path into it would
@@ -225,7 +256,8 @@ export type RunResult = {
   waitingWords?: string;
 };
 
-//: What this port reads and does not carry out.
+//: What this port reads and does not carry out — **the `AgentSpec`'s own
+//: top-level keys, and only those**.
 //:
 //: Each entry names the author's own field and says plainly what does not
 //: happen, because a runtime that silently ignores a governance line is worse
@@ -234,6 +266,25 @@ export type RunResult = {
 //: example's own three interceptors: a card number reached `payments` twice and
 //: the second refund went through, while Python masked the card and halted
 //: `stopped-by-rule`.
+//:
+//: NOT the whole report, and the name is not a promise that it is. This function
+//: composes EIGHT of the ten §7.28 list-B rows that reach `unenforced` (plus the
+//: `team:` line, which is a list-A key reported for a different reason). The
+//: other two rows are appended by `run()`, beside the call, and for two different
+//: reasons:
+//:
+//:  * a loop stage's `asks:` — written INSIDE something this function is handed
+//:    raw. `spec.loops` arrives as the workspace's block and which loop the agent
+//:    runs is `spec.loop`, so no stage exists until `run()` has resolved the two.
+//:  * `answers-with-mode:` — readable off the `AgentSpec`, but the line depends on
+//:    the mode CHOSEN for the turn (`spec.answersWithMode || CHOSEN_ANSWER_MODE`)
+//:    and on whether an `answers-with:` shape was written at all, so it is a fact
+//:    about the run and not about the field.
+//:
+//: Anything added here must be readable off the `AgentSpec` alone AND decided by
+//: the field alone; anything else belongs beside that call. The distinction is
+//: worth keeping: a function handed one document should not be able to answer
+//: questions about a second one it was never handed.
 export function notDoneHere(spec: AgentSpec): string[] {
   const out: string[] = [];
   if ((spec.interceptors ?? []).length > 0) {
@@ -304,6 +355,41 @@ export function notDoneHere(spec: AgentSpec): string[] {
   return out;
 }
 
+//: The sets of documents this port could not look anything up in — which is all
+//: of them, because it retrieves nothing at all.
+//:
+//: A SIBLING of `notDoneHere` rather than a row inside it, because the two lists
+//: go to two different people. `notDoneHere` is read by the author of the
+//: document: every line on it is a line they wrote and can take out. This is read
+//: by whoever chose the runtime — the corpus is declared correctly, nothing in
+//: the file needs editing, and the only remedy is to run the agent somewhere that
+//: can read the documents. Filing it under `unenforced` would send the ticket to
+//: the person who cannot act on it, and would put ONE fact in TWO channels across
+//: the two ports, since `harness.py` has carried `unretrieved` since A7.
+//:
+//: The sentence before `fix:` is `harness.py`'s, word for word, and the
+//: conformance driver compares the two over several corpus names, not one. The
+//: quotes around the name are TYPED on both sides and must stay typed: the
+//: reference port built them with `repr` for a round, which spells
+//: `'staff-handbook'` and `"bob's-handbook"`, and `pact check` loads both names —
+//: so the two ports agreed on every shipped tree and disagreed on the first
+//: apostrophe anybody wrote. Only the remedy differs, and it has to:
+//: the reference port takes a `retrieved_by` from a host that retrieves, so
+//: *"run this where a retrieval runtime serves ..."* is true there and would be
+//: false here — `run()` has nowhere to hand one in, so a machine with an index
+//: changes nothing about this port.
+export function neverLookedIn(spec: AgentSpec): string[] {
+  return (spec.knowledge ?? []).map(
+    (k) =>
+      `'${k.name}' is a set of documents and nothing in this run looked anything ` +
+      `up in it, so the answer comes from what the model already knew. fix: ` +
+      `nothing on this runtime can look anything up, so run this agent on the ` +
+      `reference port with a retrieval runtime serving ` +
+      `\`knowledge/${k.name}/documents/\`, or take \`${k.name}\` off this agent's ` +
+      `\`uses:\` line.`,
+  );
+}
+
 export async function run(
   spec: AgentSpec,
   transport: Transport,
@@ -326,7 +412,17 @@ export async function run(
         `neither honoured nor reported.`,
     );
   }
-  // A7. `must-cite: yes` says an answer with no source is not an answer, and
+  // A7. Every declared set, named before anything else happens. PACT retrieves
+  // nothing and this port has nowhere to be handed a retrieval either, so a set
+  // of documents nobody looked in is the ordinary state — and it must not be the
+  // silent one, because the agent then answers from what the model already knew
+  // and the answer reads exactly like one that was grounded.
+  //
+  // Filled HERE, above the refusal below, so a turn that ends `no-sources` still
+  // carries the cause beside the outcome. The reference port does the same, in
+  // the same order.
+  const unretrieved = neverLookedIn(spec);
+  // `must-cite: yes` says an answer with no source is not an answer, and
   // this port retrieves nothing — so every declared set is one the run could not
   // consult. Answering anyway produces an answer from what the model already
   // knew, citing a document it never opened: the worst outcome available and the
@@ -336,9 +432,24 @@ export async function run(
   // be given is the other thing that would look like working. The Python side
   // does the same, in the same place, and the conformance driver compares them —
   // this half existed only there for as long as it took to notice.
+  //
+  // `saidYes`, not `=== "yes"`. This line held its own two-word list against the
+  // checker's five, so `must-cite: enabled` — a line `pact check` prints `OK`
+  // for — answered out of the model's memory here and refused the turn in the
+  // reference port, on a field §7.28 lists as carried out identically. See
+  // `yes-no.ts` for the measurement and for why the driver never caught it.
   const ungrounded = (spec.knowledge ?? [])
-    .filter((k) => k["must-cite"] === true || String(k["must-cite"]).trim() === "yes")
+    .filter((k) => saidYes(k["must-cite"]))
     .map((k) => `'${k.name}'`);
+  // KNOWN AND SCOPED OUT, recorded in §7.28 rather than only here: this return
+  // carries `unenforced: []`, so a document that declares a `must-cite:` corpus
+  // AND an `interceptors:`, a `policy:` or an asking stage reports none of them.
+  // The reader is told the truth about why the turn ended — nothing was read —
+  // and nothing about the ten governance lines that also did not happen. It
+  // predates the `asks:` row (`git show HEAD:adapters/typescript/src/harness.ts`
+  // has the same empty list on this path). Not closed here because `unretrieved`
+  // is what this ending is about and widening it is a change to a sentence two
+  // ports agree on word for word; §7.28 list B names the gap instead.
   if (ungrounded.length > 0) {
     const named = ungrounded.length === 1
       ? ungrounded[0]
@@ -352,6 +463,7 @@ export async function run(
       stoppedBy: null,
       unmetered: [],
       unenforced: [],
+      unretrieved,
       phases: [],
     };
   }
@@ -414,17 +526,91 @@ export async function run(
   // The two questions, asked separately. A transport that counts tokens but whose
   // model the catalogue prices at nothing keeps `tokens-at-most` and loses only
   // the money cap — which is the distinction the one-boolean version could not
-  // draw. `pricesMoney` is optional on the transport for the same reason `usage`
-  // is: a port may not know, and saying "the same as tokens" is honest.
+  // draw.
+  //
+  // An undeclared `pricesMoney` is `false`, which is the same default
+  // `harness.py`'s `getattr(transport, "prices_money", False)` uses and has to
+  // be: two ports answering one author's `cost-per-request-under:` differently
+  // is the defect the cross-port suite exists to catch. It used to be
+  // `countsTokens` in both, and that is B6 — a transport with a `usage()` and no
+  // way to be priced was taken to price its calls, so an author was told their
+  // spend cap was enforced against a meter that read zero for the life of the
+  // workspace. Every transport in either port now declares it; the default is
+  // what the NEXT one gets before anybody has thought about it, and the safe
+  // answer to "can this be priced?" from something that never said is no.
   const countsTokens = typeof transport.usage === "function";
   const pricesMoney =
-    typeof transport.pricesMoney === "boolean" ? transport.pricesMoney : countsTokens;
-  const unmetered = unmeterable(limits, countsTokens, pricesMoney);
+    typeof transport.pricesMoney === "boolean" ? transport.pricesMoney : false;
+  // And, through the same door, a spend cap that is not a figure any spend can
+  // be at or above — `NaN USD`, `inf USD`. `ceilings()` has already refused to
+  // build the row; without this line it would be refused in SILENCE, which is
+  // the same T7 breach one step further on and is what both ports did.
+  // Not a channel of its own: `unmetered`'s wording is *"cannot promise"*, which
+  // is exactly what is true of a cap nothing can reach. Argued at
+  // `limits.ceilingsNothingCanReach`; pinned from the Python suite by
+  // `test_a_spend_cap_nothing_can_reach_holds_nothing_and_says_so.py`, which
+  // drives this port through `run-trace.ts`.
+  const unmetered = [
+    ...unmeterable(limits, countsTokens, pricesMoney),
+    ...ceilingsNothingCanReach(limits),
+  ];
   // Everything the author wrote that this port reads correctly and does not do.
   // Named one field at a time, with the sentence a person can act on, because
   // "this runtime is smaller" is not something a reader can check against their
   // own file.
   const unenforced = notDoneHere(spec);
+  // The one line `notDoneHere` cannot see, appended where it can be: a stage's
+  // `asks:`. It names WHICH question a person is put, which is a governance line
+  // and not a wording choice — and it was parsed by `loops.ts` into `Phase.asks`
+  // and read by nothing here, in silence, because `notDoneHere` is handed an
+  // `AgentSpec` whose `loops:` is still the workspace's raw block. By this point
+  // `resolve` has run, so the stages exist and each one that names a question can
+  // say that nobody here is put it.
+  //
+  // Reported for every such stage the loop declares, reached or not, exactly as
+  // `interceptors:` is reported whether or not one would have fired: the reader
+  // is being told what their document does not do on this runtime, which is a
+  // fact about the document.
+  //
+  // Sorted by stage name so two runs of one document say the same thing in the
+  // same order — `loop.steps` is insertion-ordered from the payload, and a report
+  // that reorders itself is a report a reader cannot diff.
+  //
+  // `limits.asks` is a DIFFERENT line — the question put when a ceiling runs out
+  // — and is reported below under its own `limits.` prefix.
+  //
+  // Written in the CONDITIONAL — *"a run that reaches that stage"* — because the
+  // line is reported for the document and not for the path taken, and the branch
+  // that never entered the stage would be told, in the indicative, that the run
+  // stopped somewhere it did not go. A report that states something this run did
+  // not do is the same defect as one that omits something it did.
+  for (const stage of Object.keys(loop.steps).sort()) {
+    const phase = loop.steps[stage];
+    if (phase.does !== "ask-someone") continue;
+    if (!phase.asks) {
+      // The shape that most needs the line and had none: a stage that stops to
+      // ask a person and names no question. `spec/schema.yaml` refuses the
+      // document (`needs: asks: ask-someone`), so a CLI-loaded tree cannot get
+      // here — but `run()` is a library entry point too, and a hand-built payload
+      // reached it and suspended with `unenforced: []`. This port does not run
+      // the checker, so its report may not depend on one having been run.
+      unenforced.push(
+        `asks: (none named) — stage '${stage}' stops to ask a person and names no ` +
+          `question, so a run that reaches it stops there with nothing to put to ` +
+          `anybody. fix: add an \`asks:\` line naming a question under ` +
+          `\`questions/\` — \`pact check\` refuses the stage without one, and this ` +
+          `port does not run \`pact check\`.`,
+      );
+      continue;
+    }
+    unenforced.push(
+      `asks: ${phase.asks} — the question stage '${stage}' puts to a person, ` +
+        `read here and put to nobody. This port has no durable suspension, so a ` +
+        `run that reaches that stage stops there carrying no question, no audience ` +
+        `and no deadline. The Python harness parks the run and puts the question ` +
+        `you named, with the shape of the answer it will take.`,
+    );
+  }
   // Keys inside `limits:` this port does not read. They were dropped in silence —
   // `feel`, `first-reply-within`, `per-word-under`, `measured-at` and `asks` — and
   // §7.28 accounted for them under `slo.*`, a row that could never fire because
@@ -467,7 +653,7 @@ export async function run(
       if (e instanceof LoopError) {
         return {
           output: e.message, steps, halted: "loop-error",
-          stoppedBy: null, unmetered, unenforced, phases,
+          stoppedBy: null, unmetered, unenforced, unretrieved, phases,
         };
       }
       throw e;
@@ -476,7 +662,7 @@ export async function run(
 
   const ranOut = async (r: Reached, at: number): Promise<RunResult> => {
     const base = {
-      steps, halted: r.ceiling.halted, stoppedBy: r, unmetered, unenforced, phases,
+      steps, halted: r.ceiling.halted, stoppedBy: r, unmetered, unenforced, unretrieved, phases,
     };
     if (r.action === "answer-with-what-it-has") {
       // One closing call with NO tools offered, so the model has to answer from
@@ -530,7 +716,7 @@ export async function run(
       return {
         output: steps.length ? steps[steps.length - 1].text : "",
         steps, halted: gaveUp ? "stage-limit" : "final",
-        stoppedBy: null, unmetered, unenforced, phases,
+        stoppedBy: null, unmetered, unenforced, unretrieved, phases,
       };
     }
     phaseName = phase.name;
@@ -545,7 +731,7 @@ export async function run(
     if (phase.does === "ask-someone") {
       return {
         output: "", steps, halted: "suspended",
-        stoppedBy: null, unmetered, unenforced, phases,
+        stoppedBy: null, unmetered, unenforced, unretrieved, phases,
       };
     }
 
@@ -601,7 +787,7 @@ export async function run(
       if (nxt === DONE) {
         return {
           output: text, steps, halted: "final",
-          stoppedBy: null, unmetered, unenforced, phases,
+          stoppedBy: null, unmetered, unenforced, unretrieved, phases,
         };
       }
       // A stage that finished its say on the way somewhere else. Those words go
@@ -660,7 +846,7 @@ export async function run(
     if (nxt === DONE) {
       return {
         output: text, steps, halted: "final",
-        stoppedBy: null, unmetered, unenforced, phases,
+        stoppedBy: null, unmetered, unenforced, unretrieved, phases,
       };
     }
     phaseName = nxt;

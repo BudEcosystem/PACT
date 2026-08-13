@@ -1482,3 +1482,981 @@ number as `agent.ttft` would pass every functional test while making the SLO mea
 9. **`cost_per_success` as the real objective.** §2.10 lists it. Since the eval suite is already
    the oracle (T2), `Σcost / n_passing` is computable from the same stream and is arguably the
    metric the optimizer should minimise. Is it an SLO or an optimizer objective, or both?
+
+---
+---
+
+# PART II — Second pass (2026-08-07)
+
+**Why there is a Part II.** Part I was written on 2026-07-26 against the corpus alone, before the
+prototype existed. Since then `spec/schema.yaml`, `crates/`, `adapters/python` and
+`adapters/typescript` have shipped, and §§2–9 above were partly absorbed into
+`20-ARCHITECTURE-DRAFT.md` and `25-ARCHITECTURE-DECISIONS.md` (AD-23, AD-100). Part II does three
+things and nothing else:
+
+* **§A — re-verifies** Part I's load-bearing citations against the source as it stands today, and
+  **corrects four of them that are wrong**. Part I's line numbers for the Bud ledger are all stale.
+* **§B — reports what the shipped PACT code actually does** about SLOs and traces. This is the new
+  centre of gravity: the gap between Part I's proposal and the running system is larger and more
+  specific than the gap between Part I and the corpus.
+* **§C — adds evidence Part I did not have**, most of it new to the corpus survey: OTel's MCP
+  metrics, the OTel gen_ai *metric dimension set*, Gemini's per-modality token accounting, Phoenix's
+  price schema, inspect_ai's cost limit, and the OpenAI Realtime playback clock.
+
+Marking is unchanged: **[VERIFIED]** = read in source this pass; **[CORRECTION]** = Part I is
+wrong and this supersedes it; **[DERIVED]** = computed here, reproducible; **[NEGATIVE]** = an
+absence that is itself a result; **[PROPOSAL]** = mine, not reported.
+
+---
+
+## A. Re-verification and corrections
+
+### A.1 vLLM's reference definitions are not one definition — they differ **per endpoint**  [CORRECTION]
+
+Part I §1.1 gives one row for `latency (E2EL)` and says it excludes the trailing `usage` frame,
+citing `lib/endpoint_request_func.py:257` and `:424`. Read this pass, the two paths in that one file
+disagree, and §2.3's "Divergence, stated" is therefore built on a false premise.
+
+`research/repos/routing/vllm/vllm/benchmarks/lib/endpoint_request_func.py`:
+
+| Endpoint | first-token trigger | `most_recent_timestamp = timestamp` sits | ⇒ E2EL includes the `usage` frame? |
+|---|---|---|---|
+| **completions** (`:205-257`) | `first_chunk_received` bool, set at `:233-236` | **inside** `if choices:` — `:242` | **No** |
+| **chat** (`:395-424`) | `if ttft == 0.0` at `:406-408` | **outside**, at the `if chunk != "[DONE]"` level — `:420` | **Yes** |
+| **audio transcription** (`:500-542`) | `if ttft == 0.0` at `:522-524` | outside, `:538` | **Yes** |
+| **pooling / embeddings** (`:588-600`) | n/a | n/a — `output.ttft = output.latency = time.perf_counter() - st` at `:596` | degenerate |
+
+Two further asymmetries in the same file:
+
+* The chat path stamps `timestamp = time.perf_counter()` at `:400`, **before** `json.loads` at
+  `:401`. The completions path stamps it at `:231`, **after** `json.loads` at `:221`. So reported
+  ITL includes JSON-parse cost on one endpoint and excludes it on the other.
+* The chat path's guard is `if ttft == 0.0`, not a boolean. A frame that genuinely arrives at
+  `perf_counter()` delta `0.0` re-arms the branch. Cosmetic in practice; it is the completions
+  path's `first_chunk_received` flag that is the correct pattern.
+
+**What this changes.** Part I §2.3 justified PACT diverging from vLLM by *including* the usage
+frame in `call.e2e_ms`. Against the chat endpoint — the only one an agent uses — PACT does not
+diverge at all; it matches. The divergence note should be rewritten as: *PACT matches vLLM's
+chat/audio paths and diverges from its completions path, and the CTS mapping table must name the
+endpoint, not just the tool.* **The observer axis in §2.2 is insufficient: an observed latency needs
+`(observer, endpoint, streaming?)`, because the reference implementation itself varies on all three.**
+
+Everything else in Part I §1.1 re-verified unchanged: `serve.py:607-613` (TPOT population split
+`tpots` vs `all_tpots`), `:622-645` (goodput over all declared SLOs), `:731-733` (throughput),
+`:1365` (`VALID_NAMES = ["ttft","tpot","e2el"]`), `:742-746` (percentiles over `tpots`, the
+`output_len > 1` population). **[VERIFIED]**
+
+### A.2 SGLang's speculative-decoding correction is **backend-gated**  [VERIFIED, sharpened]
+
+`research/repos/routing/sglang/python/sglang/benchmark/serving.py`:
+
+```python
+use_retokenized_itl = (
+    accept_length is not None
+    and accept_length > 0
+    and backend in ("sglang-oai", "sglang-oai-chat")     # :1083-1086
+)
+...
+adjusted_itl = itl / num_tokens                          # :1109
+retokenized_itls.extend([adjusted_itl] * num_tokens)     # :1110
+...
+itls = retokenized_itls if use_retokenized_itl else itls # :1193
+```
+
+Part I §1.3 reported the correction; it did not report that it is **conditioned on the backend
+string**. Benchmarking a speculative-decoding vLLM or lmdeploy server *through SGLang's harness*
+silently skips the correction and reports ITL inflated by the accept length. `concurrency =
+np.sum(e2e_latencies) / dur_s` re-verified at `:1236`; `total_input_text` / `total_input_vision`
+at `:1098-1099`.
+
+**Consequence for PACT (unchanged in direction, stronger in force):** a `per-word-under` SLO is
+uninterpretable without knowing whether the serving stack speculates *and* whether the measuring
+stack corrects for it. PACT must record `speculative_decoding: {enabled, accept_length}` as a
+sample covariate and **null out TPOT when `enabled ∧ ¬corrected`**, rather than reporting a number.
+
+### A.3 The catalogue numbers, recomputed  [DERIVED — supersedes Part I §1.4 and §7.1]
+
+Recomputed this pass over
+`research/repos/routing/litellm/litellm/model_prices_and_context_window_backup.json`:
+
+| Quantity | Value |
+|---|---|
+| model entries | **2,979** |
+| distinct keys | **145** (81 contain `cost`/`price`) |
+| entries carrying any latency/TTFT/TPOT/throughput field | **0** — regex over all 145 keys returns empty **[NEGATIVE]** |
+| entries with `rpm` / `tpm` | 56 / 56 |
+| `supports_vision` / `supports_audio_input` / `supports_computer_use` | 886 / 105 / 166 |
+| context-tier price keys (`*_above_<N>_tokens`) | **30 distinct** |
+
+Price-ratio distributions (only entries carrying both keys, both non-zero):
+
+| Ratio | n | min | median | max |
+|---|---|---|---|---|
+| `input_cost_per_audio_token / input_cost_per_token` | 116 | **0.56** (`gemini-2.5-pro-preview-tts`) | **3.33** | **66.67** (`gpt-4o-mini-audio-preview-2024-12-17`) |
+| `output_cost_per_audio_token / output_cost_per_token` | 50 | 1.2 (`azure/gpt-4o-mini-tts`) | **8.0** | 33.33 |
+| `cache_read_input_token_cost / input_cost_per_token` | 691 | 0.00833 (`deepseek-v4-pro`) | **0.10** | 1.0 |
+| `cache_creation_input_token_cost / input_cost_per_token` | 212 | 0.5 | **1.25** | 1.25 |
+| `output_cost_per_reasoning_token / output_cost_per_token` | **52** | **0.375** | **1.0** | **3.33** |
+
+**[CORRECTION]** Part I §7.1 states the audio-input ratio range as "8×–66.7×". The true minimum is
+**0.56×** — a TTS model where the audio side is cheaper than text. The *median* is 3.33×, not 8×.
+The 8× figure is specific to the `gpt-realtime` family and should be quoted as such.
+
+**[NEW]** The reasoning-token price row did not exist in Part I. 52 models price reasoning output
+separately from ordinary output; the median is exactly 1.0 (reasoning billed at the output rate),
+but the range 0.375×–3.33× means a cost model that folds reasoning into output is wrong by up to
+3.3× on some models in the expensive direction.
+
+Realtime family, read directly (all values USD/token):
+
+| Model | `input_cost_per_token` | `input_cost_per_audio_token` | ratio | `output` | `output_audio` | ratio | `max_input_tokens` |
+|---|---|---|---|---|---|---|---|
+| `gpt-realtime`, `-1.5`, `-2`, `-2025-08-28` | 4e-6 | 3.2e-5 | **8×** | 1.6e-5 | 6.4e-5 | **4×** | **32,000** |
+| `gpt-realtime-2.1` | 4e-6 | 3.2e-5 | 8× | 2.4e-5 | 6.4e-5 | 2.67× | 128,000 |
+| `gpt-realtime-mini`, `-2.1-mini` | 6e-7 | 1e-5 | **16.7×** | 2.4e-6 | 2e-5 | 8.3× | 128,000 |
+| `gpt-4o-realtime-preview` | 5e-6 | 4e-5 | 8× | 2e-5 | 8e-5 | 4× | 128,000 |
+| `gpt-4o-mini-audio-preview-2024-12-17` | — | — | **66.67×** | — | — | 33.33× | — |
+
+Note `gpt-realtime`'s `cache_creation_input_audio_token_cost` = 4e-7, i.e. **0.0125× the audio input
+price** — audio cache creation is 80× *cheaper* than audio input, the opposite sign to text (1.25×).
+`gpt-realtime-2.1` publishes create and read at the same 4e-7. Audio cache economics are not a
+scaled copy of text cache economics and must not be modelled as one.
+
+### A.4 Image tokens: the table holds, the air-gapped failure mode does not  [CORRECTION]
+
+Re-derived by re-implementing `resize_image_high_res` (`token_counter.py:119-153`),
+`calculate_tiles_needed` (`:157-166`) and `calculate_img_tokens` (`:285-302`) with the current
+constants (`litellm/constants.py:301-304`: short 768, long 2000, tile 512×512; base 85):
+
+| Source | Resized | Tiles | Tokens (`detail:"high"`) |
+|---|---|---|---|
+| 300×300 *(the fallback size)* | 300×300 | 1 | **255** |
+| 512×512 | 512×512 | 1 | 255 |
+| 768×768 / 1024×768 / 1024×1024 | ≤768×768 | 4 | 765 |
+| 1280×800, 1456×816, 1512×982, **1920×1080, 2560×1440, 3840×2160**, 2560×1600 | short side → 768 | 6 | **1105** |
+
+The 16:9 result (1105 tokens for every resolution from 1280×800 up) is confirmed. **[VERIFIED]**
+
+**[CORRECTION]** Part I §7.2.3 says the air-gapped fallback yields "4 tiles → 765 tokens, a 44%
+under-estimate". Both numbers are wrong, and the failure mode is worse than reported:
+
+* `DEFAULT_IMAGE_WIDTH/HEIGHT = 300` (`constants.py:61-62`) → 1 tile → **255 tokens**. Against 1105
+  that is a **77% under-estimate (4.33× under)**, not 44%.
+* More importantly, the 300×300 fallback is at the **end of `get_image_dimensions`**
+  (`token_counter.py:268`) and is only reached if the bytes were obtained and the magic-number
+  sniff failed. On the URL path with no network: `_get_httpx_client()`/`safe_get` raises, the
+  `except Exception: pass` at `:217-218` leaves `img_data = None`, and control falls to
+  `_header, encoded = data.split(",", 1)` at `:220`. **Reproduced:** for
+  `https://example.com/screenshot.png` this raises `ValueError: not enough values to unpack
+  (expected 2, got 1)` — an **uncaught crash**, not a fallback. For a URL that happens to contain a
+  comma it "succeeds" into `base64.b64decode` of a path fragment and then reaches the 300×300
+  fallback and the 255-token answer.
+
+So in an air-gapped deployment the reference cost estimator for `detail:"high"` URL images either
+**crashes** or **under-reports by 4.33×, depending on whether the URL contains a comma**. That is a
+sharper argument for Part I's rule than Part I made: **PACT must require intrinsic `width`/`height`
+on every image part at ingest and must never derive image cost from a URL** — not because the
+fallback is inaccurate but because it is *non-deterministic in the URL's punctuation*.
+
+### A.5 The Bud run ledger — all Part I line numbers are stale  [CORRECTION + VERIFIED]
+
+`/home/bud/ditto/gaia-ai-runtime/bud-agentic-runtime/src/lib.rs` has moved by ~370 lines.
+
+| Struct | Part I said | Actually (this pass) | Substance |
+|---|---|---|---|
+| `BudRunPlan` | `:8253-8301` | **`:8629-8674`** | still **no** `startedAt` / `finishedAt` / `durationMs` **[NEGATIVE, holds]** |
+| `RunLineage` | `:8357-8365` | **`:8731-8737`** | `{parent_run_id, root_run_id, node_id, relationship, depth}` — the multi-agent aggregation spine, holds |
+| `RunEvent` | `:8463-8473` | **`:8838-8846`** | `{seq, kind, status?, message?, metadata}` — still **no timestamp** **[NEGATIVE, holds]** |
+| `BudRunTraceItem` | `:8814-8830` | **`:9190`** | ordered by `seq` only, holds |
+
+`src/policy_runtime.rs` re-verified: `BudGuardrailStage` `:76`; `AgentModelTokenBudget` `:738-745`;
+`AgentBudgetPolicy` `:755-770` (seven dims, `deny_unknown_fields`); `BudRunBudgetUsage` `:786-`;
+`BudRunBudgetState` `:849-` with `deadline_at_unix_ms` `:856`; `BudRunBudgetRecord` `:960-978` with
+`exceeded_dimensions` `:975` and `recorded_at_unix_ms` `:976`.
+
+**[NEW — the most useful thing in this file for PACT]** `budget_exceeded_dimensions`
+(`policy_runtime.rs:1077-1135`) treats *unknown cost* as a violated dimension in its own right:
+
+```rust
+if state.provider_cost_unknown && state.policy.provider_cost_micros.is_some() {
+    exceeded.push("provider_cost_unknown".to_string());          // :1100-1102
+}
+```
+
+That is Part I §2.7.4's "a cost SLO MUST fail closed when any call's price is unknown", **already
+implemented in the system PACT must be a superset of**. PACT's `cost-per-request-under` currently
+has no equivalent (§B.9). Also worth copying: the wall-clock check is `now_unix_ms >= deadline`
+(`:1093-1099`) — inclusive, evaluated against reserved-plus-projected usage, i.e. reserve-then-commit
+(`:1082-1092`).
+
+### A.6 OTel gen_ai — unchanged, and one thing Part I missed  [VERIFIED + NEW]
+
+`research/repos/protocols/otel-semconv`, `git log -1` = `bfa549224a08931dca5ba8fdf7bdfa540b6c0ab2`
+(*Fri Jul 24 2026*) — **the same snapshot Part I read**. `model/gen-ai/` still contains only
+`deprecated/`, every group carrying `note: Moved to the OpenTelemetry GenAI semantic conventions
+repository`, every attribute `stability: development`. Part I's conclusion (mirror the names into
+`pact.dev/v1`, do not `$ref` an external spec) stands unrevised. **[VERIFIED]**
+
+Two normative sentences worth quoting verbatim in the spec, both re-read this pass:
+
+* `metrics-deprecated.yaml:109` and `:129` — for both
+  `gen_ai.client.operation.time_to_first_chunk` and `gen_ai.client.operation.time_per_output_chunk`:
+  > "This metrics SHOULD be reported for streaming calls and **SHOULD NOT be reported otherwise**."
+
+  This is the standards answer to the LiteLLM degenerate-TTFT defect (Part I §1.4): a non-streaming
+  call must emit **no** TTFT, not a TTFT equal to E2E. Part I §2.4.5 proposed
+  `ttft_degenerate: true`; OTel's rule is stricter and better — *emit nothing*. Recommend PACT adopt
+  the stricter rule and keep `ttft_degenerate` only as a diagnostic on the run record.
+
+* `spans-deprecated.yaml:717-727` — the don't-double-report rule for `invoke_workflow`:
+  > "This span SHOULD be reported by the instrumentations when they can reliably determine that
+  > invocation is a workflow (i.e. groups several agent invocations) and SHOULD NOT be reported by
+  > instrumentations that can't distinguish it `invoke_workflow` from `invoke_agent`. eg: Some
+  > frameworks like ADK have workflow agents that orchestrate other agents and report `invoke_agent`
+  > spans, so `invoke_workflow` SHOULD NOT be reported by such instrumentations."
+
+  Under harness lowering (D12) PACT *always* knows statically whether a node is a team or an agent,
+  so PACT can satisfy this rule where framework instrumentations structurally cannot. This is a
+  concrete, standards-anchored argument for AD-100 (PACT emits its own spans).
+
+**[NEW — the OTel gen_ai metric dimension set cannot express an agent SLO]**
+`metrics-deprecated.yaml:2-25`, group `metric_attributes.gen_ai`, is the complete attribute set for
+every gen_ai histogram:
+
+```
+server.address, server.port, gen_ai.response.model, gen_ai.request.model,
+gen_ai.provider.name, gen_ai.operation.name        (+ error.type on the server variants)
+```
+
+There is **no** `gen_ai.agent.name`, no `gen_ai.workflow.name`, no `gen_ai.conversation.id` on the
+metrics. Those attributes exist only on *spans*
+(`registry-deprecated.yaml`, `gen_ai.agent.*`, `gen_ai.workflow.name`). **[NEGATIVE]**
+
+Therefore: `gen_ai.client.operation.time_to_first_chunk` p95 answers *"how fast is this model"*, and
+there is no conforming way to ask *"how fast is this agent"* — you would have to add a non-standard
+dimension and accept the cardinality. Combined with A.6's `invoke_workflow` rule, this settles an
+open question: **PACT's agent-level SLO metrics are necessarily PACT-native. The OTel mapping is
+span-level only, and the metric layer is a projection PACT computes itself from retained samples**
+(which is what AD-100 already decided, now with the reason stated in the standard's own terms).
+
+### A.7 A2A, MCP, inspect_ai, Langfuse, AgentOps — re-verified  [VERIFIED]
+
+* **A2A** — `specification/a2a.proto` grepped case-insensitively for
+  `latency|slo|throughput|rate.limit|cost|deadline|timeout`: **zero hits**. `TaskStatus` `:211-219`
+  = `{state, message, timestamp}`; `TaskStatusUpdateEvent` `:296-305`. Part I §1.10 holds without
+  amendment: for a remote sub-agent the only portable timing signal is the sequence of ISO-8601
+  `TaskStatus.timestamp` transitions, and `INPUT_REQUIRED`/`AUTH_REQUIRED` intervals must land in a
+  blocked bucket.
+* **Langfuse** — `packages/shared/src/features/query/dataModel.ts:559-560` computes
+  `timeToFirstToken` as `date_diff('millisecond', start_time, completion_start_time)` and returns
+  `NULL` when `completion_start_time` is null (comment at `:559`: *"Return NULL … to represent
+  unknown TTFT"*) — i.e. Langfuse already implements OTel's don't-fabricate rule.
+  `:517` computes an output-tokens-per-second metric over `completion_start_time → end_time`.
+  `queryBuilder.ts:150-158` maps p50/p75/p90/p95/p99 to ClickHouse `quantile()` — approximate.
+* **AgentOps** — the two-event pattern re-verified at
+  `agentops/instrumentation/providers/openai/stream_wrapper.py:113-125`
+  (`first_token_received` on a non-empty `delta.content`; `first_tool_call_token_received` on
+  `delta.tool_calls`). **[NEW]** the clock is `time.time()` (`:8`, `:44`, `:249`, `:602`) — a
+  **wall** clock, so a TTFT measured across an NTP step is wrong by the step. Every other
+  implementation surveyed uses a monotonic clock. Part I §2.1's rule ("all latency arithmetic on
+  `mono_ms`") now has a named counter-example to cite.
+* **inspect_ai** — `_util/working.py`: `sample_working_time() = time.monotonic() - start_time -
+  waiting_time` (`:31-34`); `sample_waiting_for` de-duplicates concurrent waits via
+  `concurrent_wait_count` (`:56-94`) so only intervals where *at least one* task is blocked count.
+  Re-verified verbatim.
+
+### A.8 vLLM auto_tune — the "latency is a search result" claim, quoted  [VERIFIED]
+
+`research/repos/routing/vllm/benchmarks/auto_tune/README.md`, Configuration table:
+
+* `MAX_LATENCY_ALLOWED_MS` — *"The maximum allowed **P99 end-to-end latency** in milliseconds."*
+* the search axes are `NUM_SEQS_LIST` × `NUM_BATCHED_TOKENS_LIST`, held at fixed `INPUT_LEN`,
+  `OUTPUT_LEN`, `MAX_MODEL_LEN`, `TP`, `SYSTEM` (`TPU|GPU`) and `MIN_CACHE_HIT_PCT`.
+
+So the *upstream project that defines TTFT* treats a P99 E2E budget as a **constraint on a
+configuration search over seven variables**, not as a property of a model. Part I §4.1's position is
+confirmed in the primary source's own words: a scalar `ttft_p95` in a model catalogue is not a
+figure that can be right.
+
+---
+
+## B. What the shipped PACT prototype actually does — the implementation gap
+
+This section is new. Everything here was read this pass in
+`/home/bud/ditto/agent-inter-op/{spec,adapters,crates,models}`.
+
+### B.1 The authored surface is `limits:` — a scalar-cap block with **one** percentile for everything
+
+`spec/schema.yaml:1082-1196`, group `limits`, twelve fields:
+
+| Field | Type | Tier | Meaning |
+|---|---|---|---|
+| `feel` | one-of `voice\|interactive\|conversational\|background\|batch` | core | supplies the two latency figures |
+| `finishes-within` | duration | core | E2E promise **and** ceiling |
+| `cost-per-request-under` | money | core | whole-tree spend cap |
+| `first-reply-within` | duration | **expert** | "how long before the first words come back" |
+| `per-word-under` | duration | **expert** | "how long between words once it has started" |
+| `steps-at-most`, `tool-calls-at-most`, `runs-for-at-most`, `tokens-at-most` | integer/duration | core | hard ceilings |
+| `when-it-runs-out` | one-of `stop-and-say-so\|ask-a-person\|answer-with-what-it-has` | core | required with any ceiling |
+| `asks` | text → `questions` | core | which question, when `ask-a-person` |
+| **`measured-at`** | one-of `p50,p90,p95,p99,mean,max` | **expert** | *"whether these are typical or worst-case numbers"* |
+
+**[NEGATIVE — six things Part I argued are load-bearing are absent from the schema]**
+
+1. **No `objectives:` list.** `20-ARCHITECTURE-DRAFT.md:1737-1742` shows an expert form with
+   `- {metric: ttft, percentile: 90, at-most: 2s}` and a per-objective `clock:`. **No such field
+   exists in `spec/schema.yaml`.** One `measured-at:` governs the whole block, so an author cannot
+   say "p50 on cost, p99 on the gap between words" — which is exactly what a voice contract needs
+   (Part I §7.1: ITL must be asserted at p99 while E2E at p90 is fine).
+2. **No observer.** Nothing distinguishes `runtime` from `agent` from `gateway` (Part I §2.2).
+3. **No population.** `per-word-under` cannot say whether it ranges per-run or per-model-call.
+4. **No clock selector.** `runs-for-at-most`'s help says person-wait is excluded; `finishes-within`'s
+   does not; there is no field that says which clock a figure is on (see §B.8).
+5. **No censoring field and no `timeout_rate`/`goodput_rate`/`error_rate`** (Part I §2.9).
+6. **No sample-size declaration** — no `samples:`, no `repeats:`, no `min-n:`, no `source:`.
+   `25-ARCHITECTURE-DECISIONS.md` AD-23 says latency percentiles default to `source: probe`; there
+   is no `source` field in the schema and no probe in the code (§B.5).
+
+`measured-at` is `tier: expert`, and `20-ARCHITECTURE-DRAFT.md:1157-1158` already names the
+consequence: *"the minimum-n gate, the disjoint-split check and the censoring test are silent on a
+core-tier suite"*. Verified: a core-tier author writing only `feel:` and `finishes-within:` gets a
+p95 gate they never chose (`slo.py:118` defaults `measured_at="p95"`) at whatever `n` their eval
+suite happens to have.
+
+### B.2 The percentile is computed one rank too low  [DERIVED — defect]
+
+`adapters/python/src/pact_adapters/slo.py:162-163`:
+
+```python
+q = {"p50": 0.50, "p90": 0.90, "p95": 0.95, "p99": 0.99}.get(self.measured_at, 0.95)
+value = ordered[max(0, int(len(ordered) * q) - 1)]
+```
+
+Nearest-rank is `ordered[ceil(q*n) - 1]`. The shipped expression is `ordered[floor(q*n) - 1]`,
+which equals nearest-rank **only when `q*n` is an integer** and is otherwise exactly one rank lower.
+Enumerated over `n ∈ {20,25,30,40,50,60,72,100,120,150,200,384,400,500,1000}` × `q ∈ {.5,.9,.95,.99}`:
+**it differs in 20 of 60 pairs, and in every case the shipped index is lower.** Examples:
+
+| n | `measured-at` | shipped index | nearest-rank index | shipped reports |
+|---|---|---|---|---|
+| 30 | p95 | 27 | 28 | the 28th of 30, i.e. ≈p93.3 |
+| 72 | p95 | 67 | 68 | the 68th of 72, i.e. ≈p94.4 |
+| 384 | p99 | 379 | 380 | the 380th of 384, i.e. ≈p98.9 |
+
+The error is **always in the direction that makes an SLO pass**. For a gate whose entire purpose is
+to refuse a number that reads like evidence, a systematically optimistic estimator is the wrong
+sign. Fix is one character-class: `ordered[math.ceil(q * len(ordered)) - 1]`.
+
+### B.3 The minimum sample size is a flat 20, independent of the percentile  [defect]
+
+`slo.py:136` — `def assess(self, samples, metric, min_samples: int = 20)`. The only production
+caller is `scoring.py:542` — `scored.latency = spec.slo.assess(latencies, "e2e")` — which passes
+nothing. So p50, p90, p95, p99, `mean` and `max` all gate at **n ≥ 20**.
+
+Recomputed here, the one-sided binomial floor (accept "true quantile ≤ T" at 95% confidence with
+`k` observed violations; closed form for `k=0` is `n ≥ ln α / ln p`):
+
+| quantile | k=0 | k=1 | k=2 | k=3 | k=4 | k=5 |
+|---|---|---|---|---|---|---|
+| p50 | 5 | 8 | 11 | 13 | 16 | 18 |
+| p75 | 11 | 18 | 23 | 29 | 34 | 40 |
+| p90 | 29 | 46 | 61 | 76 | 89 | 103 |
+| **p95** | **59** | 93 | 124 | 153 | 181 | 208 |
+| **p99** | **299** | 473 | 628 | 773 | 913 | 1049 |
+| p99.9 | 2 995 | 4 742 | 6 294 | 7 752 | 9 151 | 10 511 |
+
+Two-sided 95% nonparametric rank CI for the quantile (recomputed; matches Part I §3.2 — independent
+re-derivation, so both stand):
+
+| n | p50 | p90 | p95 | p99 |
+|---|---|---|---|---|
+| 20 | [6,15] w9 | **not estimable** | **n/e** | **n/e** |
+| 24 | [7,17] w10 | n/e | n/e | n/e |
+| 30 | [10,21] w11 | n/e | n/e | n/e |
+| 50 | [18,32] w14 | [40,49] w9 | n/e | n/e |
+| **72** | [28,45] w17 | [60,70] w10 | [64,72] w8 | **n/e** |
+| 100 | [40,60] w20 | [84,96] w12 | [90,99] w9 | n/e |
+| 200 | [86,114] w28 | [171,188] w17 | [183,196] w13 | n/e |
+| 384 | [172,211] w39 | [333,357] w24 | [356,373] w17 | [376,384] w8 |
+| 1000 | [469,531] w62 | [880,918] w38 | [937,964] w27 | [983,996] w13 |
+
+**Worked failure.** A 24-case suite with `measured-at: p99` and `finishes-within: 30s`:
+`len(samples)=24 ≥ 20` so the gate passes; `q=0.99`; `int(24*0.99)-1 = 22`; `ordered[22]` is the
+**23rd of 24**, i.e. the empirical p95.8. The string returned is
+`PASS (p99=…s vs 30.00s)`. A p99 claim, printed under the author's own word, computed from a p96
+estimate over a sample 12× too small for p99's `k=0` floor of 299.
+
+This is **the same defect class the module documents having already fixed one level down**:
+`slo.py:154-160` explains that `mean` and `max` used to fall through to `q=0.95` and be *"printed
+under the author's own word"*, and calls it *"worse than no verdict"*. The fix was applied to the
+statistic and not to the sample size, so the identical sentence is still true of `p99` at n=24.
+
+**[PROPOSAL]** `min_samples` must be a function of `measured_at`, taking the values Part I §3.2
+normatively fixed (p50 ≥ 20, p75 ≥ 30, p90 ≥ 50, p95 ≥ 100, p99 ≥ 400, p99.9 ≥ 3000) with
+`mean`/`max` treated as: `mean` ≥ 20 with a reported CI; `max` never gated but always reported as
+`max of n`, never as a quantile.
+
+### B.4 Latency samples come from the eval suite, one per case, **run serially**
+
+`adapters/python/src/pact_adapters/scoring.py:686-697`:
+
+```python
+for case in cases:
+    began = time.monotonic()
+    result = asyncio.run(run(spec, transport_for(), case.when, {}, ...))
+    latencies.append(time.monotonic() - began)
+```
+
+Three properties follow, all of them load-bearing:
+
+1. **`n` = number of eval cases.** AD-23 says the eval and latency sample streams are *"decoupled"*
+   and that *"eval-case count never gates a percentile"*. In the shipped code they are the same
+   stream and the eval-case count is the only thing that gates it. There is no probe.
+2. **Concurrency is exactly 1.** Cases run in a `for` loop with `asyncio.run` per case. Every vLLM/
+   SGLang result in §A says latency is a function of batch occupancy; a p95 measured at concurrency 1
+   is the *best-case* operating point and systematically under-predicts production. Nothing in the
+   sample record says so.
+3. **The clock is `time.monotonic()`** — correct, and it brackets the whole run including tools and
+   delegation, which is the right definition of an `agent`-observer E2E. Credit where due: this is
+   Part I §2.1's rule, correctly implemented.
+
+### B.5 Censored runs enter the latency vector as if they had completed  [defect — the §2.9 rule, violated in code]
+
+`scoring.py:697` appends unconditionally. It does not read `result.halted`, which can be
+`time-limit`, `cost-limit`, `step-limit`, `tool-call-limit` or `token-limit`
+(`limits.py:299-332`, `Ceiling.halted`). A run stopped by `finishes-within: 30s` therefore
+contributes a ~30 s sample indistinguishable from a run that genuinely took 30 s.
+
+Because `finishes-within` doubles as the wall ceiling when no `runs-for-at-most` is written
+(`limits.py:274-277`), **the very field the SLO asserts on is also the field that truncates its own
+sample distribution.** The measured distribution is right-censored at the assertion threshold, and
+the report contains no `censored_rate`, no `timeout_rate`, and no `completed | censored | failed`
+split. Part I §2.9 rules 1–5 are all unimplemented.
+
+Second, smaller defect on the same loop: on a transport exception the loop **`break`s**
+(`scoring.py:698-704`), so a failure at case 7 of 24 yields a 6-sample latency vector. The suite
+verdict correctly becomes `UNDECIDED`, but `scored.latency` was already computed from the truncated
+vector at `:542` — before the partial-results check at `:544`. Order matters: the latency string is
+built from a sample the surrounding code is about to declare unusable.
+
+### B.6 Nothing measures TTFT or TPOT — and both ports say so  [VERIFIED — honest, and the honesty is the design]
+
+`slo.py:20-26` (module docstring) and `slo.py:125-133`:
+
+> *"Measuring a first token needs the transport to say when one arrived, and none of the seven does;
+> measuring the gap between words needs a token stream, and the harness has whole answers."*
+
+`Slo.unmetered()` returns exactly the fields the author *wrote* (`written`, built at `slo.py:119-122`
+from `first-reply-within` and `per-word-under`), never the ones `feel:` supplied — so a `feel:
+interactive` default does not generate noise. That is a genuinely good rule and should survive into
+the spec text.
+
+The TypeScript port goes further and reports the **whole** unread set:
+`adapters/typescript/src/limits.ts:237-245` declares `LIMITS_FIELDS` (the seven keys it reads) and
+`limitsNotRead()` returns the rest; `harness.ts:600-607` emits one `unenforced` line per key. The
+comment there records that `feel`, `first-reply-within`, `per-word-under`, `measured-at` and `asks`
+were *"dropped in silence"* until that list existed, and that §7.28 of the architecture accounted for
+them under `slo.*` — *"a row that could never fire"* because `pact show` nests them under `limits:`.
+
+**Net position for the assignment's Deliverable 1.** PACT today has a *definition* problem and a
+*measurement* problem, and only the second is admitted. `first-reply-within`'s help text is
+*"how long before the first words come back"* — which is Part I's `agent.ttft_ms` (keeps running
+through tool calls) and **not** `call.ttfc_ms`. Nothing in the schema says so. When a transport
+eventually reports first-token time, the obvious implementation (stamp the first model chunk) will
+silently implement `agent.ttfa`/`call.ttfc` under the name of `agent.ttft`, and the SLO will be
+satisfied by an agent that emitted a tool call and nothing a user can read. **The definition must be
+written into the field's help text before the measurement exists, not after.**
+
+### B.7 PACT's own event stream carries **no clock at all**  [NEGATIVE — the blocking observability finding]
+
+`adapters/python/src/pact_adapters/events.py:128-134`:
+
+```python
+@dataclass
+class Event:
+    address: Address
+    payload: dict[str, Any] = field(default_factory=dict)
+    at: tuple[int, ...] = ()      # session/turn/step indices
+```
+
+No timestamp, no duration, no monotonic offset. Grepping the module for
+`time|timestamp|monotonic|elapsed|duration` returns one comment hit and no code.
+
+The only shipped observability *output* is `watch:` (`spec/schema.yaml:3591-3690`), and its record is
+built at `watches.py:230-242`:
+
+```python
+record = {"happened": str(event.address), "at": list(event.at)}
+for key in RECORDED:                       # RECORDED at :133-157
+    if key in event.payload: record[key] = event.payload[key]
+```
+
+`RECORDED` is a six-name allow-list: `name, does, outcome, reason, member, tools`. So a watch line is
+`{happened, at, …names}` — **and the schema's own help for `writes-to:` (`schema.yaml:3689`) says
+"Each line says WHAT happened, WHEN, and where in the run it was."** The "WHEN" is the causal
+position `at`, not a clock. A reader of that sentence will expect a timestamp and will not get one.
+
+Consequences, stated plainly:
+
+* **Not one latency number in this document's vocabulary is computable from PACT's trace.** Not
+  TTFT, not TPOT, not step latency, not tool latency, not `overhead_ms`, not the parallelism factor.
+  The only timing that exists anywhere is `Meter.seconds` (an aggregate, `limits.py:139-142`) and the
+  per-case `time.monotonic()` bracket in `scoring.py`.
+* Part I §5's "one stream serves SLO + evals + learning + governance" is **not implementable on the
+  current stream**, and Part I §6's R1 (a timing sidecar keyed by `(run_id, seq)`) is still the
+  correct minimal change — it just now applies to PACT's own `Event`, not only to Bud's `RunEvent`.
+* The watch record is **content-free by construction** (`watches.py:37-48`: a watch *"cannot write
+  down what an interceptor was written to hide"*, which is why authoring one needs no approval).
+  That is precisely the property Part I §5.7 wanted for the timing plane: **timing is content-free,
+  so adding a monotonic offset and a duration to the watch line does not change its permission
+  class.** This is the cheapest correct fix available anywhere in this stream.
+
+**[PROPOSAL]** Add exactly three keys to the watch line and one to `Event`:
+`Event.mono_ms: float` (monotonic offset from run start), and on the record
+`{"ms": <mono_ms>, "took": <duration_ms|null>, "blocked": <"approval"|"rate-limit"|"sandbox"|null>}`.
+No content, no permission change, no new group in the schema, and every metric in §2.10 becomes
+computable from a file an author already knows how to ask for.
+
+### B.8 Three different working-clock definitions are now live at once  [design conflict]
+
+| System | "the clock a deadline runs on" | Excludes |
+|---|---|---|
+| **Bud** `wall_clock_ms` (`policy_runtime.rs:1093-1099`) | pure wall: `now_unix_ms >= deadline_at_unix_ms` | **nothing** |
+| **PACT** `Meter.seconds` (`limits.py:139-142`) | `carried + (now - started)`, where `carried` is restored across a **durable park** (`Meter.restored`, `:157-169`) | only time the run was *parked for a person* |
+| **inspect_ai** `sample_working_time()` (`_util/working.py:31-34`) | `monotonic - start - waiting_time`, `waiting_time` accumulated over semaphore + rate-limit waits with concurrent-wait de-duplication (`:56-94`) | approvals **and** throttling **and** queueing |
+
+`spec/schema.yaml:1148-1150` (`runs-for-at-most`) promises the middle one — *"Time spent waiting for
+a person does not count against it — nobody should fail a deadline because the approver went to
+lunch"* — and `finishes-within`'s help (`:1099-1102`) promises nothing about clocks while inheriting
+the same enforcement path.
+
+**Two consequences.**
+
+1. **D3's superset claim is not field-for-field on this row.** `bud.dev/v1`'s
+   `spec.policy.budget.wallClockMs` → PACT's `runs-for-at-most` is a *semantic change*: a run that
+   Bud would kill at 300 s survives under PACT if 200 s of it was an approval wait. The mechanical
+   converter must either emit `runs-for-at-most` **and** record the clock change in the migration
+   report, or map to a new `wall-clock-at-most` field. Silently changing what a deadline means is
+   the T7 failure, applied to the migration itself.
+2. **A rate-limited run is charged for the throttling.** PACT excludes approval waits but not 429
+   backoff or semaphore contention. Under D17 (air-gapped, self-served models) that is mostly
+   harmless; under a hosted binding it means `finishes-within` fails for a reason the author cannot
+   fix by changing the agent. inspect_ai's split is the right one and its de-duplication algorithm
+   (`_end_sample_wait`, `:88-94`) is directly portable.
+
+### B.9 Cost is modelled with two prices, and that is wrong by up to 67× for D16's modalities  [blocking]
+
+`spec/schema.yaml`, group `model-cost`, has exactly two fields: `input-per-mtok` and
+`output-per-mtok`. `resolve._cost` (`resolve.py:572-600`) reads one of the two, divides by 1000, and
+`raw.split()[0]` discards the currency word (safe only because
+`loader/currency-nothing-can-price` refuses a cap the price list cannot price — documented at
+`slo.py:184-196`).
+
+Against §A.3's measured ratios, a `cost-per-request-under` computed from those two numbers is wrong
+by:
+
+| Workload | Direction | Factor |
+|---|---|---|
+| Voice, audio input (`gpt-4o-mini-audio-preview`) | **under**-charges | **66.7×** |
+| Voice, audio input (`gpt-realtime` family) | under-charges | **8×** |
+| Voice, audio output (`gpt-realtime`) | under-charges | 4× |
+| Any loop with a stable cached prefix | **over**-charges | up to **120×** (`cache_read/input` min 0.0083) |
+| Any loop that mutates its system prompt per step | under-charges | 1.25× on the re-created prefix |
+| Reasoning-heavy binding (worst of 52) | under-charges | 3.33× |
+| Any run crossing a 128k/200k/272k/512k tier boundary | under-charges | per the 30 tier keys |
+| Vision, per screenshot | under-charges | 1105 tokens/image that nothing counts |
+
+The `cost-per-request-under` ceiling is the **single most important no-code control in the whole
+system** (D14 names it; `teamwork:` divides it; `Limits.reached` enforces it; `against_the_catalogue`
+reasons about it). It is currently sound only for a text-in/text-out, uncached, non-reasoning,
+sub-128k binding. That is not the v1 scope D16 declares.
+
+**[PROPOSAL — minimal, no-code-preserving]** Keep the two-field shape as the *author-facing* default
+and add an optional `cost:` sub-block with the six keys that carry the measured mass — a distribution
+concern, not an author concern, since `models/catalog.yaml` is distribution-supplied by design
+(its own header says the author never writes it):
+
+```yaml
+cost:
+  input-per-mtok:  4.00 USD
+  output-per-mtok: 16.00 USD
+  cached-input-per-mtok:   0.40 USD    # median 0.10× input
+  cache-write-per-mtok:    5.00 USD    # median 1.25× input
+  audio-input-per-mtok:   32.00 USD    # median 3.33×, up to 66.7×
+  audio-output-per-mtok:  64.00 USD    # median 8×
+  reasoning-output-per-mtok: 16.00 USD # median 1×, range 0.375–3.33×
+```
+
+with the rule that **a key the row does not publish makes that token bucket `unknown`, and an
+`unknown` bucket that a run actually uses makes the whole run's cost a lower bound** — the fail-closed
+posture Bud already implements as `provider_cost_unknown` (§A.5). Anything else silently prices a
+voice agent as a text agent.
+
+### B.10 The catalogue cannot bind two of D16's four modalities  [NEGATIVE — blocking for D16]
+
+`models/catalog.yaml` ships **13 rows**. Counted this pass:
+
+* rows declaring `capabilities.modality-in: [..., audio]` or `modality-out: [..., audio]`: **0**
+* rows declaring `capabilities.computer-use: yes`: **0** (`grep -c computer-use` → 0)
+* rows declaring `modality-in: [text, image]`: 7 (`qwen2.5-vl-7b-instruct`, `claude-opus-5`,
+  `claude-sonnet-5`, `claude-haiku-4-5`, `gpt-5.4`, `gemini-3.5-flash`, `grok-4.5`)
+
+The requirement side exists — `needs: {images, audio, computer-use}` (`schema.yaml`, group `needs`)
+and `model-can: {computer-use, modality-in, modality-out}` (`:830-870`). The `model-can.computer-use`
+field's own comment records why it was added: *"`needs: computer-use: yes` translated to a capability
+token no catalogue row could ever publish… measured, 0 of 13 rows passed, the refusal appended no
+fix, and `pact check` said nothing at all."* The field was added; **the data was not.**
+
+So today: `needs: {audio: yes}` → no candidate model → refuse to bind, with no recommendation
+(D11's second half has nothing to recommend). `feel: voice` → a 300 ms first-reply band
+(`slo.py:302`) that nothing measures, on a catalogue with no audio model, for a cost model with no
+audio price. **Voice is declarable end-to-end and executable nowhere**, and the same is true of
+computer use minus the cost problem.
+
+This is not an argument against D16; it is the concrete work item D16 implies: **three catalogue
+rows** (one realtime/audio, one computer-use, one already-present vision row extended with image
+pricing) plus §B.9's cost keys would make all four modalities bindable, and none of it requires a
+schema change beyond `cost:`.
+
+### B.11 `feel:` bands are constants in Python, not values in a profile  [F-1 violation]
+
+`slo.py:301-307`:
+
+```python
+FEELS: dict[str, tuple[float, float]] = {
+    "voice":          (0.3,  5.0),
+    "interactive":    (1.0,  30.0),
+    "conversational": (2.0,  60.0),
+    "background":     (10.0, 600.0),
+    "batch":          (60.0, 3600.0),
+}
+```
+
+`find -name profiles` over the repo returns nothing — **there is no `profiles/` directory.**
+`25-ARCHITECTURE-DECISIONS.md` AD-23 states `feel:` expands *"from a builtin profile document printed
+in full"* and that `profiles/*.yaml` is *"optional and overriding"*. Neither the builtin document nor
+the override layer exists. The docstring defends the location (*"a number in `spec/schema.yaml` would
+read as something they had chosen"*) — which is a good argument against putting them in the schema
+and **not** an argument for putting them in code. Invariant F-1 is explicit: *"Every default is a
+value in a profile, overridable at workspace/agent/variant/run scope"*, tested by a *"zero-magic
+audit: grep the core for literals"*. These ten literals fail that audit.
+
+Substantively, `voice: (0.3, 5.0)` also disagrees with Part I §9's placeholder table (700 ms) by
+2.3×, and neither number is sourced. Part I §7.1's decomposition is why: the user-perceived voice
+budget is `vad_endpoint_ms + transport + agent.ttft + tts_first_audio + playout`, and only
+`agent.ttft` is PACT's. A 300 ms `agent.ttft` band is defensible *only if* the deployment's
+`silence_duration_ms` and playout buffer are separately declared; nothing declares them.
+
+### B.12 Team budget: post-hoc charge, leaf-first failure  [design divergence, worth a decision]
+
+`delegation.py:197-270` (`Pool`) and `harness.py:2885-2916` (`delegate_by_running`):
+
+* the grant becomes the child's own ceiling, `min(own, allowance)` (`harness.py:2892-2899`) — good,
+  a child's tighter limit is never raised;
+* the pot is charged **after the child returns**: `grant.spend(out.spent)` at `harness.py:2905`;
+* `OverBudget` is re-raised as `RuntimeError(str(over))` *"as this member's failure rather than
+  allowed out of the join, so the author's `if-someone-fails:` decides what happens next"*
+  (`harness.py:2905-2912`).
+
+Compare the two systems that have solved this:
+
+* **inspect_ai** `_CostLimit.check` (`util/_limit.py:1235-1240`) walks **root to leaf** with the
+  reason stated in the source: *"This is so that if multiple limits are simultaneously exceeded, the
+  outermost (closest to root) one raises the error, **preventing certain sub-agent architectures from
+  ending up in an infinite loop**."*
+* **Bud** reserves worst case then commits actuals (`budget_exceeded_dimensions` projects
+  `usage + reserved + additional`, `policy_runtime.rs:1082-1092`).
+
+PACT does neither. The exposure is bounded — a child stops at its own `min(own, allowance)` ceiling,
+so overshoot is at most one step — but the *failure attribution* is leaf-first, which is exactly the
+shape inspect_ai's comment warns about: a supervisor whose pot is exhausted is told *"member X
+failed"*, and `if-someone-fails: ask-another` will ask another member, which will also fail. The
+author sees N member failures and no statement that the **pot** is empty.
+
+**[PROPOSAL]** When `Pool.allowance(member) == 0` for every remaining member, the failure raised must
+name the *parent's* `cost-per-request-under`, not the member. One `if not pool.metered or
+pool.spent_total >= pool.total` check before the join, and the diagnostic changes from
+*"fraud-checker failed"* to *"the team has spent the 0.05 USD you allowed; nobody was asked."*
+
+### B.13 One-character semantic difference in what "under" means
+
+`limits.py:341-343` — `if at >= c.limit: return Reached(...)`. inspect_ai — `if self._cost >
+self.limit`. Bud — `now_unix_ms >= deadline` for wall clock, `$actual > limit` for the counted
+dimensions (`policy_runtime.rs:1105-1109`). So PACT stops a run whose spend has *reached*
+`cost-per-request-under`, which is the reading the field name supports (`under`), while Bud's
+counted dimensions and inspect_ai's cost limit both allow equality. Trivial in money, **not trivial
+in `steps-at-most`**: `steps-at-most: 10` in PACT permits 9 completed steps and stops on reaching
+the 10th; in Bud, `turns: 10` permits 10. The converter must not map these as equal integers.
+
+---
+
+## C. Evidence Part I did not have
+
+### C.1 OTel has MCP metrics, and they give tool latency a client/server split  [NEW]
+
+`research/repos/protocols/otel-semconv/model/mcp/deprecated/metrics-deprecated.yaml` (same
+deprecation/moved note as gen_ai, `stability: development`):
+
+| Instrument | Definition (verbatim) | Line |
+|---|---|---|
+| `mcp.client.operation.duration` | *"The duration of the MCP request or notification as observed on the sender from the time it was sent until the response or ack is received."* | `:46-69` |
+| `mcp.server.operation.duration` | *"MCP request or notification duration as observed on the receiver from the time it was received until the result or ack is sent."* | `:71-86` |
+| `mcp.client.session.duration` | duration of the MCP session, client-observed | `:88-110` |
+| `mcp.server.session.duration` | ditto, server-observed | `:112-131` |
+
+Session attributes include `mcp.protocol.version`, `jsonrpc.protocol.version`, `network.transport`
+(with the normative note *"SHOULD be set to `pipe` if the transport is stdio"*), and `error.type`
+*"if and only if the session ends with an error"* (`:14-44`). Operation attributes extend
+`mcp.common.attributes` and add `server.address`/`server.port`; `mcp.method.name` is a closed enum of
+~20 JSON-RPC methods (`registry-deprecated.yaml:13-...`) including `notifications_progress`.
+
+**Why this matters.** Part I §1.10 established that MCP sets *no protocol bound* on tool latency and
+that progress notifications are the only liveness signal. That is still true. What is new is that the
+**observation-point discipline PACT wants for models is already standardised for tools**:
+`client.duration − server.duration` is the transport+queue share of a tool call, and it is
+attributable without instrumenting the tool. PACT's `step.tool.started`/`step.tool.completed` pair
+should carry both, and `run.tool_ms` should decompose into `tool_exec_ms` (server) and
+`tool_transport_ms` (client − server). For a stdio MCP server the difference is process-spawn and
+pipe latency, which is the dominant term for short tools and is invisible today.
+
+### C.2 Gemini reports a per-modality token vector on the wire — and the reference reader approximates it  [NEW]
+
+`research/repos/routing/litellm/litellm/llms/vertex_ai/gemini/vertex_and_google_ai_studio_gemini.py:1780-1935`.
+
+The wire format carries `promptTokensDetails[]`, `candidatesTokensDetails[]` and
+`cacheTokensDetails[]`, each a list of `{modality, tokenCount}` over
+`TEXT | IMAGE | AUDIO | VIDEO | DOCUMENT`, plus scalar `thoughtsTokenCount` and
+`toolUsePromptTokenCount`. So for Gemini, Part I §2.7's token vector is **provider-reported**, not
+computed. For OpenAI it must be computed (§A.4). For Anthropic, `gen_ai.usage.input_tokens` is itself
+a derived sum (`spans-deprecated.yaml:690-701`).
+
+Three specific behaviours worth carrying into the spec:
+
+1. **`DOCUMENT` is folded into text** (`:1829`, `:1860`) — a PDF page's tokens are reported as text
+   tokens. PACT's vector must either keep a `document` bucket or record that the provider collapsed
+   it, because "how many tokens did the PDF cost" is a question a vision-agent author will ask.
+2. **Implicit caching is attributed to text by assumption.** `:1896-1902`, comment verbatim:
+   *"Implicit caching: only cachedContentTokenCount is provided (no cacheTokensDetails) — Subtract
+   from text tokens since implicit caching is primarily for text content."* For a voice or vision
+   agent under implicit caching, the cached tokens are subtracted from the **wrong modality**. The
+   resulting cost error is bounded by the modality price ratio, i.e. up to 66.7× on the affected
+   tokens. **PACT must mark such a vector `attribution: assumed` and refuse to use it as the basis of
+   a cost SLO verdict in strict mode.**
+3. **Cost is not a function of the token vector alone.** `:1927-1931`:
+   `billable_tool_use_prompt_tokens = 0 if _response_has_search_grounding(...) else
+   tool_use_prompt_tokens`. Whether a bucket is billable depends on **which built-in tool ran**.
+   Part I §2.7's `CallCostRecord` needs a `billable: bool` per bucket, not only a `cost_known` flag
+   per call.
+
+### C.3 Phoenix's price schema is an independent implementation of Part I's `CallCostRecord`  [NEW — corroboration]
+
+`research/repos/eval/phoenix/src/phoenix/db/models.py`:
+
+* `SpanCost` (`:2738-2850`) — one row **per span**, i.e. per model call, with
+  `{span_rowid, trace_rowid, span_start_time, model_id, total_cost, total_tokens, prompt_cost,
+  prompt_tokens, completion_cost, completion_tokens}` and hybrid `*_cost_per_token` properties.
+  `append_detail` (`:2838-2850`) accumulates cost and tokens from details rather than multiplying
+  aggregates.
+* `SpanCostDetail` (`:2852-2880`) — `{token_type, is_prompt, cost, tokens, cost_per_token}`, unique
+  on `(span_cost_id, token_type, is_prompt)`. **This is Part I §2.7's per-call token vector, keyed by
+  token type, with the price recorded alongside the quantity.**
+* `GenerativeModel` (`:2454-2502`) — `{name, provider, start_time, name_pattern (regex),
+  is_built_in, created_at, updated_at, deleted_at}` with unique partial indexes on
+  `(name_pattern, provider, is_built_in) WHERE deleted_at IS NULL`. Price rows are **time-versioned**
+  (`start_time`) and **soft-deleted**, and `SpanCost.model_id` is `ondelete=RESTRICT` — a price row
+  cannot be removed while a cost references it.
+* `TokenPrice` (`:2504-...`) — `{model_id, token_type, is_prompt, base_rate, customization}`.
+* `ThresholdBasedTokenPriceCustomization`
+  (`src/phoenix/db/types/token_price_customization.py:11-16`) — `{type: "threshold_based", key,
+  threshold, new_rate}`, with a forward-compatible parser (`:18-29`) that round-trips unknown
+  customization shapes rather than dropping them.
+
+Three lessons, all directly actionable for D8:
+
+* **Threshold-based pricing is the generic form of context tiering.** LiteLLM's 30 `*_above_N_tokens`
+  keys are one instance. PACT's catalogue should carry `{key, threshold, new-rate}` triples rather
+  than N named keys, which also makes it forward-compatible with the next breakpoint a vendor invents
+  — an E-2 property.
+* **Prices must be time-versioned and soft-deleted, not edited.** A run's cost must remain
+  reproducible after a price change. `models/catalog.yaml` is a git file so history exists, but
+  nothing in the run record pins which revision priced it. Part I §5.5's
+  `catalog_entry_digest` on `CallCostRecord` is the fix and is not implemented.
+* **Never multiply aggregates.** Phoenix accumulates per-detail and sums; the `*_per_token` values
+  are *derived for display only*. Same rule as Part I §2.7.1, arrived at independently.
+
+**Also new:** OpenInference now carries a full cost vocabulary — `llm.cost.{prompt, completion,
+total}`, `llm.cost.prompt_details.{input, cache_write, cache_read, cache_input, audio}`,
+`llm.cost.completion_details.{output, reasoning, audio}`
+(`research/repos/eval/openinference/spec/semantic_conventions.md`). Part I §1.7's table says
+OpenInference has "none (token counts only)" — **[CORRECTION]**. Two caveats for PACT: they are
+**floats in USD** (Bud uses `u64` micro-dollars, exactly summable) and there is **no `cost_known`
+flag**, so a zero and an unknown are indistinguishable. Grep of `spec/` for
+`time_to_first|ttft|latency|first_token` still returns **nothing**: OpenInference remains
+latency-free. **[NEGATIVE, holds]**
+
+### C.4 inspect_ai has grown a **cost** limit, and its check order is a spec decision  [NEW]
+
+`research/repos/eval/inspect_ai/src/inspect_ai/util/_limit.py:1190-1268` — `_CostLimit`, alongside
+`_TokenLimit` (`:1009`), `_TurnLimit` (`:1106`), `_MessageLimit` (`:1272`), `_TimeLimit` (`:1346`)
+and `_WorkingLimit`. Part I §1.8 listed five limits; there are now six, and the sixth is cost.
+
+Two implementation details PACT should copy verbatim:
+
+* `record()` walks **to the parent first** (`:1229-1232`), so a nested agent's spend is charged to
+  every ancestor before itself.
+* `check()` walks **root to leaf** (`:1235-1240`) for the stated reason quoted in §B.12.
+
+And one to reject: `_check_self` raises on `self._cost > self.limit` (`:1256`), a strict inequality,
+which is the opposite of PACT's `>=` (§B.13). Pick one and record it; do not let the two ports and the
+converter each pick separately.
+
+### C.5 Voice: the barge-in truncation point is computed from a **receive** clock, not a playout clock  [NEW — the sharpest voice finding]
+
+`research/repos/frameworks/openai-agents-python/src/agents/realtime/`:
+
+* Turn detection is fully configurable and every field is a latency term:
+  `RealtimeTurnDetectionConfig` (`config.py:96-124`) =
+  `{type: semantic_vad|server_vad, create_response, eagerness: auto|low|medium|high,
+  interrupt_response, prefix_padding_ms, silence_duration_ms, threshold, idle_timeout_ms,
+  model_version}`. Default is `{"type": "semantic_vad", "interrupt_response": True}`
+  (`openai_realtime.py:174`).
+* Audio arithmetic is fixed by format: PCM16 at **24 000 Hz × 2 bytes** = 48 000 B/s; G.711 at
+  **8 000 Hz × 1 byte** = 8 000 B/s (`_util.py:6-8`, `calculate_audio_length_ms` `:10-20`).
+  `DEFAULT_SAMPLE_RATE = 24000` on the cascaded voice path too (`voice/input.py:14`).
+* `ModelAudioTracker.on_audio_delta` (`_default_tracker.py:32-40`) records
+  `ModelAudioState(initial_received_time = time.monotonic(), audio_length_ms)` and accumulates
+  `audio_length_ms` per `(item_id, content_index)`.
+* **The playback position is then estimated as elapsed receive time**
+  (`openai_realtime.py:885`):
+
+  ```python
+  elapsed_ms = (time.monotonic() - audio_state.initial_received_time) * 1000
+  ```
+
+  used only when no `_playback_tracker` was supplied by the application (`:878-880`).
+* On `input_audio_buffer.speech_started` the SDK stops local playback and truncates the assistant's
+  conversation item at `truncated_ms = max(int(round(effective_elapsed_ms)), 0)`
+  (`:1147-1185`), preferring the server's `audio_end_ms` when it is positive (`:1160-1164`) and
+  falling back to the receive-clock estimate otherwise. `_send_interrupt` does the same on an
+  explicit interrupt (`:905-944`), skipping when `elapsed_ms <= 0` (`:920`, `:940-945`).
+
+**Why this is an SLO finding and not a voice-plumbing detail.** The truncation point *is what the
+model believes the user heard*. It is written into the conversation history and conditions every
+subsequent turn. If the client holds a 200 ms jitter buffer and no `playback_tracker` is wired, the
+model's transcript claims the user heard 200 ms of speech they never heard — a **correctness** error
+produced by a **latency** mis-measurement. Every other metric in this document answers "was it fast
+enough"; this one answers "is the timing model accurate enough for the transcript to be true".
+
+Consequences for PACT:
+
+1. **`playout` is a fifth observation point** in Part I §2.2, and unlike `user` it is *not* outside
+   PACT's control — it is a seam the runtime either wires or does not. The IR must name who owns
+   playout position (`voice.playback-tracked-by: client | estimated`), and when it is `estimated`,
+   the run record must carry `transcript_truncation: estimated` so a downstream eval knows the
+   history may be wrong. **This is the one place in the whole SLO stream where an unmeasured latency
+   corrupts the eval oracle rather than merely the report.**
+2. **`voice.barge_in_latency_ms` decomposes** into `vad_detect (server, governed by
+   silence_duration_ms/threshold/eagerness) + downstream transport + local stop`, and only the third
+   is PACT's. Assert on the third; declare the first two.
+3. **`prefix_padding_ms` and `silence_duration_ms` are additive to any user-perceived first-reply
+   budget** and are *configuration*, not measurement. A `feel: voice` band of 300 ms
+   (`slo.py:302`) is meaningless without them: with `silence_duration_ms: 500` the user waits
+   ≥ 800 ms no matter how fast the agent is. **The `feel: voice` expansion must fail closed unless
+   the deployment declares its VAD endpointing, or must be documented as an `agent`-observer figure
+   that explicitly excludes endpointing.**
+4. **`max_input_tokens: 32000` on the `gpt-realtime` family** (§A.3) with audio consuming context at
+   the audio-token rate makes conversation compaction a *voice SLO* concern: the compaction step is
+   on the interactive path, and Part I's `step.compaction.started/completed` events already exist in
+   PACT (`watches.py:167-168`) — they just carry no duration (§B.7).
+
+### C.6 Computer use: the cost term nobody counts  [carried forward, now quantified against the shipped code]
+
+Combining §A.4's re-derivation with §B.9 and §B.10:
+
+* Every 16:9 screenshot at `detail:"high"` is **1105 input tokens**, invariant from 1280×800 through
+  4K. Downscaling saves nothing; cropping to 4:3 (1024×768 → 765) saves **31%**; `detail:"low"` is
+  85 tokens, a **13×** reduction.
+* A 40-step computer-use task is therefore ≥ **44 200 image tokens**, and **O(steps²)** if prior
+  screenshots stay in context.
+* PACT counts **none** of them: `model-cost` has no image price (§B.9), no catalogue row declares
+  `computer-use` (§B.10), and `tokens-at-most` is metered from what the transport reports rather than
+  from what PACT can compute for an image it is about to send.
+* `cua.step_latency_ms` is the right interactivity metric (a 6-minute task of 40 smooth 9-second
+  steps is fine; the same total with one 200-second stall is not) and PACT cannot compute it,
+  because `step.*` events have no clock (§B.7).
+* Approval gates and sandbox boot are `blocked`, and PACT's `Meter` gets the approval half right
+  (park time is excluded, `limits.py:139-142`) and the sandbox half wrong (cold-start is charged to
+  the run and is invisible in the report).
+
+The single highest-leverage IR field remains `keep-last-n-screenshots`, because it is the difference
+between O(N) and O(N²) and is exactly the kind of thing a framework port loses silently — which is
+what D15 ("translate or nothing") exists to prevent.
+
+---
+
+## D. Restating the five deliverables, as of this pass
+
+**D1 — Definitions.** Part I §§2.3–2.6 stand, with two amendments: an observed latency is keyed by
+`(observer, endpoint, streaming?)` not `observer` alone (§A.1), and a non-streaming call must emit
+**no** TTFT rather than a flagged one (§A.6, OTel `SHOULD NOT be reported otherwise`). The
+tool-call-first question is answered by the `ttfb / ttft / ttfa` triple and the frame taxonomy, and
+the shipped `first-reply-within:` help text already commits to the `ttft` reading without saying so —
+which must be fixed in the help text *before* a transport implements it (§B.6).
+
+**D2 — Percentiles and sample size.** Part I §3 stands and was independently re-derived here (§B.3).
+The shipped implementation violates it in three ways: one-rank-low estimator (§B.2), flat n≥20 gate
+(§B.3), censored samples counted as completed (§B.5). All three are small, local fixes.
+
+**D3 — Resolve-time estimation.** Part I §4 stands unrevised and is now confirmed in vLLM's own words
+(§A.8). The shipped code takes the honest position and says so: `slo.against_the_catalogue`'s
+docstring argues that a catalogue latency figure *"is not a property of a model: the same weights
+answer in 200 ms on an H100 and 8 s on a laptop"* and refuses to publish one. That is right. What is
+missing is the other half — the **calibration probe** (Part I §4.3, AD-23's `source: probe`) — which
+would let a *measured* verdict exist at all. Today every latency objective resolves to `UNKNOWN` and
+the only honest outcome is `unmetered`.
+
+**D4 — The one-stream trace schema.** Part I §5's structure stands; §6's R1 (timing sidecar) is
+unimplemented and now applies to PACT's own `Event` as well as Bud's `RunEvent` (§B.7). The
+reconciliation with the Bud ledger needs one correction: the clock semantics of
+`wallClockMs → runs-for-at-most` differ (§B.8), so the converter is not field-for-field. Three
+additions to Part I §5.2's semantic plane: MCP client/server durations (§C.1), per-bucket `billable`
+and `attribution: reported|computed|assumed` on the token vector (§C.2), and `catalog_entry_digest`
+per call (§C.3).
+
+**D5 — Modalities.** Voice gains a fifth observation point (`playout`) and a correctness-not-just-
+speed argument for measuring it (§C.5). Vision's token table is confirmed and its air-gapped failure
+mode is worse than reported (§A.4). Computer use is unchanged in analysis and now quantified against
+a catalogue that cannot bind it (§B.10). All three share one root cause: **the cost model has two
+prices and the trace has no clock.**
+
+---
+
+## E. Open questions added by this pass
+
+1. **Does `measured-at:` stay one word for the whole block?** A voice contract needs p99 on the
+   inter-word gap and p90 on E2E simultaneously. Either `measured-at` becomes per-field
+   (`per-word-under: {at-most: 120ms, measured-at: p99}`) or the expert `objectives:` list from
+   `20-ARCHITECTURE-DRAFT.md:1737` actually ships. Both cost no-code simplicity; doing neither means
+   voice cannot be expressed.
+2. **Where do the `feel:` numbers live?** F-1 says a profile; AD-23 says a builtin profile document;
+   the code says a Python dict; no profile exists. This needs one decision and one file.
+3. **Is the calibration probe in v1?** Without it, every latency objective is `UNKNOWN` and
+   `feel:`/`first-reply-within:`/`per-word-under:` are decorative. With it, `pact` needs a
+   run-N-times-and-measure mode that is not the eval suite.
+4. **Does the timing sidecar go on `Event` or beside it?** Bud's argument for a sidecar (replay
+   determinism, stable digests) applies to PACT's `Event` too — but PACT's `Event` has no digest and
+   is not replayed, so a `mono_ms` field may simply be correct. Deciding this decides whether the
+   watch line can carry time without a permission change (§B.7).
+5. **Should `cost-per-request-under` refuse to bind against a row missing a price key the run will
+   use?** Bud already does the equivalent (`provider_cost_unknown` as an exceeded dimension, §A.5).
+   Doing it in PACT means a voice agent cannot run against a text-priced row — which is correct and
+   will read as a regression.
+6. **What is the `steps-at-most` off-by-one, normatively?** `>=` vs `>` differs by one whole step
+   (§B.13), and the bud.dev/v1 converter has to pick.
+7. **Does PACT assert an E2E SLO when part of the run is an opaque A2A agent?** Part I's proposal
+   (yes for `e2e`, never for `ttft`/`tpot`) is unchanged and still unconfirmed; A2A still publishes
+   nothing but `TaskStatus.timestamp` (§A.7).
+8. **Is `playout` a declared capability or a measured one?** §C.5 turns a latency question into a
+   transcript-correctness question, which may mean it belongs in `needs:`/`model-can:` rather than in
+   `limits:`.

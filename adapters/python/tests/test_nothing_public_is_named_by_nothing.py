@@ -53,6 +53,99 @@ HOST_API: dict[str, str] = {
         "and it takes no code. A public function with no internal caller is "
         "normally dead, and this is the one shape where it is the point"
     ),
+    # The five parts of the Pydantic AI crossing that need something `src/`
+    # does not have: a live SDK object, or somewhere to put a file. Each is
+    # exercised by `test_both_directions_of_the_one_framework_that_writes_agents
+    # _down.py`, so "no internal caller" here is not "no caller".
+    "pydantic_ai_interop.from_pydantic_ai_agent": (
+        "takes a live `pydantic_ai.Agent`. Nothing in `src/` can call it because "
+        "nothing in `src/` HAS one — the caller built it by importing their own "
+        "module in their own process, which is the whole reason this door exists "
+        "beside `from_pydantic_ai_spec`: D17 and D23 forbid PACT executing an "
+        "author's code to find out what their agent is, and reading an object it "
+        "was handed is not that"
+    ),
+    "pydantic_ai_interop.build_agent": (
+        "returns a live `pydantic_ai.Agent`. A run inside PACT goes through "
+        "`transports/pydantic_ai_transport.py`, where PACT owns the loop "
+        "(decision 5) — so nothing on the run path wants this, and wiring it "
+        "there would be the harness handing its loop to a framework. It is for "
+        "the host that wants the agent in THEIR stack"
+    ),
+    "pydantic_ai_interop.usage_limits_for": (
+        "builds the `UsageLimits` for a run that PACT's harness is not driving. "
+        "`UsageLimits` is an argument to `Agent.run()`, not part of an agent, so "
+        "there is nothing in `src/` to pass it to — the host that called "
+        "`build_agent` is what calls `run`. PACT's own runs enforce these "
+        "ceilings in `limits.py`, which is why this is not a second enforcer"
+    ),
+    "pydantic_ai_interop.tool_files_for": (
+        "returns the BODY of one `tools/<name>.yaml` per tool a live agent "
+        "holds. It is not called here because writing an author's files is not "
+        "something an adapter may do — P-1 says an adapter is handed a document, "
+        "and `exploding` is the one module whose job is to create author files. "
+        "The host writes what this returns, or a person reads it"
+    ),
+    "pydantic_ai_interop.resource_file_for": (
+        "returns the BODY of the one `resources/<name>.yaml` those tool files "
+        "connect to, and its endpoint is a name only the HOST knows — the "
+        "platform team publishes it and nothing in a Pydantic AI agent carries "
+        "it, so there is no caller in `src/` that could supply the argument. "
+        "Same reason as `tool_files_for` for why it does not write the file"
+    ),
+    # The MCP bridge, for the same reason as the four above and one more: PACT's
+    # own run never opens a connection. It PARKS on one — the consent is a `Rule`
+    # in the gate and `harness.run` stops there — so a caller in `src/` would be
+    # the harness reaching past its own gate to the thing the gate guards.
+    "mcp_bridge.mcp_toolset_for": (
+        "returns a live `pydantic_ai.mcp.MCPToolset` per server, built from an "
+        "address and a credential only the HOST can resolve — `endpoint:` and "
+        "`auth.by-reference:` are references a platform team publishes and a "
+        "spec file may hold neither value, so nothing in `src/` could supply the "
+        "two callables this takes. PACT's own harness parks on the connection "
+        "consent rather than opening the connection"
+    ),
+    # AD-71's host half. Each of these needs the one thing `src/` structurally
+    # cannot have: text or a tool list that arrived over a live MCP connection,
+    # on the host's machine, AFTER `pact check` finished. That is the whole
+    # reason AD-71 exists — the words were not in the tree a reviewer read.
+    "calling.tool_impls_for": (
+        "turns the agent's `connect:` tools into implementations `harness.run` "
+        "can call, keyed by an open client per server. Nothing in `src/` holds a "
+        "client: PACT's own run PARKS on the connection consent rather than "
+        "opening the connection, so the harness reaching past its own gate to "
+        "build one would be the gate guarding nothing"
+    ),
+    "mcp_bridge.check_snapshot": (
+        "holds what a server published against the author's `tool-snapshot-*` "
+        "lines. The published half arrives over a live session after the loader "
+        "has finished, so nothing in `src/` has it to check — which is exactly "
+        "why AD-71 puts the pin in the tree and the comparison in the host's "
+        "hands rather than in the loader"
+    ),
+    "mcp_bridge.quarantined": (
+        "fences one server's prose into the only shape it may reach a model in "
+        "— labelled non-authoritative, every line quoted, a policy always wins. "
+        "A host that has connected calls it and puts the result on "
+        "`AgentSpec.external_prose`; a run that has connected to nothing carries "
+        "`()`, which is the state every run in this repository is in"
+    ),
+    "mcp_bridge.assemble_instructions": (
+        "puts authored instructions first and external regions after, so the "
+        "AD-71 order cannot be got wrong by a caller who forgets. The harness "
+        "does not call it because it places external text one position later — "
+        "after the written procedures, since AD-78 makes a `SKILL.md` body the "
+        "policy itself. Both now share the one fence, `fenced_regions`, so what "
+        "differs between them is the placing and nothing else; this is the same "
+        "guarantee for a host assembling a prompt outside `_system_for`"
+    ),
+    "mcp_bridge.check_against_authored": (
+        "compares the tool list a server publishes AT CONNECT TIME against what "
+        "the author wrote. Nothing in `src/` has the first half: it arrives over "
+        "a live MCP session, on the host's machine, after `pact check` has "
+        "finished — which is exactly why the check cannot live in the loader and "
+        "has to be offered to whoever holds the connection"
+    ),
 }
 
 

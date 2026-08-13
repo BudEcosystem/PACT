@@ -66,6 +66,19 @@ function countTokens(v: unknown): number {
 
 export class VercelAITransport implements Transport {
   name = "vercel-ai";
+  //: Whether ANYTHING can put a price on what a call here carried. Nothing can:
+  //: this drives a scripted model bound to no catalogue row, so the money half
+  //: of `usage()` below is a placeholder and not a bill.
+  //:
+  //: Declared rather than left to the default, and the default is `false` for
+  //: the reason B6 records: reading the money answer off the TOKEN answer told
+  //: an author their spend cap was enforced against a meter that never left
+  //: zero. This port shipped the `pricesMoney` MECHANISM and no transport that
+  //: assigned it, so the false branch was unreachable and
+  //: `cost-per-request-under` could never appear on `unmetered` for any document
+  //: this port ran. Measured through `run-trace.ts` with a `0.05 USD` cap:
+  //: `"unmetered":[]`.
+  pricesMoney = false;
   private historyRef = { value: [] as any[] };
   private counted: [number, number] = [0, 0];
 
@@ -83,6 +96,24 @@ export class VercelAITransport implements Transport {
       parallel_tool_calls: "native",
       streaming: "emulated",
       durable_resume: "unsupported",
+      // Whether a tool's `connect:` line — the reach kind that names a SYSTEM
+      // in `resources:` — becomes a call that leaves this process.
+      //
+      // `unsupported`, and it is the sharpest thing this column records. Every
+      // harness-driven PYTHON target says `emulated`, because PACT's own MCP
+      // client (`pact_adapters/mcp/`) reaches the server through the tool-impl
+      // seam the loop already has. That client is Python and this port is Node,
+      // so there is nothing here for a `connect:` line to become: the tool
+      // arrives at the model as a name and reaches the system never. The AI SDK
+      // does ship an MCP client of its own, and binding it would mean binding
+      // the SDK's loop, which PACT owns.
+      //
+      // This is the second thing this port is smaller by, beside the ten
+      // governance keys on `unenforced` — declared here rather than discovered
+      // by whoever ships a refund desk on Node. The key must be present at all
+      // or the two ports cannot be compared (P-2), which is what
+      // `test_all_seven_targets_publish_the_same_lattice_features` holds.
+      connected_tools: "unsupported",
     };
   }
 
@@ -120,9 +151,19 @@ export class VercelAITransport implements Transport {
     return [result.text ?? "", calls];
   }
 
-  //: What the last call carried. The money half is 0 because a scripted model
-  //: has no price — the same honesty every Python transport keeps, and the
-  //: reason `Limits.unmeterable` asks two questions rather than one.
+  //: What the last call carried. The TOKEN half is real — counted off the
+  //: SDK's own usage block — and the money half is a placeholder, which is why
+  //: `pricesMoney` above is `false` and not why it could be omitted.
+  //:
+  //: The comment here used to say the `0` was "the same honesty every Python
+  //: transport keeps". It was the opposite of it:
+  //: `pact_adapters.transports._metering` states the rule as *"An unpriced row
+  //: yields `None`, never zero"*, and a `0` that reaches a money meter is
+  //: exactly the *"spend cap that can never be reached"* it opens by forbidding.
+  //: The tuple type is `[number, number]` in both ports' wire shape, so the
+  //: honesty is carried by `pricesMoney` rather than by a third value — and
+  //: `unmeterable` then keeps `tokens-at-most` and drops only the money cap,
+  //: which is the whole reason it asks two questions rather than one.
   usage(): [number, number] {
     return this.counted;
   }

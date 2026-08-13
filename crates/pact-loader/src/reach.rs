@@ -79,6 +79,26 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
         // well would be two messages for one mistake, and the second would send
         // the reader adding a `connect:` line to something that is not a block.
         let Some(fields) = entry.node.as_map() else { continue };
+        // A file whose contents the loader never read says nothing about what
+        // is inside it, so nothing about what is inside it is checked — the
+        // guard `ports::check` already carries, at the seam that needs it just
+        // as much. Measured without it, on a workspace whose only mistake is
+        // one unclosed bracket in `tools/broken.yaml`:
+        //
+        //     error: 'broken' does not say where it reaches: it has no
+        //            `connect:`, no `url:` and no `says:`.
+        //       fix: Add ONE line to this file …
+        //     error: This file is not written correctly: while parsing a flow
+        //            sequence, expected ',' or ']'
+        //
+        // — two errors for one mistake, and the first tells the author to add a
+        // line to a file that did not parse. CHK-12 is the rule; this was one of
+        // the places it had not reached. It is also what makes the SKIPPED tool
+        // in `Loader::classify` cost one message rather than two, since both
+        // arrive here as the same placeholder.
+        if fields.get(pact_doc::UNLOADED).is_some() {
+            continue;
+        }
         let written: Vec<&(&str, &str)> = WAYS
             .iter()
             .filter(|(field, _)| {

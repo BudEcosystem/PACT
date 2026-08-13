@@ -50,6 +50,17 @@ fn write_node(out: &mut String, node: &Node) {
         }
         // Floats are written with the shortest representation that round-trips,
         // so 1.0 and 1.00 in the source agree.
+        //
+        // The `null` branch is the same belt-and-braces as `Node::to_json`'s,
+        // and for the same reason. It used to be reachable from a file, and
+        // that was the worse half of the defect: `x-threshold: 1e999` parsed to
+        // infinity, was written here as `null`, and so hashed identically to a
+        // document whose author had written `x-threshold:` and meant it — two
+        // different documents, one digest, and a lockfile with no way to tell
+        // them apart. `yaml::resolve_scalar` no longer produces a number it
+        // cannot hold, so no authored document reaches this branch; it stays
+        // for a `Value::Float` a caller builds by hand, because a digest
+        // function must return a digest rather than panic.
         Value::Float(f) => {
             if f.is_finite() {
                 let _ = write!(out, "{f}");

@@ -140,11 +140,14 @@ DELEGATED: dict[str, str] = {
         "§4 ports row: which connected system carries the traffic is the host's "
         "connector inventory, not something the portable folder can resolve"
     ),
-    "resource.auth": (
-        "§4 row: a reference to where a credential is kept, which only the "
-        "platform that published the reference can resolve. PACT never holds "
-        "the credential itself, so there is nothing here for a run to read"
-    ),
+    # `resource.auth` was here, delegated on the ground that "there is nothing
+    # here for a run to read". Half of that is still true and the half that
+    # mattered was wrong: the host resolves the reference, and something on this
+    # side has to CARRY the reference to it. `ir._resource` reads
+    # `auth.by-reference` into `ResourceSpec.auth_by_reference`, so a bridge can
+    # hand the name back to the platform that published it. The credential
+    # itself still never crosses — that is the §4 delegation, and it is a
+    # statement about the VALUE, not about the field.
     # The three `state.*` rows above (`never-from`, `shaped-like`, `starts-as`)
     # are delegated to the store. These two are the same delegation: retention
     # is enforced where the data lives.

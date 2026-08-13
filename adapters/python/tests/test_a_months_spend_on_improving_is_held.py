@@ -82,6 +82,12 @@ class Costing(ReferenceTransport):
     """
 
     name = "costing"
+    #: And says so, because `harness.run` and `Learner.cycle` both default this
+    #: to `False` — a transport that never said it could price its calls gets no
+    #: promise made on its behalf (B6). A stand-in that returns a real money
+    #: figure and stayed silent would be exercising a route no honest transport
+    #: is on.
+    prices_money = True
 
     def __init__(self, script: Script, money: float = 2.0) -> None:
         super().__init__(script)

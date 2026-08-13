@@ -188,6 +188,11 @@ def test_a_proposal_report_says_whether_it_cleared_the_declared_margin() -> None
         before_score, after_score = 0.50, 0.70
         verdict_before = Verdict("FAIL", 0.5, 0.7, [object()] * 6)
         verdict_after = Verdict("PASS", 0.7, 0.7, [object()] * 6)
+        # The FROZEN SPLIT, which is what the caution below is about. It used to
+        # be counted off `verdict_after.results` — see
+        # `test_the_held_out_count_on_a_report_is_the_split_itself.py`, which is
+        # where the two are held apart.
+        held_out = 6
 
     said = _margin_line(_Outcome())
     assert f"{MARGIN:.0%}" in said, said
@@ -204,6 +209,7 @@ def test_a_proposal_report_says_whether_it_cleared_the_declared_margin() -> None
     # And a margin cleared over three cases is not a result, which is the same
     # caution `Verdict` applies to a percentage over too few cases.
     class _TooFew(_Outcome):
+        held_out = 3
         verdict_after = Verdict("PASS", 0.7, 0.7, [object()] * 3)
 
     assert "not a measurement" in _margin_line(_TooFew()), _margin_line(_TooFew())

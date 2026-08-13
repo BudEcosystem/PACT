@@ -1,0 +1,20 @@
+name: Desk
+description: Answers questions about one customer's account.
+
+# There is no `uses:` line here, and that absence is the point of this tree.
+#
+# `bundles/customer-lookup/` contributes a tool called `find-customer`, and it
+# is in the document — `pact check` reads it, and holds it against what the
+# bundle said it brings. It is NOT in this workspace's `tools:`, because nothing
+# in this project mounts a bundle into the collections an agent can name. Write
+# `uses: [find-customer]` below and `pact check` refuses it:
+#
+#   error: 'uses' names 'find-customer', and there is no such entry in `tools:`,
+#          `skills:` or `knowledge:`.
+#     fix: Nothing is declared there yet. Add a file `tools/find-customer.yaml`, …
+#
+# — a fix that tells you to write a second copy of a file this tree already
+# holds. Measured: type the line and run
+# `cargo run -p pact-cli -- check tests/trees/what-a-bundle-brings`.
+# What it would take to close that, and the four decisions nobody has made
+# about it, is in `docs/remediation/C7-bundle-mounting.md`.

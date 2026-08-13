@@ -37,12 +37,29 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .limits import money, seconds
+from .limits import _HeldNothing, _nothing_can_reach, money, seconds
 
 
-@dataclass
+@dataclass(frozen=True)
 class Slo:
-    """Budgets for one run. `None` means the metric is not governed."""
+    """Budgets for one run. `None` means the metric is not governed.
+
+    FROZEN, and that is load-bearing rather than tidiness. `__post_init__` below
+    argues that a cap nothing can reach is caught *"on construction, where every
+    route in meets"* — the argument `Limits` earns by being frozen. This class
+    was a bare `@dataclass` while making that claim, and the claim was measured
+    false::
+
+        s = Slo.from_mapping({'cost-per-request-under': '0.05 USD'})
+        s.cost_per_request_under = float('nan')
+        -> cap=nan  unmetered()=()
+
+    The same assignment on a `Limits` raises `FrozenInstanceError`. No writer
+    existed in `src/` (`Slo(` appears at one site, `from_mapping` below), so this
+    was latent rather than live — and a guarantee that holds only while nobody
+    writes the line is not the guarantee the docstring was making. `assess` and
+    `against_the_catalogue` only read, so freezing costs nothing.
+    """
 
     first_reply_within_s: float | None = None   # TTFT
     finishes_within_s: float | None = None      # end-to-end
@@ -58,6 +75,140 @@ class Slo:
     #: reader their `feel: interactive` default is unenforced is noise, and noise
     #: is what makes a report stop being read.
     written: tuple[str, ...] = ()
+    #: The spend cap the author wrote WHEN no amount of money can ever be at or
+    #: above it. The figure, moved off `cost_per_request_under` and not deleted,
+    #: exactly as `Limits.cap_nothing_can_reach` carries it and for the same two
+    #: reasons: the figure is what justifies the report, and a record made of a
+    #: figure is one `__post_init__` can check rather than take on trust.
+    #:
+    #: This is the REPORTING half, and for a round the drop shipped without it.
+    #: Measured through the real harness with `limits=Limits()` so the two
+    #: readers are decoupled — a transport pricing every call at 1000 USD, six
+    #: steps::
+    #:
+    #:     Slo(cost_per_request_under=nan) -> cap=None unmetered=() spent=6000.0
+    #:     Slo(cost_per_request_under=inf) -> cap=None unmetered=() spent=6000.0
+    #:
+    #: Six thousand dollars under a cap the author typed and this object had
+    #: silently deleted, with every honesty channel empty. `cost-per-request-under`
+    #: is `surface: S-GOV, tier: core` in `spec/schema.yaml`, and T7 and FR-8.1.1
+    #: say a lossy operation MUST emit a report entry — so the drop and the report
+    #: are one change, the way `Limits.__post_init__` pairs them and the way
+    #: `learning.Permissions` pairs `per_month()` with `per_month_holds_nothing()`.
+    #: `unmetered()` below is where it comes out; `harness` reads that.
+    #:
+    #: A PRIVATE record and not a public float, for the reason `_HeldNothing`
+    #: gives at length: while this was `cap_nothing_can_reach: float | None`, the
+    #: claim was spellable at the constructor, and the predicate was no gate on
+    #: it because a forger simply passes a figure the predicate agrees with.
+    #: Measured on the tree before this, no edits::
+    #:
+    #:     Slo(cap_nothing_can_reach=float('inf')).unmetered()
+    #:       -> ('cost-per-request-under',)     <- no cost line anywhere
+    #:     Slo(cap_nothing_can_reach=30.0).unmetered()
+    #:       -> ()                              <- the only case the test saw
+    #:
+    #: — a report telling an author to go and fix a line they never wrote, which
+    #: is the wrong-diagnosis failure this whole guard exists to remove.
+    #: `cap_nothing_can_reach` below is a read-only view over it, so the readers
+    #: that ask *"was a figure recorded?"* (`harness.run`,
+    #: `scoring._unmetered_caveats`) are unchanged and the writers are gone.
+    _held_nothing: "_HeldNothing | None" = None
+
+    def __post_init__(self) -> None:
+        """A spend cap no run can be at or above is not one, here either.
+
+        The THIRD reader of `cost-per-request-under:` — `Limits.from_mapping`,
+        `limitsFrom` in the TypeScript port, and this — and for a round the
+        guard was a property of the first two readers rather than of the cap.
+        That is the same mistake one level up from guarding `from_mapping`
+        instead of the value, so it is fixed the same way and in the same place:
+        on construction, where every route in meets.
+
+        `NaN USD` went silent here rather than wrong — `against_the_catalogue`
+        short-circuits on it, because `cheapest > nan` and `dearest < nan` are
+        both false. `inf USD` did not. Measured before this guard, with
+        `tokens-at-most: 1000` and a priced model::
+
+            `cost-per-request-under: inf USD` cannot be reached on a-model. The
+            whole of `tokens-at-most: 1000` costs at most 0.0010 at the published
+            price, so the run always stops on tokens and the money cap never binds.
+
+        which is a true sentence with the WRONG REASON in it: the cap is
+        unreachable because it is infinity, not because a thousand tokens are
+        cheap, and that sentence reads identically for a perfectly sensible cap
+        of 1.00 USD. An author sent to *"lower `cost-per-request-under` below
+        0.0010"* has been pointed at the wrong line. Moved onto
+        `cap_nothing_can_reach` instead, so the one thing said about it is the
+        true one, on `RunResult.unmetered` — and that sentence used to be FALSE
+        of this object. The drop shipped without the report: `unmetered()`
+        returned `self.written`, which is built from `first-reply-within` and
+        `per-word-under` only and could never carry this name, so the figure was
+        discarded and nothing anywhere said so. See `cap_nothing_can_reach` for
+        the six thousand dollars that measured it.
+
+        Three arms, mirroring `Limits.__post_init__` line for line: a figure
+        nothing can reach is moved onto the record; a real figure arriving
+        clears the record; and a record with no figure beside it is CARRIED, so
+        `replace(slo, measured_at='p99')` on an object whose cap has already
+        been moved off still says what it said.
+
+        Being handed a claim from outside is refused by TYPE and not by the
+        predicate, and this is where that mattered: the third arm used to drop a
+        record the predicate disagreed with, which let every record it AGREED
+        with through — `Slo(cap_nothing_can_reach=float('inf'))` reporting
+        `cost-per-request-under` for an object with no cost line. `_held_nothing`
+        above carries the measurement.
+
+        THE CURRENCY IS KEPT, and it used to be cleared. It is the half of the
+        authored line that parsed, `CeilingsDisagree.currency` is the only reader
+        and `against_the_catalogue` returns before reaching it when the amount is
+        gone — so clearing it destroyed something true and bought nothing.
+        `Limits.__post_init__` gives the measurement that made this matter there.
+
+        `_nothing_can_reach` says which figures qualify and why `-inf` is not
+        one of them.
+        """
+        if self._held_nothing is not None and not isinstance(
+            self._held_nothing, _HeldNothing
+        ):
+            raise TypeError(
+                "`_held_nothing` is the record this object writes about a figure "
+                "it was handed, not a claim a caller can hand in: "
+                f"{self._held_nothing!r}"
+            )
+        cap = self.cost_per_request_under
+        if cap is not None and _nothing_can_reach(cap):
+            object.__setattr__(self, "cost_per_request_under", None)
+            object.__setattr__(
+                self,
+                "_held_nothing",
+                _HeldNothing((("cost-per-request-under", "money", cap),)),
+            )
+        elif cap is not None:
+            object.__setattr__(self, "_held_nothing", None)
+        elif self._held_nothing is not None:
+            kept = tuple(
+                row
+                for row in self._held_nothing.rows
+                if row[0] == "cost-per-request-under"
+                and row[1] == "money"
+                and _nothing_can_reach(row[2])
+            )
+            object.__setattr__(
+                self, "_held_nothing", _HeldNothing(kept) if kept else None
+            )
+
+    @property
+    def cap_nothing_can_reach(self) -> float | None:
+        """The figure this object was handed that no spend can be at or above.
+
+        A read-only view over `_held_nothing`, so `harness.run` and
+        `scoring._unmetered_caveats` go on asking the question they asked and
+        there is no longer a constructor argument that answers it.
+        """
+        record = self._held_nothing
+        return None if record is None else record.rows[0][2]
 
     @staticmethod
     def from_mapping(limits: dict[str, Any]) -> "Slo":
@@ -89,14 +240,25 @@ class Slo:
         )
 
     def unmetered(self) -> tuple[str, ...]:
-        """The promises nothing on this run measures.
+        """The promises nothing on this run measures, and the cap this object
+        could not carry.
 
         Reported rather than dropped, the same door every other unenforceable
         line leaves by. Measuring a first token needs the transport to say when
         one arrived, and none of the seven does; measuring the gap between words
         needs a token stream, and the harness has whole answers.
+
+        `cost-per-request-under` joins them when the figure written was one no
+        spend can be at or above. It is NOT enough that `Limits` reports the same
+        name: the two objects usually take the same authored `limits:` block, and
+        that coupling is the only reason the silence here was invisible. Built in
+        code they come apart — `AgentSpec(slo=Slo(cost_per_request_under=nan),
+        limits=Limits())` measured `unmetered=()` with 6000 USD spent — and this
+        is the object that read the line, so this is the object that has to
+        answer for it. `harness` unions the two lists and drops the duplicate.
         """
-        return self.written
+        held = ("cost-per-request-under",) if self.cap_nothing_can_reach is not None else ()
+        return self.written + held
 
 
     def assess(self, samples: list[float], metric: str, min_samples: int = 20) -> str:

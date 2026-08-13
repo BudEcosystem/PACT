@@ -87,8 +87,19 @@ $ pact card refund-desk examples/refund-desk
 Not a CLI verb, deliberately — it runs models:
 
 ```bash
-cd adapters/python && uv run python -m pact_adapters.scoring <PATH>
+./scripts/pact-eval <PATH>
 ```
+
+`scripts/pact-eval` is a wrapper that finds an interpreter with this adapter's
+dependencies. The same thing, spelled out:
+
+```bash
+cd adapters/python && uv run python -m pact_adapters.evals <PATH>
+```
+
+`pact_adapters.scoring` is where the scoring machinery lives, and it is not the
+command — running it directly would load a second copy of every case and verdict
+class. It says so if you try.
 
 `pact check` tells you whether a suite is **well-formed**. This tells you whether
 it **passes**.

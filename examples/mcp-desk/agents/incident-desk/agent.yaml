@@ -1,0 +1,16 @@
+name: Incident desk
+description: Says what is happening on an incident, out of the incident record itself.
+
+# The only thing this agent may use. `uses:` names TOOLS and written procedures;
+# it cannot name a server — a resource is reached only through a tool's
+# `connect:` line, which is what makes that middle hop the place the consent
+# question can hang off.
+uses:
+  - incidents
+
+# What it hands back when it is done. Declared, so the shape is part of what a
+# reviewer reads and part of what every runtime is told — not something each one
+# invents.
+answers-with:
+  status: text
+  what-happened: text

@@ -58,6 +58,11 @@ pact-pipeline = "pact_adapters.pipeline:main"
 pact-explode = "pact_adapters.exploding:main"
 pact-import = "pact_adapters.importing:main"
 pact-export = "pact_adapters.exporting:main"
+# The other direction for the one target that has a declarative format of its
+# own. `pact-export` writes a registry record, which is an index entry; this
+# writes an agent spec, which is a runnable agent minus what the format has no
+# field for — and the report is where the difference is said.
+pact-pydantic-ai = "pact_adapters.pydantic_ai_interop:main"
 pact-improve = "pact_adapters.optimising:main"
 
 [build-system]

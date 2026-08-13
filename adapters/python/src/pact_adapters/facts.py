@@ -28,6 +28,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Any, Iterable, Mapping, Sequence
 
+from .yes_no import said_yes
+
 #: The label a re-stated fact carries, so a later tidy can tell one apart from
 #: ordinary conversation and never summarise it back into prose.
 FACT_LABEL = "a-fact-that-survives"
@@ -93,7 +95,7 @@ class Facts:
         for name, raw in block.items():
             if not isinstance(raw, Mapping):
                 continue
-            if not _yes(raw.get("survives-shortening")):
+            if not said_yes(raw.get("survives-shortening")):
                 continue
             stale = raw.get("stops-being-true-when") or []
             out[str(name)] = Fact(
@@ -180,5 +182,3 @@ class Facts:
         ]
 
 
-def _yes(v: Any) -> bool:
-    return str(v).strip().lower() in {"yes", "true", "on", "1"}

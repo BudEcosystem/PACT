@@ -35,7 +35,7 @@ from typing import Any, Callable, Mapping
 from .evals import Case, CaseOutcome, Verdict, check, verdict
 from .harness import run
 from .ir import AgentSpec
-from .limits import money
+from .limits import _nothing_can_reach, money
 
 
 class Risk:
@@ -398,8 +398,48 @@ class Permissions:
         `learning.cycle-limits.per-month` by name — so by the time a cycle runs,
         the cap and the meter are in the same money. This half only carries the
         word, so the sentence a person reads names the currency they wrote.
+
+        **A figure no spend can ever cross is not returned at all.** That is
+        [`Permissions.per_month_holds_nothing`], and it is the decision
+        `Limits.__post_init__` already makes one module over for
+        `cost-per-request-under`: a cap nothing can be compared against is not a
+        loose cap, it is no cap, and carrying it as one is how a cycle comes to
+        report a ceiling it never held. Measured before this, three real cycles
+        against a real workspace ledger with `per-month: NaN USD`:
+
+            cycle 1: month_total=8.0   unmeasured=()
+            cycle 2: month_total=16.0  unmeasured=()
+            cycle 3: month_total=24.0  unmeasured=()
+
+        against the same three under the author's own `20 USD`, where the third
+        is refused at `16.00 USD`. Twenty-four dollars of self-improvement under
+        a ceiling every outcome stayed silent about. The enforcement site
+        compares `would_reach > amount` and every comparison against a NaN is
+        false, so the refusal below it never ran; `_unmeasured` enumerated three
+        reasons the ceiling can fail to bite and this was a fourth.
         """
-        return money(self.per_month) if self.per_month else None
+        cap = money(self.per_month) if self.per_month else None
+        if cap is not None and _nothing_can_reach(cap[0]):
+            return None
+        return cap
+
+    def per_month_holds_nothing(self) -> bool:
+        """Did the author write a monthly ceiling no spend can ever cross?
+
+        `limits._nothing_can_reach` and not a second test, for the reason that
+        function gives itself: `nan` and `inf` are the two figures no spend can
+        be at or above, and `-inf` is deliberately NOT one of them because a run
+        reaches it immediately — a wrong ceiling, not an absent one. The
+        comparison here is `>` and the one there is `>=`, and the answer is the
+        same on both: `would_reach > nan` and `would_reach > inf` are false at
+        every spend there is, `would_reach > -inf` is true at every spend.
+
+        `True` only when something WAS written. A workspace with no
+        `cycle-limits.per-month` line has no ceiling it failed to hold, and
+        saying so would put a sentence on every cycle that never asked for one.
+        """
+        cap = money(self.per_month) if self.per_month else None
+        return cap is not None and _nothing_can_reach(cap[0])
 
 
 def _as_list(v: Any) -> list[str]:
@@ -721,6 +761,25 @@ class Outcome:
     drift: float = 0.0
     verdict_before: Verdict | None = None
     verdict_after: Verdict | None = None
+    #: How many cases were held out — the frozen split both scoring runs were
+    #: measured on.
+    #:
+    #: Carried rather than counted off `verdict_after.results`, which is what the
+    #: report did. The two agree on this path because `cycle` scores against
+    #: `self.holdout` and `_score` returns one result per case, and nothing held
+    #: them together — so AC-3.5's own *"is this enough to mean anything"* gate
+    #: was reading a stand-in for the split rather than the split. A scoring run
+    #: that graded more than was held out would have reported a three-case split
+    #: as big enough to claim on, which is the one arrangement where the claim is
+    #: certainly wrong.
+    #:
+    #: **Set in exactly one place** — [`Learner.cycle`] stamps it onto every
+    #: answer `_decide` returns. The default below is the value that under-claims
+    #: rather than over-claims, and it is still not a value a cycle should ever
+    #: produce: `_decide` refuses before scoring when nothing is held out, so an
+    #: `Outcome` carrying two verdicts and a zero here has lost the count on the
+    #: way out. `scoring._margin_line` says so rather than printing it.
+    held_out: int = 0
     #: Ceilings the author wrote that nothing in this process can measure, in
     #: their own words. Every other unenforced ceiling in PACT is named on
     #: `RunResult.unmetered`; `cycle-limits.per-month` had no such door, so a
@@ -888,16 +947,40 @@ class Learner:
         what makes it worth reading — a door that is always open tells a reviewer
         nothing.
 
-        Three things can still stop the ceiling biting. They are three different
-        facts with three different fixes, so each gets its own sentence rather
+        FOUR things can still stop the ceiling biting. They are four different
+        facts with four different fixes, so each gets its own sentence rather
         than one that covers all of them — the distinction `RunResult.unmetered`
         and `RunResult.never_reached` already make one layer down, where
         *"nobody could count it"* and *"the count is right and the answer is
         always zero"* would send an author looking in two different places.
+
+        **The first of the four is the only one that is a mistake in the file**,
+        and it is the one this docstring claimed did not exist. The other three
+        are facts about the WORLD — no workspace folder, no price list, a price
+        list that honestly charges nothing — and in every one of them the line
+        the author wrote is a good line that this cycle cannot hold, so the cycle
+        runs and is told so. A figure that is not a figure is not that: nothing
+        about the environment would make `per-month: NaN USD` hold, so it is also
+        the one of the four that REFUSES the cycle ([`Learner._decide`]) rather
+        than reporting past it. It stays on this channel as well, because a
+        reviewer reading `Outcome.unmeasured` for "which ceilings held" must not
+        get an empty tuple for the one ceiling that held nothing at all.
+
+        Measured before it existed, three real cycles against a real ledger with
+        `per-month: NaN USD` built in code: `month_total` 8.0, 16.0, 24.0, and
+        `unmeasured=()` on every one of them.
         """
         wrote = self.permissions.per_month
         if not wrote:
             return ()
+        if self.permissions.per_month_holds_nothing():
+            return (
+                f"cycle-limits.per-month: {wrote} — no amount of money can ever be "
+                f"above this, so it is not a ceiling improving can run out against "
+                f"and nothing was held against it. Fix: write the most improving "
+                f"may cost in a month as an amount — `cycle-limits: "
+                f"{{ per-month: 20 USD }}` — or remove the line.",
+            )
         if not self.month.kept:
             return (
                 f"cycle-limits.per-month: {wrote} — this cycle was handed the "
@@ -951,8 +1034,13 @@ class Learner:
             # `Limits.unmeterable` and `Limits.priced_at_nothing` already make,
             # and the one that decides whether `per-month` is a held ceiling or
             # a number in a file.
+            # `False`, not `counts`, and it is the same default `harness.run`
+            # uses — the two have to agree or one cycle's `per-month` means
+            # something different from the run inside it. Reading the money
+            # answer off the token answer is the B6 defect; the reason it is a
+            # defect and not a convenience is argued in full at that line.
             counts = callable(getattr(transport, "usage", None))
-            prices = bool(getattr(transport, "prices_money", counts))
+            prices = bool(getattr(transport, "prices_money", False))
             self.priced = prices if self.priced is None else (self.priced and prices)
             result = asyncio.run(
                 run(spec, transport, case.when, self.tools, asking=ungated)
@@ -968,7 +1056,39 @@ class Learner:
         return verdict(results, self.bar, min_cases=1)
 
     def cycle(self, proposal: Proposal, transport_for) -> Outcome:
-        """Evaluate one proposal. Returns what happened and why."""
+        """Evaluate one proposal. Returns what happened and why.
+
+        Two lines, and the second one is the whole reason this wrapper exists.
+
+        `_decide` has twelve exits, and the held-out count belongs on every one
+        of them — it is what [`Outcome.held_out`] carries, and what AC-3.5's
+        *"is this enough to mean anything"* gate is answered from. Written at
+        each exit it was written twelve times, and twelve copies of one fact
+        agree only until somebody adds a thirteenth exit or edits one of the
+        twelve. That is not hypothetical: three of them were measured missing
+        while every test of the count passed, because the tests all came out of
+        the same branch and the field's default quietly reported a real
+        three-case split as *"over 0 held-out case(s)"* — a false number that
+        reads as caution rather than as a bug.
+
+        So it is stamped here, once, onto whatever answer came back. There is
+        one line to get wrong instead of twelve, and no exit can be added that
+        forgets it.
+        """
+        from dataclasses import replace
+
+        return replace(
+            self._decide(proposal, transport_for), held_out=len(self.holdout)
+        )
+
+    def _decide(self, proposal: Proposal, transport_for) -> Outcome:
+        """Which answer this proposal gets, and why. See [`cycle`].
+
+        Private because the count `cycle` stamps is part of the answer: an
+        `Outcome` from here has not been told how big the split was, and a
+        reader who took one would be reading the field's default rather than
+        the author's frozen split.
+        """
         cls = classify(proposal, self.permissions)
 
         # Whether this process can put such a change into effect at all, asked
@@ -1096,6 +1216,42 @@ class Learner:
         # the workspace's own measured price, not an estimate this file invented
         # — and it is zero on the first cycle of a month, so nothing is ever
         # refused on no evidence.
+        #
+        # BEFORE the forecast, the ceiling itself. `per-month: NaN USD` is not a
+        # loose ceiling, it is no ceiling: `would_reach > nan` is false at every
+        # spend there is, so the refusal below never runs, and — measured — three
+        # cycles spent 8.00, 16.00 and 24.00 USD with `unmeasured=()` on every
+        # one, under an author who believes they capped what improving may cost.
+        #
+        # REFUSED and not merely reported, which is the opposite of the choice
+        # `Limits.__post_init__` makes for `cost-per-request-under` one module
+        # over, and the difference is where the decision sits. There, the object
+        # is a frozen `Limits` built on the delegation path — `harness._delegating`
+        # calls `replace()` on a member whose own cap is `NaN USD` and hands it
+        # the join policy's real share — so raising would kill a run that is about
+        # to become correct, and the honest answer is to drop the row and name the
+        # field. HERE the decision point is a method call with no money spent yet
+        # and refusal is the module's ordinary vocabulary: two ceilings above this
+        # one already return `Outcome(False, ...)`. FR-8.1.1 says a lossy step is
+        # fail-closed by default, and here fail-closed costs nothing structural,
+        # so it is taken.
+        #
+        # Not conditional on `self.month.kept`. A missing workspace folder is a
+        # fact about the world and is reported past (see `_unmeasured`); a figure
+        # that is not a figure is a mistake in the file, and no folder would make
+        # it hold.
+        if self.permissions.per_month_holds_nothing():
+            self.rejected.append(proposal)
+            return Outcome(
+                False,
+                f"`cycle-limits.per-month: {self.permissions.per_month}` — no amount "
+                f"of money can ever be above this, so nothing improving spends could "
+                f"ever reach it and this cycle is not run. Write the most improving "
+                f"may cost in a month as an amount — `cycle-limits: "
+                f"{{ per-month: 20 USD }}` — or remove the line.",
+                cls, unmeasured=self._unmeasured(),
+            )
+
         cap = self.permissions.per_month_cap()
         if cap is not None and self.month.kept:
             amount, currency = cap

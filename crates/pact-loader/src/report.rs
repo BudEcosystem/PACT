@@ -167,7 +167,8 @@ impl LoadReport {
                     .map(str::trim)
                     .is_some_and(|name| {
                         !name.is_empty()
-                            && named_in(document, collection_for(field), &agent.node, field).is_none()
+                            && named_in(document, collection_for(field), &agent.node, field)
+                                .is_none()
                     })
             });
             for (reason, question, declared_at, shows) in asking_lines(document, &agent.node) {
@@ -207,7 +208,10 @@ impl LoadReport {
                     Shown::Anything => Vec::new(),
                     Shown::These(names) => names,
                 };
-                seen.bindings.push(Binding { open, names: names.clone() });
+                seen.bindings.push(Binding {
+                    open,
+                    names: names.clone(),
+                });
                 if open {
                     seen.open = true;
                 } else {
@@ -335,8 +339,11 @@ const WHEN_A_CEILING_STOPS_IT: &[&str] = &[
 const WHEN_IT_IS_TOO_LONG: &[&str] = &["how-much-over", "what-was-tried", "how-long-it-is"];
 
 /// `needs-approval` from `teamwork` — `shown.teammate`.
-const WHEN_A_TEAMMATE_COULD_NOT: &[&str] =
-    &["who-could-not-answer", "why-they-could-not", "who-did-answer"];
+const WHEN_A_TEAMMATE_COULD_NOT: &[&str] = &[
+    "who-could-not-answer",
+    "why-they-could-not",
+    "who-did-answer",
+];
 
 /// `x-asked-a-person` — `shown.a_stage`.
 const WHEN_A_STAGE_ASKS: &[&str] = &["the-stage", "what-the-stage-said"];
@@ -469,7 +476,12 @@ fn asking_lines(document: &Node, agent: &Node) -> Vec<(&'static str, String, Spa
         && says(limits, "when-it-runs-out", "ask-a-person")
         && let Some((name, span)) = named(limits, "asks")
     {
-        found.push((OUT_OF_BUDGET, name, span, Shown::of(WHEN_A_CEILING_STOPS_IT)));
+        found.push((
+            OUT_OF_BUDGET,
+            name,
+            span,
+            Shown::of(WHEN_A_CEILING_STOPS_IT),
+        ));
     }
 
     // needs-approval — every `ask-a-person[].question` of every policy that
@@ -477,7 +489,11 @@ fn asking_lines(document: &Node, agent: &Node) -> Vec<(&'static str, String, Spa
     // saying `applies-to: every-agent` produced no wait at all for the two
     // agents that had not named it, and `pact waits` — the list §9.4 G14
     // obliges a runtime to walk — was short by every one of them.
-    let named_policy = agent.get("policy").and_then(Node::as_str).unwrap_or("").trim();
+    let named_policy = agent
+        .get("policy")
+        .and_then(Node::as_str)
+        .unwrap_or("")
+        .trim();
     if let Some(all) = document.get("policies").and_then(Node::as_map) {
         for (key, entry) in all {
             if !crate::money::covers(&entry.node, key, named_policy) {
@@ -490,7 +506,12 @@ fn asking_lines(document: &Node, agent: &Node) -> Vec<(&'static str, String, Spa
                 if let Some((name, span)) = named(rule, "question") {
                     // The action's own `takes:`, not `OPEN`. This is the park
                     // that stops money, and it was the one with no check.
-                    found.push((NEEDS_APPROVAL, name, span, what_the_rule_is_about(document, rule)));
+                    found.push((
+                        NEEDS_APPROVAL,
+                        name,
+                        span,
+                        what_the_rule_is_about(document, rule),
+                    ));
                 }
             }
         }
@@ -514,8 +535,11 @@ fn asking_lines(document: &Node, agent: &Node) -> Vec<(&'static str, String, Spa
         // `Desugared::shows` is already the action's `takes:` — the short form
         // reads them off the action because the action says what it is given —
         // so this park has had a list all along and only needed to say so.
-        let shows =
-            if gated.shows.is_empty() { Shown::Anything } else { Shown::These(gated.shows.clone()) };
+        let shows = if gated.shows.is_empty() {
+            Shown::Anything
+        } else {
+            Shown::These(gated.shows.clone())
+        };
         found.push((
             NEEDS_APPROVAL,
             crate::approvals::SHIPPED_QUESTION.to_string(),
@@ -529,7 +553,12 @@ fn asking_lines(document: &Node, agent: &Node) -> Vec<(&'static str, String, Spa
         && says(team, "if-someone-fails", "ask-a-person")
         && let Some((name, span)) = named(team, "asks")
     {
-        found.push((NEEDS_APPROVAL, name, span, Shown::of(WHEN_A_TEAMMATE_COULD_NOT)));
+        found.push((
+            NEEDS_APPROVAL,
+            name,
+            span,
+            Shown::of(WHEN_A_TEAMMATE_COULD_NOT),
+        ));
     }
 
     // needs-permission — `resources.<server>.asks-to-connect`, reached the way a
@@ -659,7 +688,9 @@ fn check_shows(question: &str, q: &Node, asked: &Asked, diags: &mut Diagnostics)
     if !asked.open && !asked.names.is_empty() {
         let allowed: Vec<&str> = asked.names.iter().map(String::as_str).collect();
         for item in &written {
-            let Some(name) = item.as_str().map(str::trim) else { continue };
+            let Some(name) = item.as_str().map(str::trim) else {
+                continue;
+            };
             if name.is_empty() || asked.names.contains(name) {
                 continue;
             }
@@ -710,7 +741,9 @@ fn check_shows(question: &str, q: &Node, asked: &Asked, diags: &mut Diagnostics)
         if lands {
             continue;
         }
-        let Some(first) = written.first() else { continue };
+        let Some(first) = written.first() else {
+            continue;
+        };
         diags.push(Diagnostic::warning(
             "loader/shows-nothing-at-this-park",
             first.span.clone(),
@@ -741,11 +774,23 @@ fn check_shows(question: &str, q: &Node, asked: &Asked, diags: &mut Diagnostics)
 /// time separately — which is why the report lists three — but one file with one
 /// missing line in it, and three copies of the same warning is three things to
 /// fix for one edit.
+///
+/// The question is whether the line was WRITTEN, not whether it parsed. Gating
+/// this on `milliseconds(..).is_some()` made every unreadable deadline into a
+/// missing one, so `answer-within: "99999999999999999999h ..."` — already
+/// refused by name, on its own line, one paragraph above — was then told it was
+/// never written at all, which is false and unfixable. The schema owns "that is
+/// not a length of time this can keep"; this owns "there is no line here". One
+/// mistake, one message, is the same rule the once-per-question count below
+/// keeps.
 fn check_deadline(question: &str, q: &Node, asked: &Asked, diags: &mut Diagnostics) {
-    let written = q.get("answer-within").and_then(Node::as_str).unwrap_or("").trim();
-    let if_nobody_answers =
-        q.get("if-nobody-answers").and_then(Node::as_str).unwrap_or("").trim().to_string();
-    if milliseconds(written).is_some() || if_nobody_answers.is_empty() {
+    let if_nobody_answers = q
+        .get("if-nobody-answers")
+        .and_then(Node::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if q.get("answer-within").is_some() || if_nobody_answers.is_empty() {
         return;
     }
     let span = key_span(q, "if-nobody-answers").unwrap_or_else(|| q.span.clone());
@@ -787,7 +832,9 @@ fn check_nobody_approves_their_own_work(
     document: &Node,
     diags: &mut Diagnostics,
 ) {
-    let Some(agents) = document.get("agents").and_then(Node::as_map) else { return };
+    let Some(agents) = document.get("agents").and_then(Node::as_map) else {
+        return;
+    };
     for field in ["asked-of", "escalates-to"] {
         for name in strings(q.get(field)) {
             if !agents.contains_key(name.as_str()) {
@@ -800,7 +847,11 @@ fn check_nobody_approves_their_own_work(
                 format!(
                     "'{question}' {} '{name}', and '{name}' is one of this workspace's \
                      own agents — so the thing being checked is what does the checking.",
-                    if field == "asked-of" { "is asked of" } else { "escalates to" }
+                    if field == "asked-of" {
+                        "is asked of"
+                    } else {
+                        "escalates to"
+                    }
                 ),
                 format!(
                     "Name the people who decide instead — an audience like \
@@ -851,10 +902,18 @@ fn read_wait(
     declared_at: Span,
     q: &Node,
 ) -> Wait {
-    let answer_within = q.get("answer-within").and_then(Node::as_str).unwrap_or("").trim();
+    let answer_within = q
+        .get("answer-within")
+        .and_then(Node::as_str)
+        .unwrap_or("")
+        .trim();
     let deadline_ms = milliseconds(answer_within);
-    let if_nobody_answers =
-        q.get("if-nobody-answers").and_then(Node::as_str).unwrap_or("").trim().to_string();
+    let if_nobody_answers = q
+        .get("if-nobody-answers")
+        .and_then(Node::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
 
     Wait {
         reason,
@@ -882,7 +941,10 @@ fn named(node: &Node, field: &str) -> Option<(String, Span)> {
     if name.is_empty() {
         return None;
     }
-    Some((name, key_span(node, field).unwrap_or_else(|| node.span.clone())))
+    Some((
+        name,
+        key_span(node, field).unwrap_or_else(|| node.span.clone()),
+    ))
 }
 
 /// Which top-level map an agent's indirection field resolves against.
@@ -909,7 +971,9 @@ fn named_in<'a>(
 /// The span of a key, so a diagnostic underlines the setting rather than the
 /// whole file.
 fn key_span(node: &Node, field: &str) -> Option<Span> {
-    node.as_map().and_then(|m: &Map| m.get(field)).map(|e: &Entry| e.key_span.clone())
+    node.as_map()
+        .and_then(|m: &Map| m.get(field))
+        .map(|e: &Entry| e.key_span.clone())
 }
 
 /// A `list of text` field, tolerant of the single-item spelling an author
@@ -920,7 +984,12 @@ fn strings(node: Option<&Node>) -> Vec<String> {
             Some(one) => vec![one.trim().to_string()],
             None => n
                 .as_list()
-                .map(|l| l.iter().filter_map(Node::as_str).map(|s| s.trim().to_string()).collect())
+                .map(|l| {
+                    l.iter()
+                        .filter_map(Node::as_str)
+                        .map(|s| s.trim().to_string())
+                        .collect()
+                })
                 .unwrap_or_default(),
         },
         None => Vec::new(),
@@ -958,13 +1027,11 @@ mod tests {
     fn a_tree_with_no_agents_produces_no_waits() {
         let mut d = Diagnostics::new();
         let report = LoadReport::of(
-            &doc(
-                "
+            &doc("
 questions:
   x:
     answer-within: 5m
-",
-            ),
+"),
             &mut d,
         );
         assert!(report.waits.is_empty());
@@ -975,8 +1042,7 @@ questions:
     fn a_deadline_the_author_wrote_is_reported_in_milliseconds() {
         let mut d = Diagnostics::new();
         let report = LoadReport::of(
-            &doc(
-                "
+            &doc("
 agents:
   desk:
     limits:
@@ -986,22 +1052,24 @@ questions:
   keep-going:
     answer-within: 1m30s
     if-nobody-answers: stop-and-say-so
-",
-            ),
+"),
             &mut d,
         );
         assert_eq!(report.waits.len(), 1);
         assert_eq!(report.waits[0].reason, OUT_OF_BUDGET);
         assert_eq!(report.waits[0].answer_within, "1m30s");
-        assert_eq!(report.waits[0].deadline_ms, Some(90_000), "not ninety times shorter");
+        assert_eq!(
+            report.waits[0].deadline_ms,
+            Some(90_000),
+            "not ninety times shorter"
+        );
     }
 
     #[test]
     fn a_timeout_action_with_no_deadline_is_reported_as_a_line_nothing_can_read() {
         let mut d = Diagnostics::new();
         let report = LoadReport::of(
-            &doc(
-                "
+            &doc("
 agents:
   desk:
     limits:
@@ -1010,13 +1078,20 @@ agents:
 questions:
   keep-going:
     if-nobody-answers: escalate
-",
-            ),
+"),
             &mut d,
         );
-        assert_eq!(report.waits.len(), 1, "the wait is still real, it just never ends");
+        assert_eq!(
+            report.waits.len(),
+            1,
+            "the wait is still real, it just never ends"
+        );
         assert!(!report.waits[0].wakes());
-        assert_eq!(report.wake_ups().count(), 0, "a scheduler has no moment to wake at");
+        assert_eq!(
+            report.wake_ups().count(),
+            0,
+            "a scheduler has no moment to wake at"
+        );
 
         // AND THE PROJECTION SAYS SO. This is the only fixture in the tree with a
         // wait that never ends, so it is the only place the filter can be shown to
@@ -1037,8 +1112,15 @@ questions:
             .find(|x| x.rule == "loader/wait-with-no-deadline")
             .expect("a line nothing can read must be said out loud");
         assert!(warn.message.contains("keep-going"));
-        assert!(warn.fix.contains("answer-within"), "the fix has to be typeable");
-        assert_eq!(warn.related.len(), 1, "and it names the line that starts the wait");
+        assert!(
+            warn.fix.contains("answer-within"),
+            "the fix has to be typeable"
+        );
+        assert_eq!(
+            warn.related.len(),
+            1,
+            "and it names the line that starts the wait"
+        );
     }
 
     #[test]
@@ -1048,8 +1130,7 @@ questions:
         // silence.
         let mut d = Diagnostics::new();
         let report = LoadReport::of(
-            &doc(
-                "
+            &doc("
 agents:
   desk:
     limits:
@@ -1059,8 +1140,7 @@ questions:
   keep-going:
     says: Keep going?
     asked-of: [support-leads]
-",
-            ),
+"),
             &mut d,
         );
         assert_eq!(report.waits.len(), 1);
@@ -1074,8 +1154,7 @@ questions:
         // somebody who was never asked.
         let mut d = Diagnostics::new();
         LoadReport::of(
-            &doc(
-                "
+            &doc("
 agents:
   desk:
     limits:
@@ -1085,8 +1164,7 @@ questions:
   keep-going:
     says: Keep going?
     asked-of: []
-",
-            ),
+"),
             &mut d,
         );
         let e = d
@@ -1094,7 +1172,11 @@ questions:
             .iter()
             .find(|x| x.rule == "loader/nobody-can-answer")
             .expect("a wait nobody can answer must be said out loud");
-        assert!(e.fix.contains("asked-of: [support-leads]"), "the fix has to be typeable: {}", e.fix);
+        assert!(
+            e.fix.contains("asked-of: [support-leads]"),
+            "the fix has to be typeable: {}",
+            e.fix
+        );
     }
 
     #[test]
@@ -1104,8 +1186,7 @@ questions:
         // second, which is a run that parks and is never looked at again.
         let mut d = Diagnostics::new();
         let report = LoadReport::of(
-            &doc(
-                "
+            &doc("
 agents:
   desk:
     policy: approvals
@@ -1121,8 +1202,7 @@ questions:
   how-much:
     answer-within: 4h
     if-nobody-answers: decline
-",
-            ),
+"),
             &mut d,
         );
         let named: Vec<&str> = report.waits.iter().map(|w| w.question.as_str()).collect();
@@ -1135,8 +1215,7 @@ questions:
     fn a_name_with_no_question_behind_it_is_left_to_the_reference_check() {
         let mut d = Diagnostics::new();
         let report = LoadReport::of(
-            &doc(
-                "
+            &doc("
 agents:
   desk:
     limits:
@@ -1145,8 +1224,7 @@ agents:
 questions:
   is-this-ok:
     answer-within: 30m
-",
-            ),
+"),
             &mut d,
         );
         assert!(report.waits.is_empty());

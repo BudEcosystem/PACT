@@ -21,9 +21,15 @@ echo "── CLI on every shipped tree ──"
 # `--deny-warnings` because a warning here means a shipped example is teaching
 # somebody a shape the checker disagrees with, which is a different thing from a
 # warning in a workspace somebody is halfway through writing.
-for tree in examples/refund-desk examples/answers-from-documents examples/patterns/*/; do
-  [ -d "$tree" ] || continue
-  cargo run --quiet -p pact-cli -- check "$tree" --deny-warnings
+#
+# FOUND, not listed. This line spelled the trees out —
+# `refund-desk answers-from-documents patterns/*/` — so a workspace added beside
+# them was checked by nothing until somebody remembered to extend it, and the
+# success criterion for that workspace was asserted by nothing at all. The golden
+# set derives its agents from the tree for the same reason; a hand-written list
+# is a scope somebody has to remember.
+for spec in $(find examples -name workspace.yaml | sort); do
+  cargo run --quiet -p pact-cli -- check "$(dirname "$spec")" --deny-warnings
 done
 echo "── TypeScript ──"
 # 1238 lines of the "second, independent port" were never type-checked: there was
@@ -42,16 +48,35 @@ else
   echo "  (skipped: run \`npm install\` in adapters/typescript)"
 fi
 echo "── Adapters (7 targets: Pydantic AI, LangGraph, LangChain, AutoGen, OpenAI Agents, Anthropic, Vercel AI) ──"
-# The CLI has to be BUILT, not merely buildable. Forty-two adapter test files
+# The CLI has to be BUILT, not merely buildable. Dozens of adapter test files
 # load the worked example through the real loader and skip themselves when the
-# binary is absent — measured, nineteen tests skip — so a gate that ran them
+# binary is absent — the count is stated once, in the error below, because it is
+# a measurement and two copies of it drift — so a gate that ran them
 # without it would report green over a suite that had quietly stopped checking
 # the thing invariant P-1 is about. The `cargo run` above builds it; this is the
 # assertion that it did.
 if [ ! -x target/debug/pact ]; then
-  echo "error: target/debug/pact is missing, and 44 test files read the worked" >&2
+  echo "error: target/debug/pact is missing, and 62 test files read the worked" >&2
   echo "  example through it. Running the suite now would skip them silently." >&2
   echo "  fix: cargo build -p pact-cli" >&2
+  exit 1
+fi
+# And `node`, for exactly the reason above. The cross-port claim is the strongest
+# thing this repository asserts, and every test that makes it drives
+# `adapters/typescript/src/run-trace.ts` in a subprocess and SKIPS itself when
+# that subprocess cannot start. Measured, with a `node` on PATH that exits 127:
+# `1857 passed, 75 skipped` against `1945 passed, 7 skipped` — 68 tests stopped
+# running and said so only in the skip list. Among them is the only assertion
+# holding the second port's guard against a spend cap nothing can reach.
+#
+# The typecheck above gates on `node_modules` and this does not, deliberately:
+# `--experimental-strip-types` needs no install, so a missing `node` is a missing
+# runtime and not a missing dependency.
+if ! command -v node >/dev/null 2>&1; then
+  echo "error: node is not on PATH, and 68 adapter tests drive the second port" >&2
+  echo "  through it. Running the suite now would skip them silently — including" >&2
+  echo "  every cross-port comparison the portability claim rests on." >&2
+  echo "  fix: install Node (>= 22, for --experimental-strip-types)" >&2
   exit 1
 fi
 cd adapters/python && uv run pytest tests/ -q

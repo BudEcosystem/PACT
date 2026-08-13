@@ -57,6 +57,19 @@ pub fn no_team_calls_itself(document: &Node, diags: &mut Diagnostics) {
             continue;
         }
         let Some(path) = walk(&names, start) else { continue };
+        // The one grant the ban leaves room for: a circle where EVERY member
+        // has written its own bottom (`limits.asks-itself-at-most:`). One
+        // missing figure and the refusal stands — naming who. Members of a
+        // permitted circle are NOT marked reported: a second, unbudgeted
+        // circle through the same agents is its own mistake.
+        let unbudgeted: Vec<&str> = path
+            .iter()
+            .copied()
+            .filter(|m| !has_budget(agents, m))
+            .collect();
+        if unbudgeted.is_empty() {
+            continue;
+        }
         for member in &path {
             reported.insert(member);
         }
@@ -91,12 +104,135 @@ pub fn no_team_calls_itself(document: &Node, diags: &mut Diagnostics) {
                      so one request would go round it until the budget ran out."
                 )
             },
-            format!(
-                "Delete the `{last}:` line under `team:`. A teammate does work its caller \
-                 does not do; a teammate that leads back has nothing left to add."
-            ),
+            {
+                let missing = unbudgeted
+                    .iter()
+                    .map(|m| format!("'{m}'"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!(
+                    "Delete the `{last}:` line under `team:` — or write `asks-itself-at-most:` \
+                     under `limits:` on {missing}, so the going round has a bottom. A circle is \
+                     allowed only when every agent on it says how many times it may be put to work."
+                )
+            },
         ));
     }
+}
+
+/// Refuse a line that names a base — something to build on, not to run.
+///
+/// `base: yes` says nothing can run the agent, and three lines could promise
+/// that something will: a `team:` entry, a port's `answers:`, and a stage's
+/// `may-use:`. Each is refused where the author wrote it, because leaving any
+/// one open makes the field's own help — "it never runs" — a lie through that
+/// door: a port routes real traffic, and a stage offers the model a teammate
+/// it may pick.
+pub fn no_base_on_a_team(document: &Node, diags: &mut Diagnostics) {
+    let Some(agents) = document.get("agents").and_then(Node::as_map) else {
+        return;
+    };
+    let is_base = |name: &str| agents.get(name).is_some_and(|a| says_yes(a.node.get("base")));
+
+    for (_, agent) in agents {
+        let Some(team) = agent.node.get("team").and_then(Node::as_map) else {
+            continue;
+        };
+        for (member, entry) in team {
+            if is_base(member.as_str()) {
+                diags.push(Diagnostic::error(
+                    "loader/a-teammate-that-is-only-a-base",
+                    entry.key_span.clone(),
+                    format!(
+                        "'{member}' is a base — `base: yes` says nothing can run it, so it \
+                         cannot be on a team."
+                    ),
+                    format!(
+                        "Make a real agent `based-on: {member}` and name that one here, or \
+                         delete the `{member}:` line under `team:`."
+                    ),
+                ));
+            }
+        }
+    }
+
+    // The ingress door: a port's `answers:` is which agent handles what
+    // arrives, so a base here is a promise the outside world will reach
+    // something that never runs.
+    for (port, entry) in document.get("ports").and_then(Node::as_map).into_iter().flatten() {
+        let Some(answers) = entry.node.get("answers") else {
+            continue;
+        };
+        let Some(name) = answers.as_str() else {
+            continue;
+        };
+        if is_base(name) {
+            diags.push(Diagnostic::error(
+                "loader/a-port-answered-by-a-base",
+                answers.span.clone(),
+                format!(
+                    "'{port}' is answered by '{name}', which is a base — a port answered \
+                     by something that never runs."
+                ),
+                format!(
+                    "Make a real agent `based-on: {name}` and write that one on `answers:`, \
+                     or point this port at an agent that runs."
+                ),
+            ));
+        }
+    }
+
+    // The routing door: a stage's `may-use:` narrows what the agent may draw
+    // on, and one of its vocabularies is `agents`. Offering a base there is
+    // offering help that can never come.
+    for (_, loop_) in document.get("loops").and_then(Node::as_map).into_iter().flatten() {
+        for (_, stage) in loop_.node.get("steps").and_then(Node::as_map).into_iter().flatten() {
+            let Some(may_use) = stage.node.get("may-use") else {
+                continue;
+            };
+            let pact_doc::Value::List(items) = &may_use.value else {
+                continue;
+            };
+            for item in items {
+                let Some(name) = item.as_str() else {
+                    continue;
+                };
+                if is_base(name) {
+                    diags.push(Diagnostic::error(
+                        "loader/a-stage-that-may-use-a-base",
+                        item.span.clone(),
+                        format!(
+                            "'{name}' is a base — `base: yes` says nothing can run it, so no \
+                             stage may use it."
+                        ),
+                        format!(
+                            "Make a real agent `based-on: {name}` and name that one here, or \
+                             take '{name}' off `may-use:`."
+                        ),
+                    ));
+                }
+            }
+        }
+    }
+}
+
+/// Whether this node answers yes, in any spelling an author writes it.
+fn says_yes(n: Option<&Node>) -> bool {
+    n.is_some_and(|n| match &n.value {
+        pact_doc::Value::Bool(b) => *b,
+        pact_doc::Value::Str(s) => matches!(s.trim(), "yes" | "true" | "on"),
+        _ => false,
+    })
+}
+
+/// Whether this agent wrote (or inherited — derive runs first) the figure
+/// that gives a circle a bottom.
+fn has_budget(agents: &pact_doc::Map, who: &str) -> bool {
+    agents
+        .get(who)
+        .and_then(|e| e.node.get("limits"))
+        .and_then(|l| l.get("asks-itself-at-most"))
+        .is_some()
 }
 
 /// The cycle reachable from `start` that comes back to `start`, in order.
@@ -196,10 +332,95 @@ mod tests {
     }
 
     #[test]
+    fn an_agent_with_a_budget_may_name_itself() {
+        let d = check(
+            "agents:\n  helper:\n    team:\n      helper: takes another look\n    limits:\n\
+             \x20     asks-itself-at-most: 2\n      when-it-runs-out: stop-and-say-so\n",
+        );
+        assert!(d.is_empty(), "{}", d.render());
+    }
+
+    #[test]
+    fn a_ring_where_every_agent_carries_a_budget_is_allowed() {
+        let d = check(
+            "agents:\n  a:\n    team:\n      b: helps\n    limits:\n\
+             \x20     asks-itself-at-most: 2\n      when-it-runs-out: stop-and-say-so\n\
+             \x20 b:\n    team:\n      a: helps\n    limits:\n\
+             \x20     asks-itself-at-most: 2\n      when-it-runs-out: stop-and-say-so\n",
+        );
+        assert!(d.is_empty(), "{}", d.render());
+    }
+
+    #[test]
+    fn a_ring_where_one_agent_has_no_budget_is_refused_naming_who() {
+        let d = check(
+            "agents:\n  a:\n    team:\n      b: helps\n    limits:\n\
+             \x20     asks-itself-at-most: 2\n      when-it-runs-out: stop-and-say-so\n\
+             \x20 b:\n    team:\n      a: helps\n",
+        );
+        assert_eq!(d.items().len(), 1, "one missing figure is one mistake:\n{}", d.render());
+        let e = &d.items()[0];
+        assert_eq!(e.rule, "loader/team-that-has-no-bottom");
+        assert!(e.fix.contains("asks-itself-at-most"), "{}", e.fix);
+        assert!(e.fix.contains("'b'"), "the refusal names who is missing: {}", e.fix);
+        assert!(!e.fix.contains("'a',"), "the budgeted member is not blamed: {}", e.fix);
+    }
+
+    #[test]
     fn a_teammate_with_no_agent_behind_it_is_left_to_the_reference_check() {
         // `key-names: agents` already reports it at the line the author typed,
         // and a second message would be two things to fix for one mistake.
         let d = check("agents:\n  a:\n    team:\n      nobody: helps\n");
         assert!(d.is_empty(), "{}", d.render());
+    }
+
+    fn base_check(text: &str) -> Diagnostics {
+        let node = parse_yaml(text, camino::Utf8Path::new("w.yaml")).expect("parses");
+        let mut d = Diagnostics::new();
+        no_base_on_a_team(&node, &mut d);
+        d
+    }
+
+    #[test]
+    fn a_teammate_that_is_only_a_base_is_refused() {
+        let d = base_check(
+            "agents:\n  desk:\n    team:\n      pattern: helps\n  pattern:\n    base: yes\n\
+             \x20   description: a shape\n",
+        );
+        assert_eq!(d.items().len(), 1, "one base on one team is one mistake:\n{}", d.render());
+        let e = &d.items()[0];
+        assert_eq!(e.rule, "loader/a-teammate-that-is-only-a-base");
+        assert!(e.fix.contains("based-on: pattern"), "{}", e.fix);
+    }
+
+    #[test]
+    fn a_base_nobody_names_is_left_alone() {
+        let d = base_check("agents:\n  pattern:\n    base: yes\n    description: a shape\n");
+        assert!(d.is_empty(), "{}", d.render());
+    }
+
+    #[test]
+    fn a_port_answered_by_a_base_is_refused() {
+        let d = base_check(
+            "agents:\n  pattern:\n    base: yes\n    description: a shape\nports:\n\
+             \x20 front-door:\n    description: people write in\n    answers: pattern\n",
+        );
+        assert_eq!(d.items().len(), 1, "{}", d.render());
+        let e = &d.items()[0];
+        assert_eq!(e.rule, "loader/a-port-answered-by-a-base");
+        assert!(e.message.contains("never runs"), "{}", e.message);
+        assert!(e.fix.contains("based-on: pattern"), "{}", e.fix);
+    }
+
+    #[test]
+    fn a_stage_that_may_use_a_base_is_refused() {
+        let d = base_check(
+            "agents:\n  pattern:\n    base: yes\n    description: a shape\nloops:\n\
+             \x20 careful:\n    steps:\n      work:\n        may-use:\n          - pattern\n",
+        );
+        assert_eq!(d.items().len(), 1, "{}", d.render());
+        let e = &d.items()[0];
+        assert_eq!(e.rule, "loader/a-stage-that-may-use-a-base");
+        assert!(e.fix.contains("may-use"), "{}", e.fix);
     }
 }

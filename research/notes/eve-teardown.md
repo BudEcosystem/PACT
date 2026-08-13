@@ -1,7 +1,14 @@
 # Vercel `eve` — line-by-line teardown
 
 **Research stream:** `eve-teardown`
-**Date:** 2026-07-26
+**Date:** 2026-07-26 (Part I) · **2026-08-07 (Part II — second independent pass, §12–§17)**
+
+> **Reading order.** Part I (§0–§11) is the first pass. Part II (§12–§17) is a
+> **second, independent source read** done without consulting Part I first, then
+> reconciled against it. Part II records (a) which Part I claims I re-verified
+> line-by-line, (b) findings Part I does not contain, and (c) the small number of
+> places I would sharpen Part I's wording. Nothing in Part I was found to be
+> wrong. Where Part II and Part I overlap, Part I stands.
 **Target:** `/home/bud/ditto/agent-inter-op/research/repos/frameworks/vercel-eve`
 **Version read:** `eve@0.27.6`, Apache-2.0, HEAD `05f3480` (2026-07-25, "Version Packages (#1176)")
 **Source read:** `packages/eve/src/**` (~351k LOC incl. tests; ~1005 non-test `.ts` files). Docs read only to find claims, then verified against source.
@@ -900,3 +907,543 @@ correct and that PACT should adopt rather than reinvent.
 7. **Does anything in eve support audio at all?** I found no audio path
    (no streaming audio I/O, no TTFT instrumentation beyond OTel spans). Marked
    negative, but I searched by directory and grep rather than exhaustively.
+
+---
+---
+
+# PART II — Second independent pass (2026-08-07)
+
+**Method.** Re-read `packages/eve/src/{discover,compiler,harness,execution,runtime,evals,public,internal}`
+from source at the same HEAD (`05f3480`, `eve@0.27.6`), plus `docs/**` for claims,
+then reconciled against Part I. Same evidence discipline: every claim below is
+`file:line` relative to
+`/home/bud/ditto/agent-inter-op/research/repos/frameworks/vercel-eve/`.
+
+---
+
+## 12. Re-verification of Part I's load-bearing claims
+
+These are the Part I claims that PACT's design leans on hardest. All were
+re-derived independently from source; none required correction.
+
+| Part I claim | Re-verified at | Status |
+|---|---|---|
+| Runtime never reads the tree; loads compiled artifacts | `src/runtime/compiled-artifacts-source.ts:1-45` — the source union is `{kind:"bundled"}` or `{kind:"disk", appRoot, moduleMapLoaderPath?}`; the doc comment states the module-map loader path is "Omitted in deployed runtimes, where the module map **must** come from the compiled artifact emitted by the build" | ✔ confirmed |
+| Tree→graph is code generation | `src/compiler/module-map.ts:63-112` (`createCompiledModuleMapSource` emits `import * as module_N`); `src/compiler/artifacts.ts:123-136` writes it to `.eve/compile/module-map.mjs` | ✔ confirmed |
+| Compile executes author code | `src/internal/authored-module-loader.ts:1-40` — rolldown-bundles each authored module into `node_modules/.cache/eve/authored-modules/<hash>.mjs`, then `import()`s it (`AUTHORED_MODULE_BUNDLE_DIRECTORY_PATH` at `:35-40`) | ✔ confirmed |
+| Only 3 slots take Markdown | `src/discover/filesystem.ts:7-14` (`SUPPORTED_AUTHORED_MODULE_FILE_EXTENSIONS = [".cts",".mts",".cjs",".mjs",".ts",".js"]`); `src/internal/helpers/markdown.ts` exports exactly `lowerInstructionsMarkdown`, `lowerSkillMarkdown`, `lowerScheduleMarkdown` | ✔ confirmed |
+| Zero YAML/JSON authoring surface | Grep for `yaml\|yml\|\.json"` across `src/discover/` + `src/compiler/` returns **only** `package.json`, `vercel.json` (project markers, `filesystem.ts:20`), the five `.eve/*.json` output artifacts, and `_manifest.json` (extension compat). No authored `.yaml` path exists anywhere in the loader. | ✔ confirmed |
+| Harness pins one model call per durable step | `src/harness/tool-loop.ts:907` — `stopWhen: isStepCount(1)` inside `agentSettings`, `new ToolLoopAgent(agentSettings)` at `:912` | ✔ confirmed |
+| Hooks are observe-only | `src/public/definitions/hook.ts:99-102` — "Handlers are observe-only: they cannot inject model context"; `StreamEventHook` returns `void \| Promise<void>` (`:83`) | ✔ confirmed |
+| Loop config has no loop shape | `ToolLoopHarnessConfig` consumed at `tool-loop.ts:467-511`; the only behavioural knobs threaded in are `mode`, `workflow`, `workflowMaxSubagents`, `capabilities`, `resolveModel`, `dispatchDynamicModelEvent`, `onCompaction`, `tools`, `abortSignal`, `handleEvent`, `runtimeIdentity` | ✔ confirmed |
+| Agent config is 10 fields | `src/shared/agent-definition.ts:257-303` (`PublicAgentDefinition`); closed-world enforced at `src/internal/authored-definition/core.ts:45-61` | ✔ confirmed |
+| Model catalogue is a network service with a 3-entry offline table | `src/internal/gateway.ts:5,11` (`https://ai-gateway.vercel.sh/v1/models/catalog`); `src/compiler/model-catalog.ts:60-82` (built-in table: `anthropic/claude-opus-4.7`, `openai/gpt-5.4`, `openai/gpt-5.4-mini`); fetch at `:215`, 24 h TTL at `:8`, disk cache at `.eve/cache/model-catalog.json` (`:99-101`) | ✔ confirmed |
+| Subagents inherit nothing; copy-paste is the sanctioned reuse | `docs/subagents.mdx:66` ("A declared subagent inherits nothing from the root's authored slots"), `:80` ("copy the markdown under each `skills/` directory"); no merge step exists in `src/compiler/normalize-subagent.ts` or `normalize-manifest.ts` | ✔ confirmed |
+| Evals are imperative TypeScript only | `src/evals/types.ts:475-478` (`EveEvalInput.test(t)` is required and is a function); `src/evals/runner/discover.ts:7,10` (`EVAL_FILE_SUFFIX = ".eval.ts"`, `EVAL_CONFIG_FILE = "evals.config.ts"`) | ✔ confirmed |
+| Schema-version churn: compiled v36, discovery v12 | `src/compiler/manifest.ts:44`, `src/discover/manifest.ts:23` | ✔ confirmed |
+| Identity derives from `package.json#name` or a directory basename | `src/discover/manifest.ts:350-366`; `docs/reference/project-layout.md:19` | ✔ confirmed |
+
+---
+
+## 13. Findings Part I does not contain
+
+### N1 — `tools/` flattens nested paths into a dash-joined slug, and the resulting collision fails at **first session**, not at build
+
+`src/compiler/normalize-tool.ts:49-51`:
+
+```ts
+const toolName = stripLogicalPathExtension(source.logicalPath)
+  .replace(/^tools\//, "")
+  .replaceAll("/", "-");
+```
+
+The doc comment at `:27-34` is explicit: *"`tools/billing/refund.ts` → `"billing-refund"`. Path separators cannot reach the model — most providers reject `/` in tool names — so tools are the one path-derived primitive that flattens nested directories into a slug-safe single segment."*
+
+**The collision this creates is not detected by discovery or by compilation.**
+`tools/billing-refund.ts` and `tools/billing/refund.ts` are two distinct
+`logicalPath`s, so `discoverNamedSourceDirectory` emits two source refs with no
+diagnostic, and `compileAgentNodeManifest` pushes two `CompiledToolDefinition`s
+with the *same* `name` into `manifest.tools`
+(`src/compiler/normalize-manifest.ts:112-114`). The duplicate is only caught in
+`createRuntimeToolRegistry` (`src/runtime/tools/registry.ts:41-53`,
+`duplicateMessage: "Found multiple authored tools named …"`), which runs inside
+`resolveRuntimeAgentGraph` (`src/runtime/resolve-agent-graph.ts:171-184`).
+
+Who calls that? Only `src/runtime/sessions/compiled-agent-cache.ts:74` (session
+bootstrap) and `src/execution/sandbox/prewarm.ts:222,329`. **`eve info` does
+not** — it reads the compiled manifest fields directly
+(`src/cli/commands/info.ts:56-62`). So the author's feedback loop is:
+`eve info` clean → `eve build` clean → **first message fails at runtime.**
+
+*Design consequence for PACT:* name derivation that is not injective on paths
+must be validated **in the loader**, at the moment both candidates are visible,
+not in a downstream registry. And PACT's `validate` must run whatever check the
+runtime registry would run, or `validate` is not a gate.
+
+### N2 — The compiled manifest embeds **absolute host paths**, so the derived artifact is machine-bound
+
+`src/compiler/manifest.ts:638-640` and `:723-726`: both
+`compiledAgentNodeManifestSchema` and `compiledAgentManifestSchema` require
+`agentRoot: z.string()` and `appRoot: z.string()`, populated from
+`resolve(input.agentRoot)` / `resolve(input.appRoot)`
+(`src/discover/manifest.ts:311-316`). Skill packages additionally carry absolute
+`rootPath`, `skillFilePath`, `assetsPath`, `referencesPath`, `scriptsPath`
+(`src/compiler/manifest.ts:474-484`), and extension mounts carry an absolute
+`sourceRoot` (`:700-707`).
+
+`.eve/compile/compiled-agent-manifest.json` therefore **cannot be moved between
+machines, containers, or CI runners**. It is a build cache, not an interchange
+format — which is a second, independent reason it is nothing like PACT's
+`canonical.json`.
+
+*Design consequence for PACT:* `canonical.json` must be **path-free**. Every
+reference is a workspace-relative logical path or a content digest. Absolute
+paths appear only in `pact.lock` / run-scoped state, never in the IR. Add this
+as a mechanical CI check (grep the emitted IR for `/` or drive-letter prefixes).
+
+### N3 — eve versions its **extension** contract per-capability, and its **own** manifest monolithically. The contrast is the argument for PACT's E-2.
+
+`src/compiler/extension-compatibility.ts:22-34`:
+
+```ts
+const EXTENSION_CAPABILITY_CONTRACTS = {
+  extension:  { current: 1, supported: [1],       dropped: {} },
+  tool:       { current: 2, supported: [1, 2],    dropped: {} },
+  dynamicTool:{ current: 3, supported: [1, 2, 3], dropped: {} },
+  connection: { current: 2, supported: [1, 2],    dropped: {} },
+  hook:       { current: 2, supported: [1, 2],    dropped: {} },
+  skill:      { current: 1, supported: [1],       dropped: {} },
+  …
+  state:      { current: 2, supported: [1, 2],    dropped: {} },
+} as const satisfies Record<string, ExtensionCapabilityContract>;
+```
+
+`eve extension build` stamps only the capabilities the extension actually used
+into `_manifest.json#requires`
+(`EXTENSION_COMPATIBILITY_MANIFEST_FILENAME = "_manifest.json"`, `:14`;
+manifest shape at `:69-76`), and the consuming eve validates each requirement
+against its own `supported` set, reporting `UnsupportedExtensionCapability`
+per capability (`:78-82`). `dropped` carries a *per-version removal reason*, so
+a rejection can explain itself.
+
+This is **exactly PACT invariant E-2** ("unknown features are rejected loudly by
+old adapters, never ignored") and it is better than what eve does for its own
+artifact, which is a single `COMPILED_AGENT_MANIFEST_VERSION = 36`
+(`src/compiler/manifest.ts:44`) that bumps whenever *any* field changes.
+
+*Design consequence for PACT:* copy the extension model, not the manifest model.
+The IR carries `requires: {capability: version}` for only the capabilities a
+document actually uses; each adapter publishes `supported: number[]` and
+`dropped: {version: reason}` per capability. A version bump to `loop` must not
+invalidate a document that only uses `tools`.
+
+### N4 — Authored definitions are validated **closed-world** by hand-written normalisers, but no machine-readable schema for the *authored* surface is ever emitted
+
+`src/internal/authored-definition/core.ts:45-61` — `normalizeAgentDefinition`
+calls `expectOnlyKnownKeys(record, ["build","compaction","description",
+"experimental","limits","model","modelContextWindowTokens","modelOptions",
+"outputSchema","reasoning"], message)`. Same pattern for instructions
+(`:327-336`, key set `["markdown"]`) and skills (`:345-351`, key set
+`["description","files","license","markdown","metadata"]`). Unknown keys throw.
+
+Two consequences:
+
+1. **Good:** unknown-field rejection is fail-closed, matching PACT **AC-1.3**'s
+   first half. Worth adopting as the default posture.
+2. **Bad for D18:** zod schemas exist only for the **compiled** manifest
+   (`src/compiler/manifest.ts:280-751`). There is no JSON Schema, no descriptor,
+   nothing a form-renderer could consume for the *authored* surface. eve's only
+   authoring contract is TypeScript types plus `ExactDefinition`
+   (`src/public/definitions/exact.ts`). A UI that "reads and writes the same
+   files" (**D18**) would have to emit TypeScript — i.e. it would have to be a
+   code generator, and round-tripping edits back out of hand-written TS is
+   undecidable in general.
+
+*Design consequence for PACT:* the authored schema must be a first-class,
+published, machine-readable artifact (`pact schema --json`), and the four author
+surfaces of D18 (editor, UI, builder agent, PR review) all bind to *it*, not to
+a language's type system.
+
+### N5 — Remote agents speak eve's private `/eve/v1/session` protocol. There is no A2A, no MCP-server egress, no cross-vendor agent edge.
+
+`src/public/definitions/remote-agent.ts:78-84`:
+
+```ts
+export function defineRemoteAgent(input: RemoteAgentDefinitionInput): RemoteAgentDefinition {
+  return { ...input, kind: "remote", path: input.path ?? EVE_CREATE_SESSION_ROUTE_PATH };
+}
+```
+
+`EVE_CREATE_SESSION_ROUTE_PATH` comes from `src/protocol/routes.ts`. The remote
+node is lowered to the same `{message, outputSchema?}` subagent tool as a local
+child (`src/runtime/resolve-agent-graph.ts:336-398`). Auth is an outbound
+`OutboundAuthFn` plus optional principal forwarding (`:20,39`).
+
+So eve's multi-deployment story is **eve-to-eve only**. It cannot call a
+LangGraph service, an A2A endpoint, or an MCP-hosted agent as a peer; and it
+emits no Agent Card. (MCP appears only on the *ingress* side, as a tool source:
+`defineMcpClientConnection`, `docs/connections/mcp.mdx`.)
+
+Part I's L5 covers the missing *topologies*; this is the separate limitation
+that the one edge kind eve does have is **proprietary**. It blocks PACT
+**O6.2** (emit A2A Agent Cards / OSSA with loss reports) and **NG3** (PACT
+emits and consumes both edges).
+
+*Design consequence for PACT:* the remote-agent node kind must be
+protocol-tagged (`a2a | mcp | http | pact`), and A2A card emission must be a
+projection of the Contract, not an extra authoring step.
+
+### N6 — Concrete inventory of capability-capping hardcoded defaults (input for PACT's **AC-7.2** "zero-magic audit")
+
+Every one of these is a literal in the core with no profile indirection:
+
+| Default | Value | Site |
+|---|---|---|
+| Root session input-token cap | `40_000_000` | `src/execution/session.ts:9` |
+| Compaction threshold | `0.9` of context window | `src/execution/session.ts:7`, applied `:32` |
+| Compaction recent-window | `10` messages | `src/execution/session.ts:6` |
+| Compaction summary reserve | `2_048` tokens | `src/harness/compaction.ts:15` |
+| Model-call attempts | `3` (1 + 2 retries) | `src/harness/tool-loop.ts:235` |
+| Retry base delay | `500 ms`, doubling + jitter | `src/harness/tool-loop.ts:242` |
+| Workflow subagent budget | `100` per program | `src/harness/workflow-subagent-limit.ts:8` |
+| Workflow sandbox bridge requests | `256` | `src/harness/workflow-sandbox.ts:23` |
+| `read_file` line limit | `2000` (offset `1`) | `src/execution/sandbox/read-file-tool.ts:16-17` |
+| `glob` / `grep` result limit | `100` each | `src/execution/sandbox/glob-tool.ts:12`, `grep-tool.ts:12` |
+| `web_fetch` timeout | `30_000 ms` | `src/execution/web-fetch/tool.ts:6` |
+| Vercel sandbox timeout | `30 min` | `src/execution/sandbox/bindings/vercel.ts:649` |
+| microsandbox CPU / memory | `1` CPU / `1024 MiB` | `src/execution/sandbox/bindings/microsandbox-options.ts:5-6` |
+| Eval concurrency | `8` | `src/evals/runner/run-evals.ts:13` |
+| Eval target health timeout / poll | `60_000 ms` / `250 ms` | `src/evals/target.ts:16-17` |
+
+Of these, exactly **two** are author-overridable (`compaction.thresholdPercent`,
+`limits.max{Input,Output}TokensPerSession` —
+`src/shared/agent-definition.ts:104-179`). The other thirteen are constants.
+`maxToolCalls`-style loop budgets, verifier passes, and self-consistency `k`
+do not exist to be defaulted at all.
+
+*Design consequence for PACT:* this table is the shape of the **F-1 / AC-7.2**
+audit. Every one of these belongs in a `profiles/` document with
+workspace → agent → variant → run scoping, and the audit is a grep for
+capability-affecting numeric literals in the core.
+
+### N7 — Instruction composition is **concatenation**, and its ordering is `localeCompare`
+
+Part I flags the `localeCompare` hazard (§3.2 I8, §8 L15). Part II pins the
+exact fold and the exact blast radius:
+
+- `readSortedDirectoryEntries` sorts with `left.name.localeCompare(right.name)`
+  with **no locale argument** (`src/discover/grammar.ts:170-179`), i.e. ICU
+  default collation from the host environment.
+- Same pattern at `src/discover/slots.ts:56,108,111` (module candidates and slot
+  names), `src/compiler/module-map.ts:81,124`, `src/compiler/manifest.ts:891`,
+  `src/compiler/workspace-resources.ts:152`,
+  `src/compiler/normalize-manifest.ts:186-188` (extension mount order, which
+  decides first-registration-wins), `src/compiler/extension-compatibility.ts:158`.
+- The fold: `src/compiler/normalize-manifest.ts:225-240` —
+  `composedMarkdown = [...staticInstructions.map(e => e.markdown), ...extensionInstructionFragments]`
+  then `markdown: composedMarkdown.join("\n\n")`.
+
+So the **system prompt's text order is a function of the host's ICU locale**.
+For pure-lowercase-ASCII filenames this is a no-op; for mixed case, underscores,
+hyphens, or non-ASCII it is not (ICU treats punctuation as variable-weighted and
+orders `a < A < b`, whereas byte order gives `A < B < a`). And
+`normalize-manifest.ts:186-188` means the *extension shadowing winner* is
+locale-dependent too.
+
+I did **not** construct a failing case (Part I §11 Q3 also leaves this open).
+The claim "`localeCompare` is not byte order and is environment-dependent" is
+verified from source; the claim "eve produces different prompts under `tr-TR`
+vs `C`" remains **[INFERRED]** until someone runs the experiment.
+
+### N8 — The `Workflow` sandbox is a genuinely good escape-hatch design, and PACT should copy its *shape*
+
+`docs/guides/dynamic-workflows.md:69-73`: the model-authored orchestration
+program runs in a **QuickJS** isolate. *"Nothing from the host realm crosses in,
+so there is no `process`, no `globalThis` from the agent, and no
+`import`/`require`. The program can reach exactly two things, the agent
+functions bridged in as `tools.<name>` and the ordinary language built-ins.
+That is an allowlist, not a denylist."* Reach is capped at the agent's own
+subagents — "No files, network, shell, skills, or connections" (`:57`). Budget
+is `maxSubagents` (default 100, `src/harness/workflow-subagent-limit.ts:8`);
+over-budget calls resolve **inside the program** as
+`WORKFLOW_SUBAGENT_LIMIT_REACHED` rather than throwing, and the budget is
+stated in the tool description so the model can size its fan-out
+(`docs/guides/dynamic-workflows.md:63-67`). Bridged calls are dispatched as
+ordinary delegations, so they emit the normal `subagent.called` /
+`subagent.completed` events and stay observable (`:79-84`).
+
+This is the right *mechanism* attached to the wrong *authority*: the **model**
+writes the program, at runtime, unreviewably. PACT needs the identical
+sandbox contract for its **authored** code escapes (F-2/F-3) — capability
+allowlist, no ambient host realm, declared budget, budget exhaustion as a
+typed in-band result, and every bridged call surfacing on the normal event
+stream.
+
+### N9 — Authored modules are forbidden from carrying workflow directives; durability is entirely framework-owned
+
+`src/internal/authored-directive-prologue.ts:3,28-33`:
+
+```ts
+const UNSUPPORTED_WORKFLOW_DIRECTIVES = new Set(["use step", "use workflow"]);
+…
+throw new Error(
+  `Authored module "${input.filePath}" contains an actual "${statement.directive}" directive. ` +
+    "Workflow directives are reserved for eve-generated workflow entrypoints.",
+);
+```
+
+Authors can never declare a durability boundary. eve instead *rewrites* author
+code to insert them: `src/internal/workflow-bundle/dynamic-tool-transform.ts:76-78`
+hoists dynamic-tool `execute` bodies to module scope and adds `"use step"`.
+
+This is a clean, defensible ownership line — the framework owns durability, the
+author owns behaviour — and it is the same line D12 draws for loop semantics.
+But it is also the mechanism behind the silent replay hole Part I §1.5 names:
+the transform is *syntactic*, so `execute: myFn` compiles, runs once, and then
+fails to replay (`docs/guides/dynamic-capabilities.md:54-56` states this
+explicitly as a documented limitation, not a bug).
+
+*Design consequence for PACT:* durability boundaries are IR concepts (P-5), never
+author annotations — adopt eve's line. But a *syntactic* requirement on author
+code with a silent-at-build / broken-at-replay failure mode is exactly the class
+of trap T7 forbids. If PACT ever needs a shape constraint on a code escape, it
+must be **checked and reported at validate time**, not assumed.
+
+### N10 — The public hook event map is deliberately decoupled from the internal protocol union
+
+`src/public/definitions/hook.ts:10-17`: *"The explicit map keeps hook
+compatibility independent from the internal protocol union: new protocol events
+do not become extension hook events until eve exposes them here."*
+`HookEventMap` (`:17-46`) enumerates 28 event types by hand, each as
+`ProtocolEvent<"...">`.
+
+This is a small but excellent stability practice: the observable surface is an
+explicit allowlist that a refactor of the internal union cannot silently widen.
+PACT's trace/event vocabulary (which feeds hooks, evals, learning, and the
+Portability Report) should be specified the same way — an explicit, versioned
+event catalogue, not "whatever the runtime happens to emit".
+
+### N11 — The single-file subagent form produces a subagent with **no slots at all**, and inherits the parent's `agentRoot` string
+
+`src/discover/discover-subagent.ts:153-177` (`discoverSingleFileSubagent`)
+builds `createAgentSourceManifest({ agentId, agentRoot: input.agentRoot, appRoot, configModule })`
+— note `agentRoot` is the **parent's** root, and no `tools`, `skills`,
+`instructions`, `connections`, or nested `subagents` are discovered. So
+`subagents/echo.ts` is a config-only child: it can set a model and a
+description, and nothing else. `subagents/echo/` (the directory form) is a full
+agent root (`discoverLocalSubagentPackage`, `:179-315`).
+
+Two authoring forms of the same concept with materially different capability
+sets, distinguished only by whether the author typed `.ts` — and the manifest
+for the file form reports an `agentRoot` that is not that subagent's root. This
+is a concrete instance of the file-vs-directory ambiguity PACT's **Typed
+Expansion** rule exists to eliminate: expansion form should be declared per
+field by the schema, and the two forms must be *semantically identical*, not
+"one is a weaker version of the other".
+
+### N12 — The `evals/` tree is outside `agent/`, and eve actively detects the mistake
+
+`src/evals/runner/discover.ts:47-61` (`findMisplacedEvalDirs`) scans
+`<appRoot>/agent/**` for `*.eval.ts` specifically to produce a clear error when
+an author put evals in the agent tree. `docs/reference/project-layout.md:43`:
+"Evals live in `evals/` at the app root, a sibling of `agent/`, not inside it."
+
+Worth recording because PACT is likely to make the opposite choice (evals as an
+expansion of the agent's `contract.evals` field, co-located with the agent).
+eve's separation exists because their evals are *drivers* — they speak HTTP to a
+running server, so they belong to the app, not the agent
+(`src/evals/target.ts:19-44` requires a live target, polls `/eve/v1/health`
+for 60 s, then `GET /eve/v1/info` and asserts the served agent name matches
+`package.json#name` at `:29-36`). If PACT co-locates evals with agents, it
+inherits the obligation to make an eval runnable **without** a server — which
+is what the config-only + mock-model design buys.
+
+---
+
+## 14. Where Part II would sharpen Part I
+
+Not corrections — refinements.
+
+1. **§0/S1 "the runtime never reads the authored tree" is true but has one
+   nuance.** `RuntimeDiskCompiledArtifactsSource.moduleMapLoaderPath`
+   (`src/runtime/compiled-artifacts-source.ts:22-28`) exists so that in
+   *development* the runtime "loads modules directly from authored source
+   instead of the bundled-compiled module map". It still requires the compiled
+   **manifest**; only the module map is bypassed. The claim stands — there is no
+   path that interprets the tree — but the dev path is a partial exception worth
+   naming, and it is the closest eve comes to PACT's D2.
+
+2. **§2.1's "unknown files silently ignored" deserves the sharper framing that
+   the *class* of ignored file is unbounded.** `emitUnsupportedLeafDiagnostics`
+   only runs when a caller supplies `unsupportedFileCode`
+   (`src/discover/named-source-directory.ts:220-222`), and the only caller that
+   does is `schedules/` (`src/discover/schedules.ts`). So under `tools/`,
+   `channels/`, `hooks/`, `lib/`, `instructions/` and `extensions/`, a
+   `.yaml`, `.json`, `.py`, `.wasm` or `.md` file is not merely unread — it
+   produces **no diagnostic of any kind**, and `eve info` will not mention it.
+   For a non-technical author this is the worst possible failure mode: silence.
+
+3. **§5's "no loop engineering" understates one point.** It is not only that the
+   loop is fixed; it is that the loop's *inputs* are fixed too. The
+   assembly order at `tool-loop.ts:749-783` hardcodes the system-message
+   composition: `[extraSystemNote, session.agent.system, ...systemMessages]`,
+   merged by `mergeSystemInstructions` (`:269-298`) with `join("\n\n")`. Prompt
+   *structure* — not just prompt text — is a constant. Any PACT strategy that
+   varies prompt composition (a documented model-portability mechanism, thesis
+   §7.3) is inexpressible in eve at the type level, not merely unauthored.
+
+4. **§7.2's "evals are black-box over the wire" should carry its cost.** The
+   same property that makes `AC-4.3` free also means **an eval cannot run
+   without booting a server** (`src/evals/cli/eval.ts` starts a dev server when
+   `--url` is absent; `src/evals/target.ts:171-189` blocks up to 60 s on
+   health). Combined with the compile step, "run one eval" means
+   discover → compile → bundle → boot Nitro → poll health → drive HTTP. For
+   PACT's D17 air-gapped `validate → resolve → build → eval → report`, adopt the
+   *protocol-neutrality* of the design but not the *server dependency*: the eval
+   runner must accept an in-process target as a first-class target kind.
+
+---
+
+## 15. Additions to the "genuinely GOOD" list
+
+Supplements Part I §9 (G1–G17); numbering continues.
+
+| # | Idea | Evidence | Why it matters to PACT |
+|---|---|---|---|
+| G18 | **Per-capability contract versioning with `supported` sets and `dropped` reasons**, stamped as `requires` only for capabilities actually used. | `src/compiler/extension-compatibility.ts:16-34,69-82` | The correct implementation of **E-2**. Strictly better than eve's own monolithic `v36`. Copy this, not that. |
+| G19 | **`ProjectSource` — the loader's only filesystem interface**, with a disk impl and an in-memory impl, and the memory impl normalising Windows drive letters "so all paths are POSIX-rooted for determinism across platforms". | `src/discover/project-source.ts:43-66`, `:72-99`, `:140-269`, `:283-296` | PACT's loader is normative (**D2**) and must be property-testable without disk. This is the exact seam to specify. Adopt the interface shape verbatim: `readDirectory`, `readTextFile`, `stat` — nothing more. |
+| G20 | **Closed-world authored-key validation** (`expectOnlyKnownKeys`), so an unknown field is an error with the full legal key list in the message. | `src/internal/authored-definition/core.ts:45-61` | First half of **AC-1.3**. PACT adds the second half: `x-` prefixed keys round-trip untouched. |
+| G21 | **Explicit, hand-maintained public event allowlist** decoupled from the internal event union. | `src/public/definitions/hook.ts:10-46` | PACT's trace/event vocabulary feeds hooks, evals, learning and the Portability Report; it must be a versioned catalogue, not an emergent surface. |
+| G22 | **Capability-allowlist code sandbox with in-band budget exhaustion.** QuickJS isolate, no host realm, reach limited to the agent's own delegation edges, `maxSubagents` stated in the tool description, over-budget calls returning `WORKFLOW_SUBAGENT_LIMIT_REACHED` as a *value*. | `docs/guides/dynamic-workflows.md:57,63-73`; `src/harness/workflow-subagent-limit.ts:8` | The right contract for PACT's typed code escapes (**F-2/F-3**) — attached to authored code rather than model-authored code. |
+| G23 | **Identity forwarding is opt-in on both ends and defaults off**; only principal metadata crosses, never tokens; a receiver that refuses the forwarder returns 403 rather than silently downgrading. | `src/public/definitions/remote-agent.ts:20-39` | Exactly the fail-closed posture **T7** demands, applied to cross-deployment identity. Adopt as PACT's default for any remote node kind. |
+| G24 | **Diagnostics separate `error` (fail-closed, artifacts still written) from `warning` (printed, build proceeds)**, and artifacts are written *before* the throw so a failed build is still inspectable. | `src/compiler/compile-agent.ts:76-85,142-165` | Writing the derived artifact even on failure is a small, excellent DX decision — the author can diff what the loader *thought* it saw. PACT should always emit `.pact/diagnostics.json` even when `validate` fails. |
+| G25 | **Three explicit verbs for framework defaults — override / disable / add — with a typo'd disable filename being a hard error listing the legal names.** | `src/runtime/resolve-agent-graph.ts:153-169` (`"…is not a framework tool. Rename the file to one of: …"`) | The error message *contains the fix*, which is **O7.3**. Use it as the template for every PACT loader error. |
+
+---
+
+## 16. Additions to the design implications
+
+Supplements Part I §10 (1–18); numbering continues. These are the ones Part I
+does not already state.
+
+19. **Name derivation must be injective, and the loader must prove it.**
+    eve's `tools/a/b.ts → "a-b"` flattening (`normalize-tool.ts:49-51`) is
+    non-injective and the collision surfaces at first session
+    (`runtime/tools/registry.ts:50`), past `eve info` and `eve build`. PACT rule:
+    **for every derived name, the loader computes the full derived-name set and
+    errors on collision, naming both source paths.** If a derivation cannot be
+    injective (e.g. flattening for a provider charset), the spec must require an
+    explicit disambiguator rather than a silent join.
+
+20. **`canonical.json` must be path-free and relocatable, and CI must check it.**
+    eve's compiled manifest hardcodes absolute `agentRoot`, `appRoot`, skill
+    `rootPath`/`skillFilePath`, and extension `sourceRoot`
+    (`compiler/manifest.ts:638-640,474-484,700-707`). PACT's IR carries only
+    workspace-relative logical paths and content digests; absolute paths live in
+    `pact.lock` and run state. Add a mechanical test: emitted IR contains no
+    string matching `^/` or `^[A-Za-z]:`.
+
+21. **Version per capability, never per document.** Replace a monolithic
+    `pact.dev/v1` manifest version with `requires: {<capability>: <version>}`
+    stamped only for capabilities the document uses, and per-adapter
+    `supported: number[]` + `dropped: {version: reason}`. eve proves both sides:
+    the monolith reached **v36** in a 0.27 product
+    (`compiler/manifest.ts:44`) while their per-capability extension contract
+    sits at 1–3 with clean supported-ranges
+    (`extension-compatibility.ts:22-34`).
+
+22. **Silence is the worst diagnostic; make unknown files inside typed
+    directories an error by default.** eve emits *no diagnostic at all* for an
+    unrecognised leaf under `tools/`, `channels/`, `hooks/`, `lib/`,
+    `instructions/`, `extensions/` — the strictness hook exists but only
+    `schedules/` opts in (`named-source-directory.ts:220-222`,
+    `discover/schedules.ts`). PACT inverts the default: unknown extension inside
+    a typed directory → error, with a "did you mean" and an explicit
+    `.pactignore` opt-out.
+
+23. **Publish the authored schema as data, and make all four D18 surfaces bind
+    to it.** eve has zod for the compiled manifest but nothing machine-readable
+    for the authored surface (`internal/authored-definition/core.ts` is
+    hand-written normalisers; the authoring contract is TypeScript types).
+    Ship `pact schema --json` covering every document kind, and require the UI,
+    the builder agent, and the diff/review tooling to consume it. Without this,
+    D18's "UI reads and writes the same files" degrades into a code generator.
+
+24. **`validate` must run every check the runtime would run.** eve splits checks
+    across three phases — discovery (`discover/*` diagnostics), compile
+    (`normalize-*` throws), and graph resolution (`runtime/tools/registry.ts`,
+    `runtime/subagents/registry.ts`) — and only the first two run before boot.
+    A PACT `validate` that does not include the registry/uniqueness/reference
+    phase is not a gate, and **AC-7.3**'s offline pipeline would pass agents that
+    fail on first message.
+
+25. **The eval runner needs an in-process target kind.** eve's HTTP-only target
+    (`evals/target.ts:19-44`, 60 s health poll) is what makes AC-4.3 free, but it
+    forces compile+bundle+boot to run one eval. PACT keeps the protocol-neutral
+    target abstraction (`local-process | in-process | http | a2a`) so an
+    air-gapped `pact eval` against a mock model needs no server.
+
+26. **Two authoring forms of one concept must be semantically identical.**
+    eve's `subagents/<id>.ts` (config only, and it reports the *parent's*
+    `agentRoot`) versus `subagents/<id>/` (a full agent root) —
+    `discover-subagent.ts:153-177` vs `:179-315` — is a file-vs-directory split
+    where the file form is a strictly weaker thing wearing the same name.
+    Under Typed Expansion this must be impossible: `X.yaml` and `X/` are the
+    *same field*, and `load(explode(D)) ≡ D`. Make it a property test in the
+    conformance suite, not just a rule in prose.
+
+27. **Specify the ordering function, and ban locale-sensitive comparison in
+    normative text.** eve uses bare `localeCompare` in nine ordering-relevant
+    sites, three of which are semantically load-bearing: directory entry order
+    (`grammar.ts:176`) → instruction concatenation order
+    (`normalize-manifest.ts:225-240`); extension mount order
+    (`normalize-manifest.ts:186-188`) → which extension wins a name collision.
+    PACT's spec should say, in normative language: *ordering is by UTF-8 byte
+    sequence of the NFC-normalised path segment; ties are an error; ordered
+    collections carry order in-band as `NN-name.ext`.*
+
+28. **Durability boundaries are framework-owned — adopt eve's line, reject its
+    enforcement style.** `authored-directive-prologue.ts:28-33` forbids authors
+    from writing `"use step"` / `"use workflow"`; the framework inserts them by
+    AST rewrite. The line is right (same line D12 draws for loops). The
+    enforcement is not: the rewrite is syntactic, so `execute: myFn` builds
+    clean and breaks only on replay
+    (`docs/guides/dynamic-capabilities.md:54-56`). Any structural requirement
+    PACT places on a code escape must be **checked at validate time and
+    reported**, never assumed by a transform.
+
+---
+
+## 17. Open questions added by Part II
+
+*(Part I's Q1–Q7 stand.)*
+
+8. **Does `eve build` ever resolve the runtime agent graph?** I traced
+   `resolveRuntimeAgentGraph` to exactly three non-test callers —
+   `runtime/sessions/compiled-agent-cache.ts:74` and
+   `execution/sandbox/prewarm.ts:222,329` — and `prewarmBuiltAppSandboxes` is
+   called from `internal/nitro/host/start-production-server.ts:244`, i.e. at
+   *start*, not at *build*. If a Vercel build's sandbox prewarm also resolves
+   the graph, then N1's collision would surface at build after all, on that one
+   path. Worth 15 minutes in `internal/nitro/host/vercel-build-prewarm.ts` to
+   settle whether the late-failure claim holds on every path or only the
+   local one.
+
+9. **Is the `agentRoot`/`appRoot` absoluteness load-bearing at runtime, or
+   vestigial?** If the compiled manifest's absolute paths are only used for
+   sandbox/workspace materialisation and diagnostics, eve is one refactor from a
+   relocatable artifact — which would change how strongly N2 argues for
+   path-free IR. Grep `manifest.agentRoot` consumers.
+
+10. **What is the actual authoring cost of "inherits nothing" in eve's own
+    fixtures?** `e2e/fixtures/agent-subagents/` has one declared subagent with
+    its own `instructions.md`; the duplication cost is invisible at n=1. A count
+    of duplicated markdown across a real multi-subagent eve app would turn
+    Part I §6.2's argument from principled into measured. Not answerable from
+    this repo (no such app exists in it).
+
+11. **Was the tool-name flattening (N1) ever collision-checked and then
+    removed, or never checked?** The doc comment at `normalize-tool.ts:27-34`
+    reads as a considered decision but says nothing about collisions. Git
+    history is unavailable here (single squashed commit `05f3480`), so this
+    would need the upstream repo.

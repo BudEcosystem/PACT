@@ -45,6 +45,7 @@ Two properties here are structural rather than checked:
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Mapping as MappingABC
 from dataclasses import dataclass, field, replace
@@ -55,6 +56,7 @@ from typing import Any, Iterator, Mapping
 #: vocabulary cannot decide names the real file and the real line, exactly as a
 #: mistake in a context policy or an interceptor does.
 from .diagnostics import locate
+from .yes_no import said_yes
 
 
 class Rejected(ValueError):
@@ -91,10 +93,10 @@ _MONEY = re.compile(
 #: question which has crossed a process boundary parses back into what it left
 #: as. Deliberately the words an author already met in `answers-with:` — a
 #: second vocabulary would be a second thing to learn for no gain.
-#: EIGHT, matching `&the-answer-shapes` in spec/schema.yaml:308 exactly. Five for
+#: NINE, matching `&the-answer-shapes` in spec/schema.yaml:308 exactly. Five for
 #: a round, which meant a question asking a person for a photo, a voice note or
 #: an attachment passed `pact check` — the schema's own help for `question.answer`
-#: lists all eight and promises *"anything else is refused here rather than at the
+#: lists all nine and promises *"anything else is refused here rather than at the
 #: moment a person is waiting"* — and then raised `Rejected` when the agent
 #: started. That is the "loads clean, fails later, in another language, in a
 #: process the author never starts" failure the `shapes:` attribute exists to end,
@@ -109,6 +111,7 @@ _SPELLINGS: Mapping[str, frozenset[str]] = {
     "images": frozenset({"images", "a picture", "pictures", "list of images", "an image"}),
     "audio": frozenset({"audio", "a recording", "a voice message", "list of audio"}),
     "file": frozenset({"file", "a file", "an attachment", "list of files"}),
+    "agent": frozenset({"agent", "an agent", "which agent", "the name of an agent"}),
 }
 
 _DESCRIBED: Mapping[str, str] = {
@@ -120,6 +123,7 @@ _DESCRIBED: Mapping[str, str] = {
     "images": "one or more pictures",
     "audio": "a recording",
     "file": "a file",
+    "agent": "the name of one of this workspace's agents",
 }
 
 #: The three shapes whose value is a path to a file in this workspace.
@@ -166,6 +170,7 @@ _EXAMPLE: Mapping[str, str] = {
     "images": "a picture",
     "audio": "a recording",
     "file": "a file",
+    "agent": "refund-desk",
 }
 
 
@@ -279,6 +284,20 @@ class Shape:
             # same modality question answered four different ways in two ports,
             # and a picture has to mean the same thing on either side.
             return _a_path_inside_the_workspace(value, self.describe())
+        if self.kind == "agent":
+            written = str(value).strip()
+            plain = bool(written) and all(
+                ch.isascii() and (ch.isalnum() or ch == "-") for ch in written
+            )
+            if plain and not written.startswith("-") and not written.endswith("-"):
+                # Whether an agent by this name EXISTS is the checker's
+                # question, asked where the document is in scope — the same
+                # division `file` makes for paths.
+                return written
+            raise Rejected([
+                f"should be {_DESCRIBED['agent']}, written as its key — like "
+                f"`refund-desk` — and `{value}` is not one"
+            ])
         raise Rejected([f"should be {self.describe()}, but it is '{value}'"])
 
 
@@ -1255,7 +1274,36 @@ def _atom_stops(
     return value is not None and value > threshold
 
 
-_NUMBER = re.compile(r"-?\d+(?:\.\d+)?")
+#: Every way a figure is written, INCLUDING the ones with nothing before the
+#: decimal point.
+#:
+#: The first version was `-?\d+(?:\.\d+)?`, which requires a digit in front of
+#: the dot — and because [`_GROUPING`] strips the space first, `'.50 USD'`
+#: became `'.50USD'` and the first thing that matched was `50`. So a gate an
+#: author wrote at fifty cents was read at fifty dollars and did not fire on a
+#: 40 USD refund. MEASURED, before this:
+#:
+#:     '$.50'    -> 50.0        '$0.50'    -> 0.5
+#:     '.50 USD' -> 50.0        '0.50 USD' -> 0.5
+#:     '-.5 USD' -> 5.0         '-5 USD'   -> -5.0
+#:     '1e5 USD' -> 1.0
+#:
+#: with `pact check` and `pact show` passing every one of them cleanly. Three
+#: separate wrong figures out of one missing alternative: off by 100x, sign
+#: flipped (the `-?` cannot start at a `-` it is not allowed to reach), and an
+#: exponent dropped. The sign one is the sharpest, because
+#: `a_gate_that_stops_for_a_person_on_any_spend_at_all_is_left_alone` DECIDES
+#: that a negative threshold is legal — "a gate is not a ceiling" — so
+#: `more-than: -.5 USD` is a gate deliberately written to stop on every refund
+#: there is, and it stopped none under five dollars.
+#:
+#: This is the half `crates/pact-loader/src/money.rs` cannot reach: those are
+#: all figures, so no "that is not a figure" refusal could ever have caught
+#: them. The two grammars are held together by
+#: `tests/test_a_spend_cap_that_can_never_be_reached.py`, which asserts that for
+#: every threshold the checker lets through, the figure read back here is the
+#: figure that was written.
+_NUMBER = re.compile(r"-?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?")
 
 #: Every way a person or a model writes a thousands separator. Stripped before
 #: the number is read, because the pattern above stops at one — so
@@ -1273,11 +1321,32 @@ def _amount(value: Any) -> float | None:
     One reader for both sides of the comparison, so a rule written `200 USD` and
     an argument the model wrote as `$210` are compared as numbers rather than as
     strings — which is how `"210.00 USD" > "200 USD"` would quietly be false.
+
+    A number that is not a finite one is not a figure, and is read as no figure
+    at all. THE TWO SPELLINGS USED TO LAND ON OPPOSITE SIDES OF THE GATE, which
+    was the one genuinely fail-OPEN path in this whole area: `'NaN USD'` is text,
+    finds no digits, returns `None`, and `_atom_stops` then stops the call — but
+    a float `nan` arriving from a spec built in code went through the branch
+    above and came back as `nan`, and `nan > anything` is `False`, so the gate
+    silently never fired. Measured:
+
+        _atom_stops({..., 'more-than': float('nan')}, {'amount': '999999 USD'})
+        -> False
+        _atom_stops({..., 'more-than': float('inf')}, {'amount': '999999 USD'})
+        -> False
+
+    A gate that lets a 999,999 USD refund past with nobody asked, and no report
+    entry anywhere — FR-8.1.1 (T7): *"No lossy operation anywhere may proceed
+    silently; each MUST emit a report entry and be fail-closed by default."* The
+    guard is on the VALUE and not on any one reader, which is where B3's record
+    says it belongs (`docs/70-PRODUCTION-GAP-REGISTER.md`, *"The guard is on the
+    VALUE, not on a reader"*), and it costs one line: both spellings now return
+    `None`, and `None` is the case `_atom_stops` already handles by stopping.
     """
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, (int, float)):
-        return float(value)
+        return float(value) if math.isfinite(value) else None
     m = _NUMBER.search(str(value).translate(_GROUPING))
     return float(m.group()) if m else None
 
@@ -1395,11 +1464,20 @@ def _needs_a_person(action: Mapping[str, Any]) -> bool:
     recognise would be an authored gate that loads clean and stops nothing —
     the same argument `pact-loader::money::moves_money` makes for
     `spends-money:`, on the same kind of line.
+
+    This was the only one of six readers in the port whose word-list was right,
+    and it held it privately: `facts`, `egress`, `resolve`, `ir` and `scoring`
+    each kept their own and three of those took neither `y` nor `enabled`. It now
+    reads `yes_no.said_yes` like the rest — being correct in a copy is how the
+    other five came to look correct too.
+
+    NOT `_YES` above, which is a wider list on purpose: that one is what a PERSON
+    types at an approval prompt (`approve`, `granted`, `ok`), and this is what an
+    AUTHOR writes on a line `pact check` reads. `needs-a-person: approve` is
+    refused at the door, so honouring it here would be this port inventing a
+    spelling the format does not have.
     """
-    written = action.get("needs-a-person")
-    if isinstance(written, bool):
-        return written
-    return str(written or "").strip().lower() in {"yes", "y", "true", "on", "enabled"}
+    return said_yes(action.get("needs-a-person"))
 
 
 def _because_of(tool: str, action: str, written: Mapping[str, Any]) -> str:

@@ -48,11 +48,51 @@ class EchoTransport:
             "parallel_tool_calls": "unsupported",
             "streaming": "unsupported",
             "durable_resume": "unsupported",
+            # An out-of-tree adapter is not obliged to track the core's key set
+            # — E-1 says adding one costs zero core changes, and no test here
+            # compares this dict against a core transport's. It is written all
+            # the same, because P-2's *"an adapter that omits a feature cannot
+            # be compared"* is the reason the key set matters, and an exemplar
+            # that quietly omitted the newest one would teach the omission.
+            #
+            # `emulated` rather than `unsupported`, and an eighth adapter's
+            # author does not have to do anything to earn it: a `connect:` tool
+            # reaches its server through PACT's own client and the `tool_impls`
+            # seam `harness.run` already has, above whatever this binds. Only a
+            # transport that takes the LOOP away — `a2a_transport.py` — is
+            # `unsupported` there.
+            "connected_tools": "emulated",
         }
 
-    def usage(self) -> tuple[int, float]:
-        """Tokens and money for the last call. Free, and counted honestly."""
-        return (len(self.prefix) // 4, 0.0)
+    #: Whether ANYTHING can put a price on what a call here carried. Nothing
+    #: can: this is a scripted echo bound to no model, so no row in
+    #: `models/catalog.yaml` describes it and none ever will.
+    #:
+    #: Separate from `usage()` on purpose, and the reason is the same one the
+    #: `lattice()` comment gives about the newest key — an exemplar that quietly
+    #: omitted this would teach the omission. `harness.run` reads two facts in
+    #: two steps: does `usage()` exist (tokens), and can anything price it
+    #: (money). It defaults the second to `False`, so an undeclared transport is
+    #: told nothing on its behalf and the author's money ceilings arrive on
+    #: `RunResult.unmetered` — which is the honest report here. This file said
+    #: nothing for a round and returned `0.0` below, and a run over it reported
+    #: `cost-per-request-under: 0.05 USD` as ENFORCED against a meter that read
+    #: 0.00 for the life of the workspace. That is B6, in the one file a third
+    #: party is told to copy.
+    prices_money = False
+
+    def usage(self) -> tuple[int, float | None]:
+        """Tokens for the last call, and no price — because there is none.
+
+        `None`, never `0.0`. `transports/_metering.py` states the rule in the
+        imperative: *"An unpriced row yields `None`, never zero … Metering a
+        ceiling at 0.0 USD is a spend cap that can never be reached, under an
+        author who believes they capped their spend."* `harness._meter_usage`
+        adds the token count and leaves the money meter alone when the second
+        half is `None`, so a cap over this transport moves nothing and says so,
+        rather than sitting at 0.00 and looking held.
+        """
+        return (len(self.prefix) // 4, None)
 
     async def model_call(
         self,

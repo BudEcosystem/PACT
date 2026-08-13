@@ -381,7 +381,13 @@ def test_a_benchmark_floor_rules_a_model_out_both_when_it_misses_and_when_it_is_
     where UNKNOWN must NOT bind, because a floor satisfied by silence is not a
     floor.
     """
-    floor = {"scores": {"answer_relevancy": 0.80}}
+    # Written as the comparison it is. This line said `{"answer_relevancy": 0.80}`
+    # — a bare number, which `_threshold` guessed at as `> 0.80` and
+    # `coerce::threshold` has always refused, so no document `pact check` accepted
+    # could carry it. Both ports refuse it now (`spec/comparisons.yaml`,
+    # `not-comparisons:`), and D11's headline sentence is what is being pinned
+    # here, unchanged.
+    floor = {"scores": {"answer_relevancy": "> 0.80"}}
 
     measured = ModelEntry(
         name="qwen3-4b", tier="small", cost=0.0,
@@ -518,15 +524,22 @@ models:
     # reads as a measurement; absent is the truth.
     assert "GPQA" not in entry.scores
 
-    ok, why = entry.satisfies({"scores": {"MMLU": 80}})
+    # The thresholds are WRITTEN AS COMPARISONS. These four lines said
+    # `{"MMLU": 80}` — a bare number, which `_threshold` read as `> 80` and
+    # `coerce::threshold` has always refused ("a bare number states no
+    # comparison"), so `pact check` would not have loaded a document saying it.
+    # Both ports refuse it now; see `spec/comparisons.yaml` under
+    # `not-comparisons:`. Nothing this test is ABOUT changed — it is about a
+    # catalogue's own published figures reaching the predicate.
+    ok, why = entry.satisfies({"scores": {"MMLU": "> 80"}})
     assert ok, why
     # And the AC's own example, both metrics at once.
-    assert entry.satisfies({"scores": {"MMLU": 80, "SWE-Verified": 40}})[0]
+    assert entry.satisfies({"scores": {"MMLU": "> 80", "SWE-Verified": "> 40"}})[0]
     # A threshold it does not clear is refused with the figures, not with silence.
-    ok, why = entry.satisfies({"scores": {"MMLU": 90}})
+    ok, why = entry.satisfies({"scores": {"MMLU": "> 90"}})
     assert not ok and "84.1" in why and "90" in why, why
     # And a metric nobody published is still refused — honestly, and by name.
-    ok, why = entry.satisfies({"scores": {"GPQA": 50}})
+    ok, why = entry.satisfies({"scores": {"GPQA": "> 50"}})
     assert not ok and "no published GPQA score" in why, why
 
 
@@ -610,9 +623,17 @@ def test_every_comparison_the_loader_parses_is_one_the_resolver_decides() -> Non
 
     # `%` scales, the way the loader's own parser does.
     assert _threshold("> 80%") == (">", 0.8)
-    # A bare number means `> n` — what every author who wrote one meant, and what
-    # the old code did.
-    assert _threshold(40) == (">", 40.0)
+    # A bare number is NOT a comparison, and this line used to say the opposite:
+    # `assert _threshold(40) == (">", 40.0)`, under a comment calling it "what
+    # every author who wrote one meant". `coerce::threshold` has always refused it
+    # — *"a bare number states no comparison"* — so the two ports disagreed, and
+    # unreachably, because `pact check` refuses `MMLU: 40` at the author's line
+    # first. Both refuse it now; the reasoning and the rows are in
+    # `spec/comparisons.yaml` under `not-comparisons:`, and the guess was not
+    # obviously right anyway — on a latency or a hallucination rate the assumed
+    # `>` is the wrong direction.
+    assert _threshold(40) is None
+    assert _threshold("40") is None
     assert set(_HOLDS) == {">", ">=", "<", "<=", "="}
 
 

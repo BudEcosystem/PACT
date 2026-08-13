@@ -1,0 +1,8 @@
+description: Drafts an answer and hands it to the checker.
+instructions: >
+  Draft the answer, then ask the checker to look at it.
+team:
+  checker: checks a drafted answer.
+limits:
+  asks-itself-at-most: 2
+  when-it-runs-out: stop-and-say-so

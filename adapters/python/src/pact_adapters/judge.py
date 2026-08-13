@@ -273,14 +273,21 @@ def why_no_judge(
             f"{named} to `models/catalog.yaml`."
         )
 
-    # `judge` or `llm` — the role this binding plays, or the general grant for a
-    # model call. AD-56 is why `judge` is a role of its own: the grader reads
-    # every eval case, which is strictly more than the reflector ever sees, so a
-    # team that wants a hosted grader and nothing else hosted has one line to
-    # write. Until `egress.py` existed only `llm` was read here, so
-    # `allow-egress: [judge]` behaved exactly like `allow-egress: []` and the
-    # only fix this message could offer was to grant every model role at once.
-    if not entry.served_locally and not _egress.admits(doc, "judge", "llm"):
+    # `judge`, and only `judge`: the role this binding plays. AD-56 is why it is
+    # a role of its own — the grader reads every eval case, which is strictly
+    # more than the reflector ever sees, so a team that wants a hosted grader and
+    # nothing else hosted has one line to write. Until `egress.py` existed only
+    # `llm` was read here, so `allow-egress: [judge]` behaved exactly like
+    # `allow-egress: []` and the only fix this message could offer was to grant
+    # every model role at once.
+    #
+    # `allow-egress: [llm]` admits a grader as well, but that is `egress.WORDS`'s
+    # rule to apply and not this line's to restate. Passing `"llm"` here beside
+    # `"judge"` made the rule redundant at every call site in the port —
+    # MEASURED: emptying `WORDS` altogether changed no answer anywhere and the
+    # suite stayed green, so a word could have left that table the way `tools`
+    # never entered it.
+    if not entry.served_locally and not _egress.admits(doc, "judge"):
         # The same refusal `pact check` makes over `model:` and `summarised-by:`,
         # made here for the third binding — and the one that sees the most, since
         # the judge reads every eval case. Refusing rather than calling out is the

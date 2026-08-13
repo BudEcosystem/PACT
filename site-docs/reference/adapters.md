@@ -8,27 +8,35 @@ hides a difference is worse than one that admits it, because the difference
 still exists and now nobody is looking for it.
 
 ```
-              model_cal | tool_call | text_with | parallel_ | streaming | durable_r
-reference     native    | native    | native    | native    | unsupport | unsupport
-pydantic-ai   native    | native    | native    | native    | emulated  | unsupport
-langgraph     native    | emulated  | native    | emulated  | emulated  | native
-langchain     native    | native    | native    | native    | emulated  | unsupport
-autogen       native    | native    | emulated  | native    | emulated  | unsupport
-openai-agents native    | native    | native    | native    | emulated  | unsupport
-anthropic     native    | native    | native    | native    | emulated  | unsupport
-vercel-ai     native    | native    | native    | native    | emulated  | unsupport
+              model_cal | tool_call | text_with | parallel_ | streaming | durable_r | connected
+reference     native    | native    | native    | native    | unsupport | unsupport | unsupport
+pydantic-ai   native    | native    | native    | native    | emulated  | unsupport | native
+langgraph     native    | emulated  | native    | emulated  | emulated  | native    | unsupport
+langchain     native    | native    | native    | native    | emulated  | unsupport | unsupport
+autogen       native    | native    | emulated  | native    | emulated  | unsupport | unsupport
+openai-agents native    | native    | native    | native    | emulated  | unsupport | unsupport
+anthropic     native    | native    | native    | native    | emulated  | unsupport | unsupport
+vercel-ai     native    | native    | native    | native    | emulated  | unsupport | unsupport
 ```
 
 Seven targets plus `reference` — the framework-free control arm, which is not a
-target.
+target. `connected` is `connected_tools`, truncated like the other headings.
 
-Two rows worth reading:
+Three things worth reading:
 
 - **LangGraph** is the only target with native durable resume, and the only one
   that emulates tool calls.
 - **AutoGen** cannot carry an assistant sentence *and* tool calls in one result.
   Its text rides in `thought`, so the value survives and the difference is
   declared instead of hidden.
+- **`connected_tools`** is the column that decides whether a tool's `connect:`
+  line reaches the system it names, and **Pydantic AI is the only target that
+  can**: `mcp_bridge` turns a `connect:` into that runtime's own client. Every
+  other target here binds a model and nothing else, so on those a `connect:`
+  tool arrives at the model as a name and the call is answered `error: no tool
+  named …` — which is exactly the kind of thing that must be published before a
+  run rather than discovered during one. A row that is `unsupported` here is not
+  a broken adapter; it is an adapter you hand the call back to yourself.
 
 ## The seams
 

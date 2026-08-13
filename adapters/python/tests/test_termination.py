@@ -86,6 +86,11 @@ class Costing(ReferenceTransport):
     inventing a number."""
 
     name = "costing"
+    #: And says it can price them. `harness.run` defaults `prices_money` to
+    #: `False` (B6): a transport that never declared it gets no promise made on
+    #: its behalf, so a stand-in that bills a real figure has to say so, exactly
+    #: as the seven catalogue-bound transports do from `can_price`.
+    prices_money = True
 
     def __init__(self, script: Script, tokens: int = 100, money: float = 0.02) -> None:
         super().__init__(script)
@@ -851,6 +856,20 @@ def test_both_ports_name_the_currency_the_author_wrote() -> None:
     that is the point: the figures are degenerate and the NOUN is what is under
     test. Reporting a spend cap in the wrong currency is a correctness bug and
     FR-1.4.5 says so normatively.
+
+    **`0 JPY` is not an authorable line, and is deliberately used here anyway.**
+    `Schema::check_floor` refuses a money ceiling of zero or less
+    (`schema/below-the-floor`, *"which is no money at all"*), for the same reason
+    it refuses `finishes-within: 0s`: a ceiling reached before the first step
+    stops every run instantly. This is a spec BUILT IN CODE, so it never passes
+    `pact check`, and the degeneracy is what makes the noun observable — exactly
+    the licence the test below it takes with a bare `cost-per-request-under: 0`,
+    which the schema refuses too (`schema/wrong-type`, no currency). Given a
+    positive cap the money ceiling would simply never fire here, because this
+    transport reports no usage at all, and the assertion under test would be
+    about a ceiling that never spoke. What holds the refusal is
+    `test_a_spend_cap_that_can_never_be_reached.py`, over a real workspace and
+    the real binary.
     """
     written = {"steps-at-most": 8, "cost-per-request-under": "0 JPY",
                "when-it-runs-out": "stop-and-say-so"}

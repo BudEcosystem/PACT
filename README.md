@@ -70,13 +70,13 @@ build step that *executes author code*. PACT's tree is executable as-is.
 |---|---|
 | **Design** | Thesis, 28 binding decisions, FRD (120 requirements), implementation plan — complete |
 | **Research** | 14 source-grounded studies, ~15,750 lines, over 140 repos (~15 GB) + 57 papers |
-| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **2028 tests (744 Rust + 1284 adapter), clippy clean, TypeScript type-checked** |
+| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **2960 tests (994 Rust + 1966 adapter), clippy clean, TypeScript type-checked** |
 | **Adapters** | **All 7 named targets**, proven against one shared conformance suite |
 
 ### What works today
 
 ```bash
-./scripts/test-all.sh          # 2028 tests, Rust + 7 adapters, fully offline
+./scripts/test-all.sh          # 2960 tests, Rust + 7 adapters, fully offline
 ```
 
 **Framework portability is proven, not asserted.** One folder — loaded by the
@@ -84,9 +84,19 @@ Rust CLI — executes over **all seven targets** and produces *byte-identical
 traces, tool sequences and model-call counts*. That claim is bounded and the
 bound is written down: it covers `instructions:`, `tools:`, `skills:`,
 `knowledge:`, `team:`, `answers-with:`, the `loop:` and the `limits:` ceilings,
-and **not** the nine
-governance keys the TypeScript port reports on `unenforced` — see
+and **not** the ten governance keys the TypeScript port reports on
+`unenforced` — nine written at the top of the agent's own file, plus the `asks:`
+line on a loop stage that stops to ask a person, which stops both ports in the
+same stage and is put to somebody only by the Python one — nor the documents
+under `knowledge/`, which nothing on that port
+can look anything up in and which it names on `unretrieved` for every set an
+answer did not come from — see
 [§7.28 *What "byte-identical across all seven targets" covers, and what it does not*](docs/20-ARCHITECTURE-DRAFT.md).
+That ten counts the *excluded keys*, not the lines a run prints: the same channel
+also carries `team:` — which **is** inside the claim, since the names are offered
+to the model, and says only that asking one comes back as an error here — and one
+line per `limits:` key this port does not read, each under its own `limits.`
+prefix.
 Each takes the framework's *lowest* seam, so none of them gets to own the loop:
 
 | Target | Seam taken |
@@ -115,15 +125,15 @@ Each publishes a capability lattice, and the lattice records real differences
 rather than flattering uniformity:
 
 ```
-              model_cal | tool_call | text_with | parallel_ | streaming | durable_r
-reference     native    | native    | native    | native    | unsupport | unsupport
-pydantic-ai   native    | native    | native    | native    | emulated  | unsupport
-langgraph     native    | emulated  | native    | emulated  | emulated  | native
-langchain     native    | native    | native    | native    | emulated  | unsupport
-autogen       native    | native    | emulated  | native    | emulated  | unsupport
-openai-agents native    | native    | native    | native    | emulated  | unsupport
-anthropic     native    | native    | native    | native    | emulated  | unsupport
-vercel-ai     native    | native    | native    | native    | emulated  | unsupport
+              model_cal | tool_call | text_with | parallel_ | streaming | durable_r | connected
+reference     native    | native    | native    | native    | unsupport | unsupport | unsupport
+pydantic-ai   native    | native    | native    | native    | emulated  | unsupport | native
+langgraph     native    | emulated  | native    | emulated  | emulated  | native    | unsupport
+langchain     native    | native    | native    | native    | emulated  | unsupport | unsupport
+autogen       native    | native    | emulated  | native    | emulated  | unsupport | unsupport
+openai-agents native    | native    | native    | native    | emulated  | unsupport | unsupport
+anthropic     native    | native    | native    | native    | emulated  | unsupport | unsupport
+vercel-ai     native    | native    | native    | native    | emulated  | unsupport | unsupport
 ```
 
 Seven rows for seven targets, plus `reference` — the framework-free control arm,
@@ -135,6 +145,13 @@ LangGraph is the only target with native durable resume. AutoGen cannot carry an
 assistant sentence *and* tool calls in one result — its text rides in `thought`,
 so the value survives and the difference is declared instead of hidden.
 
+`connected` is `connected_tools`, truncated like the other headings: whether a
+tool's `connect:` line reaches the system it names. Pydantic AI is the only
+target that can — `mcp_bridge` turns a `connect:` into that runtime's own client
+— and every other target binds a model and nothing else, so a `connect:` tool
+reaches the model as a name and the call comes back `error: no tool named …`.
+Declared here rather than discovered there.
+
 **The HITL kill test passes on all six Python targets.** The Vercel target has
 no durable resume and declares `durable_resume: unsupported`, so it is not in
 that suite — counting the framework-free control arm as the seventh made "all
@@ -144,15 +161,16 @@ each tool executes exactly once, the decision is honoured, and the resulting
 history is identical across frameworks. The architecture named this the one
 fixture that decides everything: *"if it passes on both adapters, D12 is proven."*
 
-**Model portability is measured — but has no shipped command yet.** The
+**Model portability is measured, and `--choose-model` is the door onto it.** The
 resolver filters the catalogue on `needs:`, runs the author's eval cases against
 each candidate strategy, refuses when none passes, and names the cheapest that
-would. All of that is real and tested. Its only caller today is
-`tests/test_model_portability.py`: `scoring.py` imports `load_catalogue` and
-`needs_of` from that module and not `resolve()` itself. So the report below is
-produced by the test suite, and a user can currently ask *"does model X pass?"*
-but not *"which model should I use?"* — tracked as A2 in
-[the gap register](docs/70-PRODUCTION-GAP-REGISTER.md).
+would. It has a shipped caller: `scoring.py:1005` calls `resolve()`, behind the
+`--choose-model` flag its own usage text advertises, so a user can now ask both
+*"does model X pass?"* and *"which model should I use?"*. That closes A2 in
+[the gap register](docs/70-PRODUCTION-GAP-REGISTER.md), and the report below is
+the shape that command prints. The transcript itself is still produced by the
+test suite rather than pasted from a run, because it needs a machine serving
+those models; what is shown is the renderer's own output.
 
 ```
 PORTABILITY: PASS for claude-haiku-4-5  (agent Refund Desk, strategy decomposed)

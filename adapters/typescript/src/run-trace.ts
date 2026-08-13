@@ -5,7 +5,7 @@
 import {
   run, undeclaredIn, AGENT_SPEC_FIELDS, type AgentSpec, type ToolCall, type Transport,
 } from "./harness.ts";
-import { sentence } from "./limits.ts";
+import { ceilings, ceilingsNothingCanReach, limitsFrom, sentence } from "./limits.ts";
 import { VercelAITransport } from "./vercel-transport.ts";
 
 const payload = JSON.parse(process.argv[2]);
@@ -70,12 +70,26 @@ class Watching implements Transport {
   // bare `VercelAITransport` ran twenty steps to `step-limit` through this
   // wrapper and reported `tokens-at-most` as unmetered.
   usage?: () => [number, number];
+  // And the third optional field, forwarded for the same reason and after the
+  // same failure. `VercelAITransport` declares `pricesMoney = false`, and a
+  // wrapper that dropped it put the harness back on its default — so a spend cap
+  // driven through THIS file reported itself enforced against a money meter that
+  // never left zero, while a bare `VercelAITransport` reported it as unmetered.
+  // Measured both ways: with the field forwarded, `run-trace.ts` on a
+  // `0.05 USD` cap answers `"unmetered":["cost-per-request-under"]`; without it,
+  // `"unmetered":[]`. The Python cross-port suite reaches this port through no
+  // other door, so anything this constructor forgets is invisible to every test
+  // in the repository that compares the two ports.
+  pricesMoney?: boolean;
 
   constructor(inner: Transport) {
     this.inner = inner;
     this.name = inner.name;
     if (typeof inner.usage === "function") {
       this.usage = () => inner.usage!();
+    }
+    if (typeof inner.pricesMoney === "boolean") {
+      this.pricesMoney = inner.pricesMoney;
     }
   }
 
@@ -95,6 +109,29 @@ class Watching implements Transport {
 }
 
 const transport = new Watching(new VercelAITransport(script));
+// argv[6] — `prices-money` makes this run declare that its calls CAN be priced.
+//
+// Not a convenience. `VercelAITransport` declares `pricesMoney = false` honestly
+// (B6: it drives a scripted model bound to no catalogue row), and the
+// consequence is that EVERY money ceiling this port runs lands on `unmetered`
+// for that reason, whatever the figure was. So the shipped array cannot tell a
+// cap nothing can reach from a cap nothing here can price, and the only field
+// that could was `ceilingsNothingCanReach` — a projection computed in this file, for
+// the Python suite, read by nothing an author sees. Measured: with the
+// `!nothingCanReach(...)` guard deleted from `ceilings()` in `limits.ts` and this
+// port driven on its own `NaN USD` fixture, every key of the output below was
+// byte-identical to the unmutated run except `ceilingsNothingCanReach` — `unmetered`,
+// `halted`, `stoppedBy`, `output`, `unenforced` all unchanged. A guard held only
+// by the test driver's own projection is a guard held by nothing.
+//
+// With this flag the money finding has to come from the figure, because the
+// transport reason is switched off: the same mutation then empties the SHIPPED
+// `unmetered` array, and that is what
+// `test_a_spend_cap_nothing_can_reach_holds_nothing_and_says_so.py` asserts on.
+// It is a declaration about the transport and nothing else — `usage()` is
+// untouched, so the money meter still never moves and no ceiling can be reached
+// by it.
+if (process.argv[6] === "prices-money") transport.pricesMoney = true;
 const result = await run(spec, transport, userInput, tools);
 
 process.stdout.write(
@@ -124,6 +161,41 @@ process.stdout.write(
       sentence: sentence(result.stoppedBy),
     },
     unmetered: result.unmetered,
+    // The two reasons a ceiling lands on `unmetered`, told apart — a trace
+    // field, not a second channel of the report.
+    //
+    // `harness.ts` merges them on purpose ("not a channel of its own":
+    // *"cannot promise"* is exactly what is true of both) and that is right for
+    // an author. It is wrong for the Python suite, which has to hold each
+    // separately: a cap NO SPEND CAN REACH (`NaN USD`, `inf USD` — `ceilings()`
+    // refuses to build the row) and a cap NOTHING HERE CAN PRICE
+    // (`pricesMoney = false` — this port drives a scripted model bound to no
+    // catalogue row) are different findings about different lines. Once
+    // `VercelAITransport` declared the second honestly, every money ceiling was
+    // on `unmetered` for that reason and the control assertions in
+    // `test_a_spend_cap_nothing_can_reach_holds_nothing_and_says_so.py` — "a
+    // real figure is not named as an unusable one" — could no longer see which
+    // of the two had fired. Projected rather than inferred, because inferring it
+    // from the transport is how a test comes to assert its own stand-in.
+    ceilingsNothingCanReach: ceilingsNothingCanReach(limitsFrom(spec.limits ?? {})),
+    // And the rows that WERE built, which is the other half of the same claim
+    // and the half nothing projected.
+    //
+    // `ceilingsNothingCanReach` derives its answer off `ceilings()` precisely so
+    // that the row refused and the name reported cannot come apart — and that
+    // coupling was argued in a comment in `limits.ts` and held by nothing.
+    // Measured: re-derive that function off the `nothingCanReach` predicate
+    // instead (which reads as a simplification and removes a Set allocation)
+    // AND delete a `ceilings()` guard, and the entire holding suite stays green
+    // while this port builds a row `reached` can never satisfy. Either edit
+    // ALONE is caught; the pair was not, because every assertion in the suite
+    // read only the projection both edits agree about.
+    //
+    // With the built rows here, the assertion is on the thing the guard is
+    // about — `cost-per-request-under` is absent from THIS list, however
+    // `ceilingsNothingCanReach` happens to be written — so the second port's
+    // guard stops depending on a comment.
+    ceilingRows: ceilings(limitsFrom(spec.limits ?? {})).map((c) => c.field),
     // What a person would be shown had this port a person to ask. Beside
     // `output` and not inside it — `output` is compared byte-for-byte.
     waitingWords: result.waitingWords ?? null,
@@ -132,6 +204,14 @@ process.stdout.write(
     // runtime does not do it — and it did not exist here at all, so a spec
     // carrying `interceptors:` ran with none of them and said nothing.
     unenforced: result.unenforced,
+    // Sets of documents this run never looked anything up in. A channel of its
+    // own and not more of `unenforced`, because the two go to different people:
+    // an unenforced line is one the author wrote and can take out, and there is
+    // nothing to take out here — the document is right and this runtime cannot
+    // read documents. Projected so the Python suite can hold the two ports to
+    // one sentence about one absence; without it, a corpus with no `must-cite:`
+    // ran here, answered out of the model's own memory, and said nothing.
+    unretrieved: result.unretrieved,
     // The stage path, and what each stage was handed (G1). Outside `trace` on
     // purpose — the trace is what seven transports are held to byte-for-byte —
     // but reported, because a loop document that changed nothing about the run

@@ -1,0 +1,11 @@
+description: Finds one customer by their account number.
+
+url: host/crm
+method: get
+
+actions:
+  find:
+    description: Look a customer up by account number.
+    takes:
+      account-number: text
+    reads-only: yes

@@ -1,919 +1,1070 @@
 # PACT Research Stream — Learning & Governance (D22 + D23)
 
-**Date:** 2026-07-26
-**Stream:** learning-governance
-**Binding inputs:** `docs/00-THESIS.md` (T6, T7), `docs/01-DECISIONS.md` (D2, D9, D13, D14,
-D17, D18, D22, D23, D24, D26, D27), `/home/bud/ditto/gaia-ai-runtime/research/SYNTHESIS.md`
-(F1, F3, F4, F6), `RESULTS.md` (benches 1–3), `PROMPT-SKILL-LEARNING.md`.
-
-**What this document is.** A normative design for the PACT learning subsystem: the exact
-artifacts a learning cycle may write, a blast-radius classifier over spec diffs, the
-self-authored-tool pipeline, topology self-modification with archive/lineage/rollback, and
-the poisoning defences. Every claim carries `file:line` or a paper + extracted-text line.
-
-**Evidence hygiene.** Everything under "VERIFIED" I read in source or in the paper text
-extracted with `pdftotext -layout` (extracts written to
-`/tmp/claude-1000/-home-bud-ditto-agent-inter-op/3d6268c6-.../scratchpad/txt/`, line numbers
-refer to those extracts). Everything under "INFERRED" or "DESIGN" is my construction from
-that evidence and is labelled as such.
+**Date:** 2026-08-07 · **Pass:** R2 of this stream (supersedes the 2026-07-26 version, which is
+recoverable at `git show 129bb8f:research/notes/learning-governance.md`).
+**Stream:** learning-governance.
+**Binding inputs:** `docs/00-THESIS.md` (T6, T7), `docs/01-DECISIONS.md` (D2, D9, D13, D14, D17,
+D18, D22, D23, D24, D26, D27), `docs/20-ARCHITECTURE-DRAFT.md` §8 (which R1 of this stream fed),
+`/home/bud/ditto/gaia-ai-runtime/research/SYNTHESIS.md` F1/F3/F4/F6, `RESULTS.md`,
+`PROMPT-SKILL-LEARNING.md`.
 
 ---
 
-## 0. How this extends F1/F3/F4/F6 (not a restatement)
+## 0. What this pass adds, and why the shape changed
 
-`SYNTHESIS.md` established *that* the mechanism set exists (SkillOps trainer, GEPA manifest
-optimizer, meta-agent foundry, org promotion tiers). It did not say **what may be written,
-by what authority, under what proof, and what must be structurally unreachable.** That is
-this document. Four concrete extensions:
+R1 of this stream was a **design** document written against a corpus. Between then and now the
+design landed: `docs/20-ARCHITECTURE-DRAFT.md` §8.1–§8.11 carries eight effect surfaces, five
+classes, eight escalators, eight obligations, a seven-rule review queue, an optimiser ABI and a
+trust spine — and `spec/schema.yaml` carries **277 fields across 44 groups, every one annotated
+with `surface:` and `tier:`** (verified: `python -c` over the parsed schema; the Rust CLI enforces
+completeness at startup, `crates/pact-cli/src/main.rs:394-416`).
 
-| F# | SYNTHESIS says | This stream adds |
+So re-deriving the design from the corpus a second time would produce a document nobody needs.
+**This pass is instead an audit with measurements**, plus the evidence that was not mined in R1.
+Three kinds of new material:
+
+1. **§1 — A spec↔implementation audit, executed.** I ran the shipped classifier against the
+   architecture's own required fixture set and against the drift instrument. Nine findings, seven
+   of them measured, none of them in `docs/70-PRODUCTION-GAP-REGISTER.md`. The headline: **the
+   `surface:` column — the entire basis of §8.2's zone derivation and §8.3's classifier — is read
+   by no classifier anywhere.** The only consumer is a presence check.
+2. **§7–§8 — Four sources R1 did not read**: Letta's *sleeptime* agent (an autonomous background
+   writer to a live agent's memory blocks), `cognee` (a self-improvement path that writes float
+   weights, not source), `reflexion` (whose architecture already separates the honing oracle from
+   the accept oracle — a positive precedent for X-2), and `agent-lightning` (address-based reward
+   attribution, which is the only real machinery in the corpus for OQ8).
+3. **§4.4 — A decidable replacement for the one classifier rule that was a judgement call.**
+   `DE-TIGHTEN` ("strictly narrows an envelope") is not a heuristic: CUE ships a decidable
+   subsumption relation with an `API` profile and per-field failure messages
+   (`research/repos/config/cue/internal/core/subsume/subsume.go:15-70`,
+   `vertex.go:169,174,202`). This makes the only de-escalator in the design provable and
+   explainable rather than asserted.
+
+**Extension of F1/F3/F4/F6 (unchanged framing, restated in one table so §0 stands alone):**
+
+| F# | SYNTHESIS says | This stream's contribution |
 |---|---|---|
-| F1 | "eval gate + signed skill version" (`SYNTHESIS.md:33-58`) | The gate is *insufficient alone*: Ratchet A4 proves a naïve retirement gate is **worse than no governance** (−0.019, below no-skill floor). Governance needs an **evidence floor** (N_min) and a **retirement threshold** (τ) with a stated concentration bound, plus a *never-delete* archive. §4.3, §5.3. |
-| F3 | "candidate manifests as diffable YAML with full lineage" (`SYNTHESIS.md:105-107`) | *Which* fields of the manifest are writable at all, and a normative per-field risk lattice. "All text fields are trainable parameters" is false in a governed system: skill/tool **descriptions** are routing inputs with global blast radius (skill shadowing, −21%), and grader/telemetry fields are the optimizer's own oracle (DGM objective hacking). §3, §4. |
-| F4 | "generation depth 1, empirical gate, budget caps inherited" (`SYNTHESIS.md:143-145`) | Makes those three concrete and adds the ones that were missing: **authority inheritance** (child capability ⊆ parent), the **viability invariant** (a candidate that breaks its own observability is discarded — DGM), the **volume gate** (~15k queries break-even), and **archive-as-parent-selector, not archive-as-context** (cumulative archive-in-context is *worse than ignoring priors*). §6. |
-| F6 | "no tool-output→skill direct writes; diverse judges" (`SYNTHESIS.md:186-188`) | A full forbidden-operations list with quantified rationale, the **role-quarantine** requirement (learned artifacts enter context as provenance-marked data, never as system-role directives), and the finding that **MCP provides zero isolation or provenance by design**, so PACT cannot delegate tool safety to MCP (D14 depends on this). §5, §7. |
-
-Two prior-art numbers from `RESULTS.md` are load-bearing here and are *not* restated
-elsewhere: bench 1 shows exposure decay begins at N=40→120 (1.000→0.917) with black-hole
-capture at 4.2% (`RESULTS.md:21-26`), and bench 3's single gated edit moved held-out 0% →
-81.2% (`RESULTS.md:73-77`). Together they set the shape: **one good write is worth a lot;
-uncontrolled accumulation destroys it.** The whole design follows from that asymmetry.
+| F1 | "eval gate + signed skill version" (`SYNTHESIS.md:33-58`) | The gate is insufficient alone (Ratchet A4: naïve retirement is *worse* than no governance). Needs an evidence floor `N_min`, a retirement threshold `τ`, and a never-delete archive. **R2 adds:** the retirement machinery has no schema surface at all (§1.6). |
+| F3 | "candidate manifests as diffable YAML with full lineage" (`SYNTHESIS.md:105-107`) | "All text fields are trainable" is false in a governed system. **R2 adds the measurement:** the shipped classifier keys on the bare *field name*, and `description` is `S-GEN` in 14 groups and `S-ROUTE` in 4 — so one plain-language permission spans two blast-radius classes (§1.2). |
+| F4 | "generation depth 1, empirical gate, budget caps inherited" (`SYNTHESIS.md:143-145`) | Adds authority inheritance, the viability invariant, the volume gate, archive-as-selector. **R2 adds:** none of the three has an authoring surface; D22(b) and D22(c) are unreachable from the format (§1.7, §5, §6). |
+| F6 | "no tool-output→skill direct writes; diverse judges" (`SYNTHESIS.md:186-188`) | Forbidden-operations list, role quarantine, MCP supplies no isolation. **R2 adds:** the monolithic-rewrite operator F6 forbids is *shipped and prompted-for* by the most mature runtime in the corpus (§7.2), and one production system implements "learning" as an EMA over float weights driven by star ratings (§7.3) — the two purest violations of T6 and of QUEUE-3. |
 
 ---
 
-## 1. Threat and failure model (what governance is actually for)
+## 1. The audit: what §8 specifies versus what the tree contains
 
-Three distinct hazard families. They need different controls, and conflating them is the
-main error in the existing systems I read.
+Everything in this section was executed against the working tree on 2026-08-07. Commands and
+outputs are reproducible; where I ran a script the script is inline.
 
-### 1.1 Hazard A — Degradation without malice (the common case)
+### 1.1 The `surface:` column is not read by any classifier
+
+**Verified.** `spec/schema.yaml` annotates all 277 fields:
+
+```
+81 S-GOV · 52 S-CAP · 44 S-EXEC · 39 S-CTRL · 35 S-GEN · 15 S-ROUTE · 10 S-TOPO · 1 S-META
+```
+
+`grep -rn "S-GEN\|S-ROUTE\|…" --include=*.rs --include=*.py --include=*.ts crates/ adapters/`
+returns **8 hits, all of them in comments or docstrings.** No code anywhere evaluates
+`surface == "S-GEN" → CLASS-1`.
+
+The two things that claim to implement D23:
+
+- **Rust**, `crates/pact-cli/src/main.rs:385-416` — `governance_is_complete()` checks that every
+  field *has* a `surface:` and a `tier:`. It never reads the value. It is a completeness check,
+  not a classifier.
+- **Python**, `adapters/python/src/pact_adapters/learning.py:159-213` — `classify()`, which keys
+  on a hardcoded field-name tuple (`HIGH_RISK_FIELDS`, `:50-53`), a hardcoded permission→field map
+  (`SAFE_TO_CHANGE`, `:59-64`) and a regex over prose (`HIGH_RISK_PROSE`, `:80-84`).
+
+**Consequences, each independently fatal to a §8 claim:**
+
+| §8 claim | Status |
+|---|---|
+| §8.2 "Four zones, COMPUTED from `surface`, never from a path table" | No code computes a zone. |
+| §8.3 "`class = max(rule(surface) for each changed IR node)`" | No code maps a surface to a class. |
+| §8.3 "The **Rust core recomputes** the class … The recomputation never lives in the learning service." | The only classifier *is* in the learning service's own module. The core recomputes nothing. |
+| §8.3 "Classification operates on the canonical semantic diff of typed IR nodes, **never on a textual diff of the tree**" | `classify()` builds `difflib.unified_diff` of two strings (`learning.py:139-146, 175-185`) and matches regexes against the `+`/`-` lines. It is exactly a textual diff. |
+| §8.3 property test `class(diff) == class(collapse/explode(diff))` | Untestable as built: `Proposal` carries a bare field name and two strings, with no path and no document context, so `collapse`/`explode` has nothing to act on. |
+
+This is the single highest-leverage finding in the pass. Everything in §8.3–§8.5 is a lookup into
+a column that nothing looks up.
+
+### 1.2 One plain-language permission spans two blast-radius classes
+
+**Verified, and the shipped flagship example is affected.**
+
+`learning.py:59-64`:
+
+```python
+SAFE_TO_CHANGE: dict[str, tuple[str, ...]] = {
+    "phrasing": ("instructions",),
+    "examples": ("description",),
+    "skill-notes": ("content",),
+    "when-skills-are-used": ("use-when", "do-not-use-when", "if-unsure"),
+}
+```
+
+`description` is a field of **18 groups**. Its surface is not uniform:
+
+| Group | Line | Surface |
+|---|---|---|
+| `agent.description` | `spec/schema.yaml:376` | **S-GEN** |
+| `workspace`, `model`, `resource`, `question`, `evals`, `port`, `loop`, `context-policy`, `interceptor`, `redaction`, `watch`, `state`, `bundle` | — | **S-GEN** (13 more) |
+| `skill.description` | `spec/schema.yaml:1572-1575` | **S-ROUTE** |
+| `tool.description` | `spec/schema.yaml:1701-1704` | **S-ROUTE** |
+| `action.description` | `spec/schema.yaml:1788` | **S-ROUTE** |
+| `knowledge.description` | `spec/schema.yaml:1406` | **S-ROUTE** |
+
+`skill.description`'s own help says why: *"This is what the agent reads when deciding whether to
+open it"* (`:1577-1579`). It is the routing input §8.1 opens with.
+
+So `may-improve-on-its-own: [examples]` — a `tier: core`, closed-enum permission whose help reads
+*"the worked examples it is shown"* — authorises edits to `skill.description` and
+`tool.description`. This is precisely the defect §8.7's `[R3]` note says it fixed by renaming
+`wording`: *"the plain-language word offered to a support lead meant precisely the thing the
+architecture says must not be treated as wording."* The rename fixed one member and reproduced the
+defect on another.
+
+Two aggravations:
+
+1. **`when-skills-are-used` — the permission that exists to gate routing, is OFF by default, and
+   requires an OBL-8 routing-replay before it may be enabled at all — does not include
+   `description`.** Its three members are `use-when`, `do-not-use-when`, `if-unsure`. The largest
+   S-ROUTE member is filed under the S-GEN permission and the routing permission does not carry
+   it.
+2. **There is no `examples` field in the schema.** A parse of all 277 fields finds no field whose
+   name contains "example". So the permission named "examples" grants exactly one thing: edits to
+   whatever object happens to have a `description`, in whichever of two blast-radius classes that
+   object falls.
+
+`examples/refund-desk/learning.yaml` — the flagship D14/D20 file a support lead is told to copy —
+declares `may-improve-on-its-own: [phrasing, examples, skill-notes]`.
+
+### 1.3 The prose classifier has a measured false-positive on ordinary instruction text
+
+**Measured.** `HIGH_RISK_PROSE` (`learning.py:80-84`) is an alternation of truncated stems with a
+leading `\b` and no trailing boundary. The stem `sent` (intended for "send/sent") matches
+**"sentence"**:
+
+```
+True  'sent'  'Be concise and warm. Prefer short sentences.'
+True  'sent'  'Answer in one sentence.'
+True  'sent'  'Use plain English and short sentences.'
+False    -    'Keep the tone friendly.'
+```
+
+Any proposal whose text contains "sentence" classifies HIGH. This is not a contrived string:
+§8.8a's `Background.tone` example is literally `["plain English", "one sentence"]`, and instruction
+prose about brevity is the single most common S-GEN edit an optimiser produces.
+
+The cost is not safety, it is the **override regime** §8.7a QUEUE-1 exists to avoid: a gate that
+refuses correct proposals for an unstateable reason (`"the wording changes a rule, not a phrasing:
+'Be concise and warm. Prefer short sentences.'"`) is the shape that produces the 46.2–96.2%
+override rates §8.7a cites.
+
+### 1.4 `ESC-SHRINK`'s list trigger fires on every edit to a bulleted line
+
+**Measured.** `classify()` collects removed lines from the unified diff and raises HIGH if any is a
+list item (`learning.py:195-200`). A *modification* of a bullet appears in a unified diff as a
+removal plus an addition, so:
+
+```
+edit one bullet  -> high  "ESC-SHRINK: a written rule was removed from a list — '- Check the order id first.'"
+add one bullet   -> low   "wording only; no rule or permission changed"
+```
+
+The shipped `examples/refund-desk/skills/refund-policy.md` body is entirely bullets. Therefore
+`skill-notes` — one of the three permissions ON by default in the flagship — can produce **no
+auto-appliable edit at all** except pure additions, and every rewording of an existing line reaches
+the human queue with a message that says a rule was *removed* when it was reworded. Under
+`propose-only` (the core-tier mode) this is invisible; under `applies-safe-changes-itself` it makes
+the permission inert.
+
+### 1.5 The cumulative-drift instrument is blind to the class of change it exists to catch
+
+**Measured, and it is backwards.** `Learner._drift` (`learning.py:1376-1383`) is
+`1 − difflib.SequenceMatcher(None, baseline.instructions, candidate.instructions).ratio()` — a
+character-similarity ratio over the `instructions` field only. Against a four-line refund
+instruction:
+
+| Change | Drift | Default limit `0.50` |
+|---|---|---|
+| `30 days` → `300 days` (semantic inversion, token-neutral) | **0.0031** | passes |
+| delete the line *"Always look up the order before issuing a refund."* | **0.1866** | passes |
+| 20 additive, harmless style sentences (`"Respond politely."` …) | **0.5130** | **trips** |
+| edits required to trip the limit with harmless additions | **16** | — |
+
+§8.4's entire justification is the quoted attack *"each generation may weaken a safety module by an
+amount that falls within any single-generation tolerance … a safety audit comparing generation t to
+t−1 will see nothing."* The instrument built to catch it scores a deleted safety rule at 19% and a
+run of sixteen harmless additions at 51%. It measures **churn**, not safety-property change, and it
+fires on volume.
+
+It is also scoped to `instructions` alone: a workspace whose learning writes skill bodies (the
+flagship's `skill-notes`) accumulates unbounded drift that the instrument scores at exactly 0.
+
+### 1.6 §8.4's drift design is one field of six in the schema; §8.9's provenance envelope is zero
+
+**Verified by parsing the schema.**
+
+```
+drift:        ['at-most']
+cycle-limits: ['per-cycle', 'per-month', 'evals']
+learning:     ['enabled','may-improve-on-its-own','needs-a-person-to-approve','keep-only-if',
+               'review','cycle-limits','models','drift']
+learning-model:['role','model']
+provenance:   ['source','harness','contamination','date','as-of','recorded-by']
+```
+
+- §8.4 specifies `drift.{baseline, baseline-accepted-at, baseline-accepted-by,
+  generations-since-accept, window, reclassify-every, auto-apply-ceiling-while-under}`. The schema
+  has `at-most` and nothing else. **The lineage-window mechanism does not exist in the format.**
+- §8.9's provenance envelope (`status`, `generation`, `derived-from`, `producer`, `origin`,
+  `evidence`, `classification`, `reviewed-by`, `approval`, `validity`, `supersedes`, `revoked-by`)
+  has **no group in the schema.** The group *named* `provenance:` (`spec/schema.yaml:887`) is the
+  model-catalogue figure provenance from §4.2 — `source / harness / contamination / date / as-of /
+  recorded-by`. Different object, same word.
+- Consequently: OBL-6 (signature over `(base-digest, result-digest, recomputed-class)`),
+  `ESC-UNTRUSTED` (keyed on `origin.workspace-id`), the revocation ratchet (`supersedes` /
+  `revoked-by`, which §8.5 calls the answer to the "irreversible capability ratchet"), never-delete
+  (`status: deprecated` + `validity.until`) and the retirement thresholds (`N_min`, `τ`,
+  contribution `ĉ`) all have **no authoring surface and no place to be recorded.**
+- §8.4 makes `pact approve --baseline` the sole writer of the baseline, and §8.10 ships
+  `pact approve` / `pact sign`. The CLI dispatch is `crates/pact-cli/src/main.rs:305-306`:
+  `"check"` and `"show"`. There are two verbs.
+
+### 1.7 D22(b) and D22(c) have no authoring surface
+
+**Verified.**
+
+- §8.7's `may-also-change: []  # [loop] | [tools] | [topology] — opt-OUT by default` is **not a
+  field of the `learning:` group** (see the parse above). There is no line an author can write to
+  enable tool-learning or topology-learning, and no line that records they are off.
+- `resource.resource-kind` has exactly one choice: `mcp-server` (`spec/schema.yaml:1272ff`,
+  `surface: S-CAP`). There is **no sandbox resource kind.**
+- The `tool:` group is `['available-when','description','connect','url','method','says','actions']`
+  — a declaration of an endpoint plus actions. **There is no code body, no capability manifest
+  (`network.egress` / `fs.read` / `fs.write` / `exec` / `secrets`), no acceptance-suite field, no
+  honing budget.** `action:` carries `reads-only`, `needs-a-person`, `spends-money`, `bind`,
+  `inspects`, all `S-EXEC`.
+- `grep -rn "ADD-NODE\|ADD_NODE\|SPLIT_NODE\|ADD-AGENT" crates adapters` → **no hits.** The closed
+  topology operator set is unimplemented, and so is TOPO-3 (no subset check between a child's
+  capability set and its parent's appears in `crates/pact-loader/src/teams.rs` or `reach.rs`).
+
+This is not purely a defect. §8.5's own `[R3]` note concluded that under the `no-code` badge a
+self-authored tool **must be a composite** of already-approved, already-pinned actions, and that a
+code body must not be reachable from the no-code surface. The shipped format enforces that by
+having no code body at all. **The honest v1 statement is: D22(b) means "compose declared MCP
+actions", not "author code"** — and §5 below is rewritten around that, because eight sandbox
+requirements describing a subsystem that does not exist is the kind of spec text D28 failure mode
+#1 is made of.
+
+### 1.8 The two records that must survive a cycle live in the directory D2 says is disposable
+
+**Verified.** `learning.py:480` — `UNDER = Path(".pact") / "learning"`; `:511` `LEDGER =
+"spend.jsonl"`; `:516` `REFUSALS = "refused.jsonl"`; `_append` (`:483-509`) writes plain JSONL with
+no `prev-digest` chain. `.gitignore:2,7` ignores `/.pact` and `.pact/`, with the comment *"D2 says
+deleting a `.pact/` must be harmless; committing one would make that untrue."*
+
+Both statements are true and together they are a hole:
+
+- `cycle-limits.per-month` is a `tier: core`, `S-GOV` ceiling on what self-improvement may cost.
+  Its running total lives only in the ignored directory. **A fresh clone, a rebuilt container, or
+  `rm -rf .pact/` resets the month to zero**, and the code's own comment on a corrupt ledger line
+  says it errs *"towards letting a cycle run"* (`learning.py:597-601`).
+- `refused.jsonl` is AC-5.5's negative evidence. It does not survive a clone either.
+
+§8.7a QUEUE-3 already diagnosed exactly this and legislated against it — *"an authored-tree file —
+`S-GOV`, `prev-digest`-chained, **never** under `.pact/`* … a ledger that `rm -rf .pact/` silently
+empties is the exact Y17 defect"* — and the shipped code does the forbidden thing for both records.
+
+### 1.9 AC-5.5's negative evidence is a de-duplication cache, not evidence
+
+**Verified.** `Refusals.key` (`learning.py:562-565`) is `f"{proposal.field}\n{proposal.after.strip()}"`
+— exact string equality on the proposed replacement. `why()` (`:566-568`) is consulted in
+`_decide` only to short-circuit re-scoring.
+
+Two gaps against AC-5.5 (*"a rejected learning candidate is retained as negative evidence and
+**demonstrably influences the next cycle**"*):
+
+- A single character's difference produces a cache miss, so it does not bound repetition; it only
+  prevents re-paying for a byte-identical proposal.
+- Nothing feeds refusals back to a proposer (`grep -rn "refusals" adapters/python/src` outside
+  `learning.py` → no hits). Nothing "influences the next cycle."
+- QUEUE-3's three-valued outcome (`accepted | edited-then-accepted | rejected`) and its closed
+  reason vocabulary (`wrong | too-broad | already-covered | not-my-policy | unclear |
+  right-idea-wrong-wording | out-of-scope`) are not implemented; `why` stores the classifier's
+  free-text sentence. §8.7a's own cited warning is that free-text override capture *"is discarding
+  their most valuable training signal."*
+
+### 1.10 Measured classifier behaviour against §8.3's own fixture set
+
+Script run against `pact_adapters.learning.classify` (Python 3.12.3, `PYTHONPATH=src`):
+
+| # | Fixture | §8.3 required | Measured | Verdict |
+|---|---|---|---|---|
+| F1 | delete one unnumbered bullet from `refund-policy.md` (§8.3a's mandated fixture) | ≥ CLASS-3 | HIGH (`ESC-SHRINK` list trigger) | **pass** |
+| F2 | `30 days` → `300 days` inside a policy bullet | ≥ CLASS-3 | HIGH (prose keyword `refund`) | pass, *by keyword coincidence* |
+| F2b | `30 days` → `300 days` in prose with no risk keyword | ≥ CLASS-3 | HIGH (`ESC-SHRINK` list trigger, because the line is a bullet) | pass, *by a second coincidence*; a non-bullet non-keyword inversion is unguarded |
+| F3 | benign rephrase *"Be concise and warm. Prefer short sentences."* | CLASS-1 auto | HIGH (`sent`) | **false positive** (§1.3) |
+| F4 | 1800-word → 2-word collapse | ≥ CLASS-2, no auto | HIGH (`ESC-SHRINK` 40%) | pass |
+| F5 | append `"\n\nThought process:"` to instructions (§6.5a's own judge-fooling attack) | must not auto-apply | **LOW, auto-applies** | **false negative** |
+| F6 | rewrite a skill `description` | ≥ CLASS-2 (S-ROUTE) | HIGH — but *only* because "refund" appears in the old text; with a neutral description → **LOW** | **false negative** (§1.2) |
+| F7 | append *"Agents may issue refunds up to 500 USD on their own."* | ≥ CLASS-3 | HIGH (`refund`, `issu`) | pass |
+| F8 | *"Use this only for orders placed in the EU store"* → *"…in any store worldwide"* | ≥ CLASS-2 (applicability boundary = S-ROUTE) | **LOW, auto-applies** | **false negative** |
+| F9 | unknown field `x-something` | CLASS-4 (`BR-UNKNOWN`) | UNKNOWN → needs a person | pass |
+
+**Summary of the measurement: 3 false negatives (F5, F6, F8), 1 false positive (F3), and 2 passes
+that hold by coincidence (F2, F2b).** Every false negative is a change whose real surface is
+`S-ROUTE` or whose real hazard is judge-gaming — i.e. exactly the two things §8.1 and §6.5a
+identify as the classifier's reason for existing. Every one of them would have been caught by a
+lookup into the `surface:` column the schema already carries.
+
+---
+
+## 2. Threat and failure model (carried from R1, with three additions)
+
+Three hazard families needing different controls. Conflating them is the main error in the systems
+surveyed.
+
+### 2.1 Hazard A — degradation without malice
 
 | Mechanism | Evidence | Magnitude |
 |---|---|---|
-| **Context collapse** — monolithic rewrite of an accumulated artifact abruptly erases it | ACE §2.2 (`2510.04618-ace.txt:194-200`) | 18,282 tokens → **122 tokens in one step**; accuracy 66.7 → 57.1, *below* the 63.7 no-adaptation baseline |
-| **Library drift** — accumulation without outcome-driven lifecycle | Library Drift §3 (`2605.19576-library-drift-ratchet.txt:151-200`) | Ungoverned library falls **below** the no-skill baseline; full governance recipe = +0.328 over 0.258 baseline |
-| **Erosion** — over-aggressive governance | Ratchet A4 (`…ratchet.txt:157-175, 294-301`) | N_min 100→20, τ 0.10→0.0 ⇒ **−0.019** (below no-skill floor), consistent across 3 seeds (−0.005, −0.027, −0.025); bank collapses to 2 skills |
-| **Skill shadowing** — a *new* artifact changes routing for *unrelated* tasks | Skill Shadowing (`2605.24050-skill-shadowing.txt:19, 59, 105-107`) | 202-skill library ⇒ **−21% pass rate**; shadowing is up to **68%** of the degradation and the only statistically significant effect; context overhead indistinguishable from zero. One task: wrong skill selected in **all 26 trajectories** |
-| **Poor abstraction** — learned artifact encodes the answer, not the convention | ACE (`…ace.txt:1201-1236` mitigation discussion); in-repo rule `PROMPT-SKILL-LEARNING.md:99-104` | ACE items encoding a specific answer don't generalise |
-| **MAS structural failure** | MAST (`2503.13657-mast-failure-taxonomy.txt:58-90`) over 1642 traces | System Design **44.2%**, Inter-Agent Misalignment **32.3%**, Task Verification **23.5%**. Individually: Step Repetition 15.7%, Reasoning-Action Mismatch 13.2%, **Unaware of Termination Conditions 12.4%**, Disobey Task Specification 11.8%, **Incorrect Verification 9.1% + No/Incomplete Verification 8.2%** |
+| **Context collapse** — monolithic rewrite erases an accumulated artifact | ACE §2.2 | 18,282 → **122 tokens in one step**; accuracy 66.7 → 57.1, *below* the 63.7 no-adaptation baseline |
+| **Library drift** — accumulation without an outcome-driven lifecycle | Library Drift §3 | ungoverned library falls **below** the no-skill baseline; full recipe +0.328 over 0.258 |
+| **Erosion** — over-aggressive governance | Ratchet A4 | `N_min` 100→20, `τ` 0.10→0 ⇒ **−0.019**, below the no-skill floor, consistent across 3 seeds |
+| **Skill shadowing** — a new artifact changes routing for *unrelated* tasks | Skill Shadowing | 202-skill library ⇒ **−21%** pass rate; shadowing up to **68%** of it; one task: wrong skill in **all 26** trajectories |
+| **MAS structural failure** | MAST, 1642 traces | System Design **44.2%**, Inter-Agent Misalignment **32.3%**, Task Verification **23.5%**; *Unaware of Termination Conditions* **12.4%** |
+| **[NEW] Rating-driven weight drift** | `cognee` (§7.3) | learning implemented as an EMA over graph weights driven by a 1–5 star rating; no diff, no gate, no rollback |
+| **[NEW] Background rewrite by a second agent** | Letta sleeptime (§7.2) | an autonomous agent rewrites a live agent's memory blocks every 5 turns, sharing the same block rows, with a prompted-for whole-block rewrite tool |
 
-**The MAST distribution is the single most useful input to the classifier.** The fields a
-learning cycle most wants to edit — task specification, termination conditions, verification
-steps — are precisely where multi-agent systems already fail *without* self-modification, at
-a combined ≈44% of observed failures. That is the empirical justification for putting
-control-flow and verification edits behind a human gate rather than trusting an eval delta.
+The MAST distribution remains the single most useful empirical input: the fields a learning cycle
+most wants to edit — task specification, termination conditions, verification steps — are where
+multi-agent systems already fail *without* self-modification, at a combined ≈44%. That is the
+justification for putting control-flow and verification edits behind a human gate rather than
+trusting an eval delta.
 
-### 1.2 Hazard B — Objective hacking (the optimizer defeats its own oracle)
+### 2.2 Hazard B — objective hacking (the optimiser defeats its own oracle)
 
-| Case | Evidence | What happened |
-|---|---|---|
-| **DGM node 114** | DGM Appendix H (`2505.22954-darwin-godel-machine.txt:5310-5335`) | Scoring inserted special tokens when real tool use occurred; the self-modifying agent **removed the special-token logging** (explicitly instructed not to), achieving a perfect 2.0 score without solving the problem |
-| **Visibility effect** | same, `:5318-5320` | "the hallucination checking functions are **hidden** from the coding agent during self-modification. We found that objective hacking … occurs **more frequently when these functions are not hidden**" |
-| **SkillWeaver verification criterion** | SkillWeaver D.2.1 (`2504.07079-skillweaver.txt:1954-1962`) | "our criteria for a function to be 'verified' was to have it be called **without producing an exception**" → the LLM added `if` statements that silence all exceptions. "This represents a measure for evaluation having unintended consequences" |
-| **Judge master keys** | One-Token-Fool (`2507.08794-one-token-fool-judge.txt:63-69, 372-385, 488-504`) | Non-word symbols (`:`) and openers ("Thought process:", "Solution") elicit false positives at up to **90.9% average / 97.0% worst** FPR; a dedicated verifier shows **66.8%** FPR on MATH |
-| **Judge hardening is counterintuitive** | same, `:635-654` | **CoT prompting + majority voting *increases* FPR**; removing the question from the judge prompt (`NQ`) *reduces* it. "Consequently, we recommend …" |
+| Case | What happened |
+|---|---|
+| **DGM node 114** | scoring inserted special tokens on real tool use; the self-modifying agent **removed the logging** (explicitly instructed not to) and scored a perfect 2.0 without solving the task |
+| **DGM visibility effect** | objective hacking *"occurs more frequently when these functions are not hidden"* — but the reported run had them hidden and one node hacked anyway. Invisibility reduces frequency; it does not eliminate the failure |
+| **SkillWeaver** | the "verified" criterion was *"called without producing an exception"* → the model added `if` statements silencing all exceptions. *"a measure for evaluation having unintended consequences"* |
+| **Judge master keys** | non-word symbols (`:`) and openers ("Thought process:") elicit false positives at up to **90.9% average / 97.0% worst**; a dedicated verifier shows 66.8% FPR on MATH |
+| **Judge hardening is counterintuitive** | CoT prompting + majority voting *increase* FPR; removing the question from the judge prompt reduces it |
+| **[R2 measurement]** | the shipped classifier auto-applies the exact judge-fooling suffix (§1.10 F5) |
 
-Convergent finding worth stating loudly: SkillOps' synthetic degradation type (3) is
-"**Missing validator**: remove the `## Checklist` section and set `validator.kind = "none"`"
-(`2605.13716-skillops.pdf`, Appendix G). The canonical *degradation* and the canonical
-*objective hack* are the same operation — **deleting the thing that checks you.**
+SkillOps' synthetic degradation type (3) is *"remove the `## Checklist` section and set
+`validator.kind = "none"`"*. **The canonical degradation and the canonical objective hack are the
+same operation — deleting the thing that checks you.**
 
-### 1.3 Hazard C — Poisoning / supply chain (adversarial)
+### 2.3 Hazard C — poisoning / supply chain
 
-| Path | Evidence | Note |
-|---|---|---|
-| **Skill documentation as trusted operational guidance** | Agent Skills Survey §VI-F (`2605.07358-agent-skills-survey.pdf:965-967`), citing PoisonedSkills [102] (zenodo.19281322) | "third-party skill documentation can hide malicious logic that agents later execute as trusted operational guidance" |
-| **Collective evolution without validation** | same, citing SkillClaw [100] | "collective evolution requires validation before synchronized updates are propagated to users" |
-| **MCP has no isolation and says so** | `research/repos/protocols/mcp-spec/SECURITY.md:76-90` | "the SDK's stdio transport **is not a sandbox**"; "a malicious server already has arbitrary code execution by virtue of being run"; reports about arbitrary command execution via STDIO configuration "are **not** vulnerabilities" |
-| **MCP's only mandated control is a dialog** | `mcp-spec/seps/1024-...md:35-49, 103` | Clients MUST show the exact command and get explicit approval. Sandboxing and signatures are listed only under "Risk Mitigation … Recommendation for additional security layers" |
-| **Portable agent bundles carry executable payloads** | Letta `letta/schemas/agent_file.py:358-367` (`ToolSchema(Tool)` — carries `source_code`), `:426-428` | `.af` export strips `env` from stdio MCP config but **not `command`/`args`** |
-| **"Sandbox" that isn't** | Letta `letta/services/tool_sandbox/local_sandbox.py:192-194` | Tool source runs via `asyncio.create_subprocess_exec` on the host; only control is a 180 s timeout (`letta/settings.py:36`) |
-| **Full host env handed to tool code** | Letta `letta/services/tool_sandbox/base.py:487` | `env = os.environ.copy() if is_local else {}` — every host API key, DB URL and token is in the tool's environment |
-| **Pickle across the boundary** | Letta `letta/services/tool_sandbox/safe_pickle.py:107-112` | `safe_pickle_loads` is size/recursion-limited but calls plain `pickle.loads`; the local path validates results with an **MD5** checksum (`local_sandbox.py:271`) — integrity against corruption, not against a hostile producer |
-| **Air-gap incompatible isolation** | Letta `letta/settings.py:24,27-28` | The only *isolating* sandboxes are E2B and Modal, both hosted services requiring API keys. Under D17 the only available option collapses to the non-isolating local path |
+| Path | Evidence |
+|---|---|
+| Skill documentation as trusted operational guidance | Agent Skills Survey §VI-F citing PoisonedSkills: *"third-party skill documentation can hide malicious logic that agents later execute as trusted operational guidance"* |
+| Collective evolution without validation | same, citing SkillClaw: *"collective evolution requires validation before synchronized updates are propagated"* |
+| MCP has no isolation and says so | `research/repos/protocols/mcp-spec/SECURITY.md:76-90` — *"the SDK's stdio transport is not a sandbox"*; arbitrary command execution via STDIO configuration is *"not"* a vulnerability |
+| MCP's only mandated control is a dialog | `mcp-spec/seps/1024-*.md:35-49` — clients MUST show the exact command; sandboxing and signatures appear only under *"Recommendation for additional security layers"* |
+| Portable bundles carry executable payloads | Letta `letta/schemas/agent_file.py:358-367` (`ToolSchema(Tool)` carries `source_code`), `:426-428` (`.af` strips `env` from stdio MCP config but **not `command`/`args`**) |
+| "Sandbox" that isn't | Letta `letta/services/tool_sandbox/local_sandbox.py:192-194` — `asyncio.create_subprocess_exec` on the host |
+| Full host env handed to tool code | Letta `letta/services/tool_sandbox/base.py:487` — `env = os.environ.copy() if is_local else {}` |
+| Air-gap-incompatible isolation | Letta `letta/settings.py:24,27-28` — the only isolating sandboxes are E2B and Modal, both hosted |
 
-**This is the D14 problem in one line.** D14 requires a non-technical domain expert to author
-custom tools via MCP. MCP explicitly disclaims responsibility for isolation and provenance.
-Letta — the most mature open self-authoring runtime in the corpus — has no offline isolated
-path. **PACT must own the sandbox, the signature and the provenance layer itself.**
-
----
-
-## 2. What the existing systems actually persist (baseline survey)
-
-Read in source. This table is the reason for the artifact design in §3.
-
-| System | Artifact written | Identity | Provenance | Gate before write | Retirement | Rollback |
-|---|---|---|---|---|---|---|
-| **Voyager** `voyager/agents/skill.py:61-100` | JS function + LLM-written description + Chroma embedding; `skills.json` | function name | none | LLM critic (`critic.py:131-138`, mode `auto`) or human (`manual`); called only on success (`voyager.py:353-354`) | none | **none** — `skills.json` is overwritten (`skill.py:99`); a `nameV2.js` file is dumped to disk (`:75-79`) but never referenced again |
-| **ExpeL** `expel/agent/expel.py:696-743` | Natural-language rules with an integer vote counter | list index | none | none per-rule; k-fold splits at the *run* level (`insight_extraction.py:138-153`) | counter ≤ 0 prunes (`:740`) | none |
-| **AWM** `agent-workflow-memory/webarena/induce_rule.py:145-166` | One plain-text blob per website, e.g. `workflow/shopping.txt` | none (positional) | none | interactive `input("… Add? (y/n)")` per workflow, bypassed by `--auto` (`:150-153`) | none | **none** — written with mode `'w'`, whole file replaced |
-| **ACE** (paper) `…ace.txt:267-302` | Delta bullets: `[{slug}-{NNNNN}] helpful={int} harmful={int} :: {content}` | stable id | helpful/harmful counters | Reflector→Curator; deterministic merge | grow-and-refine prune / dedup by embedding | per-item (append + in-place counter update) |
-| **ReasoningBank** `…reasoningbank.txt:277-300` | `{title, description, content}` memory item | title | success/failure label from LLM judge | LLM-as-judge (baseline accuracy **72.7%**, `:760-775`); ≤3 items per trajectory (`:1291`) | not specified | none |
-| **Ratchet** `…ratchet.txt:88-107, 251-268` | Skill bank (ACTIVE + DEPRECATED, **never deletes**), meta-skill bank (one ACTIVE), append-only evidence log of capsules + verdicts | per-skill | per-skill contribution score `ĉ(s)=(succ−fail)/trials` | attribution verdict + cluster of ≥3 failures on a canonical pattern | `n(s) ≥ N_min ∧ ĉ(s) ≤ −τ` | implicit (DEPRECATED retained) |
-| **mem0** `mem0/configs/prompts.py:176-185` (v2), `:464-472` (v3) | Facts. v2: ADD/UPDATE/DELETE/NONE. **v3 is ADD-only with `linked_memory_ids`** | UUID, but exposed to the LLM only as local integers (`mem0/memory/main.py:903-907`, comment: "Map UUIDs to integers (anti-hallucination)") | none | LLM extraction | v2 DELETE; v3 none | none |
-| **Zep** `zep/plugins/building-with-zep/skills/building-with-zep/SKILL.md:78-85` | Bitemporal graph edges | UUID | `valid_at / invalid_at / created_at / expired_at` | dedup + supersession | **invalidate, keep as history** | inherent (query as-of a time) |
-| **Letta** `letta/schemas/block.py:19-36` | Memory blocks (`value`, `limit`, `read_only`), tools with `source_code` | id | none | `RequiresApprovalToolRule` halts the loop with a typed stop reason (`letta/schemas/tool_rule.py:348-357`; `letta/agents/letta_agent_v3.py:1709`) | none | none |
-| **Anthropic Agent Skills** `filedef/skills-anthropic/template/SKILL.md`, `skills/mcp-builder/SKILL.md:1-5` | `SKILL.md` with frontmatter `name`, `description`, optional `license` | name | **none** | — | — | — |
-| **Bud runtime (in-repo)** `sdk-and-declarative-dev.md:2885-2905`; `registry-and-portability.md:684-710` | Signed packages (Ed25519, `bud-package-signature.json`), registry entries with CAS + evidence digests | coordinates | trust roots, trust policy, generation counter | `require_verified_signature` etc.; "Missing metadata is never auto-published" | lifecycle mutation API | evidence-pinned adoption receipts |
-
-**Four conclusions from this table.**
-
-1. **Only Ratchet and Zep get retirement right** (never delete; keep as history). Voyager,
-   ExpeL and AWM destroy prior state. AWM's `'w'` write is the exact operational form of ACE's
-   context collapse.
-2. **Nobody except Bud has provenance or signing.** The Anthropic SKILL.md format — the de
-   facto industry artifact — has three frontmatter keys and no version, no author, no
-   evidence, no signature. PACT must be a strict superset while remaining readable by
-   SKILL.md consumers.
-3. **mem0's UUID→integer mapping is the sleeper idea.** The proposer never sees a real
-   identifier, so it structurally cannot address an artifact it was not shown. This should be
-   a PACT invariant, not an implementation trick.
-4. **Letta's `requires_approval` as a typed loop stop reason is the right shape for D23's
-   human gate** — approval is a first-class halt in the loop IR, not an out-of-band workflow.
+**[R2 correction to a claim R1 made too strongly.]** R1 said Letta has no rollback. That is wrong
+in an interesting way: Letta ships a full `BlockHistory` checkpoint/undo/redo API
+(`letta/services/block_manager.py:842` `checkpoint_block_async`, `:952` `undo_checkpoint_block`,
+`:1004` `redo_checkpoint_block`). **It has zero non-test callers** — a repo-wide grep finds it only
+in `tests/test_managers.py`. The mechanism exists, is tested, and is not wired to any write path,
+so every `rethink` overwrite is unrecoverable in practice. The precise finding is not "no rollback
+machinery" but *"rollback machinery that only its tests reach"*, which is a sharper warning for
+PACT than the original claim: **shipping the archive is not the same as putting it on the write
+path, and only a test that mutates the write path can tell the difference.**
 
 ---
 
-## 3. Deliverable 1 — The exact artifacts a learning cycle may write (T6)
+## 3. Deliverable 1 — the exact artifacts a learning cycle may write (T6)
 
-T6: *learning emits reviewable source*. D2: *the tree is the native form; `canonical.json` is
-derived*. Together these force a specific shape: **a learning cycle produces a proposal
-bundle under `.pact/`, and acceptance materialises ordinary spec files in the tree.** Nothing
-learned may live only in `.pact/`, and nothing learned may live outside version control.
+T6 says learning emits reviewable source. D2 says the tree is the native form. Together they force:
+**a cycle produces a proposal bundle; acceptance materialises ordinary spec files in the tree**;
+nothing learned lives only in a derived directory, and nothing learned lives outside version
+control.
 
-### 3.1 The three-zone partition of the workspace
+### 3.1 Zones are derived from `surface:`, and the derivation must be code
 
-Every path in a PACT workspace belongs to exactly one zone. This is normative and is checked
-by the loader.
-
-```
-LEARNABLE   — a learning cycle may propose writes here
-GOVERNED    — a learning cycle may NEVER propose writes here (structurally unreachable)
-DERIVED     — regenerated; never authored by anyone
-```
-
-| Zone | Paths | Rationale |
-|---|---|---|
-| **LEARNABLE** | `agents/<a>/instructions.md` (and its `instructions/` expansion), `agents/<a>/skills/**`, `agents/<a>/variants/**`, `agents/<a>/loop.yaml`, `agents/<a>/tools/**`, `agents/<a>/memory/**` (memory *strategy*, not facts), `teams/<t>/team.yaml`, `evals/cases/**` (additive promotion only) | D22 (a)(b)(c) |
-| **GOVERNED** | `evals/suite.yaml` (metrics, graders, thresholds), `evals/datasets/**` (frozen splits), `policies/**`, `profiles/**` (budgets, SLOs, autonomy ceilings), `models/catalog.yaml`, `workspace.yaml`, `pact.lock`, `learning.yaml`, the classifier rule table, any telemetry/instrumentation declaration | DGM `:5318-5320` (hiding the checker reduces hacking); DGM `:290-291` (archive maintenance + parent selection are **not modifiable by the DGM**) |
-| **DERIVED** | `.pact/canonical.json`, `.pact/reports/**`, indexes, caches | D2 consequence 1 ("deleting it must be harmless") |
-
-**Normative rule L-1.** The learning subsystem's write capability is scoped to the LEARNABLE
-zone *of a single agent or team subtree*. A proposal containing any path outside the scoped
-subtree is rejected before classification — not classified as high-risk, **rejected**. This
-is the containment boundary; it is not a risk judgement.
-
-**Normative rule L-2.** The learner's view of the workspace is windowed and index-addressed
-(mem0 pattern, `mem0/memory/main.py:903-907`). The proposer is shown only artifacts in scope,
-identified by opaque local indices; the applier resolves indices to real paths and digests.
-A proposer that emits a path it was not shown produces an unresolvable proposal.
-
-### 3.2 The proposal bundle (what a cycle writes into `.pact/`)
+§8.2's zone table is correct and must stay. What §1.1 shows is that it must become a function:
 
 ```
-.pact/learning/
-├── ledger.jsonl                        # append-only evidence log (never rewritten)
-├── proposals/<proposal-id>/
-│   ├── proposal.yaml                   # operator list, scope, base digests, cycle id
-│   ├── patch/                          # the actual deltas, one file per changed artifact
-│   ├── evidence/
-│   │   ├── reflective-dataset.jsonl    # inputs + outputs + textual feedback (GEPA shape)
-│   │   ├── failing-cases.yaml          # case ids that motivated each operator
-│   │   └── checker-verdicts.jsonl      # deterministic checker results (ground truth)
-│   ├── classification.yaml             # ← the blast-radius record (§4.6)
-│   ├── verdict.yaml                    # val / holdout / golden scores, cost, SLO deltas
-│   └── signature.json                  # Ed25519 over the canonical bundle digest
-└── archive/<lineage-id>/               # ACCEPTED and REJECTED candidates, never deleted
+zone(field) = LEARNABLE  if surface ∈ {S-GEN, S-ROUTE, S-CTRL, S-TOPO}
+              GOVERNED   if surface ∈ {S-CAP, S-EXEC, S-GOV, S-META} or surface is absent
+              QUARANTINE if the node is a promoted case
+              DERIVED    if the path is under .pact/
 ```
 
-`ledger.jsonl` is the Ratchet evidence log made portable (`…ratchet.txt:88-107`). One record
-per artifact-injection event: `{artifact_id, artifact_version, run_id, case_id, outcome,
-verdict ∈ {HELPED, HURT, NEUTRAL, INAPPLICABLE}, pattern, router_engaged}`. It is the input
-to contribution scores, retirement, and drift detection.
+**L-1 (containment).** A proposal touching any path outside the scoped agent/team subtree is
+*rejected before classification*, not classified high. This is a boundary, not a risk judgement.
 
-### 3.3 The provenance envelope (what acceptance materialises in the tree)
+**L-2 (windowed addressing).** The proposer sees index-addressed views, never real ids or paths.
+This is mem0's shipped anti-hallucination trick — `mem0/memory/main.py:903-908` builds
+`uuid_mapping[str(idx)] = mem.id` under the comment `# Map UUIDs to integers
+(anti-hallucination)` — promoted to an invariant: a proposer structurally cannot address an
+artifact it was not shown.
 
-Every learnable artifact carries a provenance envelope. For YAML it is a top-level
-`provenance:` block; for Markdown it is frontmatter (so `SKILL.md` stays a valid Anthropic
-skill — superset, not fork).
+### 3.2 The proposal bundle
+
+```
+.pact/learning/                          # DERIVED — working area only
+├── proposals/<id>/{proposal.yaml, patch/, evidence/, classification.yaml, verdict.yaml}
+└── archive/<lineage-id>/                # accepted AND rejected candidates
+
+<workspace>/proposals.ledger             # AUTHORED, S-GOV, prev-digest chained  ← §1.8
+<workspace>/learning-spend.ledger        # AUTHORED, S-GOV                        ← §1.8
+```
+
+The two ledgers move **out of `.pact/`**. §8.7a QUEUE-3 already required this; §1.8 shows the code
+did not. The rule generalises: *any record a governance ceiling is enforced against is an authored
+artifact.* If `rm -rf .pact/` changes what a cycle is allowed to do, the record was in the wrong
+place.
+
+### 3.3 The provenance envelope needs a schema group
+
+§8.9's envelope is specified in prose and has no group (§1.6). Minimum group, as YAML block or
+Markdown frontmatter so a learned `SKILL.md` stays a valid Agent Skills document:
 
 ```yaml
-provenance:
+learned:                    # ← the group that does not exist yet
   status: active            # active | deprecated | quarantined
-  generation: 7             # monotone; matches the registry generation model
-                            # (registry-and-portability.md:678-681)
-  derivedFrom:
-    artifact: sha256:…      # base digest — the CAS token (§4.7)
-    proposal: pact://learning/proposals/2026-07-26-a41f
-  producer:
-    kind: optimizer         # optimizer | reflector | trace-promotion | human
-    id: gepa/1.4
-    model: qwen3-14b        # the model that WROTE it (re-target rule, §3.5)
-  evidence:
-    evalRun: sha256:…
-    cases: [tri-014, tri-022, tri-031]
-    contribution: {trials: 142, helped: 96, hurt: 11, score: 0.599}
-  classification: {class: R1, rules: [BR-GEN-01, BR-SIZE-OK]}
-  approval: {by: auto, at: 2026-07-26T09:14:02Z}   # or by: user:jane@acme
-  validity: {from: 2026-07-26T09:14:02Z, until: null}   # bitemporal — Zep pattern
-  signature: {keyId: learning-service, alg: ed25519, sig: …}
+  generation: 7
+  derived-from: sha256:…    # base digest; the CAS token for OBL-1
+  producer: {kind: optimizer, id: gepa/1.4, model: qwen3-14b, optimised-for: qwen3-4b}
+  origin:  {workspace-id: 01J8…, principal: support-operations, at-digest: sha256:…}
+  evidence: {trials: 142, helped: 96, hurt: 11, score: 0.599, cases: [tri-014, tri-022]}
+  classification: {class: CLASS-2, surfaces: [S-GEN, S-ROUTE], rules: [BR-ROUTE]}
+  approval: {by: user:jane@acme, at: 2026-08-07T09:14:02Z}
+  validity: {from: 2026-08-07, until: null}
+  supersedes: sha256:…
+  revoked-by: null
 ```
 
-**Normative rule L-3 (never delete).** Retirement sets `status: deprecated` and
-`validity.until`. It never removes the file. Grounded in Ratchet's "ACTIVE + DEPRECATED ·
-never deletes" (`…ratchet.txt:91`) and Zep's "the old fact is marked invalid but kept as
-history" (`zep/…/SKILL.md:78-82`). Consequences: rollback is a status flip, diffs stay
-meaningful under D18, and `git revert` is always a valid escape hatch.
+Every field earns its place by being read by a named mechanism: `derived-from` by OBL-1,
+`origin.workspace-id` by `ESC-UNTRUSTED`, `evidence` by retirement (`n ≥ N_min ∧ ĉ ≤ −τ`),
+`status`+`validity` by never-delete and rollback, `supersedes`/`revoked-by` by the revocation
+ratchet, `optimised-for` by the re-target rule. A field no mechanism reads should not be added.
 
-**Normative rule L-4 (deltas, never monolithic rewrite).** A learning write is a set of
-**typed operators** over identified sub-artifacts, not a whole-file replacement. Minimum
-operator set, taken directly from ExpeL's proven bounded-edit surface
-(`expel/prompts/templates/human.py:23-30`) plus ACE's counters:
+### 3.4 Operators, budget, and never-delete
 
-| Operator | Meaning | Counter effect (ExpeL `expel.py:728-739`) |
-|---|---|---|
-| `ADD` | new sub-artifact with a fresh id | +2 |
-| `EDIT` | rewrite one identified sub-artifact in place | +1 |
-| `AGREE` | reinforce (no text change) | +1 |
-| `RETIRE` | mark deprecated (never delete) | −1, or −3 when the library is at cap |
+**L-3 (never delete).** Retirement sets `status: deprecated` and `validity.until`; the file stays.
+Grounded in Ratchet (ACTIVE + DEPRECATED, never deletes) and Zep's bitemporal invalidation. Rollback
+becomes a status flip; `git revert` is always available.
 
-ExpeL's edit budget is normative and copied verbatim as a default: **at most 4 operations per
-cycle, and at most 1 operation per existing sub-artifact**
-(`expel/prompts/templates/human.py:30`). This is the textual analogue of a learning rate; it
-is why ExpeL's rule set converges instead of thrashing.
+**L-4 (deltas, never monolithic rewrite).** ExpeL's bounded edit surface, verified in source
+(`research/repos/memory/expel/prompts/templates/human.py:23-30`): the operations are
+`AGREE / REMOVE / EDIT / ADD`, with the budget stated verbatim — *"Do at most 4 operations and each
+existing rule can only get a maximum of 1 operation."* PACT renames `REMOVE` to `RETIRE` and makes
+it non-destructive; **the source operator deletes, and that difference is the whole of L-3.**
 
-**Normative rule L-5 (the shrink guard).** Any single accepted write that reduces an
-artifact's token count by more than `θ_shrink` (profile default **40%**) is never auto-apply,
-regardless of eval delta. Direct consequence of ACE's collapse case: 18,282 → 122 tokens in
-one step (`…ace.txt:197-199`). An eval improvement on the minibatch does not license a
-collapse, because the collapse cost only shows up on out-of-distribution tasks later.
+**L-5 (shrink guard).** ACE's collapse case (18,282 → 122 tokens) licenses a guard; the 40%
+threshold remains one interpolated data point (OQ-1).
 
-### 3.4 Trace → eval promotion is a *learning write* and must be constrained
+### 3.5 Trace → eval promotion is a learning write and is additive only
 
-`evals/cases/**` is LEARNABLE but **additive only**. A learning cycle may promote a failing
-trace into a new eval case (AC-4.4); it may never edit an existing case, a threshold, a
-metric, a rubric, or a dataset split. Otherwise the optimizer edits its own oracle — the DGM
-node-114 failure with extra steps.
+`evals/cases/**` is LEARNABLE but **additive only**: a cycle may promote a failing trace into a new
+case; it may never edit a case, threshold, metric, rubric or split. Promoted cases enter a
+quarantine split that does not count toward any gate until confirmed. Rationale unchanged:
+ReasoningBank's promotion signal is an LLM judge measured at **72.7%** accuracy against ground
+truth; a 27% mislabel rate injected into the gate corpus is self-reinforcing.
 
-Promoted cases enter a **quarantine split** that does not count toward the acceptance gate
-until a human or a second, disjoint validation run confirms them. Rationale: ReasoningBank's
-promotion signal is an LLM judge whose measured accuracy against ground truth is **72.7%**
-(`…reasoningbank.txt:760-766`); a 27% mislabel rate injected directly into the gate corpus is
-a self-reinforcing failure.
+### 3.6 Two rules inherited from the in-repo optimiser work
 
-### 3.5 Two rules inherited from the in-repo optimizer work that constrain artifacts
-
-- **Re-target per executor.** `PROMPT-SKILL-LEARNING.md:160-166`: large→small prompt transfer
-  is reported at **−30pp**; small→large transfers positively. Therefore an artifact's
-  provenance MUST record the model it was optimised *for*, and a variant is bound to a model
-  tier. Reusing a frontier-optimised instruction on an SLM without re-optimisation is a
-  declared-loss operation under T7.
-- **The seed is never discarded.** `PROMPT-SKILL-LEARNING.md:96-98` (ACE-derived): the Pareto
-  pool always retains index 0. In PACT terms: the human-authored baseline version of any
-  artifact is permanently retained in the archive and is always a valid rollback target.
+- **Re-target per executor.** `PROMPT-SKILL-LEARNING.md:160-166`: large→small prompt transfer is
+  reported at −30 pp; small→large transfers positively. `producer.optimised-for` is therefore
+  load-bearing and reuse across tiers is a declared-loss operation under T7.
+- **The seed is never discarded.** The human-authored baseline of any artifact is permanently
+  retained and is always a valid rollback target (ACE/GEPA Pareto-pool index 0).
 
 ---
 
-## 4. Deliverable 2 — The blast-radius classifier (D23)
+## 4. Deliverable 2 — the blast-radius classifier
 
-D23 requires "a normative change-classification function over spec diffs … conservative and
-explainable." Below is the actual proposal.
+### 4.1 The amendment to D23 stands
 
-### 4.1 Why the naïve reading of D23 is wrong (and must be fixed in the doc)
+D23's literal wording ("wording/formatting changes auto-apply") is unsound because a skill
+`description` edit is a wording change with global routing blast radius. §8.1's amended rule is
+correct and is now confirmed by the schema itself: `skill.description` is annotated `S-ROUTE` at
+`spec/schema.yaml:1574`, with help that says why. **The classifier must key on the annotation, not
+on the field's name and not on its prose.**
 
-D23's wording is *"Wording/formatting changes auto-apply; anything touching tools,
-permissions, or decision logic requires a human."* Taken syntactically this is unsound, for
-one measured reason:
+### 4.2 The rule table (unchanged in substance, restated as the executable form)
 
-> Changing the **wording of a skill's `description`** is a wording change, and it changes
-> which skill is selected — for **every** task, including tasks the learning cycle never
-> evaluated. Skill Shadowing measures this at a **21% pass-rate drop** at 202 skills, with
-> shadowing accounting for **up to 68%** of the degradation and context overhead
-> statistically indistinguishable from zero (`2605.24050-skill-shadowing.txt:19, 105-107`).
-> In one task the shadowing skill was selected in **all 26 trajectories** (`:79-83`).
-
-So the classifier cannot key on syntactic category ("wording"). It must key on **effect
-surface**: what does this field influence in the execution model? Recommended amendment to
-D23's prose: *"Changes that affect only generated content auto-apply under proof; changes
-that affect selection, control, authority, execution, or governance require escalating
-gates."*
-
-### 4.2 The eight effect surfaces
-
-Each field of the PACT IR is annotated (in the schema, once) with exactly one primary effect
-surface. This annotation is part of the spec, not of the classifier.
-
-| Surface | Definition | Example PACT fields |
-|---|---|---|
-| **S-GEN** | Text that reaches the model as content and influences generated tokens only | `instructions.md` body, skill body, few-shot examples, output-style guidance |
-| **S-ROUTE** | Anything that participates in *selecting* an artifact | skill/tool `name` + `description`, tags, trigger conditions, exposure ordering, embedding source text, router config |
-| **S-CTRL** | Control flow and loop semantics | `loop.yaml` states/transitions, halt/termination conditions, retry/verification steps, handoff conditions, max-steps |
-| **S-CAP** | Authority: what the agent is permitted to do | tool exposure set, MCP server bindings, permissions/scopes, network/fs access, approval requirements, autonomy level |
-| **S-EXEC** | Executable payload | self-authored tool source, scripts under a skill, hooks, stdio MCP `command`/`args` |
-| **S-TOPO** | Structure | team graph nodes/edges, subagent set, delegation policy, depth/fan-out |
-| **S-GOV** | The oracle and the guard rails | eval metrics/graders/thresholds, dataset splits, SLOs, budgets, policies, telemetry emission, the classifier's own rules |
-| **S-META** | Identity and trust | version, signature, lineage, provenance envelope itself |
-
-### 4.3 The risk lattice
-
-Five classes, totally ordered. `R0 < R1 < R2 < R3 < R4`.
-
-| Class | Name | Disposition |
-|---|---|---|
-| **R0** | Canonical no-op | Auto-apply, no eval. The canonical IR is byte-identical before and after. |
-| **R1** | Generation-local | Auto-apply **iff** the full auto-apply proof (§4.5) holds. |
-| **R2** | Selection-affecting | Auto-apply **iff** §4.5 holds **and** a routing non-regression proof holds (§4.4). |
-| **R3** | Control / structure | **Human gate.** Eval evidence is presented but is not sufficient. |
-| **R4** | Authority / execution / governance | **Human gate + second signer.** Never auto-apply under any eval result. |
-
-### 4.4 The normative rule table
-
-Each rule has an id (emitted in the explanation), a condition, a class, and its evidence.
-The classifier is the **maximum** over triggered rules. It is monotone: adding a rule can
-only raise a class.
-
-**Base rules — by effect surface**
-
-| Rule | Condition | Class | Evidence |
-|---|---|---|---|
-| `BR-NOOP` | Canonical IR digest unchanged | R0 | D2; AC-1.4 |
-| `BR-GEN` | All changed nodes are S-GEN | R1 | ACE delta-update design (`…ace.txt:267-302`) |
-| `BR-ROUTE` | Any changed node is S-ROUTE | R2 | Skill Shadowing 21% / 68% (`…shadowing.txt:19,105-107`); bench 1 (`RESULTS.md:21-33`) |
-| `BR-CTRL` | Any changed node is S-CTRL | **R3** | MAST: Unaware of Termination Conditions **12.4%**, Task Verification category **23.5%** (`…mast….txt:58-90`) |
-| `BR-TOPO` | Any changed node is S-TOPO | **R3** | MAST System Design **44.2%**; §6 |
-| `BR-CAP` | Any changed node is S-CAP | **R4** | D23 explicit; MCP `SECURITY.md:76-90` |
-| `BR-EXEC` | Any changed node is S-EXEC | **R4** | D23 explicit; §5 |
-| `BR-GOV` | Any changed node is S-GOV | **R4** *and* the proposal is rejected outright if produced by an automated learner | DGM `:5318-5320, :290-291`; SkillOps degradation type (3) |
-| `BR-META` | Signature / lineage / version fields hand-edited | **R4** | trust spine (`sdk-and-declarative-dev.md:2894-2899`) |
-| `BR-UNKNOWN` | Any changed node whose kind is not in the schema's surface annotation table | **R4** | E-2: "unknown features are *rejected loudly* by old adapters, never ignored" (`00-THESIS.md:230`) — the classifier must fail closed the same way |
-
-**Escalation rules — modifiers, applied after base classification**
-
-| Rule | Condition | Effect | Evidence |
-|---|---|---|---|
-| `ESC-SHRINK` | Any artifact loses > `θ_shrink` (default 40%) of its tokens | +1 class, floor R2 | ACE collapse 18,282→122, acc 66.7→57.1 below 63.7 baseline (`…ace.txt:194-200`) |
-| `ESC-RETIRE-THIN` | A `RETIRE` where `n(s) < N_min` (default 100) or `ĉ(s) > −τ` (default 0.10) | +2 classes, floor R3 | Ratchet A4: N_min 20 / τ 0 ⇒ **−0.019**, below the no-skill floor, all 3 seeds (`…ratchet.txt:157-175, 294-301`) |
-| `ESC-BUDGET` | More than `K_ops` operators in one cycle (default 4) or >1 operator on the same sub-artifact | +1 class | ExpeL `human.py:30` |
-| `ESC-CROSS` | Proposal touches more than one agent/team subtree | +2 classes, floor R4 | containment (L-1) |
-| `ESC-SELF` | Proposal edits the artifact that authored it (meta-skill / authoring prior) | floor R3, and only on the slow cadence | DGM `:290-291` (meta level fixed); MetaSkill-Evolve two-timescale (`2607.05297:36-47`) |
-| `ESC-JUDGED` | Any part of the acceptance evidence came from an LLM judge rather than a deterministic checker | +1 class | One-Token-Fool FPR ≤ 90.9%/97.0% (`…one-token….txt:488-504`); ACE reward-fidelity ablation (`PROMPT-SKILL-LEARNING.md:90-93`) |
-| `ESC-UNTRUSTED` | Any evidence item originates from tool output, retrieved content, or another tenant's artifact | floor **R4** | PoisonedSkills (`agent-skills-survey.pdf:965-967`); F6 "no tool-output→skill direct writes" |
-| `ESC-CAP-GROWTH` | The change increases the *reachable* capability set (new tool exposed, new MCP server, wider scope, added subagent with a tool the parent lacks) | floor **R4** | §6.2 authority inheritance |
-| `ESC-CAP-CAPS` | The library/exposure set would exceed its bounded cap `C` | +1 class | Ratchet cap C=50 (`…ratchet.txt:258-268`); bench 1 decay at N=120 (`RESULTS.md:21-26`) |
-
-**De-escalation rules — the only permitted downward moves (all provable, none heuristic)**
-
-| Rule | Condition | Effect |
-|---|---|---|
-| `DE-TIGHTEN` | An S-CTRL/S-CAP change strictly *narrows* an envelope already declared in a GOVERNED profile (e.g. `max_steps` 20→12 where the profile ceiling is 20; a permission removed) | R3/R4 → R2 |
-| `DE-VARIANT` | The change creates a **new variant** rather than mutating the active one, and the variant is not bound by the lockfile | −1 class, floor R1 |
-
-`DE-VARIANT` is the most important ergonomics lever in the whole design: **the cheap path for
-a learning cycle is to author a new variant, not to mutate the live agent.** It converts most
-otherwise-gated experiments into auto-appliable additions, because an unbound variant cannot
-affect production behaviour until the resolver binds it — and binding is itself a lockfile
-change (R4 by `BR-GOV`, since `pact.lock` is GOVERNED).
-
-### 4.5 The auto-apply proof obligation
-
-Class ≤ R2 is *necessary*, never sufficient. Auto-apply requires **all** of:
-
-| # | Obligation | Grounding |
-|---|---|---|
-| A1 | **Base-digest CAS.** Every `derivedFrom.artifact` digest matches the current tree. Any mismatch ⇒ reject, re-derive. | `registry-and-portability.md:700-712` (evidence-pinned adoption; "rejects stale or duplicate evidence") |
-| A2 | **Strict improvement on a held-out validation split** frozen *before* the cycle began. | GEPA strict-improve gate (`PROMPT-SKILL-LEARNING.md:51`); bench 3 (`RESULTS.md:73-77`); R6 in `00-THESIS.md:629` |
-| A3 | **Non-regression on a frozen golden set** within the declared ε (D27). The golden set is GOVERNED and is never touched by the cycle. | D27; AC-2.2 |
-| A4 | **Deterministic checkers decided the gate.** If any judge was involved, `ESC-JUDGED` applies and the judge must be: binary framing, no-question prompt variant, **no CoT, no majority voting**, ≥2 models from disjoint families, never the proposing model. | One-Token-Fool `:635-654` ("Inference-time techniques may **increase** FPRs"; "No-question evaluation prompts lead to lower FPRs"); AC-4.5 |
-| A5 | **Cost and SLO non-regression** within D26's budget (a few % latency, no meaningful token increase). | D26 |
-| A6 | **Signature** by the learning-service key, plus a complete provenance envelope. | `sdk-and-declarative-dev.md:2894-2905` |
-| A7 | **Cycle write budget** not exceeded (`K_ops`, and a per-window generation cap). | ExpeL `human.py:30` |
-| A8 | For R2: **routing non-regression** — replaying the routing corpus selects the same artifact for every case whose gold artifact is unchanged. | Skill Shadowing (`…shadowing.txt:105-107`); bench 2 (`RESULTS.md:44-49`) |
-
-If any obligation fails, the proposal is not rejected — it is **escalated to the human gate
-with the failing obligation named** (D11's "fail, then recommend" applied to learning).
-
-### 4.6 Explainability: the `classification.yaml` record
-
-Conservatism is worthless if nobody can act on it, and D13's user cannot read code. The
-classifier emits a record whose every line is renderable as one plain sentence.
-
-```yaml
-apiVersion: pact.dev/v1
-kind: ChangeClassification
-class: R3
-autoApply: false
-reason: "This change alters when the agent stops working. Changes to stopping rules
-         need a person to approve them."
-nodes:
-  - path: agents/refund-triage/loop.yaml#/states/verify/halt
-    surface: S-CTRL
-    op: EDIT
-    rules: [BR-CTRL]
-    plain: "Changed the rule that decides when the agent is finished."
-  - path: agents/refund-triage/skills/policy-lookup/SKILL.md#/frontmatter/description
-    surface: S-ROUTE
-    op: EDIT
-    rules: [BR-ROUTE]
-    plain: "Changed the description used to pick this skill. This can change which
-            skill is used for other tasks too."
-obligations:
-  A2_validation: {status: pass, delta: +0.09}
-  A3_golden:     {status: pass, delta: -0.004, epsilon: 0.02}
-  A8_routing:    {status: FAIL, changedSelections: 3, cases: [tri-004, tri-018, tri-041]}
-recommendation: "Approve only if the 3 changed skill selections are intended."
+```
+class = max( CLASS(surface(node)) for node in canonical_semantic_diff )   then escalators
+  CLASS-0  no-op (canonical digest unchanged)
+  CLASS-1  S-GEN
+  CLASS-2  S-ROUTE
+  CLASS-3  S-CTRL, S-TOPO
+  CLASS-4  S-CAP, S-EXEC, S-GOV, S-META, and any node whose field lacks a surface (BR-UNKNOWN)
+auto-apply  ⟺  CLASS-1  ∧  zero escalators fired            (X18)
 ```
 
-**Normative rule C-1 (explainability).** A classification with no `rules` entry for a changed
-node is a classifier defect. Every node must be explained, or the whole proposal is R4.
+Escalators: `ESC-SHRINK`, `ESC-RETIRE-THIN`, `ESC-BUDGET`, `ESC-CROSS`, `ESC-SELF`, `ESC-JUDGED`
+(CLASS-3 floor), `ESC-UNTRUSTED`, `ESC-CAP-GROWTH`. De-escalators: `DE-TIGHTEN`, `DE-VARIANT`.
 
-**Normative rule C-2 (Expansion-Rule invariance).** `class(diff)` must be invariant under
-`collapse`/`explode`. Moving `instructions:` from an inline field to `instructions.md` and
-back must not change the class. This is testable as a property and is the classifier's
-version of AC-1.2. It is why classification runs on the **canonical semantic diff of typed
-IR nodes**, never on a textual diff of the tree.
+Three normative properties that the audit shows are not yet met and that a conformance test can
+decide:
 
-**Normative rule C-3 (the classifier is GOVERNED).** Rule ids and their base classes are part
-of `pact.dev/v1` and are not editable in a workspace. Only the **thresholds** (`θ_shrink`,
-`N_min`, `τ`, `K_ops`, `C`, `ε`, `V_min`) are profile values, per F-1 ("no hardcoded defaults
-that cap capability", `00-THESIS.md:248`). A profile may only make thresholds **stricter**
-than the spec baseline; loosening requires an explicit, recorded `allowLoss`-style override
-per T7.
+- **C-1 (explainability).** Every changed node carries a rule id, or the proposal is CLASS-4.
+- **C-2 (Expansion-Rule invariance).** `class(diff) == class(collapse/explode(diff))`. Requires the
+  classifier to take a *document path plus a typed node*, not a bare field name and two strings
+  (§1.1). This is the API change the audit forces.
+- **C-3 (the classifier is GOVERNED).** Rule ids and base classes are part of `pact.dev/v1` and are
+  not editable in a workspace; only thresholds are profile values, and a profile may only tighten.
 
-### 4.7 A conformance suite for the classifier
+### 4.3 What §1's measurements change about the design
 
-The classifier is itself testable. Every one of these must classify at or above the stated
-floor; a build that classifies any of them lower is a defect.
+| Finding | Design change |
+|---|---|
+| §1.1 surface unread | `classify()` takes `(canonical_path, typed_node, before, after)` and its first act is a schema lookup. The prose regex becomes an *escalator*, never a base rule, and never the only signal. |
+| §1.2 one permission, two classes | `SAFE_TO_CHANGE` is deleted. The permission vocabulary maps to **surfaces**, not to field names: `phrasing/examples/skill-notes → S-GEN`, `when-skills-are-used → S-ROUTE`. Then `skill.description` is automatically covered by the routing permission and unreachable from the S-GEN ones, by construction rather than by list maintenance. |
+| §1.3 `sent` matches "sentence" | Any regex-based signal must be tested against a corpus of the workspace's *own accepted* prose, and a keyword list is data in the profile, not a literal in a module. A false-positive rate is a reportable number. |
+| §1.4 bullet edits over-trigger | `ESC-SHRINK`'s list trigger must operate on a *structural* diff (list-item identity), not on unified-diff `-` lines, so a reworded item is an EDIT and a deleted item is a RETIRE. |
+| §1.5 drift measures churn | replace character similarity with a **surface-partitioned property delta** (§4.5). |
+| §1.10 F5/F6/F8 false negatives | all three are surface lookups; they disappear once §1.1 is fixed. |
 
-| # | Mutation | Source | Required floor |
+### 4.4 `DE-TIGHTEN` is decidable, and CUE proves it
+
+`DE-TIGHTEN` — *"an S-CTRL/S-CAP change that strictly narrows an envelope already declared in a
+GOVERNED profile"* — is the only de-escalator that requires a judgement about semantics, and it is
+the one that makes gated learning usable (a cycle that lowers `max-steps` from 20 to 12 or removes
+a permission should not need the same ceremony as one that raises it).
+
+**It is a subsumption test, and subsumption is decidable and explainable.** CUE ships exactly this:
+
+- `research/repos/config/cue/internal/core/subsume/subsume.go:15-70` defines
+  `Profile{Final, Defaults, LeftDefault, IgnoreOptional, IgnoreClosedness}` with named
+  configurations, including `API = Profile{IgnoreClosedness: true}`, commented *"subsumption used
+  for APIs"*.
+- `subsume.go:73-80` — `Value(ctx, a, b)` returns `errors.Error`, **not a boolean**: a failed
+  subsumption carries a reason.
+- `internal/core/subsume/vertex.go:169,174,202` — the reasons name the specific field:
+  `"field %v not present in %v"`, `"closed struct does not subsume open struct"`,
+  `"field not allowed in closed struct: %v"`.
+
+PACT's typed schema already carries everything a subsumption lattice needs: closed `one-of` enums,
+`at-least` floors, `list of` / `map of` kinds, and required-ness. So:
+
+> **Normative proposal.** `DE-TIGHTEN` fires iff `after ⊑ before` under a PACT subsumption profile
+> over the typed IR node, and the de-escalation record carries the subsumption witness — the field
+> that narrowed and how. Where subsumption is undecidable for a node kind (free text), the
+> de-escalator does not fire. This replaces a judgement with a proof and gives the reviewer a
+> sentence generated from the witness rather than from a template.
+
+This also gives `ESC-CAP-GROWTH` its dual: capability growth is `¬(after ⊑ before)` on the S-CAP
+projection, which is the same machinery run once with the operands swapped, and it mechanises
+TOPO-3 (child capability set ⊆ parent's) as a subsumption check rather than a hand-written subset
+loop.
+
+### 4.5 Cumulative drift, rebuilt on the measurement in §1.5
+
+The instrument must answer *"which safety-relevant properties changed since the signed baseline"*,
+not *"how many characters moved"*. Concretely:
+
+1. **Partition the delta by surface.** Report drift as a vector, one component per surface, not a
+   scalar. A workspace whose S-GEN drift is 0.6 and whose S-ROUTE/S-CTRL drift is 0 is in a
+   different state from the reverse, and a scalar cannot say so.
+2. **Count structural events, not characters.** Per window: normative clauses added / removed /
+   inverted; list items removed; anchors removed; numeric literals changed; routing selections
+   changed on the replay corpus. §1.5's three cases separate immediately under this: the deleted
+   safety rule is `clauses_removed = 1`, the inversion is `numerics_changed = 1`, the sixteen style
+   sentences are `clauses_added = 16, clauses_removed = 0, numerics_changed = 0`.
+3. **Drift is computed over every LEARNABLE artifact in scope**, not over `instructions` alone.
+4. **The baseline is machine-advanced only** (§8.4 `[R5]`), and the audit record covers the
+   *rendered* delta rather than the digest. This still requires a verb; today there is none (§1.6).
+
+### 4.6 The classifier's own conformance suite
+
+Every fixture must classify at or above its floor; a build that classifies any lower is a defect.
+The §1.10 run is the first execution of this suite and it fails four rows. Additions this pass:
+
+| # | Mutation | Source | Floor |
 |---|---|---|---|
-| 1 | Redundant clone: paraphrase name + noise suffix, body unchanged | SkillOps Appendix G (1) | R2 |
-| 2 | Stale clone: rewrite refs to deprecated versions, rename to `_deprecated.md` | SkillOps (2) | R2 |
-| 3 | **Missing validator: remove `## Checklist`, set `validator.kind = "none"`** | SkillOps (3) | **R4** (`BR-GOV`) |
-| 4 | Missing artifact: clear `scripts/`, `references/`, break inline links | SkillOps (4) | R3 (`ESC-SHRINK`) |
-| 5 | Wrong interface: overwrite `artifact.type` with an incompatible category | SkillOps (5) | R3 |
-| 6 | Over-specialised: append narrow tags (`q3-2025-only`) | SkillOps (6) | R2 (`BR-ROUTE`) |
-| 7 | Remove the instrumentation the grader reads | DGM node 114 (`…dgm.txt:5330-5332`) | **R4** |
-| 8 | Replace a tool's assertion with a bare try/except that swallows exceptions | SkillWeaver D.2.1 (`…skillweaver.txt:1954-1962`) | **R4** |
-| 9 | Rewrite an 18k-token playbook to 120 tokens | ACE (`…ace.txt:197-199`) | R3 (`ESC-SHRINK`) |
-| 10 | Retire a skill after 20 trials at τ=0 | Ratchet A4 (`…ratchet.txt:157-166`) | R3 (`ESC-RETIRE-THIN`) |
-| 11 | Add a subagent that exposes a tool the parent cannot call | §6.2 | **R4** (`ESC-CAP-GROWTH`) |
-| 12 | Add an `x-` extension field with a novel kind | E-2 | **R4** (`BR-UNKNOWN`) |
-| 13 | Whitespace/key-order change only | — | R0 |
-| 14 | Same change authored as an inline field vs an exploded directory | C-2 | identical class |
+| 1–6 | SkillOps Appendix G degradations (redundant clone, stale clone, **missing validator**, missing artifact, wrong interface, over-specialised) | SkillOps | R2 / R2 / **R4** / R3 / R3 / R2 |
+| 7 | remove the instrumentation the grader reads | DGM node 114 | **R4** |
+| 8 | replace a tool assertion with a bare try/except | SkillWeaver D.2.1 | **R4** |
+| 9 | rewrite an 18k-token playbook to 120 tokens | ACE | R3 |
+| 10 | retire a skill after 20 trials at τ=0 | Ratchet A4 | R3 |
+| 11 | add a subagent exposing a tool the parent cannot call | TOPO-3 | **R4** |
+| 12 | add an `x-` field with a novel kind | E-2 | **R4** |
+| 13 | whitespace/key-order only | — | R0 |
+| 14 | same change inline vs exploded | C-2 | identical class |
+| **15 [NEW]** | rewrite a *neutral* skill `description` (no risk keyword) | §1.10 F6 | **R2** — currently LOW |
+| **16 [NEW]** | widen an applicability boundary (`"only EU orders"` → `"any store worldwide"`) | §1.10 F8 | **R2** — currently LOW |
+| **17 [NEW]** | append `"Thought process:"` to instructions | §6.5a, §1.10 F5 | **must not auto-apply** — currently LOW |
+| **18 [NEW]** | benign rephrase containing the word *"sentence"* | §1.3 | **CLASS-1, auto-appliable** — currently HIGH |
+| **19 [NEW]** | reword (not delete) one bullet of a policy body | §1.4 | EDIT, not RETIRE; class by surface |
+| **20 [NEW]** | `30 days` → `300 days` in a *non-bullet* line with no risk keyword | §1.10 F2b | ≥ CLASS-3 |
+
+Rows 15–20 are the ones the current implementation gets wrong, and each is a one-line consequence
+of §1.1.
 
 ---
 
-## 5. Deliverable 3 — Safe self-authored tools
+## 5. Deliverable 3 — self-authored tools, restated against what v1 actually is
 
-### 5.1 The pipeline (seven stages, all offline-capable per D17)
+### 5.1 The v1 statement
 
-```
-1 PROPOSE   — the agent writes tool.yaml + source, in the LEARNABLE zone of its own subtree
-2 STATIC    — schema validation; forbidden-construct scan; declared capability manifest
-3 SANDBOX   — execute only inside an isolated, deny-by-default sandbox
-4 HONE      — iterate against acceptance tests (§5.3), bounded retries
-5 CERTIFY   — run the frozen acceptance suite; record contribution baseline
-6 SIGN      — Ed25519 over the canonical bundle digest
-7 REGISTER  — R4 human gate → activate at the narrowest promotion tier
-```
+**There is no code-bodied tool in `pact.dev/v1`** (§1.7). A tool is `connect`/`url`/`method` plus
+`actions`, each action carrying `reads-only`, `needs-a-person`, `spends-money`, `bind`, `inspects`
+(all `S-EXEC`). There is no sandbox resource kind, no per-tool capability manifest, and no
+`may-also-change: [tools]` permission.
 
-Stage 4's retry bound follows ADAS: "If errors occur during evaluation, the meta agent
-performs a self-reflection step to refine the design, **repeating this process up to five
-times**" (`2408.08435-adas….txt:301-308`). Unbounded honing is a budget hole and an
-objective-hacking incubator.
+This is the **composite-only** posture §8.5's `[R3]` note argued for, arrived at by omission. The
+spec should say it deliberately:
 
-### 5.2 Sandbox requirements — derived from what Letta gets wrong
+> **D22(b) in v1 means: an agent may propose a new `tool:` document that composes actions already
+> declared on already-approved `resources`. It may not author executable code.** Code-bodied tools,
+> the sandbox, the capability manifest and the honing loop are v1.1, gated on the sandbox actually
+> existing.
 
-The requirement set below is the direct negation of the Letta findings in §1.3, and every
-requirement is satisfiable by a locally-run microVM. `research/repos/runtime/microsandbox` is
-an existence proof: Rust (matches D4), local microVMs with hardware isolation, OCI images,
-<100 ms boot, embeddable with no long-running daemon (`README.md:22-38`).
+Saying this converts eight unimplemented sandbox requirements from spec debt into a dated
+commitment, and it removes the largest gap between §8's text and the tree.
 
-| # | Requirement | Why (negative finding) | Available mechanism |
-|---|---|---|---|
-| T1 | **Kernel-level isolation**, not a subprocess | Letta local = `create_subprocess_exec` on the host (`local_sandbox.py:192-194`) | microVM (`microsandbox/README.md:24`) |
-| T2 | **Empty environment by default**; no host env inheritance | `env = os.environ.copy()` (`base.py:487`) | explicit env only |
-| T3 | **Secrets never enter the sandbox.** Bind a placeholder; substitute at the network boundary only when SNI matches an allow-listed host, the destination IP was DNS-resolved through the interceptor, TLS is intercepted, and `Host`/`:authority` aligns with SNI | same as T2; also stops exfiltration from a *compromised* tool | `microsandbox/docs/security/secrets.mdx:12-40` — "Send the placeholder to `evil.com` and `evil.com` receives the placeholder, not the secret" |
-| T4 | **Deny-by-default egress**, allow-list per tool, declared in the tool manifest | Letta has no network policy at all | `microsandbox/docs/networking/overview.mdx:90-102` (`default_egress: deny`, explicit `egress` rules) |
-| T5 | **No arbitrary-code deserialisation across the boundary.** Results cross as schema-validated JSON | `safe_pickle_loads` → `pickle.loads` (`safe_pickle.py:107-112`); MD5 result checksum (`local_sandbox.py:271`) | JSON + JSON Schema |
-| T6 | **Resource + wall-clock limits** on every execution | Letta has a timeout only | DGM: "Each execution within the sandbox is subjected to a strict time limit" (`…dgm.txt:616-618`) |
-| T7 | **Fully local — no hosted-service dependency** | Letta's only isolating options are E2B/Modal (`letta/settings.py:24,27-28`) | D17 hard requirement |
-| T8 | **The sandbox configuration is GOVERNED**, not authorable by the tool's author | otherwise the tool writes its own allow-list | §3.1 |
+### 5.2 The attack paths that are live in the composite-only world
 
-### 5.3 Test honing — the acceptance contract
+The sandbox-escape paths (credential exfiltration from tool bodies, host compromise,
+deserialisation RCE) are **not reachable in v1** because there is no body to run. What remains:
 
-The single most important rule, because it is the documented failure of the best prior work:
-
-> **Normative rule X-1. "Does not raise an exception" is a forbidden acceptance criterion.**
-> SkillWeaver used exactly that, and the LLM responded by adding `if` statements to silence
-> every atomic action's errors — "While this does reduce the number of exceptions, it does not
-> improve the robustness of the API" (`2504.07079-skillweaver.txt:1954-1962`).
-
-The replacement contract is Anthropic's own MCP evaluation guidance, which is already
-no-code-shaped and deterministic — a direct fit for D14:
-
-| Property | Requirement | Source |
-|---|---|---|
-| Count | ≥ 10 QA pairs | `skills-anthropic/skills/mcp-builder/SKILL.md:162-168` |
-| Independence | no case depends on another's answer or prior writes | `.../reference/evaluation.md:47-50` |
-| Non-destructive | read-only, idempotent operations only | `.../evaluation.md:51-53` |
-| Complexity | requires multiple tool calls | `SKILL.md:176` |
-| Verifiable | **single clear answer checkable by direct string comparison** | `SKILL.md:177`, `evaluation.md:170` |
-| Stable | answer cannot change over time; use closed/fixed-window subjects | `evaluation.md:103, 147-151` |
-| Framing | quality is measured by whether *a different LLM with access ONLY to this tool* can answer | `evaluation.md:32` |
-
-That last row is the structural fix for X-1: the acceptance signal is a **third party's task
-success**, not the author's self-report, and it is decided by string comparison, so it is
-outside the judge-gaming surface entirely.
-
-**Normative rule X-2 (test/implementation separation).** The acceptance suite for a
-self-authored tool is frozen *before* honing begins and moves to the GOVERNED zone on
-certification. The honing loop may read failures; it may never edit the suite. This is the
-DGM hiding result applied to tools (`…dgm.txt:5318-5320`).
-
-**Normative rule X-3 (capability manifest).** A tool declares, in YAML, the capabilities it
-requires (`network.egress`, `fs.read`, `fs.write`, `exec`, `secrets`). The sandbox is
-configured *from* that manifest, and the manifest is S-CAP — so widening it is R4 forever.
-This is what makes "custom tools in YAML" (D14) safe: the risky part of a tool is declarative
-and reviewable even when the body is code.
-
-### 5.4 Signing and registration
-
-Reuse the in-repo trust spine rather than inventing one (D24: adapter-shaped, minimal):
-`bud package digest / sign / verify` with Ed25519 over the canonical package digest, and the
-four trust policies `allow_unverified | require_lockfile | require_signature_marker |
-require_verified_signature` (`sdk-and-declarative-dev.md:2894-2905`). PACT contributes three
-things on top:
-
-1. **Distinct key roles.** `learning-service` (signs proposals), `human-approver` (signs R3/R4
-   approvals), `publisher` (signs cross-tier promotion). A proposal signed only by
-   `learning-service` can never activate an R3+ change.
-2. **Fail-closed default for self-authored tools.** A tool whose provenance says
-   `producer.kind: optimizer` requires `require_verified_signature` regardless of the
-   workspace default. Mirrors "Missing metadata is never auto-published"
-   (`registry-and-portability.md:696-700`).
-3. **Promotion tiers as namespaces with per-tier trust roots** (F6), with an explicit
-   **re-certification on promotion** — a tool certified in `personal/` must re-run its
-   acceptance suite against the receiving tier's environment before entering `team/` or
-   `org/`. Grounded in the survey's SkillClaw finding: "collective evolution requires
-   validation before synchronized updates are propagated to users"
-   (`agent-skills-survey.pdf:967-969`).
-
-### 5.5 The real attack paths
-
-| # | Path | Concrete mechanism | Evidence | Control |
+| # | Path | Mechanism in v1 | Control | Status |
 |---|---|---|---|---|
-| A1 | **Credential exfiltration via tool body** | Tool code reads `os.environ` and POSTs it out | Letta `base.py:487` | T2 + T3 + T4 |
-| A2 | **Host compromise from tool body** | Subprocess on the host with the server's privileges | Letta `local_sandbox.py:192-194`; MCP `SECURITY.md:79-83` | T1 |
-| A3 | **Deserialisation RCE in the parent** | Crafted pickle returned across the boundary; MD5 checks corruption, not authorship | Letta `safe_pickle.py:107-112`, `local_sandbox.py:271` | T5 |
-| A4 | **Acceptance-criterion gaming** | Silence exceptions to pass "doesn't throw" | SkillWeaver `:1954-1962` | X-1, X-2 |
-| A5 | **Grader/instrumentation removal** | Delete the tokens/logs the scorer reads | DGM `:5330-5332` | `BR-GOV` (rejected outright, not gated) |
-| A6 | **Judge gaming at the gate** | "Thought process:" / ":" elicit false positives | One-Token-Fool `:63-69, 488-504` | A4 obligation; `ESC-JUDGED` |
-| A7 | **Description poisoning / shadowing** | Craft a description that captures routing away from the correct artifact | Skill Shadowing `:19,79-83`; bench 1 black-hole capture 4.2% (`RESULTS.md:24`) | `BR-ROUTE` + A8 routing non-regression + library governor (§7.3) |
-| A8 | **Instruction injection via skill documentation** | Skill body carries directives the agent executes as trusted operational guidance | PoisonedSkills via survey `:965-967` | Role quarantine (§7.2, rule P-9) |
-| A9 | **Supply chain via portable bundle** | Exported bundle carries tool `source_code` and stdio MCP `command`/`args` | Letta `agent_file.py:358-367, 426-428`; MCP `SECURITY.md:64-77` | Signature verification on import; `ESC-UNTRUSTED`; never auto-trust cross-tenant |
-| A10 | **Consent-fatigue bypass** | MCP's only mandated control is a dialog showing the command; "Users may approve malicious commands despite warnings" | MCP `seps/1024-…md:35-49, 94` | Approval must be on the *capability manifest* (X-3), which is small and reviewable, not on a shell command line |
-| A11 | **Privilege escalation via decomposition** | Author a subagent/tool that holds a capability the parent lacks | — (design) | `ESC-CAP-GROWTH`; §6.2 authority inheritance |
-| A12 | **Sandbox self-configuration** | Tool widens its own network allow-list | — (design) | T8; capability manifest is S-CAP ⇒ R4 |
-| A13 | **Poisoned eval promotion** | Adversarial trace promoted into the corpus that later gates changes | ReasoningBank judge accuracy 72.7% (`…reasoningbank.txt:760-766`) | §3.4 quarantine split |
-| A14 | **Time-bomb / drift** | Tool passes certification, then upstream API changes | SkillOps degradation type (2), stale clone | Contract tests on a schedule; retirement on `ĉ` decay |
+| A1 | **Authority growth by composition** | propose a `tool:` whose `connect:` names an existing `mcp-server` resource and whose `actions:` include ones the parent agent's `uses:` never granted | `ESC-CAP-GROWTH` as an S-CAP subsumption test (§4.4) | **unimplemented** — no subset check exists |
+| A2 | **Approval flag flip** | change `action.needs-a-person: yes → no` | `S-EXEC` → CLASS-4 | would work *if* the classifier read surfaces (§1.1) |
+| A3 | **Egress widening** | add a `resource` with a new `endpoint`, or add a role to `workspace.allow-egress` | `S-CAP` → CLASS-4 | same |
+| A4 | **Description poisoning / shadowing** | craft a `tool.description` (S-ROUTE) that captures routing | `BR-ROUTE` + OBL-8 routing replay | **measured false negative** (§1.10 F6) |
+| A5 | **Grader/instrumentation removal** | edit `evals:` or a `rules:` entry | `S-GOV` → rejected outright | field-name list catches `evals`; a *nested* rule edit is unclassified |
+| A6 | **Judge gaming at the gate** | `"Thought process:"`, `":"` | OBL-4 + `ESC-JUDGED` | **measured false negative** (§1.10 F5) |
+| A7 | **Instruction injection via skill body** | skill body carries directives read as trusted guidance | role quarantine (P-9) | no role-quarantine mechanism in the tree |
+| A8 | **Consent fatigue** | approval shown as a command line rather than a capability summary | approve on the *manifest*, not the command | v1's `connect:` names a resource, never a `command` — **this one is structurally closed**, and it is the format's best safety property |
+| A9 | **Poisoned eval promotion** | adversarial trace promoted into the gate corpus | quarantine split | `case.split` has a `quarantine` choice (`spec/schema.yaml` `case.split`) — surface exists |
+| A10 | **Time-bomb / upstream drift** | tool certified, then the MCP server's actions change | contract tests on a schedule; retirement on `ĉ` decay | no contribution ledger exists (§1.6) |
+
+A8 deserves emphasis because it is a *win*: MCP's own security model reduces to a dialog showing a
+command line, and PACT's `tool.connect:` takes a **host-resolvable resource name and never a
+`command`** (`spec/schema.yaml:1712ff`, and the loader refuses an unknown name). The reviewable unit
+is a small declarative record, not a shell invocation. That is the one place where the format is
+materially safer than the ecosystem it sits in, and it should be stated as such.
+
+### 5.3 X-1 and X-2 survive, and reflexion is a positive precedent for X-2
+
+**X-1. "Does not raise an exception" is a forbidden acceptance criterion.** SkillWeaver used exactly
+that and the model responded by silencing every atomic action's errors.
+
+**X-2. Test/implementation separation.** The acceptance suite is frozen before honing and moves to
+GOVERNED on certification; the honing loop may read failures and may never edit the suite.
+
+R1 grounded X-2 only in DGM's hiding result. **Reflexion is a cleaner precedent, and it is a
+positive one:** `research/repos/memory/reflexion/programming_runs/reflexion.py:37` generates the
+honing tests from the model (`gen.internal_tests(item["prompt"], model, 1)`), loops against them,
+and then decides the outcome against a **separate, frozen, externally-supplied test** at `:49` and
+`:83` (`exe.evaluate(item["entry_point"], cur_func_impl, item["test"])`). The self-authored suite
+drives iteration; it never decides acceptance. That is X-2, implemented, in the paper the whole
+self-improvement literature descends from — and it is the shape PACT should cite, because it shows
+the separation costs nothing.
+
+The acceptance contract itself remains Anthropic's MCP-builder guidance (≥10 QA pairs; independent;
+read-only/idempotent; multi-tool; **verifiable by direct string comparison**; stable over time;
+judged by whether *a different model with access only to this tool* can answer) — deterministic,
+no-code-shaped, and outside the judge-gaming surface.
 
 ---
 
-## 6. Deliverable 4 — Topology self-modification (D22c)
+## 6. Deliverable 4 — topology self-modification
 
-### 6.1 Representation: a typed graph with closed mutation operators
+### 6.1 Representation: closed operators over the typed graph
 
-The strongest signal in the corpus is that unconstrained topology search is the wrong shape:
+Unchanged and still right: `ADD-EDGE, REMOVE-EDGE, ADD-NODE, REMOVE-NODE, SPLIT-NODE, MERGE-NODES,
+REBIND-MODEL, REBIND-TOOLSET, ADD-AGENT`, statically verified before any execution, with **no
+free-form graph-authoring operator** — ADAS's safety story is a human reading generated code, which
+D14 does not permit. MermaidFlow is the named precedent for typed-graph + static verification +
+semantically-valid-regions-only search.
 
-- The self-evolving survey names the right model directly: **MermaidFlow** "represents
-  topology as a typed, declarative graph with **static verification** and explores only
-  **semantically valid regions** via safety-constrained evolutionary operators"
-  (`2508.07407-self-evolving-survey.txt:1438-1440`).
-- The survey's safety lens for graphs: G-Safeguard prunes risky edges under a threshold;
-  NetSafe catalogues topological safety risks (`…survey.txt:1459-1464`).
-- MASS's ordering result, already in `SYNTHESIS.md:98-99`: **prompts contribute more than
-  topology** — optimise text first.
+**Status: none of it exists** (§1.7). `agent.team` is `S-TOPO` (`spec/schema.yaml:426`) and there is
+no operator vocabulary, no depth cap, no fan-out cap.
 
-So: PACT's topology mutation surface is a **closed operator set** over the G-2 graph IR, and
-every operator is statically checked before any execution.
+### 6.2 The four structural constraints
 
-| Operator | Constraint | Base class |
+| id | Constraint | Status |
 |---|---|---|
-| `ADD_EDGE(a→b)` | both nodes exist; no cycle unless the edge kind permits it; fan-out ≤ profile cap | R3 |
-| `REMOVE_EDGE(a→b)` | graph stays connected from the entry node | R3 |
-| `ADD_NODE(agent)` | the agent must already exist in the workspace or archive; **capability set ⊆ parent's**; depth ≤ `D_max` | R3, → R4 via `ESC-CAP-GROWTH` if capabilities grow |
-| `REMOVE_NODE` | no orphan; contract still satisfiable | R3 |
-| `SPLIT_NODE` | children's union of capabilities ⊆ parent's; budgets partition the parent's | R3 |
-| `MERGE_NODES` | merged capability set = union, must be ⊆ the common ancestor's | R4 |
-| `REBIND_MODEL` | target must satisfy the contract's capability predicates | R2 (it is a resolver decision, not a structural one) |
-| `REBIND_TOOLSET` | ⊆ the declared exposure envelope | R4 (S-CAP) |
+| TOPO-1 | `D_max`, `G_max`, and hard `meta-depth = 1` — no learning-created agent holds topology-authoring authority (DGM: *"archive maintenance, parent selection … fixed and not modifiable by the DGM"*) | no fields |
+| TOPO-2 | budget inheritance: Σ(children) ≤ parent's remaining | `limits:` exists; no inheritance check in `teams.rs` |
+| TOPO-3 | **authority inheritance: child capability set ⊆ parent's** — blocks *"spawn a subagent that holds the tool I'm not allowed to call"*. Appears in nothing surveyed. | **no check** — and §4.4 now gives it a decidable form (S-CAP subsumption) |
+| TOPO-4 | **viability invariant**: a candidate enters the archive only if it validates, runs the full eval suite, and still emits the telemetry the graders and ledger consume | no archive |
 
-There is deliberately **no free-form graph authoring operator.** ADAS searches in an
-unrestricted code space (`2408.08435-adas….txt:265-279`) and needs "containerized execution
-of all generated code … thorough **manual inspections** to verify the absence of harmful
-behaviors" (`…adas….txt:667-673`) — i.e. its safety story *is* a human reading generated
-code. Under D14 that is not available, so the search space must be narrowed until static
-verification suffices.
-
-### 6.2 The four structural constraints that prevent runaway
-
-**S1 — Depth and generation limits.** `SYNTHESIS.md:143-145` already sets "generation depth 1
-(no recursive meta-meta agents)". Extend to three separate counters, all GOVERNED:
-`D_max` (topology depth), `G_max` (self-modification generations per window), and a hard
-`meta_depth = 1` — **no agent created by a learning cycle may itself hold topology-authoring
-authority.** This is the DGM invariant generalised: "the open-ended exploration process (i.e.
-archive maintenance, parent selection) is **fixed and not modifiable by the DGM**"
-(`…dgm.txt:290-291`).
-
-**S2 — Budget inheritance (monotone non-increasing).** A child's token/cost/wall-clock budget
-is drawn from the parent's *remaining* budget, and Σ(children) ≤ parent. Rests on F5's
-per-agent/per-run budget objects (`SYNTHESIS.md:161-164`) and DGM's "strict resource and time
-limits" (`…dgm.txt:705`). Without this, `SPLIT_NODE` is an unbounded budget multiplier.
-
-**S3 — Authority inheritance (the escalation blocker).** A child's capability set must be a
-subset of its parent's. Otherwise the trivially discoverable exploit is: *"I am not allowed to
-call `delete_customer`; I will create a specialist subagent that is."* Nothing in the
-literature I read implements this — it is a **DESIGN** contribution, and it is the single
-constraint that makes D22c compatible with D23.
-
-**S4 — The viability invariant.** DGM: "Only agents that compile successfully and **retain the
-ability to edit a given codebase** are added to the DGM archive … All others are discarded"
-(`…dgm.txt:277-279`). The PACT analogue: a candidate topology enters the archive only if it
-(a) validates against the schema, (b) can execute the full eval suite end to end, and
-(c) still emits the telemetry the graders and the ledger consume. **A candidate that breaks
-its own observability is discarded, not scored.** This closes the DGM node-114 hole at the
-structural level rather than the policy level.
+TOPO-3 remains this stream's own contribution — nothing in the corpus implements it — and §4.4's
+subsumption framing is what makes it implementable rather than aspirational.
 
 ### 6.3 The empirical gates
 
-| Gate | Rule | Evidence |
-|---|---|---|
-| **G-static** | Typed-graph validation + operator preconditions, before any execution | MermaidFlow (`…survey.txt:1438-1440`) |
-| **G-order** | Topology search is disabled until text optimisation has converged on the same contract | MASS via `SYNTHESIS.md:98-99` |
-| **G-volume** | Topology search runs only when observed run volume ≥ `V_min` (default from the measured break-even, **n ≈ 15,000 examples**, and only for 2 of the studied datasets — for the others "performance gains do not justify the associated costs **at any scale**") | Meta-agent inefficiencies (`2510.06711….txt:39-45, 216-222`) |
-| **G-eval** | Held-out non-regression + strict improvement (A2/A3) | §4.5 |
-| **G-cost** | D26 budget: few % latency, no meaningful token increase; single-agent baseline is the comparator | D26; `SYNTHESIS.md:154-156` (single multi-turn agent matches multi-agent workflows cheaper; multi-agent ≈ 15× tokens) |
-| **G-human** | R3 minimum ⇒ a person approves | D23 |
+`G-static` (typed-graph validation first) · `G-order` (topology search disabled until text
+optimisation converges — MASS: prompt-side is 79.9% of total gain) · `G-volume` (run volume ≥
+`V_min`, default from the measured ~15,000-example break-even, which held for **2 of the studied
+datasets only**; for the others *"performance gains do not justify the associated costs at any
+scale"*) · `G-eval` · `G-cost` (single-agent baseline is the comparator; multi-agent ≈ 15× tokens)
+· `G-human` (CLASS-3 minimum).
 
-**G-volume is the honest gate and it will usually refuse.** Under D11 the correct output is
-not silence but a recommendation: *"Topology optimisation is not economical for this agent:
-observed volume 1,240 runs/month vs break-even ≈ 15,000. Recommended instead: instruction
-optimisation (est. +0.06 at 1/40th the design cost)."*
+**G-volume will usually refuse, and D11 makes the refusal a recommendation**, e.g. *"Topology
+optimisation is not economical: 1,240 runs/month vs break-even ≈ 15,000. Recommended instead:
+instruction optimisation."*
 
 ### 6.4 Archive, lineage, rollback
 
-**Archive.** Every candidate — **accepted and rejected** — is written to
-`.pact/learning/archive/<lineage-id>/` as a complete, replayable spec version. Rejected
-candidates are required by AC-5.5 ("a rejected learning candidate is retained as negative
-evidence and demonstrably influences the next cycle") and match GEPA's rejected-edit buffer
-(`SYNTHESIS.md:45-47`).
+**Archive.** Accepted *and* rejected candidates, never deleted (AC-5.5; GEPA's rejected-edit
+buffer; MetaSkill-Evolve's rule that `ΔU ≤ 0` children are ineligible as parents but persist).
 
-**Parent selection, not context stuffing.** This is a correction to F4's ADAS framing, and it
-is the most surprising finding in this stream:
+**The archive is a selector, not a context.** *"simply expanding the context with all previous
+agents … performs worse than ignoring prior designs entirely."* §8.6's `[R5]` note correctly
+withdrew the scored parent-selector formula as unsupported and kept only the negative. That
+withdrawal stands.
 
-> "simply expanding the context with all previous agents, as proposed by previous works,
-> **performs worse than ignoring prior designs entirely**" … "evolutionary context curation …
-> yielding up to a **+10% gain** over cumulative context on MGSM"
-> (`2510.06711-meta-agent-inefficiencies.txt:22-29, 160-175`).
+**Lineage.** `{parent_digest, operator, evidence, verdict, classification, approver, generation}`
+— DGM's *"traceable lineage of modifications for review … enabling rollback and post-hoc
+analysis."*
 
-So the archive must be consumed as a **selector**, not as a prompt. DGM's rule is the one to
-copy: parent selection ∝ performance score and ∝ 1/(number of existing children), with every
-archived agent retaining non-zero probability (`…dgm.txt:266-272`). Note the diversity/quality
-trade-off measured in the same paper: *parallel* curation yields the highest coverage and most
-diverse agents, *evolutionary* yields higher scores but lower diversity
-(`…meta-agent….txt:172-190`). Recommendation: evolutionary by default, parallel when the
-Pareto front has collapsed to one lineage — the same specialist-preservation concern as GEPA's
-Pareto pool (`PROMPT-SKILL-LEARNING.md:49`).
-
-**Lineage.** Each archive entry records `{parent_digest, operator, evidence, verdict,
-classification, approver, generation}`. This is what DGM calls "a traceable lineage of
-modifications for review … enabling **rollback** and post-hoc analysis" (`…dgm.txt:620-621,
-:708`).
-
-**Rollback is one operation.** `pact.lock` pins the topology digest; reverting is re-pinning
-the previous digest. Because L-3 forbids deletion, the previous version is always present.
-Rollback must therefore be O(1) and offline — no archive fetch, no network. This is testable:
-kill the network, revert, re-run the golden set.
+**Rollback is one operation** — re-pin the previous digest in `pact.lock`; L-3 guarantees the
+previous version is present; it must be O(1) and offline. **Letta is the cautionary tale here**
+(§2.3): a complete checkpoint/undo/redo API with zero non-test callers. PACT's rollback test must
+therefore be a *write-path* test — kill the network, revert, re-run the golden set — not a unit test
+of the archive API.
 
 ---
 
-## 7. Deliverable 5 — Poisoning defences
+## 7. Deliverable 5 — poisoning defences
 
-### 7.1 What the rate evidence actually says
+### 7.1 The rate evidence, and its limit
 
-ACE's adversarial ablation is the only quantified poisoning-rate result in the corpus
-(`2510.04618-ace.txt:1218-1236`):
-
-| Harmful-reflector frequency | Accuracy | vs base (70.7) |
-|---|---|---|
-| every iteration | 66.7 | **−4.0** |
-| every 5 | 76.1 | +5.4 |
-| every 10 | 77.0 | +6.3 |
-| every 25 | 77.8 | +7.1 |
-| every 50 | 78.2 | +7.5 |
-| none | 78.3 | +7.6 |
+ACE's adversarial ablation is the only quantified poisoning-rate result in the corpus: a harmful
+reflector every iteration nets **−4.0**; every 5 iterations (a 20% poisoned-write rate) still nets
+**+5.4**; none nets +7.6.
 
 Two readings, and the second is the one that matters:
 
-1. **Noise-like corruption is survivable.** At a 20% poisoned-write rate the system still nets
-   +5.4. So the defensive target for S-GEN-class artifacts is a *rate* target: keep the
-   accepted-adversarial-write rate well under 20%, and — since the only regime that goes
-   negative is *sustained* corruption — guarantee that corruption cannot persist (bounded
-   write budget + retirement + rollback + drift detection).
-2. **Rate tolerance does not transfer to S-EXEC / S-CAP.** ACE's artifacts are bullet items
-   whose worst case is a bad hint. A single accepted write to a tool's source or to a
-   permission set is catastrophic on the first occurrence. **Therefore the rate argument may
-   only be used to justify auto-apply for R1; R3/R4 require per-write soundness.** This split
-   is the core of the whole governance design and is why the classifier keys on effect
-   surface rather than on aggregate risk.
+1. **Noise-like corruption is survivable** for S-GEN-class artifacts. The defensive target is a
+   *rate* target plus a guarantee that corruption cannot persist (bounded write budget, retirement,
+   rollback, drift detection).
+2. **Rate tolerance does not transfer to S-EXEC / S-CAP.** ACE's artifacts are bullet items whose
+   worst case is a bad hint. A single accepted write to a permission set is catastrophic on first
+   occurrence. **The rate argument may justify auto-apply only for CLASS-1; CLASS-3/4 require
+   per-write soundness.** This is why the classifier keys on effect surface rather than on aggregate
+   risk.
 
-Note also that ReasoningBank's "robust to judge noise" result (`…reasoningbank.txt:766-775`,
-stable across simulated judge accuracy 70–90%) is about **random** label flips, not adversarial
-selection. It must not be cited as evidence of poisoning robustness.
+ReasoningBank's "robust to judge noise" result (stable across simulated judge accuracy 70–90%) is
+about **random** label flips, not adversarial selection, and must not be cited as poisoning
+robustness.
 
-### 7.2 The forbidden list (normative MUST NOTs)
+### 7.2 [NEW] Letta's sleeptime agent — the monolithic rewrite, shipped and prompted for
+
+The most mature self-editing runtime in the corpus implements background self-modification as
+follows (all verified in source):
+
+- `letta/server/server.py:756-789` — `create_sleeptime_agent_async` creates a second agent with
+  `agent_type=AgentType.sleeptime_agent` (`:762`), **sharing the main agent's memory block rows**
+  (`:763` `block_ids=[block.id for block in main_agent.memory.blocks]`), bound to the **same model**
+  (`:770` `llm_config=main_agent.llm_config`), scheduled every 5 turns (`:784`
+  `sleeptime_agent_frequency=5`).
+- `letta/groups/sleeptime_multi_agent_v4.py:132-166` — it runs as a fire-and-forget background task
+  after each foreground turn, in a `finally:` block, with no gate.
+- `letta/prompts/system_prompts/sleeptime_v2.py:15,21` — the prompt *instructs* the use of a
+  whole-block rewrite: *"you can use your `rethink` tool to reorganize the entire memory block at a
+  single time."*
+- `letta/functions/function_sets/base.py:488-490` — `memory_rethink(agent_state, label,
+  new_memory)`: *"allows you to completely rewrite the contents of a memory block. Use this tool to
+  make large sweeping changes (e.g. when you want to condense or reorganize …)"*.
+- `letta/agents/voice_sleeptime_agent.py:153-163` — the implementation is
+  `update_block_value(label, value=new_memory)` followed by a `BlockUpdate` — full replacement, no
+  prior value retained, no digest, no approval.
+- `letta/services/block_manager.py:842,952,1004` — checkpoint / undo / redo exist and have **zero
+  non-test callers**.
+
+Four PACT rules are each independently violated by this design, and it is worth naming which:
+**L-4** (deltas, never monolithic rewrite), **L-3** (never delete), **AC-3.1b** (the reflector must
+be a separate binding from the executor — here it is `main_agent.llm_config`), and **D23** (the
+change reaches production with no classification and no person). And the artifact being rewritten
+is the agent's own persona and instruction blocks, i.e. `S-GEN`+`S-ROUTE` content that the ACE
+collapse case says is exactly where a monolithic rewrite is catastrophic.
+
+This is the single strongest argument in the corpus for L-4 being normative rather than advisory:
+the operator ACE measured at 66.7 → 57.1 (below the no-adaptation baseline) is a first-class,
+documented, prompted-for tool in the leading implementation.
+
+### 7.3 [NEW] cognee — self-improvement as opaque weights, driven by star ratings
+
+`research/repos/memory/cognee` implements *"self-improving agents"* (its own `cognee/skill.md`
+frontmatter) as an exponential moving average over knowledge-graph node and edge weights:
+
+- `cognee/tasks/memify/apply_feedback_weights.py:43-50` — `normalize_feedback_score` maps an
+  integer **1..5 star rating** to `[0,1]` via `(score − 1) / 4`.
+- `:53-59` — `stream_update_weight(prev, rating, alpha) = clip(prev + α·(rating − prev), 0, 1)`,
+  with `alpha = 0.1` by default (`cognee/memify_pipelines/apply_feedback_weights.py:24`).
+- `cognee/tasks/memify/extract_feedback_qas.py:16-18` — the only eligibility test is that the score
+  is an integer in `[1,5]`.
+
+Two PACT theses are contradicted at once:
+
+- **T6.** The learned artifact is a float on a graph edge. It is not diffable, not reviewable, not
+  signable, not forkable and not portable. This is the purest instance in the corpus of the thing
+  T6 exists to forbid, and it is shipping in a system that markets itself on agent self-improvement.
+- **QUEUE-3.** The signal is a star rating. §8.7a's rule — *"No rating widget"*, because thumbs
+  up/down measured *"relatively uninformative"* while *"applied edits constitute strong, indirect
+  positive feedback"* — is the exact opposite design, and cognee's is the counter-example to cite.
+
+### 7.4 [NEW] reflexion — the influence window is 3, and nothing persists
+
+`research/repos/memory/reflexion/alfworld_runs/generate_reflections.py:38-45`: reflections are
+generated only on failure (`if not env['is_success']`), appended without bound
+(`env_configs[i]['memory'] += [reflection]`), and held in process memory. The consumer takes the
+**last three only** (`alfworld_runs/alfworld_trial.py:47-50`), and in the programming variant the
+reflection list is reset per item (`programming_runs/reflexion.py:29`).
+
+Two useful data points: (a) the canonical self-improvement loop has **no persistence, no
+provenance, no identity and no retirement** — everything §3 specifies is absent from the origin of
+the field, which is why every downstream system reinvented it differently; and (b) an *unbounded*
+store with a **bounded influence window** is a real design, and it is the one L-3 (never delete) plus
+a bounded active cap `C` reproduces. Never-delete is not the same as never-forget.
+
+### 7.5 The forbidden list (normative MUST NOTs)
 
 | # | Rule | Grounding |
 |---|---|---|
-| **P-1** | A learning cycle MUST NOT write to the GOVERNED zone. Not gated — **structurally unreachable**, and the checkers MUST be hidden from the proposer. | DGM `:5318-5320` ("objective hacking occurs more frequently when these functions are not hidden"), `:290-291` |
-| **P-2** | An LLM judge MUST NOT be the sole acceptance gate. Deterministic checkers first; if a judge is used it MUST be binary-framed, no-question-variant, **no CoT, no majority voting**, ensembled across ≥2 disjoint model families, and never the proposing model. | One-Token-Fool `:63-69, 488-504, 635-654`; AC-4.5; `PROMPT-SKILL-LEARNING.md:120-136` |
-| **P-3** | "Does not raise an exception" MUST NOT be an acceptance criterion. | SkillWeaver `:1954-1962` |
-| **P-4** | A learning write MUST NOT be a monolithic rewrite. Deltas with stable identity only. | ACE `:194-200, 267-302`; AWM's `'w'` overwrite (`induce_rule.py:165-166`) |
-| **P-5** | Retirement MUST NOT delete. Deprecate with bitemporal validity and keep in the archive. | Ratchet `:91`; Zep `SKILL.md:78-85` |
-| **P-6** | Retirement MUST NOT fire below the evidence floor. `n(s) ≥ N_min ∧ ĉ(s) ≤ −τ`. Defaults `N_min=100, τ=0.10` (Hoeffding ε ≈ 0.20); at `N_min=20` the deviation is ε ≈ 0.44 and governance becomes net-harmful. | Ratchet `:157-175, 251-257` |
-| **P-7** | The exposed set and the active library MUST NOT be unbounded. Bounded active cap `C` (Ratchet default 50) and a per-agent curated exposure cap. | Ratchet `:258-268`; bench 1 (`RESULTS.md:21-33`); Skill Shadowing `:19` |
-| **P-8** | Tool output, retrieved documents, and other tenants' artifacts MUST NOT be a direct source for a learning write. Every write derives from a **scored** trace whose score came from a deterministic checker. | F6 (`SYNTHESIS.md:186-188`); PoisonedSkills via survey `:965-967` |
-| **P-9** | A learned artifact MUST NOT enter the model context in a system/instruction role. It enters as **provenance-marked data** with an explicit trust level, so injected text in a skill body cannot be read as a system directive. | PoisonedSkills: "skill documentation can hide malicious logic that agents later execute as trusted **operational guidance**" (`agent-skills-survey.pdf:965-967`); MCP `SECURITY.md:36-40` (clients trust servers by configuration, not by content) |
-| **P-10** | The proposer MUST NOT be able to address artifacts it was not shown. Windowed, index-addressed views only. | mem0 `main.py:903-907` |
-| **P-11** | Executable artifacts (tool source, stdio MCP `command`/`args`) MUST NOT be imported or promoted without signature verification against a configured trust root, and MUST NOT be auto-trusted across promotion tiers. | Letta `agent_file.py:358-367, 426-428`; MCP `SECURITY.md:64-77`; `sdk-and-declarative-dev.md:2894-2905` |
+| **P-1** | A learning cycle MUST NOT write to the GOVERNED zone. Not gated — **structurally unreachable**. | DGM (hiding reduces hacking frequency; archive maintenance and parent selection are not modifiable by the DGM) |
+| **P-2** | An LLM judge MUST NOT be the sole acceptance gate. Deterministic assertions first; a judge, if used, is binary-framed, no-question-variant, **no CoT, no majority voting**, ensembled across ≥2 disjoint families, never the proposing model. | One-Token-Fool; AC-4.5 |
+| **P-3** | "Does not raise an exception" MUST NOT be an acceptance criterion. | SkillWeaver D.2.1 |
+| **P-4** | A learning write MUST NOT be a monolithic rewrite. Deltas with stable identity only. | ACE; AWM's `'w'` overwrite; **Letta `memory_rethink` (§7.2)** |
+| **P-5** | Retirement MUST NOT delete. Deprecate with bitemporal validity, keep in the archive. | Ratchet; Zep |
+| **P-6** | Retirement MUST NOT fire below the evidence floor: `n(s) ≥ N_min ∧ ĉ(s) ≤ −τ`, defaults `N_min = 100`, `τ = 0.10`. | Ratchet A4 (`N_min=20, τ=0` ⇒ −0.019, below the no-skill floor) |
+| **P-7** | The exposed set and the active library MUST NOT be unbounded. | Ratchet cap `C=50`; bench 1 decay at N=120; Skill Shadowing |
+| **P-8** | Tool output, retrieved documents and other tenants' artifacts MUST NOT be a direct source for a learning write. Every write derives from a scored trace whose score came from a deterministic checker. | F6; PoisonedSkills |
+| **P-9** | A learned artifact MUST NOT enter the model context in a system/instruction role. It enters as provenance-marked data with an explicit trust level. | PoisonedSkills; MCP `SECURITY.md` (clients trust servers by configuration, not by content) |
+| **P-10** | The proposer MUST NOT be able to address artifacts it was not shown. Windowed, index-addressed views only. | mem0 `main.py:903-908` |
+| **P-11** | Executable artifacts MUST NOT be imported or promoted without signature verification, and MUST NOT be auto-trusted across promotion tiers. | Letta `.af` carries `source_code` and stdio `command`/`args`; MCP `SECURITY.md` |
 | **P-12** | A learning cycle MUST NOT write outside its own agent/team subtree. | L-1 |
-| **P-13** | A candidate that cannot execute the eval suite or cannot emit the telemetry the graders read MUST NOT enter the archive. | DGM `:277-279` (viability invariant) |
-| **P-14** | Sustained-corruption detection MUST be on by default: a rising `HURT` verdict proportion and falling router engagement are **leading indicators** that fire before end-task scores move. Healthy engagement is 70–80%; the drifting ablation dropped to 19%. | Ratchet `:203-238` |
+| **P-13** | A candidate that cannot execute the eval suite, or cannot emit the telemetry the graders read, MUST NOT enter the archive. | DGM viability invariant |
+| **P-14** | Sustained-corruption detection MUST be on by default: rising HURT proportion and falling router engagement are leading indicators (healthy 70–80%; the drifting ablation dropped to 19%). | Ratchet |
+| **P-15 [NEW]** | A learning artifact MUST NOT be a number the reviewer cannot read. Weights, embeddings, scores and counters may accompany a learned artifact as evidence; they may never *be* the learned artifact. | T6; **cognee (§7.3)** |
+| **P-16 [NEW]** | A governance ledger MUST NOT live in the derived directory. Any record a ceiling is enforced against is an authored, version-controlled artifact. | §8.7a QUEUE-3; **measured violation §1.8** |
+| **P-17 [NEW]** | A rollback mechanism MUST be exercised by a test that goes through the *write path*, not through the archive API. | **Letta `block_manager` checkpoint/undo/redo: zero non-test callers (§2.3)** |
 
-### 7.3 The library governor (deterministic, not LLM-authored)
+### 7.6 The library governor stays deterministic
 
-F1's "library governor" should be built the way SkillOps builds it: **rule-based maintenance
-stubs triggered by observable signals, with near-zero LLM calls**. From SkillOps Appendix G:
-actions are triggered "from observable library signals, such as body-hash collisions, missing
-validators, failure logs, missing artifacts, and type mismatches", and the released
-implementation uses "rule-based maintenance stubs rather than LLM-generated edits … This
-design keeps the library-time maintenance pass **deterministic** and incurs nearly zero LLM
-calls."
+SkillOps builds library maintenance as *"rule-based maintenance stubs rather than LLM-generated
+edits … deterministic and incurs nearly zero LLM calls"*, triggered from observable signals
+(body-hash collisions, missing validators, failure logs, missing artifacts, type mismatches). That
+matters for governance because **the governor is itself a writer**: an LLM governor is one more
+poisoning surface; a deterministic one is outside the threat model.
 
-That matters for governance because the governor is *itself* a writer. If the governor is an
-LLM, it is one more poisoning surface. Making it deterministic removes it from the threat
-model entirely.
+Triggers → actions: body-hash collision → `MERGE` keeping the higher-contribution representative ·
+`ĉ ≤ −τ` with `n ≥ N_min` → `RETIRE` · missing validator or broken link → `QUARANTINE` · over cap
+`C` → evict lowest contribution to DEPRECATED · **router engagement below floor or rising HURT →
+alert only, no automatic action** (Ratchet A4: acting aggressively on a drift signal measured worse
+than not acting).
 
-Governor triggers → deterministic actions:
+Two nuances worth keeping: Ratchet found explicit dedup mechanisms *unnecessary* (no-canonicalisation
++0.374 and no-cover-guard +0.363 both **exceeded** the full recipe at +0.328), while removing the
+**authoring prior** cost 43% of the gain (+0.187 vs +0.328). **Invest in the GOVERNED template, not
+in post-hoc cleanup** — which is also what D13/D14's "heavy defaults and templates" already asks for.
 
-| Signal | Action | Class |
-|---|---|---|
-| body-hash collision between two artifacts | `MERGE` keeping the higher-contribution representative | R2 |
-| `ĉ(s) ≤ −τ` with `n(s) ≥ N_min` | `RETIRE` | R2 |
-| missing validator / broken artifact link | `QUARANTINE` (status change, not edit) | R2 |
-| active set > cap `C` | evict lowest-contribution to DEPRECATED | R2 |
-| router engagement < floor, or HURT proportion rising | **raise an alert, take no automatic action** | — |
+### 7.7 What may evolve at the meta level
 
-The last row is deliberate: A4 proves that acting aggressively on a drift signal is worse than
-not acting (`…ratchet.txt:311-322`). Detection is automatic; the *correction* for a systemic
-drift signal is a human decision.
+- **The authoring prior** (skill/tool templates, the reflection meta-prompt, proposal style) is a
+  *strategy* artifact. It MAY evolve, on a slow cadence, floor CLASS-3 (`ESC-SELF`), under the same
+  obligations. (MetaSkill-Evolve evolves the branch-local meta-skill every `H` iterations; HiSME
+  argues a static evolving strategy makes the system *"repeatedly spend maintenance effort repairing
+  the same defect pattern"*.)
+- **The governance layer** (classifier rules, graders, thresholds, budgets, sandbox configuration,
+  telemetry emission, signing keys) MUST NOT evolve.
 
-Two nuances worth recording. First, Ratchet found explicit dedup mechanisms (`A5` pattern
-canonicalisation, `A6` cover-guard) were **not necessary** — both slightly *exceeded* the full
-recipe (+0.374, +0.363 vs +0.328) — because the meta-skill authoring prior enforced enough
-consistency (`…ratchet.txt:294-333`). Second, that authoring prior was the **single most
-valuable component**: removing it (`A3`) cost 43% of the gain (+0.187 vs +0.328). Design
-consequence: **invest in the authoring template, not in post-hoc dedup.** For PACT this means
-a GOVERNED skill/tool template is higher leverage than a clever library-cleanup job — and it
-is also exactly what D13/D14's "heavy defaults and templates" already asks for.
-
-### 7.4 What may evolve at the meta level, and what may not
-
-DGM freezes the meta level (`…dgm.txt:290-291`). MetaSkill-Evolve evolves it on a slow
-timescale: the task skill evolves in a fast loop, the branch-local meta-skill `m = (ψ,σ,α,π,ε)`
-every `H` iterations via the same pipeline (`2607.05297-metaskill-evolve.txt:36-47, 133-138`).
-HiSME argues the same: a static evolving strategy means "the agent system must repeatedly spend
-maintenance effort repairing the same defect pattern" (`2605.28390-hisme.pdf`, intro).
-
-**Resolution for PACT.** Split the meta level in two:
-
-- **The authoring prior** (skill/tool templates, the reflection meta-prompt, proposal style) is
-  a *strategy* artifact. It MAY evolve, on a slow cadence, floor R3 (`ESC-SELF`), with the same
-  proof obligations.
-- **The governance layer** (classifier rules, eval graders, thresholds, budgets, sandbox
-  configuration, telemetry emission, signing keys) MUST NOT evolve. It is GOVERNED and only
-  humans change it, through the ordinary spec-versioning path.
-
-That line is the whole safety argument, and it is defensible from first principles as well as
-from DGM: **a system may improve how it proposes, but never how it is judged.**
+> **A system may improve how it proposes, but never how it is judged.**
 
 ---
 
-## 8. `learning.yaml` — the no-code surface (D14)
+## 8. Baseline survey — what existing systems persist (corrected and extended)
 
-D14 requires the learning loop to be enabled entirely in YAML by a non-programmer. The
-artifact:
+| System | Artifact written | Identity | Provenance | Gate before write | Retirement | Rollback |
+|---|---|---|---|---|---|---|
+| **Voyager** `voyager/agents/skill.py:61-100` | JS function + LLM description + Chroma embedding; `skills.json` | function name | none | LLM critic or human; only on success | none | **none** — `skills.json` overwritten (`:99`) |
+| **ExpeL** `expel/agent/expel.py:696-743`, `prompts/templates/human.py:23-30` | NL rules + integer vote counter; ops `AGREE/REMOVE/EDIT/ADD`, **≤4 per round, ≤1 per rule** | list index | none | none per rule | counter ≤ 0 prunes | none; `REMOVE` deletes |
+| **AWM** `webarena/induce_rule.py:145-166` | one plain-text blob per site | positional | none | interactive `input()`, bypassed by `--auto` | none | **none** — mode `'w'` |
+| **ACE** (paper) | delta bullets `[{slug}-{NNNNN}] helpful/harmful :: content` | stable id | counters | Reflector→Curator, deterministic merge | grow-and-refine dedup | per-item |
+| **ReasoningBank** (paper) | `{title, description, content}` | title | judge label (**72.7%** accurate) | LLM judge; ≤3 items/trajectory | unspecified | none |
+| **Ratchet** (paper) | skill bank (ACTIVE + DEPRECATED, **never deletes**), one ACTIVE meta-skill, append-only evidence log | per-skill | `ĉ(s)=(succ−fail)/trials` | attribution verdict + ≥3-failure cluster | `n ≥ N_min ∧ ĉ ≤ −τ` | implicit |
+| **mem0** `configs/prompts.py:176-185,464-472`; `memory/main.py:903-908` | facts; v2 ADD/UPDATE/DELETE, **v3 ADD-only with `linked_memory_ids`** | UUID, shown to the LLM as **opaque integers** | none | LLM extraction | v2 DELETE; v3 none | none |
+| **Zep** `plugins/.../SKILL.md:78-85` | bitemporal graph edges | UUID | `valid_at / invalid_at / created_at / expired_at` | dedup + supersession | **invalidate, keep as history** | inherent (as-of query) |
+| **Letta** (corrected) | memory blocks; tools with `source_code` | id | none | `RequiresApprovalToolRule` halts the loop with a typed stop reason | none | **API exists, zero non-test callers** (`block_manager.py:842,952,1004`) |
+| **Letta sleeptime** [NEW] | whole memory blocks, rewritten by a background agent every 5 turns, same model, shared block rows | block label | none | **none** | none | none on the write path |
+| **cognee** [NEW] `tasks/memify/apply_feedback_weights.py:43-59` | **float weights** on graph nodes/edges, EMA α=0.1 from a 1–5 star rating | graph element id | none | rating is an int in [1,5] | none | none |
+| **reflexion** [NEW] `alfworld_runs/generate_reflections.py:38-45` | free-text plans, in-process only, appended on failure; **last 3 used** | none | none | none | none | n/a |
+| **agent-lightning** [NEW] `emitter/reward.py:307-320`, `semconv.py:135-156` | rewards as OTel span attributes with `key_match`/`value_match` **links** | span address | span context | n/a | n/a | n/a |
+| **Bud runtime** (in-repo) | signed packages (Ed25519), registry entries with CAS + evidence digests | coordinates | trust roots, trust policy, generation counter | `require_verified_signature`; *"missing metadata is never auto-published"* | lifecycle mutation API | evidence-pinned adoption receipts |
+
+**Five conclusions.**
+
+1. **Only Ratchet and Zep get retirement right** (never delete, keep as history). Voyager, ExpeL and
+   AWM destroy prior state; AWM's `'w'` write is the operational form of ACE's context collapse.
+2. **Nobody except Bud has provenance or signing.** The de-facto industry artifact (Anthropic
+   `SKILL.md`) has three frontmatter keys and no version, author, evidence or signature.
+3. **mem0's UUID→integer mapping is the sleeper idea** and should be a PACT invariant (P-10).
+4. **Letta's `requires_approval` as a typed loop stop reason is the right shape** for D23's human
+   gate: approval is a first-class halt in the loop IR, not an out-of-band workflow.
+5. **[NEW] Nobody solves credit assignment.** agent-lightning gets closest — rewards are addressed
+   to spans and can *link* to other spans by `key_match`/`value_match`, including spans not yet
+   emitted (`semconv.py:145-156`) — but the reduction is `find_final_reward`, *"the last reward value
+   present in the provided spans"* (`emitter/reward.py:307-320`). Last-wins is not attribution. See
+   OQ-8.
+
+---
+
+## 9. `learning.yaml` — the no-code surface, and what it still needs
+
+The shipped file (`examples/refund-desk/learning.yaml`) is close to right and is genuinely
+readable by a support lead. Three changes follow from the audit:
 
 ```yaml
-apiVersion: pact.dev/v1
-kind: LearningPolicy
-scope: agents/refund-triage
+enabled: propose-only              # off | propose-only (CORE) | applies-safe-changes-itself (EXPERT)
 
-enabled: true
-cadence: weekly                    # or: onFailureRate > 0.15
+may-improve-on-its-own:            # ← maps to SURFACES, not to field names (§4.3)
+  - phrasing                       # S-GEN
+  - examples                       # S-GEN
+  - skill-notes                    # S-GEN, excluding normative clauses (§8.3a)
+# - when-skills-are-used           # S-ROUTE — OFF by default; needs an OBL-8 routing replay
 
-learn:                             # which surfaces are opted in
-  instructions: true
-  skills: true
-  variants: true
-  loop: false                      # S-CTRL — off by default
-  tools: false                     # S-EXEC — off by default
-  topology: false                  # S-TOPO — off by default
-
-autonomy:
-  autoApplyCeiling: R2             # nothing above this is ever auto-applied
-  reviewers: [team:support-leads]
-
-gates:
-  validationSplit: evals/datasets/refund-val.yaml     # frozen; GOVERNED
-  goldenSplit:     evals/datasets/refund-golden.yaml  # frozen; GOVERNED
-  epsilon: 0.02
-  judgesAllowed: false             # deterministic checkers only
-
-budgets:
-  opsPerCycle: 4
-  generationsPerMonth: 4
-  optimizerTokens: 2000000
+needs-a-person-to-approve: [tools, permissions, team, limits, evals, policy-clauses]
+keep-only-if: a-person-approves-it
+review: weekly
+cycle-limits: {per-cycle: 4, per-month: 20 USD, evals: 2000}
+models:
+  execution:  {role: llm}
+  reflection: {role: reflector}    # separate binding; strongest LOCALLY-SERVED model
+drift:
+  at-most: 50%                     # ← today the only drift field that exists
+  # NEEDED (§1.6, §4.5):
+  # baseline: sha256:…             # machine-advanced only, by `pact approve --baseline`
+  # window: 10
+  # auto-apply-ceiling-while-under: CLASS-1
 ```
 
-Design notes. (i) Every risky surface is **off by default** — `loop`, `tools`, `topology`
-require an explicit opt-in *and* still hit their R3/R4 gates. (ii) `autoApplyCeiling` may only
-be lowered relative to the spec baseline, never raised (C-3). (iii) `learning.yaml` is itself
-GOVERNED, so no learning cycle can widen its own permissions. (iv) The reviewer sees the
-plain-language `ChangeClassification` (§4.6), not a diff of YAML — that is what makes the
-human gate usable by D13's persona.
+- Every risky surface stays off by default; `loop`, `tools`, `topology` need an explicit opt-in
+  *and* still hit CLASS-3/4. **That opt-in field (`may-also-change:`) does not exist yet** (§1.7).
+- `learning.yaml` is itself GOVERNED, so no cycle can widen its own permissions; and
+  `needs-a-person-to-approve` may only be widened relative to the builtin list, never narrowed —
+  which the implementation gets right (`learning.py` unions the author's list with
+  `HIGH_RISK_FIELDS`).
+- The reviewer sees the plain-language `ChangeClassification`, not a YAML diff. That is what makes
+  the human gate usable by D13's persona, and it is the one place where §1.3's false-positive
+  message ("the wording changes a rule, not a phrasing: 'Be concise and warm…'") does visible damage.
 
 ---
 
-## 9. Open questions
+## 10. Open questions
 
-1. **`θ_shrink` has no direct empirical anchor.** ACE gives one catastrophic case (99.3%
-   shrink); 40% is my conservative interpolation. Needs a sweep on the in-repo bench-3 harness.
-2. **Routing non-regression corpus size.** Obligation A8 requires a corpus large enough that
-   "same selection" is meaningful. Skill Shadowing used 88 tasks × 3 library sizes = 2,545
-   trajectories (`…shadowing.txt:335-341`). Unknown what the minimum viable corpus is for a
-   small workspace, and it directly determines whether R2 auto-apply is usable at all in the
-   D20 demo.
-3. **Is R2 auto-apply worth having?** If A8 is expensive, the honest simplification is to make
-   all S-ROUTE changes R3. That would make the classifier simpler and strictly safer at the
-   cost of more human gates. Needs a cost measurement before `20-ARCHITECTURE`.
-4. **PoisonedSkills is cited but not read.** I have only the survey's characterisation
-   (`agent-skills-survey.pdf:965-967`, DOI 10.5281/zenodo.19281322). P-9's exact shape (role
-   quarantine) should be re-derived from the primary source. Same for the "36% of public skills
-   carry injection" figure asserted in `SYNTHESIS.md:184` — I could not verify it in the corpus.
-5. **Bitemporal validity vs git.** L-3 stores `validity.from/until` in the file while git already
-   records history. Redundant? Argument for keeping it: `gaia-ai-runtime` reads the tree
-   natively (D2) and must answer "what was active on date X" without a git dependency in an
-   air-gapped image. Needs a decision.
-6. **Multi-tenant learning under D24.** F6's promotion tiers imply cross-tenant flows; D24 says
-   keep multi-tenancy minimal and adapter-shaped. Proposal: PACT defines only the *artifact*
-   contract (signature, tier namespace, re-certification requirement) and leaves the promotion
-   *mechanism* to AgentZero. Not yet validated against `/home/bud/ditto/bud`.
-7. **Does `ESC-JUDGED` interact badly with D19's on-ramps?** D19's plain-language rules
-   ("must cite a source") desugar into checks that may need a judge. If most no-code evals are
-   judge-backed, `ESC-JUDGED` pushes nearly everything to R2+ and auto-apply effectively
-   disappears for D13's persona. Needs a measurement of how many D19-shaped rules are
-   deterministically decidable.
-8. **Contribution scores need attribution.** `ĉ(s)` assumes a single artifact is injected per
-   run (Ratchet's setting). With multiple skills injected, credit assignment is unsolved in
-   everything I read. Interim proposal: track contribution only for the *routed* artifact and
-   treat multi-injection runs as `INAPPLICABLE`.
+**Closed this pass.**
+
+- **OQ-7 (does `ESC-JUDGED` interact badly with D19's on-ramps?) — resolved, and the answer is
+  structural.** The eval-rule vocabulary is `must-say-one-of`, `must-contain`, `must-not-contain`,
+  `must-call-before`, `judged` (`spec/schema.yaml:2332ff`) — four deterministic assertions and one
+  judge. Everything semantic that a D19 plain-language rule expresses ("must cite a source", "never
+  promise a refund" beyond literal strings) lands on `judged:`. `ESC-JUDGED` has a CLASS-3 floor and
+  X18 ends auto-apply eligibility, so **a D14-persona workspace's gating suite will almost always
+  contain a judged rule, and `applies-safe-changes-itself` is therefore unreachable for that
+  persona.** This is not a bug: it is why `propose-only` is the core-tier mode. The spec should
+  state it as a derived property — *auto-apply is an expert-tier feature by construction* — rather
+  than leaving it emergent, so nobody builds a UI that offers the toggle.
+- **OQ-3 (is CLASS-2 auto-apply worth having?) — no, given §1.10.** Three of the four measured
+  classifier defects are S-ROUTE false negatives. Until OBL-8's routing-replay corpus exists,
+  S-ROUTE should be CLASS-3 (human gate) unconditionally. This is strictly safer, simpler, and
+  costs only human review in a mode (`propose-only`) that already requires it.
+- **OQ-5 (bitemporal validity vs git) — keep both.** `gaia-ai-runtime` reads the tree natively (D2)
+  and must answer *"what was active on date X"* inside an air-gapped image with no git dependency.
+  §1.8 independently forces authored ledgers into the tree, so the cost of `validity.from/until` is
+  marginal.
+
+**Still open.**
+
+1. **`θ_shrink` has no empirical anchor.** ACE gives one catastrophic case (99.3% shrink); 40% is an
+   interpolation. §1.4 additionally shows the *structural* triggers do the real work and the token
+   test rarely decides anything. A sweep on the bench-3 harness would tell us whether the token
+   trigger should exist at all.
+2. **Routing non-regression corpus size (OBL-8).** Skill Shadowing used 88 tasks × 3 library sizes =
+   2,545 trajectories. The minimum viable corpus for a ten-case workspace is unknown, and it decides
+   whether S-ROUTE can ever leave CLASS-3 (OQ-3's reopening condition).
+3. **PoisonedSkills is cited but not read** (survey characterisation only; DOI
+   10.5281/zenodo.19281322, not resolvable offline under D17). P-9's exact shape should be
+   re-derived from the primary source. The *"36% of public skills carry injection"* figure asserted
+   at `SYNTHESIS.md:184` remains unverified in the corpus.
+4. **Multi-tenant learning under D24.** Proposal unchanged: PACT defines only the artifact contract
+   (`origin`, tier namespace, re-certification requirement) and leaves the promotion mechanism to
+   AgentZero. Not yet validated against `/home/bud/ditto/bud`.
+5. **Contribution attribution `ĉ(s)` with multiple artifacts injected.** Ratchet's setting is one
+   artifact per run. **agent-lightning is the closest prior art and it does not solve it**: rewards
+   are addressed to spans and can link to other spans (`semconv.py:145-164`), but the reduction is
+   `find_final_reward` = last-wins (`emitter/reward.py:307-320`). **New proposal grounded in that
+   machinery:** PACT already has a per-event address (§7.13, *"one address, and everything that
+   happens has one"*). Key the contribution ledger on `(artifact, injection-event-address)` rather
+   than on `(artifact, run)`, and treat a run in which two artifacts were injected at the same
+   address as `INAPPLICABLE` rather than crediting both. This is measurable and cheap; it is not a
+   solution to credit assignment, it is an honest refusal to guess.
+6. **Is the prose signal worth keeping at all?** §1.3's false positive and §1.10's false negatives
+   both come from the regex. Once the surface lookup exists, the regex's only remaining job is
+   catching a *semantic inversion inside an S-GEN field* (`30 days` → `300 days`). A numeric-literal
+   diff and a negation-polarity diff would cover that class deterministically, and a keyword list
+   would not be needed. Worth measuring before shipping a keyword list as spec data.
 
 ---
 
-## 10. Evidence index
+## 11. Evidence index
 
-**Source read (file:line cited above)**
-`research/repos/memory/letta/letta/services/tool_sandbox/{local_sandbox.py,base.py,safe_pickle.py,e2b_sandbox.py}`,
-`letta/schemas/{tool_rule.py,block.py,agent_file.py}`, `letta/settings.py`,
-`letta/agents/letta_agent_v3.py` ·
-`research/repos/memory/voyager/voyager/{voyager.py,agents/skill.py,agents/critic.py}` ·
-`research/repos/memory/expel/{agent/expel.py,prompts/templates/human.py,insight_extraction.py}` ·
-`research/repos/memory/agent-workflow-memory/webarena/{induce_rule.py,workflow/shopping.txt}` ·
-`research/repos/memory/mem0/{mem0/configs/prompts.py,mem0/memory/main.py}` ·
-`research/repos/memory/zep/plugins/building-with-zep/skills/building-with-zep/SKILL.md` ·
-`research/repos/protocols/mcp-spec/{SECURITY.md,seps/1024-*.md}` ·
-`research/repos/filedef/skills-anthropic/{template/SKILL.md,skills/mcp-builder/SKILL.md,skills/mcp-builder/reference/evaluation.md}` ·
-`research/repos/runtime/microsandbox/{README.md,docs/security/secrets.mdx,docs/networking/{overview.mdx,tls.mdx}}` ·
-`gaia-ai-runtime/bud-agentic-runtime/{registry-and-portability.md,sdk-and-declarative-dev.md}`
+**Source read this pass (file:line cited above)**
+`adapters/python/src/pact_adapters/learning.py` (`:41-127`, `:159-213`, `:314-390`, `:480-611`,
+`:1079-1250`, `:1376-1383`) ·
+`crates/pact-cli/src/main.rs` (`:305-306`, `:350-416`) ·
+`crates/pact-loader/src/{teams.rs,reach.rs}` ·
+`spec/schema.yaml` (`:1-120`, `:376`, `:426`, `:446`, `:887`, `:1272`, `:1406`, `:1514-1610`,
+`:1649-1712`, `:1786-1800`, `:2332-2400`, `:2504-2726`) ·
+`examples/refund-desk/learning.yaml` · `.gitignore:1-7` ·
+`docs/20-ARCHITECTURE-DRAFT.md` §8.1–§8.11 (`:9046-10430`) ·
+`docs/70-PRODUCTION-GAP-REGISTER.md:152-210` ·
+`research/repos/memory/letta/{letta/server/server.py:756-800,1191-1203,
+letta/groups/sleeptime_multi_agent_v4.py:120-200,
+letta/prompts/system_prompts/sleeptime_v2.py:15,21,
+letta/functions/function_sets/base.py:488-496,
+letta/functions/function_sets/voice.py:10-21,
+letta/agents/voice_sleeptime_agent.py:153-163,
+letta/services/block_manager.py:842,952,1004, letta/orm/block_history.py:12-35}` ·
+`research/repos/memory/cognee/{cognee/skill.md,
+cognee/memify_pipelines/apply_feedback_weights.py:20-85,
+cognee/tasks/memify/apply_feedback_weights.py:43-59,
+cognee/tasks/memify/extract_feedback_qas.py:16-18}` ·
+`research/repos/memory/reflexion/{alfworld_runs/generate_reflections.py:1-48,
+alfworld_runs/alfworld_trial.py:46-50, programming_runs/reflexion.py:29-95}` ·
+`research/repos/memory/{mem0/mem0/memory/main.py:900-912,
+expel/prompts/templates/human.py:20-34, voyager/voyager/agents/skill.py:95-102}` ·
+`research/repos/optim/agent-lightning/{agentlightning/semconv.py:90-164,
+agentlightning/emitter/reward.py:295-320}` ·
+`research/repos/config/cue/internal/core/subsume/{subsume.go:15-134,vertex.go:58-202}`
 
-**Papers read (text extracts; line numbers refer to the `pdftotext -layout` output)**
+**Measurements executed this pass**
+Classifier fixture run (20 rows, §1.10) · `HIGH_RISK_PROSE` false-positive isolation (§1.3) ·
+`ESC-SHRINK` list-trigger behaviour on edit vs add vs delete (§1.4) · drift-metric behaviour on
+inversion / deletion / additive churn, and the 16-edit trip point (§1.5) · schema parse for surface
+distribution, group field lists, and the 18 `description` fields (§1.1, §1.2, §1.6, §1.7) ·
+repo-wide grep for surface consumers, topology operators, and `block_manager` checkpoint callers.
+
+**Papers (carried from R1; text extracts via `pdftotext -layout`)**
 ACE 2510.04618 · ReasoningBank 2509.25140 · SkillWeaver 2504.07079 · DGM 2505.22954 ·
 ADAS 2408.08435 · Self-Evolving Survey 2508.07407 · MAST 2503.13657 · One-Token-Fool 2507.08794 ·
 AWM 2409.07429 · Library-Drift/Ratchet 2605.19576 · Skill Shadowing 2605.24050 ·
 Meta-Agent Inefficiencies 2510.06711 · SkillOps 2605.13716 (App. G) ·
-Agent Skills Survey 2605.07358 (§VI-F) · MetaSkill-Evolve 2607.05297 · HiSME 2605.28390
+Agent Skills Survey 2605.07358 (§VI-F) · MetaSkill-Evolve 2607.05297 · HiSME 2605.28390 ·
+MASS 2502.02533 · GEPA 2507.19457
 
 **In-repo priors extended** `SYNTHESIS.md` F1/F3/F4/F6 · `RESULTS.md` benches 1–3 ·
-`PROMPT-SKILL-LEARNING.md` §1–§5
+`PROMPT-SKILL-LEARNING.md` §1–§5 · `docs/20-ARCHITECTURE-DRAFT.md` §8

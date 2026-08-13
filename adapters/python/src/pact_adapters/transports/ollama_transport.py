@@ -22,6 +22,7 @@ from ..harness import ToolCall
 from ..resolve import window_of
 from ..script import Script
 from ._metering import can_price, priced
+from ._tool_choice import can_choose
 
 
 class OllamaTransport:
@@ -166,6 +167,14 @@ class OllamaTransport:
             "parallel_tool_calls": "native",
             "streaming": "emulated",
             "durable_resume": "unsupported",
+            # `/v1/chat/completions` is a model surface and the only address
+            # this transport holds, so a `connect:` line becomes no connection
+            # of its own. It reaches the server through PACT's own client above
+            # the seam — and on this target that matters most: `Client
+            # .in_process` means the air-gapped box (D17) this transport is FOR
+            # runs the same document as a connected one. `mock.py` states the
+            # rule once for every target that shares it.
+            "connected_tools": "emulated",
         }
 
     def apply_settings(self, settings: dict[str, Any]) -> tuple[str, ...]:
@@ -225,9 +234,22 @@ class OllamaTransport:
         # `temperature:` or `max-tokens:` wins over the constructor's — the
         # constructor's values are what a host chose, and an author's file is
         # more specific than a host's default.
+        offered = tuple(str(t["name"]) for t in tools)
         for key, value in getattr(self, "_settings", {}).items():
-            if key in _WIRE:
-                payload[_WIRE[key]] = _translated(key, value)
+            if key not in _WIRE:
+                continue
+            # A tool choice goes only when THIS call can carry it, the same
+            # per-call question `_tool_choice.can_choose` answers on the five
+            # framework transports. This one sent it unconditionally, and on
+            # this surface that is not merely unhonoured: `/v1/chat/completions`
+            # rejects a `tool_choice` sent without `tools`, and `tools` is added
+            # below only `if tools`. `harness.run` closes every
+            # ceiling-terminated run with `model_call(instructions, history,
+            # [])`, so the calls this would have broken are the ones a run makes
+            # precisely when it has stopped early.
+            if key == "tool-choice" and not can_choose(value, offered):
+                continue
+            payload[_WIRE[key]] = _translated(key, value)
         if tools:
             payload["tools"] = [
                 {
@@ -316,6 +338,19 @@ def _loads(raw: Any) -> dict[str, Any]:
 #: `thinking` and `parallel-tool-calls` are deliberately absent: the
 #: OpenAI-compatible endpoint takes neither, and a row here that mapped them onto
 #: something approximate would make `unmetered` lie by omission.
+#:
+#: This table is COUPLED to `autogen_transport._CREATE_ARGS`, and the two differ
+#: in both directions, which is worth saying here so a reader who finds the other
+#: one first cannot mistake the difference for a disagreement. This transport
+#: NAMES its endpoint, so it can map `top-k` — a parameter that is not in the
+#: OpenAI chat-completions set at all and that a transport talking to an unknown
+#: client therefore cannot spell. `_CREATE_ARGS` is the intersection over the
+#: clients an AutoGen host might bind, so it refuses `thinking`,
+#: `parallel-tool-calls` and `service-tier` — the first two on THIS table's
+#: finding above, quoted there by name. Revise either against a measured server
+#: and the other moves with it;
+#: `test_the_two_tables_disagree_only_where_one_of_them_knows_more` fails if only
+#: one of them does.
 _WIRE: dict[str, str] = {
     "max-tokens": "max_tokens",
     "temperature": "temperature",

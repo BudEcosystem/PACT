@@ -1,0 +1,12 @@
+# A bundle whose folder is NOT here.
+#
+# `from:` names something a platform team publishes rather than a path in this
+# tree, and nothing in this project resolves such a name. So this file loads,
+# `pact check` exits 0, and not one definition from `acme/refund-toolkit` is in
+# this workspace. That used to be silent; `loader/bundle-not-mounted` now says
+# it out loud, and this tree is what proves the sentence arrives from a real
+# folder of files rather than only from a test that builds the document by hand.
+description: Gates and wording for sending money back, as the platform team publishes them.
+version: "2.1"
+from: acme/refund-toolkit
+brings: [tools, questions, policies]

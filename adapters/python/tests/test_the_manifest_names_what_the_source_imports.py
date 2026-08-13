@@ -48,6 +48,18 @@ OPTIONAL: frozenset[str] = frozenset({
     # uses one target does not have to install the other six. `test_portability`
     # skips a target whose SDK is missing rather than failing.
     "deepeval",
+    # The MCP client. `mcp_bridge.py` imports `pydantic_ai.mcp`, which imports
+    # this at its own module level and raises `ImportError` without it — so this
+    # is the name in the traceback a reader gets, and the name they would
+    # otherwise add to `[project] dependencies` to make the error go away.
+    #
+    # It is named HERE and not there, and that is the decision: adding it to the
+    # manifest would make every install of the adapters pull an MCP client, on
+    # boxes that have no network to point one at. `mcp_bridge.why_no_mcp` reports
+    # the absence as a sentence with two lines to type — one that installs it,
+    # one that needs nothing installed at all — which is the condition this list
+    # requires of everything in it.
+    "fastmcp",
 })
 
 

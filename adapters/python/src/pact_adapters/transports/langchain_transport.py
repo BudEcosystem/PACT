@@ -18,6 +18,7 @@ from ..resolve import default_model, window_of
 from ..script import Script
 from ._metering import can_price, priced, tokens_in, what_the_summariser_cost
 from ._summarise import summarise_with
+from ._tool_choice import can_choose
 
 
 class _ScriptedChatModel(BaseChatModel):
@@ -67,6 +68,24 @@ class _ScriptedChatModel(BaseChatModel):
         else:
             msg = AIMessage(content=turn.text, usage_metadata=counted)
         return ChatResult(generations=[ChatGeneration(message=msg)])
+
+    def bind_tools(self, tools, *, tool_choice=None, **kwargs):
+        """What every LangChain integration's `bind_tools` does, and no more.
+
+        `BaseChatModel.bind_tools` raises `NotImplementedError`, and each
+        integration implements it as `self.bind(tools=..., tool_choice=...)`
+        plus its own translation of the tool choice into the provider's shape.
+        Implemented here so the transport can call the method LangChain DEFINES
+        for a tool choice rather than smuggling the key in through `bind()` —
+        the translation of a NAME into `{"type": "function", ...}` or
+        `{"type": "tool", ...}` belongs to the integration, and reaching it
+        through `bind_tools` is what leaves it there.
+        """
+        return self.bind(
+            tools=list(tools),
+            **({"tool_choice": tool_choice} if tool_choice is not None else {}),
+            **kwargs,
+        )
 
     @property
     def _llm_type(self) -> str:
@@ -169,7 +188,124 @@ class LangChainTransport:
             "parallel_tool_calls": "native",
             "streaming": "emulated",
             "durable_resume": "unsupported",
+            # The seam here is `BaseChatModel`, a model INTERFACE with no door a
+            # `connect:` line could go out of — so nothing in this file reads
+            # `ToolSpec.reaches`, and the reaching is PACT's own client above the
+            # framework. `mock.py` states the rule once for every target that
+            # shares it.
+            "connected_tools": "emulated",
         }
+
+    def apply_settings(self, settings: dict[str, Any]) -> tuple[str, ...]:
+        """Take the author's `settings:` block, and say what could not be taken.
+
+        FOUR of the twelve, and the eight left over are the honest part.
+
+        The seam here is `BaseChatModel`, which is an INTERFACE rather than a
+        provider — so unlike `ollama_transport.py` there is no wire format to map
+        onto, only whatever vocabulary `langchain_core` itself defines. That
+        vocabulary is small and it is checkable:
+
+        * `stop` is a parameter of `_generate` / `_agenerate`, in the signature.
+        * `tool_choice` is a keyword-only parameter of `bind_tools`.
+        * `temperature` and `max_tokens` are `langchain_core`'s own spelling of
+          the two commonest generation parameters. **Neither is a parameter of
+          `BaseChatModel`**, and this is worth being exact about because the
+          first version of this docstring was not: what carries them is an
+          integration's `_generate(**kwargs)` forwarding them into the request it
+          builds, which is the documented purpose of `bind()` — *"attach runtime
+          kwargs"* — and which no test in this tree can check, because no
+          integration package is installed here. What `langchain_core` does give
+          is the SPELLING, in two places: `ModelProfile.temperature` (*"whether
+          the model supports a temperature parameter"*) and
+          `BaseChatModel._get_ls_params`, which reads `temperature` and
+          `max_tokens` off the kwargs by those names. `_get_ls_params` builds
+          LangSmith TRACING metadata and sends nothing to any provider, so it is
+          evidence about the NAME and about nothing else. That is a weaker claim
+          than the two above it and is written down as one.
+
+        Everything else is a kwarg of a concrete integration, spelled
+        differently in each — `top_k` is on `ChatAnthropic` and absent from
+        `ChatOpenAI`, `seed` the other way round, and thinking is
+        `reasoning_effort` on one and a `thinking={...}` dict on another. `bind()`
+        forwards an unknown kwarg without complaint, into the provider payload or
+        into an integration's `model_kwargs`, and the author is never told. That
+        is the translate-or-nothing line: a setting in a shape the provider
+        ignores is worse than one reported unhonoured, because nothing says it
+        did not happen. So those eight come back here and land on
+        `RunResult.unmetered`.
+
+        This is a floor and not a ceiling. It grows the day a
+        `langchain-openai` or `langchain-anthropic` is a dependency of this
+        package and its parameter names can be checked against an INSTALLED
+        version rather than remembered — and the same dependency is what would
+        turn the `temperature`/`max_tokens` claim above from a spelling into a
+        measured request payload.
+
+        `tool-choice:` is answered here and again at every call. This says the
+        SDK has a shape for the authored value; whether a PARTICULAR call can
+        carry it depends on the tools that call offers, which nothing knows yet.
+        `bound_for_request` decides that per call, and sends nothing rather than
+        an approximation when the answer is no.
+        """
+        self._settings = dict(settings)
+        return tuple(
+            k for k in settings if k not in _KWARGS and k not in _FIRST_CLASS
+        )
+
+    def bound_for_request(self, tools: list[dict[str, Any]]):
+        """The `Runnable` this transport is about to invoke.
+
+        Split out for the reason `ollama_transport.payload_for` was: a test that
+        asserts a mapping table and a return value is true of a transport that
+        then drops every setting on the floor. `bind` and `bind_tools` are what
+        LangChain calls "attaching runtime kwargs", and what they attach is
+        delivered to `_generate` — which is where the tests read it.
+
+        `tool_choice` leaves this method through `bind_tools` or it does not
+        leave at all. There was a third path here for one round and it was the
+        exact defect this round exists to close, pointing the other way: on a
+        call with no tools the key was attached with `bind()` instead, and a
+        plain bound kwarg is forwarded by an integration straight into the
+        request payload without passing through the one method that translates
+        it. What a provider then received was `tool_choice: "any"` — a word no
+        OpenAI-compatible endpoint accepts — or `tool_choice: "payments"`, a bare
+        string such an endpoint accepts and silently ignores. `harness.run` makes
+        that call on every ceiling-terminated run, so it was not an edge case.
+        """
+        said = getattr(self, "_settings", {})
+        model = self._model
+        chose = said.get("tool-choice")
+        offered = tuple(str(t["name"]) for t in tools)
+        attach: dict[str, Any] = {
+            _KWARGS[k]: v for k, v in said.items() if k in _KWARGS
+        }
+        if tools:
+            # `bind_tools` rather than `bind(tool_choice=...)`, because the
+            # method LangChain defines for a tool choice is also the method each
+            # integration translates a tool NAME inside.
+            model = model.bind_tools(
+                [
+                    {"name": t["name"], "description": t.get("description", ""),
+                     "parameters": {"type": "object", "properties": {}}}
+                    for t in tools
+                ],
+                # And only a choice THIS call can carry. `_tool_choice.can_choose`
+                # says why `required` and a NAME both need the tool set they are
+                # about; an author whose stage narrowed the tools away gets the
+                # call without the key rather than a 400 from the provider.
+                **(
+                    {"tool_choice": _tool_choice(chose)}
+                    if chose is not None and can_choose(chose, offered)
+                    else {}
+                ),
+            )
+        stop = said.get("stop-sequences")
+        if stop is not None:
+            # `stop` has its own parameter on `_generate`, which is what makes it
+            # the one PACT key `BaseChatModel` itself is guaranteed to honour.
+            attach["stop"] = [str(stop)] if isinstance(stop, str) else [str(s) for s in stop]
+        return model.bind(**attach) if attach else model
 
     async def model_call(
         self, system: str, history: list[dict[str, Any]], tools: list[dict[str, Any]]
@@ -184,8 +320,13 @@ class LangChainTransport:
                 messages.append(AIMessage(content=m["content"]))
             elif m["role"] == "tool":
                 messages.append(ToolMessage(content=m["content"], tool_call_id="c0"))
-        result = await self._model._agenerate(messages)
-        msg = result.generations[0].message
+        # Through `Runnable.ainvoke` rather than straight into `_agenerate`,
+        # because that is the path the bound kwargs travel: `bind` attaches them
+        # to the runnable and LangChain's own machinery hands them down. It
+        # returns the `AIMessage` itself rather than a `ChatResult`, so the usage
+        # read below is one hop shorter and off the same object.
+        runnable = self.bound_for_request(tools)
+        msg = await runnable.ainvoke(messages)
         # Off the SDK's own object, not a private tally beside it, so the field a
         # live provider fills in is the one PACT bills from.
         used = getattr(msg, "usage_metadata", None) or {}
@@ -195,3 +336,56 @@ class LangChainTransport:
         )
         calls = [ToolCall(name=c["name"], args=c.get("args") or {}) for c in (msg.tool_calls or [])]
         return (msg.content or ""), calls
+
+
+#: The author's key, and the kwarg `bind()` attaches. Two rows, and both are the
+#: SPELLING `langchain_core` itself uses for these two parameters — in
+#: `ModelProfile.temperature`, a capability it declares models may have, and in
+#: `BaseChatModel._get_ls_params`, which reads `temperature` and `max_tokens` off
+#: the kwargs by exactly those names. What DELIVERS them is an integration's
+#: `_generate(**kwargs)` putting them in the request it builds, which is what
+#: `bind()` is documented to be for and which nothing installed here can check;
+#: `_get_ls_params` itself only fills in LangSmith tracing metadata. See
+#: `apply_settings` for that distinction stated at length.
+#:
+#: Deliberately short. `top_p`, `top_k`, `seed`, `presence_penalty`,
+#: `frequency_penalty`, `parallel_tool_calls`, `service_tier` and every spelling
+#: of thinking are absent because `langchain_core` names none of them and no
+#: integration package is installed here to check a guess against.
+_KWARGS: dict[str, str] = {
+    "max-tokens": "max_tokens",
+    "temperature": "temperature",
+}
+
+#: The two keys that do NOT travel as ordinary bound kwargs. `stop-sequences` has
+#: its own parameter on `_generate`; `tool-choice` has its own on `bind_tools`.
+#: Named here so `apply_settings` counts them as honoured — they are mapped, just
+#: not through `_KWARGS`.
+_FIRST_CLASS = ("stop-sequences", "tool-choice")
+
+
+def _tool_choice(value: Any) -> str:
+    """One authored `tool-choice:` in LangChain's own vocabulary.
+
+    `BaseChatModel.bind_tools`' docstring gives it: *"The tool to use. If 'any'
+    then any tool can be used."* So PACT's `required` is `any` here — the word
+    Anthropic uses, not the word an OpenAI-compatible endpoint uses — and one
+    authored word working on both targets is what the `settings` group's own
+    header promises.
+
+    A NAME goes through as a bare string, and that is the RIGHT answer here where
+    it is the wrong one on the ollama transport. There the bare string reaches
+    the wire, is accepted, and silently means nothing. Here the bare string IS
+    the interface: each integration's `bind_tools` is what turns it into
+    `{"type": "function", "function": {"name": ...}}` or `{"type": "tool",
+    "name": ...}`, which is why this transport hands it over through that method
+    and not through `bind()`.
+
+    That last sentence is now true without exception, and for one round it was
+    not — `bound_for_request` had a branch that attached the result of this
+    function with `bind()` when the call had no tools, which is the one route on
+    which nothing translates it. What this function returns is only ever safe
+    downstream of `bind_tools`, so it is only ever called there.
+    """
+    said = str(value).strip()
+    return "any" if said == "required" else said

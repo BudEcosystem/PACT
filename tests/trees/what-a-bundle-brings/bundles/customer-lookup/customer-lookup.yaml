@@ -1,0 +1,18 @@
+# A bundle whose folder is right here, beside this file, under `contributes/`.
+#
+# The folder form is the only mounting PACT has today: the definitions are files
+# in this tree, so the same loader reads them and `pact check` can point at a
+# line inside one. Nothing downloads, nothing builds, nothing runs.
+description: Read-only lookups against the customer record.
+version: "1.4"
+
+# A path inside this workspace. `from:` also accepts "a name your platform team
+# publishes" — see `bundles/refund-toolkit/` — and nothing in the field
+# distinguishes the two, which is the first decision in
+# `docs/remediation/C7-bundle-mounting.md`.
+from: bundles/customer-lookup
+
+# What this bundle is allowed to contribute. Anything under `contributes/` that
+# is not on this list is refused when the file is read — so adding a `policies/`
+# folder to the bundle cannot quietly start gating this workspace's runs.
+brings: [tools]

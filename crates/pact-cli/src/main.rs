@@ -14,10 +14,9 @@ mod egress;
 mod suites;
 
 use anyhow::{Result, bail};
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use pact_diag::Diagnostics;
 use pact_loader::Loader;
-
 
 const USAGE: &str = "\
 pact — Portable Agent Contract
@@ -181,7 +180,10 @@ fn options_sentence() -> String {
         [only] => format!("The only option `pact` takes is `{only}`."),
         many => format!(
             "The options `pact` takes are {}.",
-            many.iter().map(|o| format!("`{o}`")).collect::<Vec<_>>().join(", ")
+            many.iter()
+                .map(|o| format!("`{o}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
         ),
     }
 }
@@ -216,7 +218,10 @@ fn unknown_options(args: &[String]) -> Diagnostics {
         let span = pact_diag::Span::new(COMMAND_LINE, 1, start + 1, start, start + arg.len());
         let fix = match pact_schema::suggest::closest(arg, OPTIONS) {
             Some(real) => {
-                format!("Did you mean `{real}`? Type this instead: `{}`", corrected(args))
+                format!(
+                    "Did you mean `{real}`? Type this instead: `{}`",
+                    corrected(args)
+                )
             }
             None => format!(
                 "{} Take `{arg}` off and type this instead: `{}`",
@@ -308,7 +313,9 @@ fn run() -> Result<i32> {
         "discover" => discover_cmd(&path, unsafe_spec),
         "card" => {
             let agent = positional.get(1).map(|s| s.as_str()).unwrap_or("");
-            let root = positional.get(2).map(|s| Utf8PathBuf::from(s.as_str()))
+            let root = positional
+                .get(2)
+                .map(|s| Utf8PathBuf::from(s.as_str()))
                 .unwrap_or_else(|| Utf8PathBuf::from("."));
             card_cmd(agent, &root, unsafe_spec)
         }
@@ -341,7 +348,11 @@ fn load(path: &Utf8PathBuf) -> Result<(Option<pact_doc::Node>, Diagnostics)> {
     if !path.exists() {
         bail!("'{path}' does not exist");
     }
-    let root = if path.is_dir() { path.clone() } else { path.parent().unwrap_or(path).to_owned() };
+    let root = if path.is_dir() {
+        path.clone()
+    } else {
+        path.parent().unwrap_or(path).to_owned()
+    };
     let mut diags = Diagnostics::new();
     let node = Loader::new(root).load(path, &mut diags);
     diags.sort();
@@ -442,7 +453,11 @@ fn catalogue_ids(text: &str, from: &str) -> std::collections::BTreeSet<String> {
     };
     for (name, entry) in rows {
         ids.insert(name.clone());
-        if let Some(list) = entry.node.get("also-known-as").and_then(pact_doc::Node::as_list) {
+        if let Some(list) = entry
+            .node
+            .get("also-known-as")
+            .and_then(pact_doc::Node::as_list)
+        {
             ids.extend(list.iter().filter_map(|n| n.as_str().map(str::to_string)));
         }
     }
@@ -461,7 +476,11 @@ fn models_known_here(root: Option<&pact_doc::Node>) -> pact_schema::Known {
     {
         for (name, entry) in rows {
             names.insert(name.clone());
-            if let Some(list) = entry.node.get("also-known-as").and_then(pact_doc::Node::as_list) {
+            if let Some(list) = entry
+                .node
+                .get("also-known-as")
+                .and_then(pact_doc::Node::as_list)
+            {
                 names.extend(list.iter().filter_map(|n| n.as_str().map(str::to_string)));
             }
         }
@@ -507,7 +526,11 @@ fn locally_served(text: &str, from: &str) -> std::collections::BTreeSet<String> 
             continue;
         }
         ids.insert(name.clone());
-        if let Some(list) = entry.node.get("also-known-as").and_then(pact_doc::Node::as_list) {
+        if let Some(list) = entry
+            .node
+            .get("also-known-as")
+            .and_then(pact_doc::Node::as_list)
+        {
             ids.extend(list.iter().filter_map(|n| n.as_str().map(str::to_string)));
         }
     }
@@ -530,10 +553,12 @@ fn locally_served(text: &str, from: &str) -> std::collections::BTreeSet<String> 
 /// This is the same rule at check time, over the fields an author writes by
 /// hand, which is the only place it can reach an author *where they are*.
 ///
-/// **Which of the six roles admits which binding lives in [`egress`]**, along
-/// with the walk that finds them. It used to live here and asked one question of
-/// all four — `"llm" in allow-egress:` — so five of the six choices a workspace
-/// can write were read by nothing at all. This function's job is the three
+/// **Which role admits which binding lives in [`egress`]**, along with the walk
+/// that finds them, and the words themselves are read off the specification
+/// there rather than listed anywhere. It used to live here and asked one
+/// question of all four — `"llm" in allow-egress:` — so five of the six model
+/// roles a workspace can write were read by nothing at all. This function's job
+/// is the three
 /// things only the CLI knows: what is served on this machine, what to offer
 /// instead, and which ids exist at all.
 /// An address that leaves the box, in a workspace that says nothing may (B9).
@@ -583,7 +608,9 @@ fn locally_served(text: &str, from: &str) -> std::collections::BTreeSet<String> 
 /// they are declaring, and every question the agent is asked in the meantime is
 /// answered from nothing.
 fn a_set_of_documents_has_documents_in_it(root: &pact_doc::Node, diags: &mut Diagnostics) {
-    let Some(sets) = root.get("knowledge").and_then(pact_doc::Node::as_map) else { return };
+    let Some(sets) = root.get("knowledge").and_then(pact_doc::Node::as_map) else {
+        return;
+    };
     for (name, entry) in sets {
         // A payload is `Value::Payload`, not a map — `pact show` renders it
         // with `$payload` and `files` keys, and reading it back through those
@@ -623,13 +650,16 @@ fn a_set_of_documents_has_documents_in_it(root: &pact_doc::Node, diags: &mut Dia
 /// matters: a hosted embedder is called on every question a customer asks, with
 /// the question in it.
 fn looking_up_by_meaning_needs_an_embedder(root: &pact_doc::Node, diags: &mut Diagnostics) {
-    let Some(sets) = root.get("knowledge").and_then(pact_doc::Node::as_map) else { return };
+    let Some(sets) = root.get("knowledge").and_then(pact_doc::Node::as_map) else {
+        return;
+    };
     let allowed: Vec<String> = match root.get("allow-egress") {
         None => return,
         Some(n) => match &n.value {
-            pact_doc::Value::List(items) => {
-                items.iter().filter_map(|x| x.as_str().map(str::trim).map(str::to_owned)).collect()
-            }
+            pact_doc::Value::List(items) => items
+                .iter()
+                .filter_map(|x| x.as_str().map(str::trim).map(str::to_owned))
+                .collect(),
             pact_doc::Value::Str(s) => vec![s.trim().to_owned()],
             _ => Vec::new(),
         },
@@ -638,7 +668,11 @@ fn looking_up_by_meaning_needs_an_embedder(root: &pact_doc::Node, diags: &mut Di
         return;
     }
     for (name, entry) in sets {
-        let Some(how) = entry.node.get("looked-up-by").and_then(pact_doc::Node::as_str) else {
+        let Some(how) = entry
+            .node
+            .get("looked-up-by")
+            .and_then(pact_doc::Node::as_str)
+        else {
             continue;
         };
         if !matches!(how.trim(), "meaning" | "meaning-and-words") {
@@ -678,9 +712,10 @@ fn nothing_reaches_outside_the_box(
         // inventing one would refuse trees that never opted in.
         None => return,
         Some(n) => match &n.value {
-            pact_doc::Value::List(items) => {
-                items.iter().filter_map(|x| x.as_str().map(str::trim).map(str::to_owned)).collect()
-            }
+            pact_doc::Value::List(items) => items
+                .iter()
+                .filter_map(|x| x.as_str().map(str::trim).map(str::to_owned))
+                .collect(),
             pact_doc::Value::Str(s) => vec![s.trim().to_owned()],
             _ => Vec::new(),
         },
@@ -738,15 +773,28 @@ fn walk_for_outbound(
             && let Some(written) = entry.node.as_str().map(str::trim)
             && leaves_the_box(written)
         {
-            let named = if owner.is_empty() { key.clone() } else { format!("'{owner}'") };
+            let named = if owner.is_empty() {
+                key.clone()
+            } else {
+                format!("'{owner}'")
+            };
             found.push((named, written.to_owned(), entry.node.span.clone()));
             continue;
         }
         // The name of the thing that owns the address is the key one level up
         // — `vendor` in `tools: { vendor: { url: … } }` — because that is what
         // an author looks for, not the field name.
-        let next = if node_is_collection(key) { owner } else { key.as_str() };
-        walk_for_outbound(&entry.node, if next.is_empty() { key } else { next }, outbound, found);
+        let next = if node_is_collection(key) {
+            owner
+        } else {
+            key.as_str()
+        };
+        walk_for_outbound(
+            &entry.node,
+            if next.is_empty() { key } else { next },
+            outbound,
+            found,
+        );
     }
 }
 
@@ -772,13 +820,37 @@ fn leaves_the_box(address: &str) -> bool {
 fn node_is_collection(key: &str) -> bool {
     matches!(
         key,
-        "agents" | "tools" | "resources" | "skills" | "policies" | "questions" | "ports"
-            | "loops" | "context-policies" | "bundles" | "interceptors" | "watch" | "models"
-            | "actions" | "served-by"
+        "agents"
+            | "tools"
+            | "resources"
+            | "skills"
+            | "policies"
+            | "questions"
+            | "ports"
+            | "loops"
+            | "context-policies"
+            | "bundles"
+            | "interceptors"
+            | "watch"
+            | "models"
+            | "actions"
+            | "served-by"
     )
 }
 
-fn egress_is_allowed(root: &pact_doc::Node, diags: &mut Diagnostics) {
+/// `schema` is here for the same reason `nothing_reaches_outside_the_box` takes
+/// it: WHICH lines bind a model is `names: pact:models` in the specification,
+/// and a copy of that list in Rust is a copy that comes to disagree with it.
+///
+/// `kind` is the group this document is being validated as, passed rather than
+/// worked out again, so the egress rule reads the tree as exactly the shape the
+/// schema just checked it against — see `egress::bindings`.
+fn egress_is_allowed(
+    root: &pact_doc::Node,
+    kind: &str,
+    schema: &pact_schema::Schema,
+    diags: &mut Diagnostics,
+) {
     let mut local = locally_served(BUILTIN_CATALOGUE, "models/catalog.yaml");
     if let Some(rows) = root.get("models") {
         local.extend(locally_served_from(rows));
@@ -801,7 +873,7 @@ fn egress_is_allowed(root: &pact_doc::Node, diags: &mut Diagnostics) {
     // correct the spelling.
     let known = models_known_here(Some(root));
 
-    egress::refusals(root, &local, &offer, &known.names, diags);
+    egress::refusals(root, kind, schema, &local, &offer, &known.names, diags);
 }
 
 /// Warn when the model grading the eval suite is a model under test.
@@ -845,7 +917,9 @@ fn egress_is_allowed(root: &pact_doc::Node, diags: &mut Diagnostics) {
 /// it, and refusing outright would break a workspace whose runtime does. What
 /// must not happen is silence, which is what happened until this.
 fn a_profile_selects_nothing_yet(root: &pact_doc::Node, diags: &mut Diagnostics) {
-    let Some(named) = root.get("profile") else { return };
+    let Some(named) = root.get("profile") else {
+        return;
+    };
     let Some(said) = named.as_str().map(str::trim).filter(|s| !s.is_empty()) else {
         return;
     };
@@ -879,7 +953,9 @@ fn a_profile_selects_nothing_yet(root: &pact_doc::Node, diags: &mut Diagnostics)
 /// call `look-up-order` before `issue-refund`"* has nothing to put in `expect:`
 /// and is complete without it.
 fn every_case_asserts_something(root: &pact_doc::Node, diags: &mut Diagnostics) {
-    let Some(cases) = root.get("evals").and_then(|e| e.get("cases")) else { return };
+    let Some(cases) = root.get("evals").and_then(|e| e.get("cases")) else {
+        return;
+    };
     let Some(cases) = cases.as_map() else { return };
     for (name, entry) in cases {
         let says_what = entry
@@ -928,11 +1004,19 @@ fn every_case_asserts_something(root: &pact_doc::Node, diags: &mut Diagnostics) 
 /// two vocabularies is how an author learns that the checker and the runtime are
 /// different products.
 fn every_metric_says_who_provides_it(root: &pact_doc::Node, diags: &mut Diagnostics) {
-    let Some(metrics) = root.get("evals").and_then(|e| e.get("metrics")) else { return };
-    let Some(metrics) = metrics.as_list() else { return };
+    let Some(metrics) = root.get("evals").and_then(|e| e.get("metrics")) else {
+        return;
+    };
+    let Some(metrics) = metrics.as_list() else {
+        return;
+    };
     for metric in metrics {
-        let Some(uri) = metric.get("uri") else { continue };
-        let Some(written) = uri.as_str().map(str::trim).filter(|s| !s.is_empty()) else { continue };
+        let Some(uri) = metric.get("uri") else {
+            continue;
+        };
+        let Some(written) = uri.as_str().map(str::trim).filter(|s| !s.is_empty()) else {
+            continue;
+        };
         if written.contains(':') {
             continue;
         }
@@ -969,7 +1053,9 @@ fn every_metric_says_who_provides_it(root: &pact_doc::Node, diags: &mut Diagnost
 /// What it may never be is silent, because the failure is the dangerous
 /// direction — the author believes the rule is being enforced.
 fn a_judged_rule_has_somebody_to_grade_it(root: &pact_doc::Node, diags: &mut Diagnostics) {
-    let Some(evals) = root.get("evals") else { return };
+    let Some(evals) = root.get("evals") else {
+        return;
+    };
     let graded_by = evals
         .get("graded-by")
         .and_then(|n| n.as_str())
@@ -992,7 +1078,11 @@ fn a_judged_rule_has_somebody_to_grade_it(root: &pact_doc::Node, diags: &mut Dia
     }
     if let Some(cases) = evals.get("cases").and_then(pact_doc::Node::as_map) {
         for (name, entry) in cases {
-            let Some(also) = entry.node.get("must-also").and_then(pact_doc::Node::as_list) else {
+            let Some(also) = entry
+                .node
+                .get("must-also")
+                .and_then(pact_doc::Node::as_list)
+            else {
                 continue;
             };
             for rule in also {
@@ -1022,9 +1112,15 @@ fn a_judged_rule_has_somebody_to_grade_it(root: &pact_doc::Node, diags: &mut Dia
 }
 
 fn judge_is_not_the_model_under_test(root: &pact_doc::Node, diags: &mut Diagnostics) {
-    let Some(judge) = root.get("evals").and_then(|e| e.get("graded-by")) else { return };
-    let Some(grader) = judge.as_str().map(str::trim).filter(|s| !s.is_empty()) else { return };
-    let Some(agents) = root.get("agents").and_then(pact_doc::Node::as_map) else { return };
+    let Some(judge) = root.get("evals").and_then(|e| e.get("graded-by")) else {
+        return;
+    };
+    let Some(grader) = judge.as_str().map(str::trim).filter(|s| !s.is_empty()) else {
+        return;
+    };
+    let Some(agents) = root.get("agents").and_then(pact_doc::Node::as_map) else {
+        return;
+    };
 
     let mut rows = alias_groups(BUILTIN_CATALOGUE, "models/catalog.yaml");
     if let Some(node) = root.get("models") {
@@ -1041,8 +1137,12 @@ fn judge_is_not_the_model_under_test(root: &pact_doc::Node, diags: &mut Diagnost
         .collect();
 
     for (name, entry) in agents {
-        let Some(pinned) = entry.node.get("model") else { continue };
-        let Some(id) = pinned.as_str().map(str::trim).filter(|s| !s.is_empty()) else { continue };
+        let Some(pinned) = entry.node.get("model") else {
+            continue;
+        };
+        let Some(id) = pinned.as_str().map(str::trim).filter(|s| !s.is_empty()) else {
+            continue;
+        };
         if !same_as_grader.contains(id) {
             continue;
         }
@@ -1085,7 +1185,11 @@ fn alias_groups_from(models: &pact_doc::Node) -> Vec<std::collections::BTreeSet<
     rows.iter()
         .map(|(name, entry)| {
             let mut names = std::collections::BTreeSet::from([name.clone()]);
-            if let Some(list) = entry.node.get("also-known-as").and_then(pact_doc::Node::as_list) {
+            if let Some(list) = entry
+                .node
+                .get("also-known-as")
+                .and_then(pact_doc::Node::as_list)
+            {
                 names.extend(list.iter().filter_map(|n| n.as_str().map(str::to_string)));
             }
             names
@@ -1097,7 +1201,9 @@ fn alias_groups_from(models: &pact_doc::Node) -> Vec<std::collections::BTreeSet<
 fn catalogue_default() -> Option<String> {
     let path = camino::Utf8Path::new("models/catalog.yaml");
     let doc = pact_doc::parse_yaml(BUILTIN_CATALOGUE, path).ok()?;
-    doc.get("default").and_then(pact_doc::Node::as_str).map(str::to_string)
+    doc.get("default")
+        .and_then(pact_doc::Node::as_str)
+        .map(str::to_string)
 }
 
 /// The locally-served ids a workspace added in its own `models/catalog.yaml`.
@@ -1122,7 +1228,11 @@ fn locally_served_from(models: &pact_doc::Node) -> std::collections::BTreeSet<St
             continue;
         }
         ids.insert(name.clone());
-        if let Some(list) = entry.node.get("also-known-as").and_then(pact_doc::Node::as_list) {
+        if let Some(list) = entry
+            .node
+            .get("also-known-as")
+            .and_then(pact_doc::Node::as_list)
+        {
             ids.extend(list.iter().filter_map(|n| n.as_str().map(str::to_string)));
         }
     }
@@ -1210,7 +1320,9 @@ fn find_spec(unsafe_spec: bool) -> SpecSource {
 /// than misread quietly, which is what happens today to every consumer of a format
 /// with no version at all.
 fn version_is_one_we_read(root: &pact_doc::Node, diags: &mut Diagnostics) {
-    let Some(written) = root.get("pact-version") else { return };
+    let Some(written) = root.get("pact-version") else {
+        return;
+    };
     let Some(said) = written.as_str() else { return };
     let said = said.trim();
     if said.is_empty() || said == pact_doc::SPEC_VERSION {
@@ -1254,7 +1366,9 @@ fn durability_matches_what_this_tree_does(
     report: &pact_loader::report::LoadReport,
     diags: &mut Diagnostics,
 ) {
-    let Some(said) = root.get("durability").and_then(pact_doc::Node::as_str) else { return };
+    let Some(said) = root.get("durability").and_then(pact_doc::Node::as_str) else {
+        return;
+    };
     if said.trim() != "none" || report.waits.is_empty() {
         return;
     }
@@ -1279,7 +1393,10 @@ fn durability_matches_what_this_tree_does(
     ));
 }
 
-fn validate(path: &Utf8PathBuf, unsafe_spec: bool) -> Result<(Option<pact_doc::Node>, Diagnostics)> {
+fn validate(
+    path: &Utf8PathBuf,
+    unsafe_spec: bool,
+) -> Result<(Option<pact_doc::Node>, Diagnostics)> {
     let (mut node, mut diags) = load(path)?;
 
     // `based-on:` is resolved BEFORE the schema sees anything (G11). A derived
@@ -1287,8 +1404,8 @@ fn validate(path: &Utf8PathBuf, unsafe_spec: bool) -> Result<(Option<pact_doc::N
     // written would demand every required field on a document whose whole point
     // is that it restates only what differs, and would then check the merged
     // fields never at all. Resolving first means one document reaches the
-    // schema, the digest, `show` and both adapters — the alternative is four
-    // places that each have to remember to merge.
+    // schema, the digest, `show`, `discover`, `card` and both adapters — the
+    // alternative is four places that each have to remember to merge.
     // The specification is built BEFORE the tree is touched, because
     // `based-on:` resolution has to know which top-level maps are collections of
     // definitions and which are not — and that is a fact the specification
@@ -1326,7 +1443,10 @@ fn validate(path: &Utf8PathBuf, unsafe_spec: bool) -> Result<(Option<pact_doc::N
             .knowing("evals", suites::known_here(node.as_ref()));
 
         if sd.has_errors() {
-            eprintln!("The specification itself has problems ({}):", source.describe());
+            eprintln!(
+                "The specification itself has problems ({}):",
+                source.describe()
+            );
             eprint!("{}", sd.render());
             bail!("cannot validate against a broken specification");
         }
@@ -1352,8 +1472,30 @@ fn validate(path: &Utf8PathBuf, unsafe_spec: bool) -> Result<(Option<pact_doc::N
             );
         }
 
-        // A tree with `agents:` is a workspace; anything else is a single agent.
-        let kind = if root.get("agents").is_some() { "workspace" } else { "agent" };
+        // A folder holding BOTH self files has not said what it is, and the
+        // loader has already said so (`loader/two-self-files`). Whichever of the
+        // two this went on to validate against, every line of the OTHER file
+        // came back as a setting that kind cannot have — a folder with
+        // `workspace.yaml` and `agent.yaml` in it was told *"'instructions' is
+        // not something a workspace can have"* about the one line that makes its
+        // `agent.yaml` an agent. One mistake gets one message, and the mistake
+        // here is the second file, not what is written in it.
+        let folder = holding_folder(path);
+        if holds_self_file(&folder, &WORKSPACE_SELF_FILES)
+            && holds_self_file(&folder, &AGENT_SELF_FILES)
+        {
+            diags.sort();
+            return Ok((node, diags));
+        }
+
+        // A workspace is a workspace; anything else is a single agent. See
+        // `is_a_workspace` for what makes one, and for the round in which the
+        // question was answered with `agents:` alone.
+        let kind = if is_a_workspace(path, root, &schema) {
+            "workspace"
+        } else {
+            "agent"
+        };
         // ...and a folder that is neither is neither, which nothing said. A
         // directory holding only `agent.yaml` and `instructions.md` — Eve's
         // documented flat layout — printed "OK — loaded cleanly (3 settings)"
@@ -1381,6 +1523,11 @@ fn validate(path: &Utf8PathBuf, unsafe_spec: bool) -> Result<(Option<pact_doc::N
                 source.describe()
             ),
         }
+        // The other half of "nothing here can run", now that a workspace is
+        // allowed to exist without an `agents:` in it.
+        if kind == "workspace" {
+            nobody_here_to_run(path, root, &mut diags);
+        }
         // WHICH VERSION OF THE FORMAT THIS TREE IS WRITTEN FOR — asked before any
         // other cross-document rule, because every one of them is a rule of a
         // particular version. A tree written for a version this build does not
@@ -1390,7 +1537,7 @@ fn validate(path: &Utf8PathBuf, unsafe_spec: bool) -> Result<(Option<pact_doc::N
         // The one rule the schema cannot state about itself: `names: pact:models`
         // asks whether an id EXISTS, and this asks whether binding it would leave
         // a workspace that says nothing may (D17, Y16).
-        egress_is_allowed(root, &mut diags);
+        egress_is_allowed(root, kind, &schema, &mut diags);
         // B9: the seventh part of the system — every address a tool or a server
         // it connects to reaches. See `nothing_reaches_outside_the_box`.
         nothing_reaches_outside_the_box(root, &schema, &mut diags);
@@ -1454,6 +1601,10 @@ fn validate(path: &Utf8PathBuf, unsafe_spec: bool) -> Result<(Option<pact_doc::N
         // cannot see the shape of the graph, so `team: {helper: I ask myself.}`
         // inside `agents/helper/` printed "OK — loaded cleanly (11 settings)".
         pact_loader::teams::no_team_calls_itself(root, &mut diags);
+        // And beside it: a base put to work. `base: yes` says nothing can run
+        // the agent, and a `team:` entry, a port's `answers:` or a stage's
+        // `may-use:` naming it is a promise that something will.
+        pact_loader::teams::no_base_on_a_team(root, &mut diags);
         // And the sixth, which runs the other way round from every check above:
         // `names:` asks whether a name RESOLVES, and never whether anything names
         // a document. A fully-written approval policy that no agent points at
@@ -1568,29 +1719,358 @@ fn validate(path: &Utf8PathBuf, unsafe_spec: bool) -> Result<(Option<pact_doc::N
     Ok((node, diags))
 }
 
+/// The folder a path names, which is the path itself when it is one.
+///
+/// `pact check` accepts a single file as well as a directory, and every question
+/// below is a question about the folder the file sits in.
+///
+/// RESOLVED FIRST, the way [`enclosing_workspace`] resolves it, because the
+/// questions asked of the answer are questions about the SHAPE of the tree —
+/// which folder is above this one, what that folder is called — and `.`, `..`
+/// and a bare file name have no answer to those. The two disagreed for a round,
+/// and the same agent in the same tree got two different instructions depending
+/// on how the reader had typed the path:
+///
+/// ```text
+/// $ pact check bare/agents/hello
+///   fix: Create `bare/workspace.yaml` … This agent is already in the right
+///   place; nothing here has to move.
+/// $ cd bare/agents/hello && pact check .
+///   fix: Create `./workspace.yaml` … Then move this agent into a folder beside
+///   it: `./agents/<a short name for it>/agent.yaml`.
+/// $ cd bare/agents/hello && pact check agent.yaml
+///   fix: … `/agents/<a short name for it>/agent.yaml`
+/// ```
+///
+/// The second is the advice that builds a second tree inside the author's own —
+/// reached by the most ordinary invocation there is, checking the folder you are
+/// standing in. The third names a path at the root of the filesystem, because
+/// `agent.yaml` has no parent to speak of. Resolving once, here, is what makes
+/// all three one answer.
+fn holding_folder(path: &Utf8PathBuf) -> Utf8PathBuf {
+    // A path that cannot be resolved is one that does not exist, and the caller
+    // above has its own words for that; falling back to what was typed keeps
+    // this from swallowing them.
+    let here = path.canonicalize_utf8().unwrap_or_else(|_| path.clone());
+    if here.is_dir() {
+        here
+    } else {
+        here.parent().map_or(here.clone(), Utf8Path::to_path_buf)
+    }
+}
+
+/// The file that says a folder describes a whole system, in both spellings.
+///
+/// `discover::walk` loops over exactly these two and nothing else. Every place
+/// in this file that asks *is this a workspace* reads THIS list, so the trees a
+/// runtime finds and the trees the checker calls workspaces cannot drift apart
+/// one spelling at a time.
+const WORKSPACE_SELF_FILES: [&str; 2] = ["workspace.yaml", "workspace.yml"];
+
+/// ...and the file that says a folder describes one agent, in both spellings.
+/// The mirror of the list above, read the same way, so neither question is
+/// answered by which optional settings the author has typed so far.
+const AGENT_SELF_FILES: [&str; 2] = ["agent.yaml", "agent.yml"];
+
+/// Whether `dir` holds one of `names`.
+fn holds_self_file(dir: &Utf8Path, names: &[&str]) -> bool {
+    names.iter().any(|n| dir.join(n).exists())
+}
+
+/// Whether a folder on disk is the root of a workspace, asked of the filesystem
+/// alone and of nothing else.
+///
+/// ONE definition, and it is `discover::walk`'s — that function calls this one,
+/// so the trees a runtime finds and the trees the checker calls workspaces are
+/// ONE FUNCTION TODAY rather than two lists that happen to match. Stated that
+/// carefully on purpose: nothing red-flags somebody inlining the two file names
+/// back into `walk`, and the suite would stay green if they did, because every
+/// shape it can build uses a spelling both sides already know. What the sharing
+/// buys is that the next spelling, or the next rule, lands in one place; it is
+/// not a guarantee anything enforces.
+///
+/// Three call sites used to hold their own answer — this, `enclosing_workspace`
+/// and the `agents:` test that C11 was about — and three answers to one question
+/// is how they come to disagree:
+///
+/// * `enclosing_workspace` accepted `workspace.yaml` and not `workspace.yml`, so
+///   a tree whose self file used the second spelling had a workspace around it
+///   that walking up could not see;
+/// * ...and it accepted an `agents/` FOLDER with no self file beside it, which
+///   `walk` does not, so `pact check <tree>/agents/hello` on a tree with no
+///   `workspace.yaml` in it at all answered *"OK — loaded cleanly, checked
+///   inside `<tree>`"* while `pact discover <tree>` answered `[]` and
+///   `pact check <tree>` refused the same folder for having no `name:`. The
+///   workspace-level complaint was filtered out on the way, because
+///   `check_in_context` prints only what is wrong inside the folder the reader
+///   named — so the one command an author is told to run while editing an agent
+///   was the one command that said the tree was fine.
+///
+/// So: a self file, and nothing else. The `agents/`-folder answer is a RICHER
+/// one and it is still given, in [`is_a_workspace`] — but only there, where a
+/// document has been loaded and the reader has pointed the checker AT this
+/// folder, so what comes back is *"a workspace must have a `name`"* and the file
+/// to put it in. Walking UP is a different question: it decides whether some
+/// ancestor is a tree a runtime could load, and about that the runtime's own
+/// answer is the only one worth having.
+fn looks_like_a_workspace_root(dir: &Utf8Path) -> bool {
+    holds_self_file(dir, &WORKSPACE_SELF_FILES)
+}
+
+/// Whether the tree being checked is a workspace rather than a lone agent.
+///
+/// The first two answers are the filesystem's, and they are the same question
+/// asked twice in mirror image: a folder holding `workspace.yaml`/`.yml` is a
+/// workspace, and a folder holding `agent.yaml`/`.yml` is an agent. The first is
+/// the entire discovery contract (see `discover::walk` and
+/// `looks_like_a_workspace_root`), so the trees a runtime finds and the trees
+/// the checker reads as workspaces are one set. The second has to be asked in
+/// the same breath, because the alternative is deciding what a folder IS from
+/// which optional lines the author has finished typing — and a half-written
+/// `agent.yaml` holding only `name:` and `description:` is then read as a
+/// workspace, which tells its author their folder has no agents in it while
+/// their `agent.yaml` is open in front of them, and drops the
+/// *"An agent must have 'instructions'"* that would have told them what was
+/// actually missing.
+///
+/// Then `agents/` on disk, and then — for the tree that has no self file at all
+/// — the document itself, with the specification deciding what the answers mean,
+/// so a new setting or a new collection costs a line of YAML and not a line
+/// here:
+///
+/// * a setting only an AGENT can have — `instructions:`, `model:`, `uses:` — and
+///   this folder is an agent. This is what catches the flat agent whose self
+///   file is named after its own folder (`desk/desk.yaml`), which the disk
+///   cannot tell from any other kind.
+/// * a collection only a WORKSPACE can have — and this folder is a workspace one
+///   line short of finished, which is the first tree anybody builds:
+///   `agents/hello/agent.yaml` and nothing else. The missing `name:` is what it
+///   should be told about rather than being told it is not a PACT folder at all.
+///
+/// This used to be `root.get("agents").is_some()` and nothing else, which made
+/// `agents:` the definition of the word. A workspace whose only collection was
+/// `skills:` — the skills and tools written before the agent that uses them,
+/// which is a perfectly ordinary order to build in — was read as a lone AGENT,
+/// found no workspace around itself, and was refused with *"there is no
+/// `workspace.yaml` in it and no `agents/` folder either"* while
+/// `workspace.yaml` sat in that folder holding the author's own `name:`. R56: a
+/// message that describes the reader's own tree wrongly is a message they stop
+/// believing.
+fn is_a_workspace(path: &Utf8PathBuf, root: &pact_doc::Node, schema: &pact_schema::Schema) -> bool {
+    let folder = holding_folder(path);
+    if holds_self_file(&folder, &WORKSPACE_SELF_FILES) {
+        return true;
+    }
+    // The mirror, and it is asked before anything about collections: a folder
+    // with an `agent.yaml` in it is that agent's folder however many `tools/`
+    // and `knowledge/` folders sit beside it, and whether or not the agent is
+    // finished.
+    if holds_self_file(&folder, &AGENT_SELF_FILES) {
+        return false;
+    }
+    // ...and then an `agents/` FOLDER, which only this function asks about.
+    //
+    // It is a true signal — an author who has made `agents/` and not yet put
+    // anything in it has still said what this tree is, and the emptiest possible
+    // `agents/` produces no `agents:` key to read — but it is only safe to act
+    // on where the checker has been pointed AT this folder, which is here. What
+    // it buys is the sentence *"A workspace must have a 'name'"* and the file to
+    // put it in, instead of *"not a PACT folder"* at somebody one line from
+    // done.
+    //
+    // `looks_like_a_workspace_root` is deliberately NOT where this lives, because
+    // that is the predicate `enclosing_workspace` and `discover::walk` share and
+    // walking UP is a different question: an ancestor with an `agents/` folder
+    // and no `workspace.yaml` is not a tree any runtime can load, and treating it
+    // as one made `pact check <tree>/agents/hello` print `OK` for a tree
+    // `pact discover` returns nothing for.
+    if folder.join("agents").is_dir() {
+        return true;
+    }
+    let (Some(workspace), Some(agent)) = (schema.group("workspace"), schema.group("agent")) else {
+        return false;
+    };
+    // A setting only the agent group has, so only an agent can be holding it.
+    // `name:` and `description:` are on both groups and say nothing either way,
+    // which is exactly why neither list is allowed to consult them.
+    if agent
+        .fields
+        .iter()
+        .filter(|f| !workspace.fields.iter().any(|w| w.name == f.name))
+        .any(|f| root.get(&f.name).is_some())
+    {
+        return false;
+    }
+    workspace
+        .fields
+        .iter()
+        .filter(|f| matches!(f.ty, pact_schema::Ty::MapOf(_)))
+        .filter(|f| !agent.fields.iter().any(|a| a.name == f.name))
+        .any(|f| root.get(&f.name).is_some())
+}
+
+/// A workspace with nobody in it to run.
+///
+/// The mirror image of the `loader/nothing-can-run-this` below, and the same
+/// rule id because it is the same claim about the same folder: `pact discover`
+/// finds this tree and lists no agents, and `pact card` has nothing to publish.
+/// One id, so an author who has read the sentence once recognises it, and a
+/// reader searching for it finds both shapes.
+///
+/// A WARNING and not an error, deliberately. A tree with its tools and skills
+/// written and no agent yet is not broken — it is half built, and building
+/// bottom-up is an authoring order the tool has no business refusing. What it
+/// must not do is print `OK — loaded cleanly` and leave an author believing
+/// something in there will run.
+fn nobody_here_to_run(path: &Utf8PathBuf, root: &pact_doc::Node, diags: &mut Diagnostics) {
+    // A workspace whose every agent is a base is the same claim in different
+    // words: entries exist, and still nothing here can run. Without this arm,
+    // `base: yes` on the last runnable agent turned the warning off.
+    let all_base = |m: &pact_doc::Map| m.iter().all(|(_, e)| discover::is_base(&e.node));
+    let only_bases = root
+        .get("agents")
+        .and_then(pact_doc::Node::as_map)
+        .is_some_and(|m| !m.is_empty() && all_base(m));
+    let empty = match root.get("agents") {
+        None => true,
+        Some(agents) => agents.as_map().is_none_or(|m| m.is_empty() || all_base(m)),
+    };
+    if !empty {
+        return;
+    }
+    let folder = holding_folder(path);
+    // The thing that is missing is a whole FOLDER, so the span says folder — the
+    // same move `not_a_workspace` makes, and for the same reason: borrowing the
+    // span of `name:` put the caret under the workspace's name and told the
+    // reader that line was the problem.
+    let make = folder.join("agents/<a short name for it>/agent.yaml");
+    let (message, fix) = if only_bases {
+        (
+            format!(
+                "'{path}' is a workspace whose every agent says `base: yes`, so there \
+                 is nothing here to run: a base exists only to be based on."
+            ),
+            "Add an agent `based-on:` one of them, with its own `instructions:` — \
+             that one can run."
+                .to_string(),
+        )
+    } else {
+        (
+            format!(
+                "'{path}' is a workspace with no agents in it, so there is nothing here \
+                 to run: `pact discover` finds it and lists none, and `pact card` has \
+                 nothing to publish."
+            ),
+            format!(
+                "Create `{make}` and put one line in it: `description: ...` — what that \
+                 agent is for."
+            ),
+        )
+    };
+    diags.push(pact_diag::Diagnostic::warning(
+        "loader/nothing-can-run-this",
+        pact_diag::Span::in_folder(folder.as_str(), make.as_str()),
+        message,
+        fix,
+    ));
+}
+
+/// The folder the missing `workspace.yaml` belongs in.
+///
+/// ONE computation, read by BOTH arms of [`not_a_workspace`], because "where
+/// does the workspace go" is one question and the two arms answered it two ways:
+/// the warning worked it out from the `agents/` folder above and the error used
+/// the folder it had been handed, so `pact check <tree>/agents/empty` on a
+/// half-built tree said *"Create `<tree>/agents/empty/workspace.yaml`"* — a
+/// whole second tree, three folders deep inside the author's own.
+///
+/// The rule is the loader's own: an agent lives at `<tree>/agents/<name>/`, so
+/// anything at or under an `agents/` directory belongs to the tree that
+/// directory sits in, however deep under it the reader is standing. A folder
+/// with no `agents/` above it is its own tree, which is the flat shape.
+fn tree_the_folder_belongs_to(folder: &Utf8Path) -> Utf8PathBuf {
+    folder
+        .ancestors()
+        .find(|a| a.file_name() == Some("agents"))
+        .and_then(Utf8Path::parent)
+        .map_or_else(|| folder.to_path_buf(), Utf8Path::to_path_buf)
+}
+
+/// Whether the agent is already sitting where the loader will look for it, so
+/// the only thing missing is the workspace file above.
+///
+/// STRUCTURAL, and it has to be: this used to be *"is any ancestor called
+/// `agents`"*, which is true of every folder at every depth under one, so
+/// `X/agents/proj/m/agent.yaml` — an agent two levels down, which the Expansion
+/// Rule does not read at all — was told *"This agent is already in the right
+/// place; nothing here has to move."* Creating the file that message names left
+/// a tree that still would not load, and `pact check` had already exited 0. A
+/// sentence a non-technical reader cannot check is a sentence that has to be
+/// true (D13).
+///
+/// The two shapes the Expansion Rule really reads, and nothing else:
+///
+/// * `<tree>/agents/<name>/agent.yaml` — the folder form, so the folder's parent
+///   is `agents` AND the folder holds an agent self file;
+/// * `<tree>/agents/<name>.yaml` — the flat file form, so the FILE's parent is
+///   `agents`. Not `agents/agent.yaml`, which is neither form: measured, the
+///   loader answers *"This should be a set of agent settings, but it is some
+///   text"* three times over for that file, so its author is told to move it
+///   like anybody else.
+fn the_agent_is_where_the_loader_looks(path: &Utf8Path, folder: &Utf8Path) -> bool {
+    let under_agents = |d: &Utf8Path| d.parent().and_then(Utf8Path::file_name) == Some("agents");
+    if under_agents(folder) && holds_self_file(folder, &AGENT_SELF_FILES) {
+        return true;
+    }
+    path.is_file()
+        && !AGENT_SELF_FILES.contains(&path.file_name().unwrap_or_default())
+        && under_agents(path)
+}
+
 /// Say so when the folder being checked is not something a runtime can load.
 ///
 /// Two shapes, and they need different words. A folder with an agent in it but
 /// no workspace around it is an author one file away from working; a folder with
 /// neither is somebody who pointed the command at the wrong place, and telling
 /// them to add `description:` to a file that does not exist helps nobody.
+///
+/// **Which of the two is asked the same way [`is_a_workspace`] asks it**, and
+/// for a round it was not: this one looked only at the SETTINGS, so a folder
+/// holding an `agent.yaml` its author had not finished typing — `name:` written,
+/// `description:` not yet — was told *"there is no `workspace.yaml` in it and no
+/// `agents/` folder either"*, which is a true sentence about a folder whose
+/// `agent.yaml` is sitting right there, and it swallowed the `An agent must have
+/// a 'description'` that would have told this author which line was missing.
+/// That is the same mirror `is_a_workspace`'s own comment records walking into,
+/// one function along. A file named `agent.yaml` is an agent's file whether or
+/// not the agent is finished, so the name is asked first and the settings are
+/// what answer for a flat document that has no self file at all.
 fn not_a_workspace(path: &Utf8PathBuf, root: &pact_doc::Node, diags: &mut Diagnostics) -> bool {
-    let has_agent_settings = root.get("description").is_some() || root.get("instructions").is_some();
-
     // The folder that has to become a workspace. `pact check` also accepts a
     // single file, and the workspace a lone `agent.yaml` is missing goes BESIDE
     // it, never inside it — `agent.yaml/workspace.yaml` is not a path anybody
     // can create.
-    let folder = if path.is_dir() {
-        path.clone()
-    } else {
-        path.parent().map_or_else(|| path.clone(), Utf8PathBuf::from)
-    };
-    // Which file to make is asked of the one component that answers that
-    // question, so this can never name a spelling the loader would go on to read
-    // as an ordinary setting. `folder` is its own root here, so rule 1 fires and
-    // the answer is `workspace.yaml` — the only name `pact discover` reads.
-    let start = pact_loader::firstfile::to_start(&folder, &pact_loader::policy::Policy::default(), &folder);
+    let folder = holding_folder(path);
+    // The same path resolved, for the questions below that are about a FILE
+    // rather than its folder — the flat agent form is a file directly inside
+    // `agents/`, and `pact check desk.yaml` typed from inside that folder has no
+    // parent to compare until it is resolved. `path` itself stays exactly as the
+    // reader typed it, because the message quotes back the place they pointed at.
+    let here = path.canonicalize_utf8().unwrap_or_else(|_| path.clone());
+    let has_agent_settings = holds_self_file(&folder, &AGENT_SELF_FILES)
+        || root.get("description").is_some()
+        || root.get("instructions").is_some();
+
+    // WHERE it goes, asked ONCE for both arms below. See
+    // `tree_the_folder_belongs_to` for why that is not the folder we were handed.
+    let tree = tree_the_folder_belongs_to(&folder);
+
+    // ...and which file to make there, asked of the one component that answers
+    // that question, so this can never name a spelling the loader would go on to
+    // read as an ordinary setting. `tree` is its own root here, so rule 1 fires
+    // and the answer is `workspace.yaml` — the only name `pact discover` reads.
+    let start =
+        pact_loader::firstfile::to_start(&tree, &pact_loader::policy::Policy::default(), &tree);
 
     // ...and the span says FOLDER, which is what stops the arrow printing a line
     // and a column against a directory.
@@ -1617,10 +2097,40 @@ fn not_a_workspace(path: &Utf8PathBuf, root: &pact_doc::Node, diags: &mut Diagno
     // when you cannot write code (D13), ends up with a workspace actually called
     // `<what this whole system is called>`. Two spellings of one instruction,
     // and the ambiguous one was on the message that comes first.
-    let make_the_workspace =
-        format!("Create `{start}` and put one line in it: `name: ...` — what this whole system is called.");
+    let make_the_workspace = format!(
+        "Create `{start}` and put one line in it: `name: ...` — what this whole system is called."
+    );
 
     if has_agent_settings {
+        // Whether the agent has to MOVE, which is a different question from
+        // where the workspace goes and is asked separately.
+        //
+        // An agent already written at `<tree>/agents/hello/agent.yaml` is in
+        // exactly the right place and the ONLY thing missing is the self file at
+        // `<tree>`. The move sentence is written for the flat shape
+        // (`m/agent.yaml`), and read at that one it said: create
+        // `<tree>/agents/hello/workspace.yaml`, then move your agent into
+        // `<tree>/agents/hello/agents/hello/agent.yaml` — a second tree built
+        // inside the one the author already laid out correctly, which a reader
+        // who cannot write code has no way to tell is wrong advice (D13).
+        //
+        // The mirror mistake is just as bad and was made next: telling an agent
+        // that is NOT in one of the two places the loader reads that it need not
+        // move. See `the_agent_is_where_the_loader_looks`.
+        let fix = if the_agent_is_where_the_loader_looks(&here, &folder) {
+            format!(
+                "{make_the_workspace} This agent is already in the right place; \
+                 nothing here has to move."
+            )
+        } else {
+            // Beside the file just named, which is the tree's own `agents/` —
+            // not this folder's, which for an agent buried under one is a
+            // fourth level nobody reads.
+            format!(
+                "{make_the_workspace} Then move this agent into a folder beside it: \
+                 `{tree}/agents/<a short name for it>/agent.yaml`."
+            )
+        };
         diags.push(pact_diag::Diagnostic::warning(
             "loader/nothing-can-run-this",
             span,
@@ -1629,10 +2139,7 @@ fn not_a_workspace(path: &Utf8PathBuf, root: &pact_doc::Node, diags: &mut Diagno
                  can find it: `pact discover` returns none and `pact card` cannot \
                  publish it."
             ),
-            format!(
-                "{make_the_workspace} Then move this agent into a folder beside it: \
-                 `{folder}/agents/<a short name for it>/agent.yaml`."
-            ),
+            fix,
         ));
         return false;
     } else {
@@ -1652,18 +2159,13 @@ fn not_a_workspace(path: &Utf8PathBuf, root: &pact_doc::Node, diags: &mut Diagno
     true
 }
 
-fn check(
-    path: &Utf8PathBuf,
-    quiet: bool,
-    unsafe_spec: bool,
-    deny_warnings: bool,
-) -> Result<i32> {
+fn check(path: &Utf8PathBuf, quiet: bool, unsafe_spec: bool, deny_warnings: bool) -> Result<i32> {
     // Checking ONE AGENT is the obvious thing to type while working on one. Its
     // tools and policies live in the workspace above it, so the workspace is what
     // gets loaded and only what is wrong inside the folder the reader named is
     // printed.
     if let Some(root) = enclosing_workspace(path) {
-        return check_in_context(path, &root, quiet, unsafe_spec);
+        return check_in_context(path, &root, quiet, unsafe_spec, deny_warnings);
     }
     let (node, diags) = validate(path, unsafe_spec)?;
 
@@ -1690,20 +2192,28 @@ fn check(
     // safe to ADD is that a false positive costs a line of noise rather than a
     // broken build. `--deny-warnings` gives that up on purpose, per run, where
     // somebody has decided the trade — never by default.
-    Ok(if errors > 0 || (deny_warnings && warnings > 0) { 1 } else { 0 })
+    Ok(if errors > 0 || (deny_warnings && warnings > 0) {
+        1
+    } else {
+        0
+    })
 }
 
 /// The workspace `path` is an agent inside, if it is one.
 ///
-/// A workspace has `workspace.yaml` or an `agents/` folder. Walking up stops at
-/// the first one, so an agent inside an agent's own subfolder still resolves to
-/// the tree that holds its tools. `None` means `path` is the whole thing being
-/// looked at, which is the ordinary case.
+/// What makes a folder a workspace is asked of `looks_like_a_workspace_root` and
+/// not answered again here — it used to be spelled out a second time, and the
+/// copy accepted `workspace.yaml` and not `workspace.yml`, so a tree whose self
+/// file used the second spelling had a workspace around it that this walk could
+/// not see and every agent in it was told nothing could find it. Walking up
+/// stops at the first one, so an agent inside an agent's own subfolder still
+/// resolves to the tree that holds its tools. `None` means `path` is the whole
+/// thing being looked at, which is the ordinary case.
 fn enclosing_workspace(path: &Utf8PathBuf) -> Option<Utf8PathBuf> {
     let start = path.canonicalize_utf8().ok()?;
     let mut dir = start.parent().map(Utf8PathBuf::from);
     while let Some(d) = dir {
-        if d.join("workspace.yaml").exists() || d.join("agents").is_dir() {
+        if looks_like_a_workspace_root(&d) {
             return Some(d);
         }
         dir = d.parent().map(Utf8PathBuf::from);
@@ -1724,6 +2234,7 @@ fn check_in_context(
     root: &Utf8PathBuf,
     quiet: bool,
     unsafe_spec: bool,
+    deny_warnings: bool,
 ) -> Result<i32> {
     let here = agent.canonicalize_utf8().unwrap_or_else(|_| agent.clone());
     let (_, whole) = validate(root, unsafe_spec)?;
@@ -1736,6 +2247,43 @@ fn check_in_context(
         if inside {
             mine.push(d.clone());
         }
+    }
+    // WHAT IS WRONG ELSEWHERE IN THE TREE, counted before anything is added to
+    // `mine`, and said in one sentence rather than reprinted.
+    //
+    // Printing only the named folder's problems is right — it is the question
+    // that was asked — but staying SILENT about the rest was the same false `OK`
+    // C13 was about, reached a different way. `pact discover` refuses a workspace
+    // it cannot load whole (`skipping <root>: N problem(s)`, then `[]`), so an
+    // agent in a tree with an error anywhere in it cannot be run by any runtime,
+    // however clean its own folder is. Measured, before this:
+    //
+    // ```text
+    // $ pact discover broke        skipping broke: 1 problem(s) / []
+    // $ pact check broke/agents/hello
+    // OK — broke/agents/hello loaded cleanly, checked inside broke so its tools
+    // and policies could be found.                                    (exit 0)
+    // ```
+    //
+    // A WARNING, and the count only — not the problems themselves, which belong
+    // to whoever asked about that folder. Warning and not error because this
+    // author's own work is not what is broken and refusing their command would
+    // be answering for somebody else's file; `--deny-warnings` still fails, and
+    // `pact check <root>` is named so the next step is one command away.
+    let elsewhere = whole.error_count() - mine.error_count();
+    if elsewhere > 0 {
+        let start =
+            pact_loader::firstfile::to_start(root, &pact_loader::policy::Policy::default(), root);
+        mine.push(pact_diag::Diagnostic::warning(
+            "loader/the-workspace-around-it-is-broken",
+            pact_diag::Span::in_folder(root.as_str(), start.as_str()),
+            format!(
+                "'{root}' — the workspace this agent is in — has {elsewhere} \
+                 problem(s) in other files, so nothing in this tree can run yet: \
+                 `pact discover` skips a workspace it cannot load whole."
+            ),
+            format!("Run `pact check {root}` to see them, and fix those too."),
+        ));
     }
     mine.borrow_sources_from(&whole);
     mine.sort();
@@ -1756,7 +2304,16 @@ fn check_in_context(
             (e, w) => out!("{e} problem(s) and {w} warning(s) found in {agent}."),
         }
     }
-    Ok(if errors > 0 { 1 } else { 0 })
+    // `--deny-warnings` is read HERE too. It was read only on the other branch,
+    // so the one flag whose whole job is *"treat a warning as a refusal, this
+    // run"* was silently ignored for every invocation that named an agent inside
+    // a workspace — which is the invocation the tool tells authors to use while
+    // editing one, and the invocation a CI script makes per agent.
+    Ok(if errors > 0 || (deny_warnings && warnings > 0) {
+        1
+    } else {
+        0
+    })
 }
 
 /// `pact waits` — every wait this tree can produce, as data.
@@ -1809,24 +2366,41 @@ fn discover_cmd(path: &Utf8PathBuf, unsafe_spec: bool) -> Result<i32> {
     let roots = discover::find_workspaces(path, 6);
     let mut out = Vec::new();
     for root in &roots {
-        // Validated as well as loaded. `discover` publishes `"runnable": true`
-        // for a tree, and it said so for trees `pact check` refuses.
-        if let Ok((_, d)) = &validate(root, unsafe_spec)
-            && d.has_errors()
-        {
+        // Validated AND derived: `validate` resolves `based-on:` before the
+        // schema sees anything (G11), so the inventory publishes each agent as
+        // the thing it becomes. The bare re-load this replaces published
+        // `model: null` and `limits: null` for every derived agent (D-5).
+        let (node, mut d) = match validate(root, unsafe_spec) {
+            Ok(v) => v,
+            Err(e) => {
+                // Never silent: a folder this walk found and then could not
+                // read is named, the way every other skip here is.
+                eprintln!("skipping {root}: {e}");
+                continue;
+            }
+        };
+        if d.has_errors() {
             eprintln!("skipping {root}: {} problem(s)", d.error_count());
             continue;
         }
-        let mut diags = Diagnostics::new();
-        if let Some(found) = discover::load(root, &mut diags) {
-            if diags.has_errors() {
-                eprintln!("skipping {root}: {} problem(s)", diags.error_count());
-                continue;
-            }
-            out.push(discover::inventory(&found));
+        let Some(document) = node else {
+            eprintln!("skipping {root}: nothing loadable");
+            continue;
+        };
+        // Warnings on stderr, stdout untouched — the same channel as before.
+        d.sort();
+        if !d.is_empty() {
+            eprint!("{}", d.render());
         }
+        out.push(discover::inventory(&discover::Found {
+            root: root.clone(),
+            document,
+        }));
     }
-    out!("{}", serde_json::to_string_pretty(&serde_json::Value::Array(out))?);
+    out!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::Value::Array(out))?
+    );
     Ok(0)
 }
 
@@ -1848,14 +2422,26 @@ fn card_cmd(agent: &str, root: &Utf8PathBuf, unsafe_spec: bool) -> Result<i32> {
     // The card is what another system reads INSTEAD of the tree. It built a
     // `Diagnostics` and threw it away unrendered, so a tree `pact check` refuses
     // was published as a valid A2A card at exit 0.
-    let (_, diags) = validate(root, unsafe_spec)?;
+    let (node, mut diags) = validate(root, unsafe_spec)?;
     if diags.has_errors() {
         eprint!("{}", diags.render());
         return Ok(1);
     }
-    let mut load_diags = Diagnostics::new();
-    let Some(found) = discover::load(root, &mut load_diags) else {
+    // The same stderr channel `show` and `discover` now use, for the same
+    // reason: a card is what another system reads INSTEAD of the tree, so an
+    // agent the loader skipped is an agent that system will never hear of.
+    diags.sort();
+    if !diags.is_empty() {
+        eprint!("{}", diags.render());
+    }
+    // Validate's own node, kept — the bare re-load this replaces projected the
+    // card from the underived document (D-5).
+    let Some(document) = node else {
         bail!("nothing loadable at '{root}'");
+    };
+    let found = discover::Found {
+        root: root.clone(),
+        document,
     };
     match discover::agent_card(&found, agent, "https://agents.local") {
         Some(card) => {
@@ -1863,11 +2449,18 @@ fn card_cmd(agent: &str, root: &Utf8PathBuf, unsafe_spec: bool) -> Result<i32> {
             Ok(0)
         }
         None => {
+            // Bases are left off the list: suggesting one would send the
+            // reader straight into the refusal they just read about.
             let mut known: Vec<String> = found
                 .document
                 .get("agents")
                 .and_then(pact_doc::Node::as_map)
-                .map(|m| m.keys().cloned().collect())
+                .map(|m| {
+                    m.iter()
+                        .filter(|(_, e)| !discover::is_base(&e.node))
+                        .map(|(k, _)| k.clone())
+                        .collect()
+                })
                 .unwrap_or_default();
             known.sort();
             let fix = if known.is_empty() {
@@ -1896,10 +2489,20 @@ fn show(path: &Utf8PathBuf, unsafe_spec: bool) -> Result<i32> {
     // Validated, for the reason `waits_cmd` gives: every adapter in this
     // repository reads its document through `pact show`, so a tree that only
     // `check` refuses is a tree every adapter accepts.
-    let (node, diags) = validate(path, unsafe_spec)?;
+    let (node, mut diags) = validate(path, unsafe_spec)?;
     if diags.has_errors() {
         eprint!("{}", diags.render());
         return Ok(1);
+    }
+    // Warnings too, on stderr. This gate used to be `has_errors()` alone, and
+    // the consequence was B2 surviving its own fix: a workspace holding
+    // `agents/build/agent.yaml` printed `warning: … was skipped` through
+    // `pact check` and, through `show`, a document the agent is simply not in —
+    // exit 0, stderr zero bytes, measured. stdout stays exactly the JSON it was,
+    // so nothing that parses `show` output can tell the difference.
+    diags.sort();
+    if !diags.is_empty() {
+        eprint!("{}", diags.render());
     }
     match node {
         Some(n) => {

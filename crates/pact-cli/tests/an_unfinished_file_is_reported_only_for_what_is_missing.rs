@@ -177,6 +177,43 @@ fn an_unfinished_file_written_as_markdown_is_reported_only_as_unfinished() {
 }
 
 #[test]
+fn a_markdown_self_file_whose_fences_are_not_settings_names_no_invented_setting() {
+    // The third route to the same invented setting, and the one this file could
+    // not see: an `agent.md` that DOES hold something, above a `---` fence that
+    // holds no settings. The fence's contents were planted in the folder's own
+    // settings, so `Be brief.` became the body field and the author was told
+    //
+    //     error: 'content' is not something an agent can have.
+    //       fix: Remove it, or use one of: name, description, instructions, …
+    //
+    // beside two missing-field errors and the true report about the fence — four
+    // messages for one mistake, on a file whose entire text is five lines. Every
+    // fixture above is YAML or an EMPTY markdown file, so none of them reached
+    // this arm. What the whole report must be, exit status included, is asserted
+    // in `a_fence_that_is_not_settings_is_one_mistake_told_once.rs`; what is
+    // asserted here is this file's own invariant, on the shape that broke it.
+    let root = example_with_self_file_rewritten_as(
+        "mdfence",
+        "agents/fraud-checker/agent.yaml",
+        "agents/fraud-checker/agent.md",
+        "---\nBe brief.\n---\n\nYou look for signs that a refund request is not genuine.\n",
+    );
+    let text = check(&root);
+    let mine = problems_in(&text, "agents/fraud-checker/agent.md");
+    assert_eq!(mine.len(), 1, "one mistake is one message:\n{text}");
+    assert!(
+        mine[0].contains("between the '---' lines"),
+        "and the message is about what the author actually wrote:\n{}",
+        mine[0]
+    );
+    for block in &mine {
+        assert!(!block.contains("'content'"), "still no invented setting name:\n{block}");
+        assert!(!block.contains("Remove it"), "still nothing to remove:\n{block}");
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
 fn an_unfinished_workspace_file_is_reported_only_as_unfinished() {
     // The same fold applied at the root, where a beginner's very first file is.
     let root = example_with("ws", "workspace.yaml", "# TODO\n");

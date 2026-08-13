@@ -1455,3 +1455,973 @@ are single-runtime object-graph serialisations per the thesis §1.3 table);
 or `msghub` module — grep for `MsgHub|sequential_pipeline|fanout_pipeline` over
 `src/` returns nothing, so the pipeline abstraction appears to have been removed);
 Haystack pipelines; `dapr-agents`; `strands`; `agno`.
+
+*(All six of the above are closed in Part II, §R2.8. The `agentscope` inference is
+confirmed there.)*
+
+---
+---
+
+# PART II — REVISION 2
+
+**Date:** 2026-08-07. **Method:** source reading only, same rules of evidence.
+**Baseline:** Part I (above, 2026-07-26) and `docs/20-ARCHITECTURE-DRAFT.md` §7 as
+it stands at R12. This revision does **not** restate Part I. It does four things:
+
+1. reads the **Serverless Workflow** DSL schema systematically — the assignment
+   named it and Part I only spot-cited it;
+2. closes the six frameworks Part I listed as *not investigated*;
+3. **corrects three claims** that the architecture draft currently carries as
+   PACT inventions or as settled deletions, where source shows otherwise;
+4. names **one hole in the closed node set** that all three of the mature
+   declarative workflow systems fill and PACT does not.
+
+Paths remain relative to `/home/bud/ditto/agent-inter-op/research/repos/`.
+
+---
+
+## R2.0 What this revision changes, at a glance
+
+| # | Claim as it stands | R2 verdict | Where |
+|---|---|---|---|
+| 1 | §7.2's eight node kinds are closed and sufficient | **Incomplete** — no failure path exists outside a join group | §R2.2 |
+| 2 | `on-reentry` has no prior art (`BET H5`, marked INFERENCE) | **Corrected** — `strands` ships it as `reset_on_revisit`, graph-scoped, default off | §R2.4 |
+| 3 | `stall:` deleted; `budget.turns` + `timeout.idle` + `emit-best` suffice (`[R5]` Y7) | **Counterexample found** — a two-agent handoff ping-pong defeats all three; `strands` ships a closed-data detector for exactly it | §R2.5 |
+| 4 | DUR-2 classifies spec drift cosmetic/additive/structural and refuses structural | **Superseded by better prior art** — Temporal pins the *run* to a version instead, which removes the classification from the common path | §R2.6 |
+| 5 | DUR-1 content-addressed step identity is a PACT departure from positional identity | **Confirmed and corroborated** — Inngest derives `(parent run ID, hashedID)` for the same stated reason | §R2.6 |
+| 6 | §7.4's control-flow taint rule is PACT's own | **Independently corroborated** by a standards body, added to the SWF spec three weeks ago | §R2.1.9 |
+| 7 | `join` is group-scoped on edges and that is enough | **One case missing** — LangGraph's `defer` is a *run-terminal* join that a static group cannot express | §R2.3 |
+| 8 | `queue` (claim + lease) has zero prior art; deferred to v1.1 | **Confirmed** by an exact corpus-wide grep | §R2.9 |
+| 9 | `agentscope` pipeline abstraction "appears to have been removed" | **Confirmed** — no `pipeline/` module, no orchestration module, in the v2 tree | §R2.8.1 |
+| 10 | PACT's interceptors (§7.10) are new | **Prior art exists** — SWF `extension{extend, when, before, after}` | §R2.1.8 |
+
+---
+
+## R2.1 Serverless Workflow — the DSL read as a whole
+
+`protocols/serverless-workflow`, `schema/workflow.yaml` (1974 lines), at commit
+`44c3ecf` ("[Fix #1162] Add security note against evaluating expressions in user
+input (#1171)", 2026-07-23).
+
+This is the only artifact in the corpus that is *simultaneously* a closed
+declarative control-flow IR, vendor-neutral, versioned by a foundation, and
+already implemented by multiple runtimes. It is the closest external thing to
+what PACT §7 is trying to be, and it is worth treating as the null hypothesis:
+**anything SWF has that PACT does not, PACT must either have a reason to omit or
+a hole to fill.**
+
+### R2.1.1 The task union is 12, closed, and `oneOf`
+
+`schema/workflow.yaml:223-239`:
+
+```
+task:  oneOf: [ callTask, doTask, forkTask, emitTask, forTask, listenTask,
+                raiseTask, runTask, setTask, switchTask, tryTask, waitTask ]
+```
+
+Definition sites: `callTask:240`, `forkTask:613`, `doTask:637`, `emitTask:650`,
+`forTask:677`, `listenTask:714`, `raiseTask:744`, `runTask:769`, `setTask:956`,
+`switchTask:973`, `tryTask:1007`, `waitTask:1057`.
+
+A `taskList` (`:173-183`) is an **array of single-key objects** — `minProperties: 1,
+maxProperties: 1` (`:180-181`) — i.e. an *ordered map*. Order is carried by the array
+and the name by the sole key. This is the same problem PACT's Typed Expansion solves
+with `NN-name.ext`; SWF solves it by refusing the map form entirely. Worth noting
+that the most mature declarative workflow spec in existence concluded that an
+unordered map cannot carry a task list.
+
+### R2.1.2 `taskBase` — the node-common field set (`:184-222`)
+
+| Field | Line | PACT equivalent |
+|---|---|---|
+| `if` (runtime expression) | 186-189 | edge `when:` — but SWF puts it on the **node**, PACT on the **edge** |
+| `input` / `output` | 190-197 | node `accepts:` / `answers-with:` |
+| `export` (write task output to shared context) | 198-201 | node `writes:` |
+| `timeout` (inline or **named reference**) | 202-210 | node `timeout:` — but PACT has no named/reusable timeout |
+| `then` (flow directive) | 211-214 | edge, see below |
+| `metadata` | 215-218 | `x-` |
+
+Two deltas that matter. **`timeout` is referenceable by name** (`TaskTimeoutReference`,
+`:208-210`) against a workflow-level `use.timeouts` map — PACT's node `timeout:` is
+inline-only, so a workspace cannot state "every external tool call gets our house
+timeout" once. Same for `retryPolicy` (`RetryPolicyReference`, `:1050-1053`). For a
+no-code author under D14 this is the difference between one line in `workspace.yaml`
+and forty lines across the tree.
+
+**`if` on the node, not the edge.** SWF's per-task `if` is a *skip* predicate: false
+means the task does not run and control continues. PACT's `when:` on the edge is a
+*routing* predicate. These are not the same and both are useful: `if` composes with
+a linear `do:` list without introducing an edge, which is why an author writing a
+five-step pipeline with one optional step needs no branching vocabulary at all.
+**[INFERENCE]** PACT can express this as an edge pair (`A→B when P`, `A→C when not P`)
+but it costs the author two edges and a duplicated predicate, and a `then:`-style
+linear surface cannot express it at all.
+
+### R2.1.3 `flowDirective` — the anti-spaghetti rule, verified
+
+`:1070-1077`:
+
+```
+flowDirective:
+  anyOf:
+    - enum: [ continue, exit, end ]   default: continue
+    - type: string                    # the name of a SIBLING task
+```
+
+Four outcomes: continue to the next sibling, exit the containing scope, end the
+workflow, or jump to a **named sibling within the same `taskList`**. The draft's
+§7.5 claims to adopt this "verbatim" — **confirmed**, and the important half is the
+scoping: the free-form string is a sibling name, so there is no cross-depth `goto`
+in the type system at all. That is stronger than a validation rule, because it is
+unrepresentable rather than merely rejected.
+
+### R2.1.4 `forkTask.compete` — the race is on the fan-**out**, not the fan-in
+
+`:613-636`. `fork.branches` is a taskList; `fork.compete: boolean` (`:632-636`)
+"Indicates whether or not the concurrent tasks are racing against each other, with
+a single possible winner, which sets the composite task's output."
+
+PACT puts every wait rule on the **edge** (`join.waits-for`). SWF puts the only wait
+rule it has on the **node that fans out**. Both are defensible; the draft's §7.3
+argument for edge-placement (two independent fan-ins into one target inside a cycle)
+is sound and SWF cannot express that case. But note what SWF's placement buys:
+`compete` needs no group name, no consistency validation across member edges
+(PACT's VAL-4 and VAL-9 exist only because the rule is spread across edges), and
+cannot deadlock. **The cost of edge-placed joins is two of PACT's eleven validation
+rules.** That is the honest price of the extra expressiveness, and it should be
+stated as such rather than presented as free.
+
+### R2.1.5 `forTask` — map and while are ONE task (`:677-713`)
+
+```
+for:  { each: <var, default "item">, in: <expr>, at: <index var, default "index"> }
+while: <expr>          # ":707" — the condition for the iteration to CONTINUE
+do:   <taskList>
+```
+
+`for.in` is required (`:711`); `while` is optional and **additive**. So one construct
+covers: map over a collection, map with early exit, and — with a constant `in` — a
+plain while loop. This is the single strongest external endorsement of the draft's
+§7.1 "ONE construct" decision, and it is stronger than the two the draft cites
+(ADK deprecating `LoopAgent`, Mastra putting `loop` in the same union as `parallel`),
+because SWF unified them *at design time* rather than arriving there by deprecation.
+
+**Delta against PACT:** PACT's `map` node has `over, as, body, concurrency, max-items,
+on-error` (§7.2) and no `while`. A bounded map with a data-dependent early exit —
+"try each candidate refund policy until one matches, then stop" — needs a cycle plus a
+`route` node in PACT and one extra line in SWF. Adding `while:` to the `map` payload
+is a one-field change that removes a three-node desugaring from the most common
+no-code shape after a plain pipeline. **Recommended.**
+
+### R2.1.6 `listenTask` + `eventConsumptionStrategy` — the fan-in PACT does not have
+
+`listenTask:714-743`; `eventConsumptionStrategy:1527-1568`; `eventFilter:1569-1596`.
+
+```
+eventConsumptionStrategy: oneOf
+  - all: [ eventFilter ]                       # :1531-1543
+  - any: [ eventFilter ]                       # :1544-1563
+    until: <expr>  |  <eventConsumptionStrategy with `until: false`>   # :1548-1562
+  - one: eventFilter                           # :1564-1568
+
+eventFilter:
+  with:      <event properties, minProperties 1>          # :1573-1578
+  correlate: { <name>: { from: <expr>, expect: <const|expr> } }   # :1580-1595
+```
+
+Three things here have **no PACT equivalent**:
+
+1. **Waiting on external events at all.** PACT's `join.waits-for` waits on
+   *internal branches of its own graph*. A PACT graph cannot declaratively say
+   "wait until the payments webhook fires or 24h elapse". §7.14's suspension covers
+   *asking a person*; there is no *waiting for a system*. For a refund desk — the
+   worked example — "wait for the bank to confirm the reversal" is the obvious next
+   requirement and it is currently unauthorable.
+2. **`until` as a nested consumption strategy** (`:1553-1562`, with `until: false`
+   inside to forbid infinite nesting). "Consume any of these events until *that*
+   event arrives" is a streaming fan-in with a data-defined close, which is exactly
+   the shape a market/auction clearing rule wants (`§5.8` above), and it is the only
+   place in the corpus where the *close* condition of a fan-in is itself a filter
+   rather than a count or a timeout.
+3. **`correlate`** (`:1580-1595`) — a named correlation key extracted from the event
+   with `from:`, optionally checked against `expect:`, and *if `expect` is unset the
+   first extracted value becomes the expectation*. This is how a durable engine
+   matches a late callback to the right suspended run. PACT's DUR-4 suspension record
+   is `{await, step-keys, resume-shape, deadline}` — it has a step key but **no
+   correlation key**, so an inbound event that does not already know the step key
+   cannot be routed to a waiting run. Every A2A callback and every webhook is in that
+   category.
+
+`listen.foreach` (`:737-742` → `subscriptionIterator:1947-1974`) additionally lets
+each consumed event drive a taskList **as it arrives**, with `item`/`at` variables and
+its own `output`/`export`. That is a streaming map. PACT's `map` is over a
+materialised collection only.
+
+### R2.1.7 `tryTask` / `raiseTask` / `errorFilter` — see §R2.2
+
+`tryTask:1007-1054`, `raiseTask:744-768`, `errorFilter:1418-1439`,
+`retryPolicy:1684-1787`. Treated in full in §R2.2 because it is the hole.
+
+The one detail to record here: `catch` has **four** filters, not one —
+`errors.with` (static filter over RFC-7807 fields: `type`, `status`, `instance`,
+`title`, `detail` — `:1424-1439`), `when` (dynamic expression), `exceptWhen`
+(dynamic negative), and `as` (bind the error to a variable). And `retry` lives
+*inside* `catch` (`:1044-1053`), not on the task — so retry is a *response to a
+classified error*, never a blanket property. PACT's node-level `retry: {…, on: <error
+filter>}` collapses these; the `on:` field is the same idea but the draft never
+defines its vocabulary.
+
+`retryPolicy` itself (`:1684-1787`) is worth copying wholesale: `when` / `exceptWhen`
+/ `delay` / `backoff: oneOf[constant|exponential|linear]` (`:1707-1728`) /
+`limit: {attempt: {count, duration}, duration}` (`:1729-1758`) / `jitter: {from, to}`
+(`:1759-1772`). Note **`limit.attempt.duration` (per-attempt) is distinct from
+`limit.duration` (all attempts)** — PACT's `retry:` has `max-attempts` and no
+total-duration bound, so a node with `max-attempts: 5` and a 10-minute timeout can
+burn 50 minutes and no authored field says otherwise.
+
+### R2.1.8 `extension` — prior art for PACT's interceptors (`:1597-1625`)
+
+```
+extension:
+  extend: enum [ call, composite, emit, for, listen, raise, run, set,
+                 switch, try, wait, all ]     # :1603-1607
+  when:   <expr>                              # :1608-1611
+  before: <taskList>                          # :1612-1615
+  after:  <taskList>                          # :1616-1619
+```
+
+Declarative before/after hooks, **bound by task KIND** (plus `all`), gated by a
+condition. §7.10 of the draft ("Interceptors — rules that may CHANGE what happens")
+presents this as PACT's own; it is not. The binding difference is instructive:
+SWF binds by *task kind*, PACT binds by *event address prefix* (`step.tool`, `*` —
+§7.13). PACT's is strictly more expressive (it can bind a phase of a kind, not just
+the kind) and should say so; but SWF's kind-binding is the one a non-technical
+author can hold in their head, and `extend: all` is the "every tool call" case that
+PACT spells `step.tool`.
+
+### R2.1.9 The security note — §7.4's taint rule, independently arrived at
+
+`dsl.md:386` (added at HEAD, commit `44c3ecf`, 2026-07-23):
+
+> Runtimes **must** evaluate only runtime expressions that are defined in workflow
+> definitions, and **must not** parse or evaluate expression syntax embedded in
+> workflow input or task input data (for example, `jq`, regular expressions, or
+> similar). Treating input data as executable expressions exposes the system to
+> injection attacks, potentially allowing unauthorized access to system data and
+> resources.
+
+The draft's §7.4 `[R3]` control-flow taint rule — model/external-trust channels may
+not reach `when:`/`route:`/`halt:` — is the *agentic generalisation* of this, and it
+is now backed by a CNCF-hosted spec that shipped the narrow version as a normative
+MUST NOT. That is the strongest external support any §7 rule has. It also implies a
+rule PACT does not yet state: **`transform.expr` / `map.over` expressions must be
+evaluated from the spec only, never assembled from channel content.** PACT's §7.4
+covers control-flow reads; it does not cover *expression construction*.
+
+### R2.1.10 Two more SWF constructs with no PACT form
+
+- **`runTask.await: false`** (`:784-788`, default `true`) — fire-and-forget. Start a
+  process and continue without joining. Every PACT node is joined by construction.
+  A supervisor that kicks off a long audit and answers the customer now is
+  unauthorable. **[INFERENCE]** this is expressible as a `map` with `concurrency` and
+  no inbound join edge only if PACT's VAL rules permit a dangling branch, which
+  VAL-6 ("at least one start node and one terminal node") does not obviously allow.
+- **`schedule`** (`:133-154`): `every` (duration) | `cron` | `after` (delay after
+  completion) | `on` (eventConsumptionStrategy). PACT's §7.19 KIND-1 derives a timer
+  from a `port` carrying `every:`. SWF's `after:` — "delay before starting again
+  *after it completes*" — is the drift-free variant that PACT's `every:` cannot say,
+  and `if-still-running: skip` is PACT's answer to the overlap that `after:` makes
+  impossible by construction.
+- **`evaluate: {language: <default jq>, mode: strict|loose}`** (`:155-172`). The
+  expression language is *named in the document*. PACT rejected CEL for
+  `when:`/`halt:` (Part I §3.4) and left `transform.expr`/`map.over` unresolved.
+  SWF's answer — declare the language, default one, and let a runtime refuse an
+  unsupported one — is the portable form, and it is what PACT's capability lattice
+  is for.
+
+### R2.1.11 SWF's 12 tasks against PACT's 8 node kinds
+
+| SWF task | PACT | Gap |
+|---|---|---|
+| `call` | `tool` node | — |
+| `run` (container/shell/script/workflow) | `escape` / `graph` node | `await: false` has no form |
+| `do` | a chain of edges | — |
+| `fork` | `map` / static fan-out + `join` | `compete` ≈ `waits-for: anyone` |
+| `for` | `map` node | **`while:` missing** (§R2.1.5) |
+| `switch` | `route` node | — |
+| `set` | `transform` node | — |
+| `wait` | — | **no timer node**; only `port.every:` at workspace scope |
+| `listen` | — | **no external-event wait, no correlation** (§R2.1.6) |
+| `emit` | — | no way to publish an event from inside a graph |
+| `raise` | — | **no way to fail deliberately with a typed error** |
+| `try` | — | **no failure path** (§R2.2) |
+
+Five of twelve have no PACT form. Two of those five (`emit`, `wait`) are arguably
+Resource/port concerns under D24 and can be declined with a reason. Three — `listen`,
+`raise`, `try` — are control flow, and control flow is exactly what §7 claims to own.
+
+---
+
+## R2.2 The hole: PACT has no failure path
+
+### R2.2.1 What PACT has today
+
+A grep of `docs/20-ARCHITECTURE-DRAFT.md` for `on-error|catch|compensat|fallback|
+error-handler` returns, for the orchestration layer, exactly three things:
+
+1. node-common `retry: {max-attempts, initial-delay, max-delay, backoff, jitter, on}`
+   (§7.2);
+2. `on-error` in the `map` node payload (line 5378 — and the payload table is the
+   only place it appears; no section defines its values);
+3. `join.if-someone-fails: carry-on | stop-the-others | ask-a-person` (line 5461),
+   which by construction applies **only to member edges of a join group**.
+
+There is no construct for: *this `agent` node's retries are exhausted, now what?* on
+a plain sequential edge. §7.5's `on-budget-exhausted: fail | emit-best | goto <node>`
+is the *budget* failure path and has no failure twin.
+
+### R2.2.2 What three independent systems have
+
+**Serverless Workflow — `tryTask` (`schema/workflow.yaml:1007-1054`).** Required
+keys `try` + `catch`; `catch` carries `errors.with` (static RFC-7807 filter),
+`as`, `when`, `exceptWhen`, `retry`, and `do` (the compensating taskList).
+Plus `raiseTask` (`:744-768`) to originate a typed error deliberately.
+
+**LangGraph — `error_handler`, added at node and graph level.**
+`libs/langgraph/langgraph/graph/state.py`:
+- `add_node(..., error_handler=...)` materialises an auto-generated node named
+  `__error_handler__{node}` with a collision check (`:855-870`); the handler is
+  flagged `is_error_handler=True` (`:869`) and the failing node records
+  `error_handler_node=handler_node_name` (`:879, :891, :903`).
+- A graph-level default handler exists and is applied to every non-handler node that
+  has none (`:1288-1308`).
+- Four normative rules are encoded in the defaulting logic, each with its reason in
+  a comment, and **all four are things PACT would otherwise have to discover in
+  production**:
+  - `:1299-1300` — *"error_handler: regular nodes only — handlers must never catch
+    themselves or other handlers."*
+  - `:1310-1311` — *"retry: all nodes — handlers should be retried on transient
+    failures just like regular nodes."*
+  - `:1315-1319` — *"cache: regular nodes only — caching an error-handler result is
+    unsafe because the input (failed-node state) may differ across failures even when
+    the cache key matches."*
+  - `:1322-1323` — *"timeout: all nodes — a stuck handler should be cancelled the
+    same way a stuck regular node would be."*
+
+**strands — failure is a first-class node status.**
+`frameworks2/strands-sdk-python/strands-py/src/strands/multiagent/graph.py:131-134`:
+`GraphState` tracks `completed_nodes`, **`failed_nodes`**, and **`interrupted_nodes`**
+as three separate sets, and `GraphResult` reports all three (`:177-181`). A run can
+therefore finish with some nodes failed and still return a result — the topology
+outlives a member's failure.
+
+### R2.2.3 Why this is blocking, not cosmetic
+
+- **AC-5.1 requires market/auction on ≥3 adapters.** An auction whose clearing rule
+  fires only when *every* bidder responds is not an auction; the draft's own
+  encoding uses `waits-for: enough-of-them`, which handles slow bidders but not
+  *failed* ones — and VAL-4 forces every member edge of the group to agree on
+  `if-someone-fails`, so "ignore the two that 500'd, clear on the other six" needs
+  `carry-on`, which then also silently ignores a bidder that returned garbage.
+- **D14 is the binding constraint.** A support lead building a refund desk cannot
+  write a `try/catch`. But the question they *will* hit on day one is "what happens
+  when the fraud checker is down?" and today the honest answer is "the customer's
+  refund request errors". §7.16's `if-someone-fails: ask-a-person` answers it for
+  parallel teammates and nothing answers it for a sequential step.
+- **It interacts with DUR-3.** A node with `effects: external` that fails *after*
+  the side effect is the case that needs compensation, and PACT declares the effect
+  class without providing anywhere to put the compensation.
+
+### R2.2.4 Recommended shape — no new node kind
+
+The closed set survives. Two additions, both fields:
+
+```yaml
+# 1. node-common, mirroring §7.5's on-budget-exhausted, in the same vocabulary
+if-it-goes-wrong: stop-the-run | carry-on | ask-a-person | goto <node>
+asks: <question name>          # required with `ask-a-person`, same rule as join
+```
+
+```yaml
+# 2. a Tier-0 predicate atom so an edge can route on failure
+edges:
+  - from: fraud-checker
+    to:   manual-review
+    when: { atom: went-wrong, of: fraud-checker }   # or: kind, status, timed-out
+```
+
+with four validation rules lifted directly from LangGraph's comments:
+
+| Rule | Source |
+|---|---|
+| A node reachable **only** via a `went-wrong` edge may not itself carry `if-it-goes-wrong` other than `stop-the-run` (handlers must not catch handlers) | `state.py:1299-1300` |
+| `retry:` applies to handler nodes | `state.py:1310-1311` |
+| Handler nodes are never memoised by `step-key` (the failed-node input differs across failures at an equal key) | `state.py:1315-1319` — and this is a **direct hit on DUR-1**, whose `input-digest` term would otherwise collide |
+| `timeout:` applies to handler nodes | `state.py:1322-1323` |
+
+and the error vocabulary itself closed and small — `timed-out | refused | no-answer |
+budget | tool-error | policy` — so `retry.on:` and `when: {atom: went-wrong, kind: …}`
+share one alphabet, which is what SWF's `errorFilter` (`:1418-1439`) does with
+RFC 7807 fields.
+
+The third LangGraph rule is the load-bearing one and is worth restating: **DUR-1's
+`step-key = H(node-id ‖ branch-path ‖ iteration-index ‖ map-item-key ‖ input-digest)`
+is unsound for a failure handler**, because two different failures of the same node
+present the same input digest and the memoised first handler result would be
+replayed for the second failure. The failure's own identity must enter the key.
+
+---
+
+## R2.3 LangGraph `defer` — a run-terminal join with no PACT form
+
+`libs/langgraph/langgraph/graph/state.py:379, 395` (and the same pair at `:448/464`,
+`:522/537`, `:591/610`, `:667/686` — five overloads):
+
+> `defer: bool = False` — *"Whether to defer the execution of the node until the run
+> is about to end."*
+
+Implementation, `:1512-1516`:
+
+```python
+self.channels[branch_channel] = (
+    LastValueAfterFinish(Any) if node.defer else EphemeralValue(Any, guard=False)
+)
+```
+
+and for multi-source edges, `:1547-1554`:
+
+```python
+if self.builder.nodes[end].defer:
+    self.channels[channel_name] = NamedBarrierValueAfterFinish(str, set(starts))
+else:
+    self.channels[channel_name] = NamedBarrierValue(str, set(starts))
+```
+
+So `defer` is implemented by swapping the barrier for its `AfterFinish` variant — the
+node fires only once the Pregel loop has drained, i.e. **it joins on "everything that
+was ever going to run", not on a named group**.
+
+**Why PACT cannot express this.** §7.3's `join: {group, waits-for}` is
+*statically-membered*: the group is the set of edges that name it. That is exactly
+right for a declared fan-out. It is wrong for the case `defer` exists for — a node
+that fans out dynamically at run time (LangGraph `Send`, PACT `map` with a
+data-derived `over:`, or a `route` node whose `starts: all-at-once` emits a variable
+number of labels), where a *later* branch may itself fan out further. No static edge
+set covers the transitive closure.
+
+**Concretely in PACT terms:** a research desk where the supervisor dispatches N
+specialists, and any specialist may itself dispatch a sub-specialist, with one
+`write-the-report` node that must see every finding. The reporter's join group can
+name the supervisor's edges; it cannot name edges that do not exist until run time.
+
+**Recommendation.** Add one value to the existing field rather than a new construct:
+`join.waits-for: everyone-in-the-whole-run` (spelling to match §7.16's authored
+vocabulary), defined as *fires once no other node in this graph can run*. It maps to
+LangGraph `defer=True` natively; on Temporal it is the workflow's terminal step; in
+Bud it is a `.reduce` on the run's completion. **[INFERENCE]** — the mapping is mine;
+`defer`'s semantics are read from source. A validation rule follows: at most one
+such join per graph scope, and it may not be inside a cycle (there is no "about to
+end" inside one).
+
+---
+
+## R2.4 `on-reentry` — the prior art the draft says does not exist
+
+The draft, §7.2 `[R2]`:
+
+> *"PACT's actual contribution is lifting the axis to NODE scope and adding `fork`.
+> There is no prior art for node-scoped re-entry policy and none for `fork` as an
+> authored field. Marked INFERENCE. BET H5."*
+
+**The re-entry half is wrong.** `frameworks2/strands-sdk-python/strands-py/src/strands/multiagent/graph.py`:
+
+- `GraphBuilder.reset_on_revisit(enabled: bool = True)` (`:374-385`), docstring:
+  *"When enabled, nodes will reset their messages and state to initial values each
+  time they are revisited (re-executed). This is useful for stateless behavior where
+  nodes should start fresh on each revisit."*
+- `Graph.__init__(..., reset_on_revisit: bool = False)` (`:505, 521, 539`) — so the
+  **default is `False`, i.e. accumulate**.
+- Enforcement, `:978-981`: *"Reset the node's state if reset_on_revisit is enabled,
+  and it's being revisited"* → `if self.reset_on_revisit and node in
+  self.state.completed_nodes: node.reset_executor_state()`.
+- What "reset" means is precise and is *context*, not resumption bookkeeping —
+  `GraphNode.reset_executor_state()` (`:249-266`) restores `executor.messages`,
+  `executor.state` and `executor._model_state` from deep copies captured in
+  `__post_init__` (`:237-247`), and clears `execution_status` and `result`.
+
+This is exactly PACT's `on-reentry: reset` vs `accumulate`, authored, declarative,
+and shipping. It differs from ADK's `reset_sub_agent_states` (which the draft
+correctly identified as resumption state, not context) and from LangGraph's
+`Topic(accumulate)` (channel scope). It is **graph**-scoped, not node-scoped.
+
+**Corrected claim.** PACT's contribution is (a) per-node granularity over strands'
+per-graph switch, and (b) `fork`. `fork` remains without prior art — I re-grepped and
+found nothing that instantiates an independent node instance per traversal path as an
+*authored* option.
+
+**Design consequences, both concrete:**
+
+1. **Default `on-reentry` to `accumulate`**, matching strands' `False` default and
+   LangGraph's `Topic(accumulate=True)`-by-default reading. The draft does not state a
+   default; the two surfaces want different ones (a loop wants accumulate, a topology
+   wants reset), and an unstated default here is a cross-adapter behaviour divergence
+   of exactly the kind D27 measures.
+2. **Admit a graph-level `on-reentry` default with node override.** strands' switch is
+   graph-scoped because that is what an author actually reaches for — "this whole
+   review board is stateless". Per-node-only means the no-code author writes it N
+   times, and D14's ceiling is measured in lines typed.
+
+---
+
+## R2.5 The stall detector — `[R5]` Y7 has a counterexample
+
+The draft deleted `stall:` on the argument that a non-progressing loop is *"already
+bounded three times over"* by `budget.turns`, `timeout.idle`, and
+`on-budget-exhausted: emit-best`, and that *"no decision in D1–D28 requires stall
+detection at all"*. It also pre-committed the re-admission condition:
+
+> *"If a fixture later shows a spin all three miss, `stall` is re-admitted as a
+> `timeout.idle` variant, not as a fifth termination construct."*
+
+**Here is the fixture.** A swarm of two agents handing off to each other:
+`triage → billing → triage → billing → …`. Each hop makes a model call, writes to
+the transcript, and emits events. Therefore:
+
+- `timeout.idle` — defined as "no observable progress" (DUR-8) — **never fires**.
+  There is continuous observable progress. It is the wrong instrument: it detects a
+  *hang*, and this is a *livelock*.
+- `budget.turns` — **fires, at the ceiling**, after burning the whole budget.
+- `on-budget-exhausted: emit-best` — then produces a forced answer from a
+  conversation that has been going in circles, which is the worst of the three
+  outcomes because it is *confidently wrong* rather than an honest failure.
+
+**And a framework ships a declarative detector for exactly this.**
+`strands-py/src/strands/multiagent/swarm.py`:
+
+```
+Swarm(..., max_handoffs: int = 20, max_iterations: int = 20,
+      repetitive_handoff_detection_window: int = 0,
+      repetitive_handoff_min_unique_agents: int = 0)        # :245-250
+```
+
+docstrings at `:267-269`: *"repetitive_handoff_detection_window: Number of recent
+nodes to check for repetitive handoffs"* / *"repetitive_handoff_min_unique_agents:
+Minimum unique agents required in recent sequence"*. Enforcement, `:214-224`:
+
+```python
+if repetitive_handoff_detection_window > 0 and len(self.node_history) >= repetitive_handoff_detection_window:
+    recent = self.node_history[-repetitive_handoff_detection_window:]
+    unique_nodes = len({node.node_id for node in recent})
+    if unique_nodes < repetitive_handoff_min_unique_agents:
+        return False, f"Repetitive handoff: {unique_nodes} unique nodes out of {repetitive_handoff_detection_window} recent iterations"
+```
+
+Two integers. No detector plugin, no leaky bucket, no model judgement — which is
+precisely why the draft's original objections (undefined `detector: model-judged`,
+unspecified decay, CTS flap) do not apply to this form. It is a **pure function of
+the run's own node history**, so two adapters cannot disagree about it.
+
+Magentic-One's `is_in_loop` ledger key
+(`frameworks/autogen/.../_magentic_one_orchestrator.py:347-354`) is the model-judged
+version of the same predicate, and Part I §6.2 already documented that it drives
+replanning. Two independent frameworks; one deterministic, one model-judged.
+
+**Recommendation.** Re-admit as the pre-committed variant: a `timeout.idle` sibling
+spelled in `teamwork:`'s own vocabulary, e.g.
+`stop-if-they-go-in-circles: {looking-back: 6, needs-at-least: 3}` — deterministic,
+two integers, off by default (`looking-back: 0`, matching strands), and mapping to
+`on-budget-exhausted` for what happens next rather than adding an outcome. This costs
+two fields and closes a livelock that D28 failure mode #2 ("portability technically
+true but useless") names directly: a swarm that ping-pongs on a weak model and then
+fabricates an answer is worse than the framework it replaced, which F-4 classifies as
+a defect.
+
+Note this is **more likely on small models**, which is the tier the whole model-
+portability thesis targets: handoff loops are a routing failure, and the thesis §7.3
+table already records routing fragility rising as the executor weakens.
+
+---
+
+## R2.6 Resume across spec drift — Temporal already solved this, differently
+
+### R2.6.1 DUR-1 is corroborated
+
+`runtime/inngest/pkg/event/defer.go:16-24`:
+
+```go
+// event. The ID is derived from (parent run ID, hashedID) so a duplicate
+// ...
+func DeferEventID(parent ulid.ULID, hashedID string) (ulid.ULID, error) {
+    ...
+    fmt.Appendf(nil, "defer-event:%s:%s", parent, hashedID),
+```
+
+plus `UseDeterministicIDs: true` (`pkg/devserver/api.go:431`) and `HashedID` carried
+on the deferred-step record (`pkg/execution/defers/defers.go:68, 85`;
+`pkg/cqrs/manager/run_linkage.go:31-43`). Inngest derives step identity from a hash,
+for the stated reason of duplicate suppression. **DUR-1's departure from positional
+identity is not a PACT eccentricity — it is what the one corpus runtime that had to
+solve idempotency across restarts already does.**
+
+### R2.6.2 DUR-2's classification is the wrong default
+
+`runtime/temporal`, grep over `--include=*.go`:
+
+```
+VERSIONING_BEHAVIOR_PINNED
+VERSIONING_BEHAVIOR_AUTO_UPGRADE
+VERSIONING_BEHAVIOR_USE_RAMPING_VERSION
+VERSIONING_BEHAVIOR_UNSPECIFIED
+```
+
+and, when replay diverges from history, a *typed, first-class* failure cause with its
+own metric:
+
+- `service/frontend/workflow_handler.go:1296` —
+  `if request.GetCause() == enumspb.WORKFLOW_TASK_FAILED_CAUSE_NON_DETERMINISTIC_ERROR`
+- `common/metrics/metric_defs.go:692` —
+  `ServiceErrNonDeterministicCounter = NewCounterDef("service_errors_nondeterministic")`
+
+The 18 command types (`grep -o "COMMAND_TYPE_[A-Z_]*"` over `service/`, `common/`,
+sorted-unique) are: `CANCEL_TIMER`, `CANCEL_WORKFLOW_EXECUTION`,
+`COMPLETE_WORKFLOW_EXECUTION`, `CONTINUE_AS_NEW_WORKFLOW_EXECUTION`,
+`FAIL_WORKFLOW_EXECUTION`, `MODIFY_WORKFLOW_PROPERTIES`, `PROTOCOL_MESSAGE`,
+`RECORD_MARKER`, `REQUEST_CANCEL_ACTIVITY_TASK`,
+`REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION`, `REQUEST_CANCEL_NEXUS_OPERATION`,
+`SCHEDULE_ACTIVITY_TASK`, `SCHEDULE_NEXUS_OPERATION`,
+`SIGNAL_EXTERNAL_WORKFLOW_EXECUTION`, `START_CHILD_WORKFLOW_EXECUTION`, `START_TIMER`,
+`UNSPECIFIED`, `UPSERT_WORKFLOW_SEARCH_ATTRIBUTES`.
+
+**The argument.** DUR-2 says: on resume, diff the spec, classify the diff
+(cosmetic / additive / structural), resume for the first two, refuse for the third.
+That places a **semantic diff classifier on the hot path of every resume**, and it
+inherits D23's classifier — a component the draft itself requires to be
+"conservative and explainable", which for spec-diff-vs-in-flight-run means
+conservative-to-the-point-of-refusing.
+
+Temporal's answer avoids the classifier entirely for the common case: a run is
+**pinned** to the version it started on and finishes there; new runs get the new
+version; `AUTO_UPGRADE` is the opt-in for runs that should follow the deployment.
+The classifier is then needed only when someone explicitly asks to migrate an
+in-flight run.
+
+**This matters more for PACT than for Temporal**, because D22 lets *the agent itself*
+rewrite its instructions, tools and topology, and D23 auto-applies low-risk changes.
+Under DUR-2-as-written, every auto-applied learning candidate runs the classifier
+against every in-flight run and must be proven cosmetic — so the learning loop's
+throughput is coupled to the resume path. Under pinning, it is not: the learned spec
+becomes the next run's spec and nothing in flight is disturbed.
+
+**Recommendation.**
+
+```yaml
+graph:
+  when-the-spec-changes: finish-on-the-old-one | move-to-the-new-one   # default: finish-on-the-old-one
+```
+
+- `finish-on-the-old-one` (= PINNED): the run resolves its documents from the pinned
+  `contract-digest` + `doc-digest` for its whole life. No classifier, no refusal, no
+  `--allow-drift`. Requires the pinned canonical form to be retained for the run's
+  maximum lifetime — a real storage obligation and the honest cost of this choice.
+- `move-to-the-new-one` (= AUTO_UPGRADE): DUR-2's classifier as written, refusing on
+  `structural`.
+- Either way, replay divergence gets a typed cause and a counter, following
+  `WORKFLOW_TASK_FAILED_CAUSE_NON_DETERMINISTIC_ERROR` — PACT currently has
+  `ResumeRefused` for the *pre-flight* check but nothing named for a divergence
+  discovered *mid-replay*.
+
+### R2.6.3 Inngest made model inference a first-class durable step
+
+`runtime/inngest/pkg/enums/step_type.go:12-27` — 14 step types:
+`Unknown, Run, SendEvent, SendSignal, Sleep, WaitForEvent, Invoke, AiInfer, AiWrap,
+Fetch, WaitForSignal, Metadata, GroupExperiment, RealtimePublish`.
+
+`pkg/enums/opcode.go:9-30` — opcodes include `AIGateway`, `Gateway`, `WaitForSignal`,
+and **`DeferAdd` / `DeferAbort`**.
+
+`AiInfer` / `AiWrap` / `OpcodeAIGateway` are the finding: a general-purpose durable
+execution engine concluded that an LLM call is **not** just another `Run` step and
+gave it its own type. That is independent support for PACT's `agent` vs `tool` node
+split being a *durability*-relevant distinction and not only a semantic one — the
+journal entry for a model call carries a request/response shape the engine knows
+about, which is what makes cost accounting and replay-without-re-billing possible.
+It also supports §5.3's wire-request IR being a first-class artifact.
+
+### R2.6.4 Restate — the await-tree nests, verified
+
+`runtime/restate/service-protocol/dev/restate/service/protocol.proto`:
+`enum CombinatorType` at `:110`, values `FIRST_COMPLETED = 1` (`:114`),
+`ALL_COMPLETED = 2` (`:116`), `FIRST_SUCCEEDED_OR_ALL_FAILED = 3` (`:118`),
+`ALL_SUCCEEDED_OR_FIRST_FAILED = 4` (`:120`). The doc comment at `:132-136` shows a
+**nested** example — an `ALL_SUCCEEDED_OR_FIRST_FAILED` combinator containing a
+`FIRST_COMPLETED` one — and `combinator_type` is field 5 of the suspension record
+(`:146`), with `SuspensionMessage` at `:151`.
+
+DUR-4's "typed await-tree, shaped like Restate's `Future` combinator tree" is
+therefore literally implementable and the nesting is not an extrapolation.
+
+Every command message carries a `completion_id` / `result_completion_id`
+(`:222, 263, 282, 333, 343, 384, 394, 429, 439, 453, 463, 484, 494, 507-522,
+529-573, 643-654, 675-685, 706-716`). These are **monotonic per-journal integers**,
+i.e. positional — which is the same weakness DUR-1 identifies in DBOS, present in
+Restate too. A Restate adapter therefore cannot preserve step identity across a
+spec edit, and that belongs in its capability-lattice row rather than being
+discovered at 3am.
+
+---
+
+## R2.7 Cross-runtime durability, consolidated
+
+| Concern | Temporal | Restate | DBOS | Inngest | PACT today |
+|---|---|---|---|---|---|
+| Step identity | positional event IDs | positional `completion_id` (`protocol.proto:222 ff.`) | positional counter | **hashed** `(parent, hashedID)` (`event/defer.go:16-24`) | content-addressed (DUR-1) ✔ |
+| Spec/version drift | `VERSIONING_BEHAVIOR_{PINNED, AUTO_UPGRADE, USE_RAMPING_VERSION}` + typed `NON_DETERMINISTIC_ERROR` cause (`workflow_handler.go:1296`) | — | — | — | classifier only (DUR-2) — **change recommended** §R2.6.2 |
+| Join algebra | futures | 4 nested combinators (`protocol.proto:110-149`) | futures | futures + `DeferAdd/Abort` | 5 `waits-for` values ✔ + missing run-terminal §R2.3 |
+| Model call as a step kind | activity (generic) | `Run` (generic) | `@step` (generic) | **`AiInfer` / `AiWrap` / `OpcodeAIGateway`** | `agent` node ✔ |
+| External event wait + correlation | signals | `GetPromise`/`SignalNotification` | `recv` | `WaitForEvent` / `WaitForSignal` | **none** — §R2.1.6 |
+| History growth | `CONTINUE_AS_NEW` | — | — | — | DUR-9 (journaled compaction) ✔ |
+| Deliberate typed failure | `FAIL_WORKFLOW_EXECUTION` | — | — | — | **none** — §R2.2 |
+| Failure handler / compensation | (in SDK) | — | — | — | **none** — §R2.2 |
+
+Two rows are empty on PACT's side and are control flow, not plumbing.
+
+---
+
+## R2.8 The six frameworks Part I did not read
+
+### R2.8.1 agentscope — the pipeline abstraction was deleted
+
+`ls frameworks2/agentscope/src/agentscope/` →
+`agent app credential embedding event exception formatter mcp message middleware
+model permission rag skill state tool tts types workspace` — **no `pipeline/`
+module**. `ls src/agentscope/pipeline/` returns nothing;
+`grep -rn "def sequential_pipeline|def fanout_pipeline|class MsgHub|class .*Pipeline"
+src/agentscope/` returns **zero hits**. `grep -rln "handoff|orchestrat"` over `src/`
+returns four files, all in the RAG/session service layer
+(`app/_service/_knowledge_base.py`, `app/rag/index_worker/__init__.py`,
+`app/_service/_session.py`, `middleware/_rag.py`) — none of them orchestration.
+
+The v2 tree is a **single-agent runtime plus a server**: `agent/` contains only
+`_agent.py`, `_config.py`, `_structured_output_tool.py`, `_utils.py`.
+
+**Negative finding, and it is a data point for the ONE-construct decision from the
+opposite direction:** a framework that shipped a named-topology combinator library
+(`sequential_pipeline`, `fanout_pipeline`, `MsgHub`) removed it wholesale rather than
+generalising it. Part I's inference is confirmed.
+
+### R2.8.2 Haystack — a readiness lattice, not a super-step model
+
+`frameworks2/haystack/haystack/core/pipeline/base.py:75-79`:
+
+```python
+class ComponentPriority(IntEnum):
+    HIGHEST = 1
+    READY    = 2
+    DEFER    = 3
+    BLOCKED  = 4
+```
+
+`_calculate_priority` (`:1285-1306`) assigns one of the four per component per tick,
+and a priority queue picks the lowest number. `DEFER` means *"has some inputs but is
+waiting for more — run it only if nothing is READY"*, i.e. **the "should I wait for
+the other branch?" question is answered at run time by a heuristic**, not declared.
+The class carries its own hazard: `:1618-1624` documents a "stale queue" check —
+*"`ComponentPriority.DEFER > ComponentPriority.READY` which is true, indicating that
+the queue is stale"* — forcing a recompute.
+
+This is a **third** execution-model class in the corpus, after LangGraph's super-steps
+and AutoGen's activation ready-queue. It is the one PACT should explicitly *not*
+adopt, and saying so is useful: PACT's `waits-for` makes the same decision
+*declaratively*, which is why a PACT graph's execution order is a function of the
+document and Haystack's is a function of the scheduler. That is a D27 (fidelity
+within a margin) argument, since a heuristic scheduler is exactly what makes two
+adapters disagree.
+
+`max_runs_per_component: int = 100` (`base.py:92, 103, 112`) with a dedicated
+`PipelineMaxComponentRuns` exception is a **per-node** execution cap. PACT deleted
+`bounds.max-transitions` and `bounds.max-iterations` in favour of the single global
+`budget.turns` (`[R5]` Y20). Haystack and Bud (`maxNodeExecutions`) both keep a
+per-node cap, and it catches a different failure: one node spinning inside an
+otherwise-healthy graph. **[INFERENCE]** `budget.turns` bounds the total and will
+eventually stop it, but the diagnostic is "the run ran out of turns" rather than
+"`fraud-checker` ran 100 times", and O7.3 requires the error to name the fix. A
+per-node execution ceiling is cheap and is a diagnostic-quality argument, not an
+expressiveness one.
+
+### R2.8.3 strands — graph + swarm, and the two corrections
+
+Covered in §R2.4 (`reset_on_revisit`) and §R2.5 (repetitive-handoff detection).
+Remaining structure, `strands-py/src/strands/multiagent/`:
+
+- `graph.py:108-171` `GraphState` — `completed_nodes` / `failed_nodes` /
+  `interrupted_nodes` as three sets (`:131-134`), `execution_order` (`:135`),
+  `accumulated_usage` + `accumulated_metrics` (`:141-142`).
+- `should_continue(max_node_executions, execution_timeout, …)` (`:152-172`) — two
+  graph-level bounds, each returning a **reason string**, not a bare bool
+  (`:161-168`). PACT's `on-budget-exhausted` should carry the same: the reason is
+  what the trace and the Portability Report need.
+- `GraphEdge.condition: EdgeCondition | None` (`:187-193`) plus an
+  `EdgeConditionWithContext` **Protocol** (`:66`) — callable conditions again, and
+  therefore again non-serialisable. Part I's finding #3 holds for a sixth framework.
+- `_validate_node_executor` (`:279-299`) refuses a duplicate executor *instance*
+  and refuses an `Agent` with a session manager: *"Session persistence is not
+  supported for Graph agents yet."* A framework whose multi-agent graph cannot carry
+  per-agent session state is a live example of why PACT keeps state in channels with
+  a declared `scope:` rather than inside the agent object.
+- `swarm.py:121` `SharedContext` + `:170-190` `SwarmState{shared_context,
+  node_history, handoff_node, handoff_message}` — a blackboard by another name, and
+  `handoff_message` confirms Part I §5.5's reading that a handoff carries a payload,
+  not just a target. PACT's `route.assigns:` (`[R5]`) is the right shape for this.
+
+### R2.8.4 agno — a topology enum replaced by orthogonal booleans
+
+`frameworks2/agno/libs/agno/agno/team/team.py:73` `class Team`, with
+`respond_directly: bool = False` (`:108`), `delegate_to_all_members: bool = False`
+(`:110`), `determine_input_for_members: bool = True` (`:112`); same three in
+`__init__` (`:447-449`) and in `_init.py:73-74, 205-206`. A conflict rule at
+`_init.py:729-733` warns and forces `respond_directly = False` when both it and
+`delegate_to_all_members` are set.
+
+There is no `mode: route | coordinate | collaborate` enum in the current source.
+**Negative finding with a design reading:** a framework that shipped named team modes
+replaced them with three orthogonal booleans, then needed a runtime conflict check
+because two of the three interact. That is the *worst* of both worlds — named modes
+are teachable but not composable; free booleans are composable but produce illegal
+combinations. PACT's position (`teamwork:` as authored sugar with a normative
+desugaring into one graph, §7.7) is the third option and this is evidence for it: the
+sugar stays teachable, and the desugaring is where the combination is checked, at load
+time rather than at run time.
+
+`determine_input_for_members` is worth one more line: it is the switch between "the
+supervisor rewrites the task for each member" and "each member gets the raw input".
+PACT's `route.assigns:` covers the first; the second is `carry: null` (the graph's
+shared scope). Both expressible.
+
+### R2.8.5 dapr-agents — a supervisor ledger that mutates its own plan
+
+`runtime/dapr-agents/dapr_agents/agents/orchestrators/llm/schemas.py`:
+
+```
+PlanStep / IterablePlanStep{objects: List[PlanStep]}        :23-29
+NextStep{next_agent, instruction, step: int, substep: Optional[float]}   :32-58
+TaskPlan{plan: List[PlanStep]}                              :60-63
+PlanStatusUpdate{step, substep, status: not_started|in_progress|blocked|completed}  :66-85
+ProgressCheckOutput{verdict: continue|completed|failed,
+                    plan_needs_update: bool,
+                    plan_status_update: Optional[List[PlanStatusUpdate]],
+                    plan_restructure: Optional[List[PlanStep]]}          :87-104
+```
+
+This is Magentic-One's progress ledger (Part I §6.2) with two additions PACT should
+take:
+
+1. **The supervisor's structured output can rewrite the plan** — `plan_restructure:
+   List[PlanStep]` — and can mark individual steps `blocked` — `plan_status_update`.
+   PACT's `route` node emits a label and, since `[R5]`, `assigns:` a payload per
+   label. Neither covers "and also mark step 3 blocked in the shared plan". This is
+   expressible as a `route` node with a `writes:` onto a `merge` channel, but §7.2's
+   `route` payload does not list `writes:` — only `assigns:`. **One-line fix:
+   `route` nodes take the node-common `writes:` like every other kind**, or the
+   plan-and-execute pattern (AC-5.2, required) needs a `transform` node after every
+   routing decision.
+2. **`substep: Optional[float]` with a normaliser** (`:45-58`, `:68-80`) — plan steps
+   are numbered `3, 3.1, 3.2` so a step can be *inserted* without renumbering its
+   successors. That is the plan-level analogue of DUR-1's rule that `map-item-key`
+   derives from item identity and never from list index, arrived at independently by
+   an orchestrator author for the same reason. Good corroboration; worth citing in
+   DUR-1's rationale, since DUR-1 currently rests only on DBOS's counterexample.
+
+### R2.8.6 Dify / Langflow
+
+Not re-read. Thesis §1.3's judgement — *"each is a serialisation of one runtime's
+object graph, which is the definition of non-portable"* — is a positioning claim, not
+a design input, and nothing in this stream depends on it. Recorded as **not
+investigated** rather than confirmed.
+
+---
+
+## R2.9 Re-verified negatives
+
+| Claim | Method | Result |
+|---|---|---|
+| No claimable work channel with a lease anywhere in the agent corpus | `grep -rln "visibility_timeout\|visibilityTimeout\|lease_duration\|leaseDuration\|renew_lease" --include=*.py --include=*.ts --include=*.go frameworks/ frameworks2/` | **zero files**. Confirms `[R2]` X3's withdrawal of `queue` and the v1.1 deferral |
+| CAMEL's `TaskChannel` has claim but not lease | `grep -n "lease\|Lease" frameworks2/camel/camel/societies/workforce/task_channel.py` | **zero hits**. The atomic claim at `:174` stands; there is no expiry, so a crashed worker holds a task forever |
+| No quorum / k-of-n join primitive in any durable runtime | Restate's 4 combinators (`protocol.proto:110-120`); Temporal's 18 command types; Inngest's 14 step types | none expresses k-of-n. `enough-of-them` is `emulated` on every runtime, as the draft says |
+| No timed join (`whoever-answers-in-time`) primitive | same | none. `emulated` everywhere |
+| No auction / contract-net / bidding implementation | Part I §5.8's grep | unchanged; still the highest-risk row in AC-5.1 |
+
+---
+
+## R2.10 The five deliverables, restated with R2's deltas
+
+**(1) Closed minimal node and edge set.** Part I §3 / draft §7.2's **eight** node
+kinds and one edge type survive R2 unchanged — nothing in SWF, strands, Haystack,
+agno, dapr-agents or agentscope needs a ninth kind. But the *field* set is
+incomplete in four places, all of which are one or two fields rather than new kinds:
+
+| Missing | Shape | Forced by |
+|---|---|---|
+| a failure path | node `if-it-goes-wrong:` + edge atom `went-wrong` | §R2.2 — SWF `try`, LangGraph `error_handler`, strands `failed_nodes` |
+| a run-terminal join | `waits-for: everyone-in-the-whole-run` | §R2.3 — LangGraph `defer` |
+| bounded iteration on `map` | `map.while:` | §R2.1.5 — SWF `forTask.while` |
+| `writes:` on `route` | node-common, already exists for other kinds | §R2.8.5 — dapr-agents `plan_status_update` |
+
+**(2) Loops as data.** Part I §7's six sketches stand; nothing in R2 requires a new
+loop primitive. Two corrections: `on-reentry` needs a stated default (`accumulate`,
+§R2.4) or ReAct and Reflexion diverge across adapters; and the livelock case
+(§R2.5) is a loop-termination gap, not a topology one, so it belongs in the loop
+budget vocabulary.
+
+**(3) One construct or two.** The ONE-construct decision is *strengthened*. SWF's
+`forTask` unifies map and while **by design** (`:677-713`), which is a better
+argument than ADK's deprecation because it was not arrived at by retreat.
+agentscope deleting its combinator library and agno replacing its mode enum with
+booleans are two more frameworks concluding that named topologies are not the right
+storage form. No evidence found for two constructs.
+
+**(4) Durability across three runtime classes.** DUR-1 is corroborated (Inngest
+hashing, dapr-agents substep numbering). DUR-4 is verified implementable (Restate's
+nested combinator example). DUR-2 should change from *classify-and-refuse* to
+*pin-by-default with classify as the opt-in*, following Temporal's
+`VERSIONING_BEHAVIOR_PINNED` (§R2.6.2) — this is the single highest-value change in
+this revision, because it decouples the learning loop (D22/D23) from the resume path.
+Two new obligations: a typed mid-replay divergence cause (Temporal has one, PACT
+has only a pre-flight `ResumeRefused`); and a **correlation key** on the suspension
+record, without which no external callback can find its waiting run (§R2.1.6).
+
+**(5) What cannot be declared.** Part I §10's six escapes stand. R2 adds no seventh
+and **removes the case for one**: the failure path (§R2.2) looked like it might need
+an escape and does not — SWF, LangGraph and strands all express it as data. The one
+place where declarative genuinely runs out remains unchanged: MCTS-class search with
+backpropagation over a persistent tree (MetaGPT's own `NotImplementedError`), plus
+arbitrary reward computation, which the eval-metric registry covers for every case
+D14 needs.
+
+---
+
+## R2.11 R2 evidence ledger
+
+**Verified by reading source (every file:line above):** the SWF 12-task union and
+every field cited from `schema/workflow.yaml`; `dsl.md:386`; LangGraph `defer` and
+`error_handler` including the four defaulting comments; strands `reset_on_revisit`,
+`reset_executor_state`, `repetitive_handoff_detection_window`, `GraphState`'s three
+node-status sets, `_validate_node_executor`; Haystack `ComponentPriority` and
+`max_runs_per_component`; agno's three team booleans and the conflict warning;
+dapr-agents' orchestrator schemas; agentscope's missing pipeline module; Temporal's
+18 command types, four versioning behaviours, and the non-determinism failure cause
+plus its metric; Restate's four combinator types, the nested example, and the
+per-message `completion_id`s; Inngest's 14 step types, opcode list, and
+`DeferEventID`; the five negative greps in §R2.9.
+
+**Inferred (marked in text):** the mapping of `defer` onto a proposed
+`waits-for: everyone-in-the-whole-run`; the claim that PACT's edge-placed joins cost
+exactly VAL-4 and VAL-9; the reading that per-node execution ceilings are a
+diagnostic-quality rather than expressiveness argument; the proposed spellings of
+`if-it-goes-wrong:`, `when-the-spec-changes:` and `stop-if-they-go-in-circles:`; the
+claim that `run.await: false` is unrepresentable under VAL-6.
+
+**Not investigated:** Dify and Langflow node vocabularies (§R2.8.6); the SWF
+`callTask` sub-union (`:240-612` — AsyncAPI/OpenAPI/gRPC/HTTP call shapes), which is
+a Resource concern rather than a control-flow one; DBOS beyond Part I's reading;
+`dapr` core workflow engine internals (only the Python SDK's `when_all` surfaced, at
+`tests/apps/perf/workflowsapp/app.py:17,105`, with no `when_any` in the tree).

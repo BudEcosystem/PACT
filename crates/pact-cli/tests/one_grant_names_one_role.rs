@@ -1,5 +1,5 @@
-//! `allow-egress:` offers six roles. Until this file existed, five of them were
-//! read by nothing.
+//! `allow-egress:` offers six model roles. Until this file existed, five of them
+//! were read by nothing.
 //!
 //! Measured before these tests: every check in the repository asked the same
 //! question — `"llm" in allow-egress:` — so `allow-egress: [judge]` behaved in
@@ -35,7 +35,10 @@ fn edited(name: &str, edits: &[(&str, &str, &str)]) -> String {
     for (file, from, to) in edits {
         let p = dst.join(file);
         let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-        assert!(text.contains(from), "fixture drifted: {from:?} not found in {file}");
+        assert!(
+            text.contains(from),
+            "fixture drifted: {from:?} not found in {file}"
+        );
         std::fs::write(&p, text.replace(from, to)).unwrap();
     }
     dst.to_string_lossy().into_owned()
@@ -55,8 +58,8 @@ fn copy_dir(src: &std::path::Path, dst: &std::path::Path) {
 
 fn check(root: &str) -> (bool, String) {
     let out = pact().args(["check", root]).output().unwrap();
-    let said = String::from_utf8_lossy(&out.stdout).to_string()
-        + &String::from_utf8_lossy(&out.stderr);
+    let said =
+        String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr);
     (out.status.success(), said)
 }
 
@@ -84,19 +87,28 @@ fn a_workspace_that_lets_the_reflector_out_does_not_thereby_let_the_agent_out() 
         "reflector-allowed",
         &[
             (WORKSPACE, "allow-egress: []", "allow-egress: [reflector]"),
-            (LEARNING, "reflection: { role: reflector }",
-             &format!("reflection: {{ role: reflector, model: {HOSTED} }}")),
+            (
+                LEARNING,
+                "reflection: { role: reflector }",
+                &format!("reflection: {{ role: reflector, model: {HOSTED} }}"),
+            ),
         ],
     );
     let (ok, said) = check(&allowed);
-    assert!(ok, "the role the workspace granted must be the role that loads:\n{said}");
+    assert!(
+        ok,
+        "the role the workspace granted must be the role that loads:\n{said}"
+    );
 
     let refused = edited(
         "reflector-does-not-cover-the-agent",
         &[
             (WORKSPACE, "allow-egress: []", "allow-egress: [reflector]"),
-            (LEARNING, "execution:  { role: llm }",
-             &format!("execution:  {{ role: llm, model: {HOSTED} }}")),
+            (
+                LEARNING,
+                "execution:  { role: llm }",
+                &format!("execution:  {{ role: llm, model: {HOSTED} }}"),
+            ),
         ],
     );
     let (ok, said) = check(&refused);
@@ -126,7 +138,11 @@ fn the_grant_that_names_grading_admits_the_grader_and_nothing_else() {
         "judge-allowed",
         &[
             (WORKSPACE, "allow-egress: []", "allow-egress: [judge]"),
-            (SUITE, "graded-by: qwen2.5-14b-instruct", &format!("graded-by: {HOSTED}")),
+            (
+                SUITE,
+                "graded-by: qwen2.5-14b-instruct",
+                &format!("graded-by: {HOSTED}"),
+            ),
         ],
     );
     let (ok, said) = check(&allowed);
@@ -139,7 +155,11 @@ fn the_grant_that_names_grading_admits_the_grader_and_nothing_else() {
         "judge-does-not-cover-the-summariser",
         &[
             (WORKSPACE, "allow-egress: []", "allow-egress: [judge]"),
-            (POLICY, "summarised-by: qwen2.5-14b-instruct", &format!("summarised-by: {HOSTED}")),
+            (
+                POLICY,
+                "summarised-by: qwen2.5-14b-instruct",
+                &format!("summarised-by: {HOSTED}"),
+            ),
         ],
     );
     let (ok, said) = check(&refused);
@@ -168,12 +188,18 @@ fn the_grant_that_names_the_numbers_admits_that_model_and_no_neighbouring_grant_
         "embedder-allowed",
         &[
             (WORKSPACE, "allow-egress: []", "allow-egress: [embedder]"),
-            (LEARNING, "reflection: { role: reflector }",
-             &format!("vectors: {{ role: embedder, model: {HOSTED} }}")),
+            (
+                LEARNING,
+                "reflection: { role: reflector }",
+                &format!("vectors: {{ role: embedder, model: {HOSTED} }}"),
+            ),
         ],
     );
     let (ok, said) = check(&allowed);
-    assert!(ok, "`embedder` must admit the model that turns text into numbers:\n{said}");
+    assert!(
+        ok,
+        "`embedder` must admit the model that turns text into numbers:\n{said}"
+    );
 
     // And no neighbouring grant stands in for it. `judge` is the closest of the
     // six — both are model calls over words that are not the agent's own — and
@@ -183,8 +209,11 @@ fn the_grant_that_names_the_numbers_admits_that_model_and_no_neighbouring_grant_
         "embedder-not-covered-by-judge",
         &[
             (WORKSPACE, "allow-egress: []", "allow-egress: [judge]"),
-            (LEARNING, "reflection: { role: reflector }",
-             &format!("vectors: {{ role: embedder, model: {HOSTED} }}")),
+            (
+                LEARNING,
+                "reflection: { role: reflector }",
+                &format!("vectors: {{ role: embedder, model: {HOSTED} }}"),
+            ),
         ],
     );
     let (ok, said) = check(&refused);
@@ -209,10 +238,17 @@ fn a_refusal_asks_for_the_least_grant_that_would_work_and_never_for_all_of_them(
     // because somebody wanted one of those four.
     let root = edited(
         "least-grant",
-        &[(SUITE, "graded-by: qwen2.5-14b-instruct", &format!("graded-by: {HOSTED}"))],
+        &[(
+            SUITE,
+            "graded-by: qwen2.5-14b-instruct",
+            &format!("graded-by: {HOSTED}"),
+        )],
     );
     let (ok, said) = check(&root);
-    assert!(!ok, "a hosted grader under `allow-egress: []` must be refused:\n{said}");
+    assert!(
+        !ok,
+        "a hosted grader under `allow-egress: []` must be refused:\n{said}"
+    );
     assert!(
         said.contains("add `judge` or `llm` to `allow-egress:`"),
         "name the narrow grant first, and the broad one as the alternative:\n{said}"
@@ -235,13 +271,23 @@ fn a_voice_recording_is_not_covered_by_permission_for_the_words() {
         "voice-under-llm",
         &[
             (WORKSPACE, "allow-egress: []", "allow-egress: [llm]"),
-            (AGENT, "policy: approvals", &format!("model: {HOSTED}\npolicy: approvals")),
-            (AGENT, "  photos: list of images",
-             "  photos: list of images\n  recording: a voice message"),
+            (
+                AGENT,
+                "policy: approvals",
+                &format!("model: {HOSTED}\npolicy: approvals"),
+            ),
+            (
+                AGENT,
+                "  photos: list of images",
+                "  photos: list of images\n  recording: a voice message",
+            ),
         ],
     );
     let (ok, said) = check(&refused);
-    assert!(!ok, "the recording went out under a grant for the words:\n{said}");
+    assert!(
+        !ok,
+        "the recording went out under a grant for the words:\n{said}"
+    );
     assert!(
         said.contains("accepts: recording: a voice message"),
         "quote the author's own line, so nobody has to go and verify it:\n{said}"
@@ -261,9 +307,16 @@ fn a_voice_recording_is_not_covered_by_permission_for_the_words() {
         "voice-with-stt",
         &[
             (WORKSPACE, "allow-egress: []", "allow-egress: [llm, stt]"),
-            (AGENT, "policy: approvals", &format!("model: {HOSTED}\npolicy: approvals")),
-            (AGENT, "  photos: list of images",
-             "  photos: list of images\n  recording: a voice message"),
+            (
+                AGENT,
+                "policy: approvals",
+                &format!("model: {HOSTED}\npolicy: approvals"),
+            ),
+            (
+                AGENT,
+                "  photos: list of images",
+                "  photos: list of images\n  recording: a voice message",
+            ),
         ],
     );
     let (ok, said) = check(&allowed);
@@ -283,8 +336,11 @@ fn the_speech_roles_gate_speech_wherever_the_author_wrote_it() {
         "speech-in-learning",
         &[
             (WORKSPACE, "allow-egress: []", "allow-egress: [llm]"),
-            (LEARNING, "reflection: { role: reflector }",
-             &format!("transcribe: {{ role: stt, model: {HOSTED} }}")),
+            (
+                LEARNING,
+                "reflection: { role: reflector }",
+                &format!("transcribe: {{ role: stt, model: {HOSTED} }}"),
+            ),
         ],
     );
     let (ok, said) = check(&learning);
@@ -302,13 +358,27 @@ fn the_speech_roles_gate_speech_wherever_the_author_wrote_it() {
         "speech-in-needs",
         &[
             (WORKSPACE, "allow-egress: []", "allow-egress: [llm]"),
-            (AGENT, "policy: approvals", &format!("model: {HOSTED}\npolicy: approvals")),
-            ("agents/refund-desk/needs.yaml", "images: yes", "images: yes\naudio: yes"),
+            (
+                AGENT,
+                "policy: approvals",
+                &format!("model: {HOSTED}\npolicy: approvals"),
+            ),
+            (
+                "agents/refund-desk/needs.yaml",
+                "images: yes",
+                "images: yes\naudio: yes",
+            ),
         ],
     );
     let (ok, said) = check(&needs);
-    assert!(!ok, "`needs: audio: yes` went out under a grant for the words:\n{said}");
-    assert!(said.contains("needs: audio: yes"), "quote the author's line:\n{said}");
+    assert!(
+        !ok,
+        "`needs: audio: yes` went out under a grant for the words:\n{said}"
+    );
+    assert!(
+        said.contains("needs: audio: yes"),
+        "quote the author's line:\n{said}"
+    );
     assert!(
         said.contains("add `stt` or `tts` to `allow-egress:`"),
         "either grant answers the sentence the author wrote:\n{said}"
@@ -325,17 +395,38 @@ fn the_worked_example_still_loads_and_still_refuses_everything_it_did_before() {
     assert!(ok, "the worked example must load:\n{said}");
 
     for (name, file, from, to, field) in [
-        ("plain-model", AGENT, "policy: approvals",
-         "model: claude-opus-5\npolicy: approvals", "model"),
-        ("plain-summariser", POLICY, "summarised-by: qwen2.5-14b-instruct",
-         "summarised-by: claude-opus-5", "summarised-by"),
-        ("plain-grader", SUITE, "graded-by: qwen2.5-14b-instruct",
-         "graded-by: claude-opus-5", "graded-by"),
+        (
+            "plain-model",
+            AGENT,
+            "policy: approvals",
+            "model: claude-opus-5\npolicy: approvals",
+            "model",
+        ),
+        (
+            "plain-summariser",
+            POLICY,
+            "summarised-by: qwen2.5-14b-instruct",
+            "summarised-by: claude-opus-5",
+            "summarised-by",
+        ),
+        (
+            "plain-grader",
+            SUITE,
+            "graded-by: qwen2.5-14b-instruct",
+            "graded-by: claude-opus-5",
+            "graded-by",
+        ),
     ] {
         let root = edited(name, &[(file, from, to)]);
         let (ok, said) = check(&root);
-        assert!(!ok, "{field} must still be refused under `allow-egress: []`:\n{said}");
-        assert!(said.contains("allow-egress: []"), "quote the line as written:\n{said}");
+        assert!(
+            !ok,
+            "{field} must still be refused under `allow-egress: []`:\n{said}"
+        );
+        assert!(
+            said.contains("allow-egress: []"),
+            "quote the line as written:\n{said}"
+        );
         assert!(
             said.contains(&format!("write `{field}: qwen2.5-7b-instruct`")),
             "the fix must still be a line the author can type:\n{said}"

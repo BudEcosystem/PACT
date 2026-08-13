@@ -1,0 +1,27 @@
+# A tool reaches ONE place, and this is the line that says where.
+#
+# `connect:` names an entry in `resources/` — not an address, not a command.
+# The name is checked: `connect: incidnet-server` is refused here, at the line
+# you typed, and the message names the servers this workspace really has. That
+# check is load-bearing rather than tidy, because the consent question hangs off
+# the far end of it: a misspelt server name used to load clean, and the whole
+# `may-we-connect` wait then disappeared off `pact waits` in silence.
+description: The platform team's incident records. Used to read one incident and what has happened on it.
+
+connect: incident-server    # -> /resources/incident-server.yaml
+
+# What the server publishes, written down here so a person can review it before
+# a machine ever asks the server what it has. The two lists are compared at
+# connect time — on a machine, at run time, with somebody waiting — and that
+# comparison is the only thing standing between "what you reviewed" and "what
+# ran". An action here the server does not publish, or one it publishes that
+# nobody wrote down, is reported rather than used.
+actions:
+  read-incident:
+    description: Read one incident and the timeline of what has happened on it.
+    takes:
+      incident-id: text
+    # Nothing here changes anything and nothing here spends. That is why this
+    # workspace needs no approval policy: the only thing anybody has to agree to
+    # is the connection itself, which is the point being shown.
+    reads-only: yes

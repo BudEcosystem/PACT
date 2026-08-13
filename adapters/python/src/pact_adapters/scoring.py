@@ -86,6 +86,7 @@ from .judge import LOCAL_RUNTIME, graded_by, judge_of, local_ask, served_here
 from .learning import CAN_BE_APPLIED, Learner, Outcome, Proposal
 from .resolve import ModelEntry, load_catalogue, needs_of, price_of, resolve
 from .slo import against_the_catalogue
+from .yes_no import said_yes
 
 #: Where the repository root is from here, so a checkout that has built the CLI
 #: is found without anybody exporting anything.
@@ -152,11 +153,15 @@ OPTIONS:
                         row that meets its `needs:` — admissibility only, on
                         the figures the catalogue publishes.
     --choose-model      Do not take a model on trust: RUN the author's cases
-                        against each candidate, in the order their `variants:`
-                        are written, and bind the first that passes the bar.
-                        If none does, refuse and name the cheapest that would.
-                        This is the measured form of the line above, and it
-                        costs one model call per case per candidate.
+                        against the model this agent names, trying its
+                        `variants:` in the order they are written. If it
+                        passes, that is the model. If it does not, run the
+                        same cases against the rest of the catalogue,
+                        cheapest first, and bind the first row that passes —
+                        the report says which model it bound and why. If
+                        nothing passes, refuse and say what happened to each
+                        row. This is the measured form of the line above, and
+                        it costs one model call per case per candidate.
     --serving-at URL    Where that model is being served. Defaults to
                         http://localhost:11434/v1
     --from-trace FILE   Promote a recorded run into an eval case, and
@@ -463,13 +468,16 @@ def score(
         )
         return scored
 
+    #: How the model came to be the model, when it was MEASURED into place rather
+    #: than admitted by the catalogue. `""` on every run without `--choose-model`.
+    chose_because = ""
     if choose:
         # The measured selection (D11), which had no door until this line.
         # `resolve()` filters on `needs:`, then RUNS the author's cases against
         # each candidate strategy in declaration order and binds the first that
         # passes. For a round it worked and the only caller was a test, so
         # "PACT picks the model" was a capability of the test suite.
-        chosen, trouble = _choose(document, spec, key, serving_at, root)
+        chosen, chose_because, trouble = _choose(document, spec, key, serving_at, root)
         if trouble is not None:
             scored.problem = trouble
             return scored
@@ -477,7 +485,12 @@ def score(
 
     bound, why, trouble = _bind(document, spec, key, model, serving_at, root)
     scored.model = bound.name if bound is not None else (model or "")
-    scored.model_because = why
+    # THE MEASURED sentence wins over the admissibility one. `_bind`'s `because`
+    # says what the catalogue publishes about this row; `_choose`'s says the
+    # author's own cases were run against it and what came out — and when
+    # `--choose-model` bound a row the agent does not name, that is the one fact
+    # the report must not leave the author to guess at.
+    scored.model_because = chose_because or why
     if trouble is not None:
         scored.problem = trouble
         return scored
@@ -693,13 +706,93 @@ def _run_every_case(
             movers.add(case.key)
         _collect(caveats, _uncalled_tools(result))
         _collect(caveats, result.unenforced)
-        if result.unmetered:
-            _collect(caveats, [
-                f"these ceilings were not measured on this run, so they stopped "
-                f"nothing: {', '.join(result.unmetered)}. fix: nothing to type — "
-                f"what can be measured depends on what the model reports back."
-            ])
+        _collect(caveats, _unmetered_caveats(spec, result))
     return results, movers, tuple(caveats), latencies
+
+
+def _unmetered_caveats(spec: AgentSpec, result: RunResult) -> tuple[str, ...]:
+    """What a person is told about the ceilings this run did not hold.
+
+    TWO sentences, because `unmetered` carries two different reasons and for a
+    round every member got the first one's remedy. That line ends *"fix: nothing
+    to type — what can be measured depends on what the model reports back"*,
+    which is exactly right for a ceiling no transport could count and exactly
+    wrong for `cost-per-request-under: NaN USD`: there IS something to type
+    (an amount), and what the model reports back has nothing to do with it. The
+    author was handed the right field name with the wrong diagnosis and a
+    remedy that told them not to act — which is worse than saying nothing,
+    because it closes the question.
+
+    The split is read off `Limits.held_nothing()`, which is what moved the figure
+    off the ceiling field in the first place, so the two can never come apart.
+    Everything else on `unmetered` — an unpriced transport, a latency promise
+    nothing measures, a `settings.` key this runtime does not read — keeps the
+    sentence it had.
+
+    THREE sentences and not two, because `held_nothing()` answers about two
+    kinds of ceiling. *"No amount of money can ever be at or above the figure
+    written"* is exactly as wrong for `runs-for-at-most: inf` as the transport's
+    remedy was for `cost-per-request-under: NaN USD` — a right field name, a
+    wrong diagnosis, and a remedy pointing at a line that has no money on it. So
+    the money remedy is printed for what `held_nothing()` calls `money` and a
+    duration remedy for what it calls `seconds`; those are `Ceiling.reads`
+    values, the same word the row would have carried had one been built.
+    """
+    if not result.unmetered:
+        return ()
+    #: The remedy per kind of ceiling: the sentence that says WHY nothing can be
+    #: at or above it, and the line to type instead.
+    remedies = {
+        "money": (
+            "no amount of money can ever be at or above the figure written",
+            "write an amount of money on that line, like "
+            "`cost-per-request-under: 0.05 USD`",
+        ),
+        "seconds": (
+            "no length of time can ever be at or above the figure written",
+            "write a length of time on that line, like `runs-for-at-most: 30s`",
+        ),
+        # And the two ceilings that could carry the same figure and had no
+        # remedy here. `held_nothing()` answers with `Ceiling.reads`, and a
+        # `reads` this dict does not know falls through to `rest` above — which
+        # prints *"nothing to type — what can be measured depends on what the
+        # model reports back"* for a figure the author typed. That is the exact
+        # wrong-diagnosis this function was written to remove, so the table has
+        # to cover every `reads` `Limits._CEILING_FIELDS` can produce.
+        "tokens": (
+            "no number of tokens can ever be at or above the figure written",
+            "write a whole number of tokens on that line, like "
+            "`tokens-at-most: 1000`",
+        ),
+        "tool_calls": (
+            "no number of tool calls can ever be at or above the figure written",
+            "write a whole number of tool calls on that line, like "
+            "`tool-calls-at-most: 5`",
+        ),
+    }
+    held = {f: reads for f, reads in spec.limits.held_nothing()}
+    # `Slo` reads the same authored line and reports the same name, and it is a
+    # money cap wherever it comes from — so a run whose `limits:` block is empty
+    # and whose `slo` carried the figure still gets the money sentence rather
+    # than falling through to the transport's.
+    if spec.slo.cap_nothing_can_reach is not None:
+        held.setdefault("cost-per-request-under", "money")
+    rest = tuple(f for f in result.unmetered if f not in held)
+    lines: list[str] = []
+    if rest:
+        lines.append(
+            f"these ceilings were not measured on this run, so they stopped "
+            f"nothing: {', '.join(rest)}. fix: nothing to type — "
+            f"what can be measured depends on what the model reports back."
+        )
+    for reads, (because, remedy) in remedies.items():
+        named = tuple(f for f in result.unmetered if held.get(f) == reads)
+        if named:
+            lines.append(
+                f"these ceilings held nothing, because {because}: "
+                f"{', '.join(named)}. fix: {remedy}."
+            )
+    return tuple(lines)
 
 
 def _collect(into: list[str], lines) -> None:
@@ -753,7 +846,7 @@ def _money_moving_actions(document: dict[str, Any], spec: AgentSpec) -> set[str]
         for action, written in (tool.get("actions") or {}).items():
             if not isinstance(written, dict):
                 continue
-            if str(written.get("spends-money") or "").strip().lower() in ("yes", "true", "on"):
+            if said_yes(written.get("spends-money")):
                 out.add(f"{name}/{action}")
     return out
 
@@ -871,27 +964,89 @@ def _choose(
     key: str,
     serving_at: str,
     root: Path,
-) -> tuple[str, "Problem | None"]:
-    """Run the author's cases against each candidate and return the one that passes.
+) -> tuple[str, str, "Problem | None"]:
+    """Measure the model this agent names, and bind the cheapest that passes.
 
     Distinct from `_bind`, which decides ADMISSIBILITY from what the catalogue
     publishes. This decides whether the model can actually do the job, by doing
     it — which is the only honest answer for behaviour that is probabilistic, and
     the whole of T4.
 
-    Refusal is the useful outcome: when nothing passes, `resolve()` names the
-    cheapest row that would, and that sentence is returned rather than a number.
+    Returns the model to bind, the sentence saying how it came to be that one,
+    and a refusal when nothing passed. When the agent's own model fails and
+    another row passes the author's cases, THAT ROW IS BOUND: the search has
+    already run every case against it, and refusing with an error over a model it
+    just watched pass at 83% is a search whose answer is thrown away. `_bind`
+    still runs afterwards on whatever comes back here, so a chosen row is held to
+    the same `needs:` and the same egress rule a named one is.
     """
+    # EGRESS IS DECIDED BEFORE ANYTHING IS BUILT, and that ordering is the whole
+    # of this block. The identical check lives in `_bind`, which `score()` calls
+    # AFTER this function — so for as long as the search actually connected, a
+    # workspace with `allow-egress: []` had every case of every candidate posted
+    # to an off-box `--serving-at` before the line that forbids it was reached.
+    # Measured: 36 requests carrying the agent's system prompt and the author's
+    # eval cases arrived at a listener on this machine's LAN address, in the same
+    # run whose report said "this workspace does not let the model call leave the
+    # box". The same command with `--model` sent nothing.
+    #
+    # It was unreachable rather than absent before the arity was fixed: the
+    # search died on the line that BUILDS the transport, one statement ahead of
+    # the first request. So this is a guard-ordering defect the arity fix turned
+    # live, and it is fixed here rather than by moving `_bind` up, because
+    # `_bind` also needs a model name and the point of this function is that
+    # there is not one yet.
+    refused = _egress_refusal(document, key, serving_at)
+    if refused is not None:
+        return "", "", refused
+
     catalogue = load_catalogue(workspace=root)
     entries = list(catalogue.entries)
     if not entries:
-        return "", Problem(
+        return "", "", Problem(
             severity="error", rule="scoring/no-catalogue", file=COMMAND_LINE, line=1,
             message="there is no model catalogue to choose from",
             fix="add `models/catalog.yaml` to this workspace, or name a model "
                 "with `--model`",
         )
     asked = spec.model or entries[0].name
+
+    # TWO parameters, and the second is unused on purpose. `resolve.evaluate`
+    # calls this as `transport_for(model_name, strategy_name)` — that is the
+    # `TransportFactory` protocol it declares — while `_transport_for` here
+    # returns a builder that takes none. A one-argument lambda satisfied the
+    # reader and nothing else: every `--choose-model` run died with a `TypeError`
+    # six frames inside the search, so the flag existed and the door behind it
+    # could not be opened. The strategy name is bound and ignored because a
+    # transport does not vary by strategy — only the spec handed to `run` does.
+    #
+    # AND THE FIX COSTS TIME THE CRASH DID NOT. Say that plainly rather than
+    # claiming parity: before the arity was fixed this search opened no socket at
+    # all, because it died on the line that BUILDS the transport, one statement
+    # ahead of the first request. Now it really connects, once per qualifying
+    # catalogue row per strategy. Against a dead address that is instant — the
+    # connection is refused — but against a firewalled `--serving-at` that drops
+    # packets rather than refusing, a flat ten-minute timeout would be ten
+    # minutes a row before the refusal arrived. So the connect phase is capped
+    # here at five seconds while generation keeps the full ten minutes: deciding
+    # whether a machine is serving a model at all is a question about the socket,
+    # and no honest answer to it needs longer than that.
+    # AND IT ASKS FOR EACH ROW BY THE NAME THE RUNTIME ANSWERS TO. `_served` is
+    # what the scoring path one screen up already does with the model it binds:
+    # `qwen2.5-vl-7b-instruct` is what a person types and `qwen2.5vl:7b` is what
+    # Ollama has on disk, and `also-known-as:` is the catalogue's map between
+    # them. The search posted the catalogue id, so on a real box every
+    # locally-served candidate came back 404 and the report said this machine is
+    # not serving models it is serving right now — the false diagnosis this whole
+    # change is about, reached by a different road. A row the runtime has no
+    # spelling for keeps its catalogue name and honestly fails to answer.
+    by_name = {e.name: e for e in entries}
+
+    def transport_for(model_name: str, _strategy_name: str):
+        entry = by_name.get(model_name)
+        tag = (_served(entry, serving_at)[0] or model_name) if entry else model_name
+        return _transport_for(tag, serving_at, root, connect=5.0)()
+
     report = resolve(
         spec,
         document,
@@ -899,14 +1054,33 @@ def _choose(
         # The same two seams the scoring path already uses, so a chosen model
         # is measured exactly as a named one is — one transport per case, and the
         # author's own `graded-by:` judge.
-        transport_for=lambda name: _transport_for(name, serving_at, root)(),
+        transport_for=transport_for,
         catalogue=entries,
         agent_key=key,
         judge=judge_of(document, workspace=root)[0],
     )
     if report.verdict.outcome == "PASS":
-        return report.model, None
-    return "", Problem(
+        return report.model, (
+            f"you asked PACT to choose, and `{report.model}` passed this agent's "
+            f"own cases at {report.verdict.score:.0%} using the "
+            f"{report.strategy!r} strategy"
+        ), None
+    found = report.instead
+    if found is not None and found.model:
+        # THE SEARCH FOUND ONE, so bind it. Every case has already been run
+        # against this row and it passed, which is the measurement `--choose-model`
+        # exists to take; returning an error here made the flag's help
+        # ("bind the first that passes the bar") false and threw away work that
+        # had already cost one model call per case.
+        #
+        # It is still `_bind` that admits it: `score()` calls that next with this
+        # name, so a chosen row is held to the author's `needs:` and to
+        # `allow-egress:` exactly as a row somebody typed is.
+        return found.model, (
+            f"`{asked}` did not pass this agent's own cases, so PACT ran them "
+            f"against the rest of the catalogue and bound {found.sentence}"
+        ), None
+    return "", "", Problem(
         severity="error", rule="scoring/no-model-passes", file=COMMAND_LINE, line=1,
         message=report.render(),
         fix=report.recommendation
@@ -987,28 +1161,51 @@ def _bind(
             f"would produce a number about a different agent.{advice}"
         ), None
 
-    off_box = _off_this_machine(serving_at)
-    if needs.get("must-stay-on-this-machine") and off_box:
-        # Name the role that is actually missing, and quote the line as written.
-        # This message hardcoded `llm` in both halves, which was true only while
-        # `llm` was the one role anything read: an agent that `accepts:` a voice
-        # message under `allow-egress: [llm]` is refused for `stt`, and telling
-        # that author their file "does not list `llm`" when it plainly does is
-        # ledger row R56 happening a second time in a second language.
-        wants = needs.get("egress-missing") or ("llm",)
-        return None, "", Problem(
-            severity="error", rule="scoring/egress-refused",
-            file="workspace.yaml", line=1,
-            message=(
-                f"`--serving-at {serving_at}` sends every case to {off_box}, and "
-                f"this workspace says `allow-egress: {_egress.listed(document)}` "
-                f"— nothing there names {_egress.grants(wants)}"
-            ),
-            fix="serve the model on this machine and point `--serving-at` at it, "
-                f"or add `- {wants[0]}` under `allow-egress:` — which is a change "
-                "a person has to approve",
-        )
+    refused = _egress_refusal(document, key, serving_at, needs)
+    if refused is not None:
+        return None, "", refused
     return entry, because, None
+
+
+def _egress_refusal(
+    document: dict[str, Any],
+    key: str,
+    serving_at: str,
+    needs: dict[str, Any] | None = None,
+) -> "Problem | None":
+    """`--serving-at` against `allow-egress:`, for every path that dials.
+
+    ONE function because there is one rule, and because the second caller was
+    missing for a round: `_choose` built transports and ran the whole catalogue
+    through them before `_bind` was ever reached, so the search sent the agent's
+    system prompt and the author's eval cases to an off-box address out of a
+    workspace whose `allow-egress:` is `[]`. A guard that only some of the paths
+    reach is a guard that says what the product would like to be true.
+    """
+    if needs is None:
+        needs = needs_of(document, key)
+    off_box = _off_this_machine(serving_at)
+    if not (needs.get("must-stay-on-this-machine") and off_box):
+        return None
+    # Name the role that is actually missing, and quote the line as written.
+    # This message hardcoded `llm` in both halves, which was true only while
+    # `llm` was the one role anything read: an agent that `accepts:` a voice
+    # message under `allow-egress: [llm]` is refused for `stt`, and telling
+    # that author their file "does not list `llm`" when it plainly does is
+    # ledger row R56 happening a second time in a second language.
+    wants = needs.get("egress-missing") or ("llm",)
+    return Problem(
+        severity="error", rule="scoring/egress-refused",
+        file="workspace.yaml", line=1,
+        message=(
+            f"`--serving-at {serving_at}` sends every case to {off_box}, and "
+            f"this workspace says `allow-egress: {_egress.listed(document)}` "
+            f"— nothing there names {_egress.grants(wants)}"
+        ),
+        fix="serve the model on this machine and point `--serving-at` at it, "
+            f"or add `- {wants[0]}` under `allow-egress:` — which is a change "
+            "a person has to approve",
+    )
 
 
 def _needs_file(root: Path, key: str) -> str:
@@ -1041,7 +1238,7 @@ def _off_this_machine(serving_at: str) -> str:
     return "" if host in ON_THIS_MACHINE else host
 
 
-def _transport_for(served_as: str, serving_at: str, root: Path):
+def _transport_for(served_as: str, serving_at: str, root: Path, connect: float = 0.0):
     """A fresh transport per case, bound to `served_as` on the local runtime.
 
     Fresh per case for the reason `resolve.evaluate` builds one per case: a
@@ -1052,12 +1249,24 @@ def _transport_for(served_as: str, serving_at: str, root: Path):
     `models/catalog.yaml` is priced and sized — the case that layer exists for is
     exactly an air-gapped box serving a model the distribution has never heard
     of, and it is where a suite is most likely to be scored.
+
+    `connect` caps the time spent WAITING FOR THE SOCKET, separately from the ten
+    minutes a slow local model is allowed to spend generating. `0.0` keeps the
+    single flat timeout, which is right for scoring one named model: the author
+    asked for that model, and a machine that takes a while to accept is still
+    the machine they asked about. It is set by the portability search, which
+    asks about models the author did NOT name — see `_choose`.
     """
     from .transports.ollama_transport import OllamaTransport
 
     def build():
+        timeout: Any = 600.0
+        if connect:
+            import httpx
+
+            timeout = httpx.Timeout(600.0, connect=connect)
         return OllamaTransport(
-            served_as, base_url=serving_at, workspace=str(root), timeout=600.0
+            served_as, base_url=serving_at, workspace=str(root), timeout=timeout
         )
 
     return build
@@ -1277,21 +1486,51 @@ def _margin_line(outcome: "Any") -> str:
     question for APPLYING an edit. AC-3.5 asks whether an optimiser improves a
     score *by a declared margin*, which is the right question for CLAIMING one
     works — and a claim built on `after > before` is a claim about noise.
+
+    The count comes off `Outcome.held_out`, which is the frozen split itself.
+    It used to be `len(verdict_after.results)` — the number of GRADED results,
+    which is a different question that happens to have the same answer whenever
+    `cycle` scores against `self.holdout` and nothing goes wrong. `measured`
+    documents its first argument as the held-out count and decides *"is this
+    enough to mean anything"* from it, so a scoring run that graded more cases
+    than were held out would have reported a split too small to claim on as one
+    big enough.
+
+    **Latent, and said plainly.** No scorer in the tree grades more than it is
+    handed, so the two numbers agreed on every path that shipped. What was wrong
+    was that they agreed by coincidence of call order rather than by anything
+    holding them together — and a gate whose correctness rests on nobody
+    changing `_score` is a gate the next change breaks silently. It is fixed as
+    a wiring defect, not as an incident.
     """
     from .optimising import measured
 
     after = outcome.verdict_after
-    said = measured(
-        len(getattr(after, "results", ())) if after is not None else 0,
-        outcome.verdict_before,
-        after,
-    )
+    said = measured(outcome.held_out, outcome.verdict_before, after)
     line = (
         f"  margin      {said['improved-by']:+.1%} against a declared "
         f"{said['margin-declared']:.0%} — "
         f"{'cleared' if said['cleared-the-margin'] else 'NOT cleared'}"
     )
-    if not said["enough-to-mean-something"]:
+    if not said["held-out-cases"] and getattr(after, "results", ()):
+        # A count of zero beside two scored verdicts is not a small split — it is
+        # a lost number. `Learner.cycle` refuses before spending anything when
+        # nothing is held out, and that refusal carries no verdicts at all, so
+        # this state cannot come out of a cycle: the count went missing between
+        # the learner and this page.
+        #
+        # It is said rather than printed because `Outcome.held_out` defaults to
+        # 0, and 0 renders as *"over 0 held-out case(s), so this is not a
+        # measurement"* — a false statement about a real split, wearing the
+        # clothes of caution. That is how the count was measured missing from
+        # three of `cycle`'s exits while every test of it passed.
+        line += (
+            "\n              (how many cases were held out did not reach this "
+            "report, so"
+            "\n               nothing here says whether that margin means "
+            "anything)"
+        )
+    elif not said["enough-to-mean-something"]:
         # Said out loud for the reason `Verdict` refuses a percentage over too
         # few cases: a margin cleared over three cases is not a result.
         line += (
@@ -1574,3 +1813,44 @@ def _parse(args: list[str]) -> tuple[str, dict[str, str], "Problem | None"]:
                 "`./scripts/pact-eval examples/refund-desk`",
         )
     return path, options, None
+
+
+if __name__ == "__main__":  # pragma: no cover — exercised in a subprocess
+    # NOT `raise SystemExit(main())`, and the difference is the whole of these
+    # lines.
+    #
+    # Running the scorer from here would be wrong for the reason `evals.py`'s
+    # own guard gives: `-m` executes this file a second time under the name
+    # `__main__`, so a `Case`, a `Verdict` and an `AgentSpec` built here would
+    # not be the ones `resolve.py` and `learning.py` imported. Two copies of a
+    # class that compare unequal is a bug that reports itself as a failing eval.
+    # The door is `python -m pact_adapters.evals`, which imports `main` from this
+    # module rather than re-executing it, and that stays true.
+    #
+    # It was not, however, what the site said. `site-docs/guide/evals.md` and
+    # `site-docs/reference/cli.md` both taught THIS module name, so the first
+    # effect of the lines below was to refuse the command the documentation gives
+    # a reader — a lie moved out of silence and into a sentence, which is no
+    # better. Both pages were corrected in the same change, and
+    # `test_the_documentation_site_tells_the_truth.py` now runs every `python -m`
+    # line the site quotes.
+    #
+    # But having NO guard is how `python -m pact_adapters.scoring
+    # examples/refund-desk` — the module name anybody looking for the scorer
+    # reaches for — printed nothing and exited 0. Silence with a success code is
+    # the worst answer a command can give: it reads as *"scored, and there was
+    # nothing to report"*, which is a lie about work that never happened. So the
+    # guard refuses, in the four-part form every other diagnostic here uses, and
+    # says the line to retype.
+    _typed = " ".join(a for a in sys.argv[1:] if a not in ("-h", "--help", "help"))
+    sys.stderr.write(str(Problem(
+        severity="error", rule="scoring/not-the-command",
+        file=COMMAND_LINE, line=1,
+        message="`python -m pact_adapters.scoring` does not score anything. This "
+                "file holds the scoring machinery; the command that runs it is "
+                "spelled `pact_adapters.evals`.",
+        fix=f"run this again with:  python -m pact_adapters.evals "
+            f"{_typed or '<folder>'}"
+            + ("" if _typed else " — for example `examples/refund-desk`"),
+    )))
+    raise SystemExit(3)

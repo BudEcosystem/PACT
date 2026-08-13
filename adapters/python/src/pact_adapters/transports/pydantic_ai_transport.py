@@ -25,6 +25,7 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 from pydantic_ai.models import ModelRequestParameters
+from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.tools import ToolDefinition
@@ -34,6 +35,7 @@ from ..resolve import default_model, window_of
 from ..script import Script
 from ._metering import can_price, priced, tokens_in, tokens_sent, what_the_summariser_cost
 from ._summarise import summarise_with
+from ._tool_choice import can_choose
 
 
 class PydanticAITransport:
@@ -145,6 +147,20 @@ class PydanticAITransport:
             "parallel_tool_calls": "native",
             "streaming": "emulated",
             "durable_resume": "unsupported",
+            # The only `native` in this column, and `native` is the whole of the
+            # difference it records. Every harness-driven target reaches a
+            # `connect:` server through PACT's own client (`emulated` — see
+            # `mock.py`); this is the one RUNTIME that has a client of its own,
+            # so `mcp_bridge._live` builds a `pydantic_ai.mcp.MCPToolset` and
+            # `pydantic_ai_interop.build_agent` hands it to a real `Agent`. The
+            # call leaves the process on the framework's own legs.
+            #
+            # NOT conditioned on whether `pydantic_ai.mcp` imports on THIS
+            # machine. `mcp_bridge.why_no_mcp` answers that per run, with a line
+            # to type and the tools deferred rather than dropped; a lattice that
+            # changed with the installed extras would make the published matrix
+            # a property of one laptop instead of a property of the runtime.
+            "connected_tools": "native",
         }
 
     def _respond(self, messages: list[Any], info: AgentInfo) -> ModelResponse:
@@ -171,6 +187,87 @@ class PydanticAITransport:
             parts=parts, usage=RequestUsage(input_tokens=went_in, output_tokens=came_out)
         )
 
+    def apply_settings(self, settings: dict[str, Any]) -> tuple[str, ...]:
+        """Take the author's `settings:` block, and say what could not be taken.
+
+        Pydantic AI is the one framework here whose own settings object names an
+        analogue for all twelve schema fields — `pydantic_ai.settings
+        .ModelSettings` carries `max_tokens`, `thinking`, `temperature`, `top_p`,
+        `top_k`, `stop_sequences`, `seed`, `presence_penalty`,
+        `frequency_penalty`, `tool_choice`, `parallel_tool_calls` and
+        `service_tier`, and each concrete `Model` translates them into its
+        provider's own spelling. So this is the transport with the least excuse
+        for dropping any of it, and for a round it dropped all of it: the block
+        loaded, validated, and came straight back on `RunResult.unmetered`.
+
+        Two keys can still come back, and neither is a stub.
+
+        `thinking:` because `Model.prepare_request` resolves it against the bound
+        model's PROFILE and silently strips it when the profile does not think.
+        Asking that same question here is what turns a `tier: core` field
+        vanishing into a `tier: core` field reported. `_thinking_reaches` asks
+        all THREE of the questions that method asks, including the third one
+        this transport missed for a round: a profile with
+        `thinking_always_enabled` discards `thinking: none` and thinks anyway.
+
+        `service-tier:` because the schema types it as free text and this SDK
+        types it as `Literal['auto', 'default', 'flex', 'priority']` — four
+        words it can translate per provider, and nothing it can do with a fifth.
+        `ModelSettings` is a `TypedDict`, so nothing would stop a fifth being
+        posted; reporting it is the translate-or-nothing line.
+
+        `tool-choice:` is answered here and again at every call, because the two
+        questions are different ones. This says whether the SDK has a shape for
+        the authored value, and it always has. Whether a PARTICULAR call can
+        carry it depends on the tools THAT call offers, which nothing knows yet:
+        `harness.run`'s closing call offers none on purpose and a stage may
+        offer a subset. `_tool_choice.can_choose` decides that per call, and the
+        transport sends nothing rather than an approximation when the answer is
+        no — on this SDK sending it anyway does not degrade, it raises
+        `UserError` out of `resolve_tool_choice` and takes the run with it.
+        """
+        self._settings = dict(settings)
+        return tuple(
+            k
+            for k in settings
+            if k not in _SETTINGS
+            or (k == "thinking" and not _thinking_reaches(self._model, settings[k]))
+            or (k == "service-tier" and str(settings[k]).strip() not in _SERVICE_TIERS)
+        )
+
+    def settings_for_request(self, offered: tuple[str, ...] = ()) -> ModelSettings:
+        """The `ModelSettings` this transport is about to hand the SDK.
+
+        Split out for the reason `ollama_transport.payload_for` was: a test that
+        asserts a mapping table and a return value is true of a transport that
+        then drops every setting on the floor. Here the stronger assertion is
+        available and is the one the tests make — Pydantic AI hands the model
+        function an `AgentInfo` carrying the `model_settings` and
+        `model_request_parameters` its own `prepare_request` produced, so what
+        reached the SDK can be read on the far side of it.
+
+        `offered` is the tool names THIS call carries, and it is a parameter
+        rather than a field because it changes call by call. Every provider model
+        in this SDK runs `models._tool_choice.resolve_tool_choice`, which raises
+        `UserError` on `required` with no function tools and on a name it cannot
+        find — so a `tool-choice:` this call cannot carry is left out of the
+        request instead. `models/function.py` is the one model that does NOT call
+        it, which is why the tests for this drive a model that does.
+        """
+        said = getattr(self, "_settings", {})
+        wire: ModelSettings = {}
+        for key, value in said.items():
+            if key not in _SETTINGS:
+                continue
+            if key == "thinking" and not _thinking_reaches(self._model, value):
+                continue
+            if key == "service-tier" and str(value).strip() not in _SERVICE_TIERS:
+                continue
+            if key == "tool-choice" and not can_choose(value, offered):
+                continue
+            wire[_SETTINGS[key]] = _translated(key, value)  # type: ignore[literal-required]
+        return wire
+
     async def model_call(
         self, system: str, history: list[dict[str, Any]], tools: list[dict[str, Any]]
     ) -> tuple[str, list[ToolCall]]:
@@ -179,6 +276,16 @@ class PydanticAITransport:
         response = await direct.model_request(
             self._model,
             _to_messages(system, history),
+            # The author's `settings:` block, in this SDK's own shape. The
+            # per-REQUEST surface rather than `FunctionModel(settings=...)`,
+            # because a `settings:` block belongs to the run and the model object
+            # is built once in `__init__`. The tool names go with it because
+            # `tool_choice` is a statement ABOUT them: this call's `function_tools`
+            # is what `resolve_tool_choice` validates it against, and the harness
+            # makes calls whose list is empty or narrowed.
+            model_settings=self.settings_for_request(
+                tuple(str(t["name"]) for t in tools)
+            ),
             model_request_parameters=ModelRequestParameters(
                 function_tools=[
                     ToolDefinition(
@@ -212,6 +319,106 @@ def _to_messages(system: str, history: list[dict[str, Any]]) -> list[Any]:
                 )
             )
     return [ModelRequest(parts=parts)]
+
+
+#: The author's key, and this SDK's. One mapping per transport, which is what the
+#: `settings` group's own header makes possible — *"every key here works on every
+#: provider"* — and why the group is closed rather than open.
+#:
+#: All twelve, uniquely among the transports here, because `ModelSettings` is
+#: itself a cross-provider vocabulary: Pydantic AI has already done per-provider
+#: translation one layer down, so PACT's job on this target is a rename plus the
+#: two value translations `_translated` makes.
+_SETTINGS: dict[str, str] = {
+    "max-tokens": "max_tokens",
+    "thinking": "thinking",
+    "temperature": "temperature",
+    "top-p": "top_p",
+    "top-k": "top_k",
+    "stop-sequences": "stop_sequences",
+    "seed": "seed",
+    "presence-penalty": "presence_penalty",
+    "frequency-penalty": "frequency_penalty",
+    "tool-choice": "tool_choice",
+    "parallel-tool-calls": "parallel_tool_calls",
+    "service-tier": "service_tier",
+}
+
+#: `pydantic_ai.settings.ServiceTier`, which is a closed set where the schema's
+#: `service-tier:` is free text. A word outside it has no translation on any
+#: provider and is reported rather than posted.
+_SERVICE_TIERS = ("auto", "default", "flex", "priority")
+
+#: The three `tool-choice:` words this SDK also uses. The fourth value its help
+#: names — *"one tool name"* — is not a word at all here.
+_PLAIN_CHOICES = ("auto", "required", "none")
+
+
+def _thinking_reaches(model: Any, value: Any) -> bool:
+    """Whether this authored `thinking:` would reach the bound model.
+
+    The same THREE questions `Model.prepare_request` asks before it moves the key
+    onto `ModelRequestParameters` and out of `ModelSettings` (models/__init__.py,
+    pydantic_ai_slim 2.21.0)::
+
+        if supports_thinking or thinking_always_enabled:
+            if not (thinking_value is False and thinking_always_enabled):
+                params = replace(params, thinking=thinking_value)
+
+    Asked here so the transport reports the key in exactly the cases the SDK
+    would drop it — a provider fact, read from the SDK, rather than a permanent
+    excuse written into a table.
+
+    The third question is why this takes the VALUE and not only the model, and
+    it was missed for a round. `thinking: none` is PACT's word for *do not*, it
+    translates to `False` here, and on a profile with `thinking_always_enabled`
+    the SDK discards exactly that combination and thinks anyway. Reporting the
+    key honoured there tells the author a `tier: core` line held when the SDK
+    provably threw it away.
+    """
+    profile = getattr(model, "profile", None)
+    if profile is None:
+        return False
+    supports = bool(profile.get("supports_thinking", False))
+    always = bool(profile.get("thinking_always_enabled", False))
+    if not (supports or always):
+        return False
+    return not (_translated("thinking", value) is False and always)
+
+
+def _translated(key: str, value: Any) -> Any:
+    """One authored value in this SDK's shape.
+
+    Three keys need it.
+
+    `tool-choice:`'s help says *"auto, required, none, or one tool name"*. The
+    three words are `ToolChoiceScalar` here and go through unchanged; a NAME is a
+    `list[str]`, which `models._tool_choice.resolve_tool_choice` turns into
+    `('required', {name})` and each provider then writes in its own shape —
+    `{"type": "function", "function": {"name": ...}}` on an OpenAI-compatible
+    endpoint, `{"type": "tool", "name": ...}` on Anthropic's. A bare `"payments"`
+    is not in `ToolChoice` at all; passed through it would be a setting in a shape
+    the provider ignores, which is worse than one reported unhonoured because
+    nothing says it did not happen.
+
+    `thinking:`'s `none` is `False` here rather than a fifth string — Pydantic
+    AI's `ThinkingLevel` is `bool | Literal['minimal', 'low', 'medium', 'high',
+    'xhigh']`, so PACT's four words are three literals and a boolean.
+
+    `stop-sequences:` because the schema says "list of text" and the SDK says
+    `list[str]`; a scalar an author wrote as one line is a sequence of CHARACTERS
+    to anything that iterates it, which is the quietest possible way to send the
+    wrong thing.
+    """
+    if key == "tool-choice":
+        said = str(value).strip()
+        return said if said in _PLAIN_CHOICES else [said]
+    if key == "thinking":
+        said = str(value).strip()
+        return False if said == "none" else said
+    if key == "stop-sequences":
+        return [str(value)] if isinstance(value, str) else [str(v) for v in value]
+    return value
 
 
 def _from_response(response: ModelResponse) -> tuple[str, list[ToolCall]]:

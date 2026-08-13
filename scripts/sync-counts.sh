@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Write the test counts into the four documents that state them.
+# Write the test counts into the documents that state them.
 #
 # `test_the_headline_test_count_is_the_count.py` fails when README and the site
 # disagree with what the suites actually run, and it is right to. But its fix
@@ -45,6 +45,18 @@ edits = {
     "site-docs/index.md": [
         (r"\| Tests \| \*\*[\d,]+\*\* — \d+ Rust, \d+ adapter \|",
          f"| Tests | **{total:,}** — {rust} Rust, {adapter} adapter |"),
+    ],
+    # §1's table opens "Measured, not read." and then carried 690 and 1207 for
+    # long enough that both were wrong by hundreds — a cell that does not re-run
+    # inside a table whose whole point is that every cell does. The two figures
+    # are anchored on the row label so the prose around them can be edited
+    # without the pattern going stale silently; `subn` returning 0 is fatal
+    # above, so a row that is renamed fails this script rather than quietly
+    # leaving the old number behind.
+    "docs/90-REVIEW.md": [
+        (r"(\| Rust \| 5 crates, \*\*)\d+( tests\*\*)", rf"\g<1>{rust}\g<2>"),
+        (r"(\| Python \| \*\*\d+ modules\*\*.*?, \*\*)\d+( tests\*\*)",
+         rf"\g<1>{adapter}\g<2>"),
     ],
 }
 for path, pairs in edits.items():

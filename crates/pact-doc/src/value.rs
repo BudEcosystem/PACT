@@ -167,6 +167,28 @@ impl Node {
         }
     }
 
+    /// How many bytes of *text* the tree holds: every piece of writing in it,
+    /// plus the setting names it is filed under.
+    ///
+    /// Counting settings is not the same as counting size. One setting can hold
+    /// a megabyte of text, so a limit expressed only in settings says nothing
+    /// about how much memory a copy of this tree needs — which is the question
+    /// a `&name`/`*name` shortcut actually asks. Numbers, yes/no and nothing
+    /// are all fixed-width and cost nothing worth counting.
+    pub fn text_bytes(&self) -> usize {
+        match &self.value {
+            Value::Str(s) => s.len(),
+            Value::List(items) => items.iter().map(Node::text_bytes).sum(),
+            Value::Map(m) => m.iter().map(|(k, e)| k.len() + e.node.text_bytes()).sum(),
+            Value::File(f) => f.path.len() + f.content_type.len(),
+            Value::Payload(p) => {
+                p.root.len()
+                    + p.files.iter().map(|f| f.path.len() + f.content_type.len()).sum::<usize>()
+            }
+            _ => 0,
+        }
+    }
+
     /// Depth of the tree, used to enforce a nesting limit.
     pub fn depth(&self) -> usize {
         1 + match &self.value {
@@ -184,6 +206,17 @@ impl Node {
             Value::Null => J::Null,
             Value::Bool(b) => J::Bool(*b),
             Value::Int(i) => J::Number((*i).into()),
+            // `from_f64` returns nothing for infinity and not-a-number, and the
+            // `J::Null` here is what that used to come out as. It was reachable
+            // from a FILE: `x-threshold: 1e999` parsed to infinity, so a value
+            // the author had typed left through this arm as nothing at all,
+            // with no problem reported anywhere. That is fixed where it was
+            // caused — `yaml::resolve_scalar` no longer reads a number it
+            // cannot hold as a number — so no authored document can reach this
+            // arm any more. It stays because `Value::Float` is a public field
+            // on a public type and nothing here can promise what a caller
+            // builds by hand; falling back is better than a panic in a
+            // checker.
             Value::Float(f) => serde_json::Number::from_f64(*f).map_or(J::Null, J::Number),
             Value::Str(s) => J::String(s.clone()),
             Value::List(items) => J::Array(items.iter().map(Node::to_json).collect()),

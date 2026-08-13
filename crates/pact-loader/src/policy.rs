@@ -2,13 +2,25 @@
 //! *rules*, isolated so they can be changed without touching the Expansion Rule
 //! itself (invariant F-1: no capability-affecting literal buried in the core).
 
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 
 /// Files that are documentation or tooling residue rather than specification.
 /// Treating `README.md` as a field called `README` would be technically
 /// consistent and practically absurd, so these are skipped.
-const NON_SPEC_STEMS: &[&str] =
-    &["readme", "license", "licence", "notice", "changelog", "contributing", "codeowners"];
+///
+/// The stem is only half the question — see [`Ignored::Documentation`] and
+/// [`Ignored::SettingsNamedLikeDocumentation`]. `README.md` is documentation on
+/// any reading; `tools/license.yaml` is a tool called `license` written in the
+/// one form documentation is never written in.
+const NON_SPEC_STEMS: &[&str] = &[
+    "readme",
+    "license",
+    "licence",
+    "notice",
+    "changelog",
+    "contributing",
+    "codeowners",
+];
 
 /// Extensions parsed as structured documents.
 const STRUCTURED: &[&str] = &["yaml", "yml", "json"];
@@ -19,9 +31,146 @@ const PROSE: &[&str] = &["md", "markdown"];
 /// Extensions read as plain text values.
 const PLAIN_TEXT: &[&str] = &["txt"];
 
-/// Directory names never descended into.
-const SKIP_DIRS: &[&str] =
-    &["node_modules", "target", "__pycache__", "venv", ".venv", "dist", "build"];
+/// Directory names never descended into, and TOLD ABOUT — every name here earns
+/// the [`Ignored::ToolingFolder`] warning, because every name here is **also an
+/// ordinary English noun an author could have meant**: an agent that runs
+/// builds, a tool that ships a distribution, a skill about picking a target.
+/// Behind one of these there might really be something somebody wrote, so the
+/// warning can rescue it; that is the whole justification for the line of
+/// output. Names that could never be authored are on [`TOOL_ONLY_DIRS`].
+///
+/// **Nothing beginning with a dot belongs on this list.** [`Policy::is_ignored`]
+/// answers the leading-dot question first and returns [`Ignored::Hidden`], which
+/// is SILENT, so a dotted name written here would be unreachable — a line that
+/// reads like a rule and decides nothing. `.venv` sat here for a release doing
+/// exactly that (D5).
+///
+/// Held by `no_folder_this_list_skips_is_one_the_dot_rule_answers_first` below.
+pub const SPEAKING_SKIP_DIRS: &[&str] = &["dist", "build", "target"];
+
+/// Directory names never descended into, and **never mentioned** — the ones no
+/// author has ever typed on purpose.
+///
+/// This list exists because the warning [`SPEAKING_SKIP_DIRS`] earns is only
+/// defensible where a real setting could be behind the name. Behind
+/// `__pycache__` there never is one, so the message can never rescue anything
+/// and can only ever be noise — and the noise is not free. Measured on this
+/// repository's own Python adapter, with every one of these names speaking:
+///
+/// ```text
+/// $ pact check adapters/python 2>&1 | grep -c loader/folder-skipped-by-name
+/// 5
+/// ```
+///
+/// — five lines, none of which names anything anybody wrote, and `pact check
+/// --deny-warnings` at exit 1 on a tree whose only sin is that Python imported
+/// its own tools once. The same run on a workspace where somebody had typed
+/// `python -m venv venv` printed three.
+///
+/// That is verbatim the harm the `.venv` reasoning rejects — recorded at
+/// `no_folder_this_list_skips_is_one_the_dot_rule_answers_first` below, where
+/// `.venv` was deleted from the old list rather than promoted, because a
+/// warning on it "would put a warning on every workspace an author had ever run
+/// `python -m venv .venv` in". The argument does not become weaker when the dot
+/// is left off, and for a release it was not applied: `python -m venv
+/// venv` is the same command with the other conventional argument, and the fix
+/// printed under the warning — *"rename it to something else"* — breaks the
+/// virtual environment either way. `.venv` is answered by the dot rule;
+/// `venv`, `node_modules` and `__pycache__` are answered here.
+///
+/// The two lists are a split of one former `SKIP_DIRS`, and the criterion is
+/// stated once, above: *could an author have meant this name?* Held by
+/// `a_name_only_a_tool_writes_is_told_apart_from_a_name_a_person_might_write`
+/// below, and at the level of what the loader actually SAYS by
+/// `a_folder_only_a_tool_ever_makes_is_skipped_without_a_word` in
+/// `tests/an_agent_in_a_folder_named_build_is_never_silently_gone.rs`.
+pub const TOOL_ONLY_DIRS: &[&str] = &["node_modules", "__pycache__", "venv"];
+
+/// Why an entry takes no part in the document.
+///
+/// This used to be a bare `bool`, and the one caller answered it with a bare
+/// `continue`. That is fine for two of these reasons and quietly wrong for the
+/// other two: an author whose agent runs builds writes `agents/build/`, and the
+/// whole agent disappeared with `pact check` reporting a clean load (thesis T7 —
+/// no silent loss anywhere). Telling them requires knowing *which* reason
+/// applied, because the whole decision is which reasons are worth a word:
+///
+/// - [`Ignored::Hidden`], [`Ignored::ToolArtifact`] and
+///   [`Ignored::Documentation`] are silent. Every real workspace has a
+///   `README.md` at the top and a `.gitignore`, half of them have a
+///   `node_modules/`, none of the three was ever a setting, and a line about
+///   each on every run is noise that teaches an author to stop reading the
+///   output.
+/// - [`Ignored::ToolingFolder`], [`Ignored::SettingsNamedLikeDocumentation`]
+///   and [`Ignored::DocumentationInsideTheTree`] speak. `build`, `dist`,
+///   `target` and `license` are ordinary English words, so the collision with a
+///   tool's or a project's convention is the loader's accident rather than the
+///   author's, and the author is the only one who knows which they meant.
+///
+/// **The criterion is the same one in all three speaking cases: could the
+/// author have meant it?** It is asked of a folder by its NAME
+/// ([`SPEAKING_SKIP_DIRS`] against [`TOOL_ONLY_DIRS`]) and of a file by its name
+/// AND ITS PLACE:
+///
+/// - a documentation stem in the form settings are written in — `license.yaml`,
+///   `notice.json` — is a collision at any depth, because nobody writes a
+///   readme as a YAML document;
+/// - a documentation stem written as prose is documentation **at the top of the
+///   workspace**, where `README.md`, `CHANGELOG.md` and `CONTRIBUTING.md` are
+///   what those names mean and always have been;
+/// - the same stem written as prose **anywhere below the top** is the same
+///   accident `agents/build/` is. `agents/keeper/settings/notice.md` is a file
+///   somebody wrote inside a folder of settings, and for a release it took no
+///   part in the document and produced no diagnostic — B2 verbatim, one
+///   file-kind over. Measured on four sibling `.md` files of identical shape in
+///   one ordinary folder: `escalation.md` became a field and was named,
+///   `notice.md`, `changelog.md` and `contributing.md` produced no error, no
+///   warning and no mention, and `pact show` had no trace of any of them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ignored {
+    /// The name begins with a dot: tooling's own business, not a setting.
+    Hidden,
+    /// A directory a tool made and no author ever names ([`TOOL_ONLY_DIRS`]).
+    /// Skipped like [`Ignored::ToolingFolder`] and, unlike it, in silence:
+    /// there can be nothing of the author's behind `node_modules`, so a line
+    /// about it can only ever be noise.
+    ToolArtifact,
+    /// A directory whose name is one that build and packaging tools fill in
+    /// themselves ([`SPEAKING_SKIP_DIRS`]) *and* one an author could have meant.
+    /// Descending into one would pull thousands of files nobody wrote into the
+    /// document; skipping it in silence would lose an agent called `build`.
+    ToolingFolder,
+    /// A file that is documentation rather than specification: a
+    /// [`NON_SPEC_STEMS`] stem written as prose, plain text or no extension at
+    /// all, **at the top of the workspace** — `README.md`, `LICENSE`,
+    /// `CHANGELOG.md`.
+    Documentation,
+    /// The same stem, the same prose form, **below the top of the workspace**.
+    ///
+    /// `agents/keeper/notice.md` is not a project's notice file; it is a file
+    /// inside a folder of settings whose name happens to collide with one. The
+    /// author is the only one who knows which they meant, so it is skipped and
+    /// said out loud — the same answer `agents/build/` gets, for the same
+    /// reason.
+    DocumentationInsideTheTree,
+    /// A file with a [`NON_SPEC_STEMS`] stem written as a *structured* document
+    /// — `tools/license.yaml`, `notice.json`.
+    ///
+    /// The same skip as [`Ignored::Documentation`] and a different answer,
+    /// because this one is almost certainly a setting. Measured before this
+    /// variant existed, on a workspace holding a perfectly good
+    /// `tools/license.yaml` named under an agent's `uses:`:
+    ///
+    /// ```text
+    /// error: 'uses' names 'license', and there is no such entry in `tools:`,
+    ///        `skills:` or `knowledge:`.
+    ///   fix: Nothing is declared there yet. Add a file `tools/license.yaml`
+    /// ```
+    ///
+    /// — the author told to write the file they had already written, because
+    /// the loader discarded it without a word.
+    SettingsNamedLikeDocumentation,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileKind {
@@ -66,7 +215,17 @@ pub struct Policy {
 impl Default for Policy {
     fn default() -> Self {
         Self {
-            max_text_bytes: 4 * 1024 * 1024,
+            // ONE constant, not a second `4 * 1024 * 1024` that happens to
+            // match. This figure and `pact_doc::yaml::MAX_TEXT` are the same
+            // answer to the same question — how much writing one document may
+            // hold — asked at two moments: here of the file on disk, there of
+            // what the file works out to once every `*name` has been copied in.
+            // Written out separately they were free to drift, and the direction
+            // of the drift decides which of two differently-worded refusals an
+            // author gets for one file. See `pact_doc::yaml::MAX_TEXT` for why
+            // both are still needed and which one an alias-free file always
+            // meets first.
+            max_text_bytes: pact_doc::yaml::MAX_TEXT as u64,
             body_field: "content".to_string(),
             follow_symlinks: false,
             // Only the stems where a kind's root file is named after the KIND
@@ -85,12 +244,21 @@ impl Default for Policy {
             // `team`, `variant`, `workflow` and `contract` are gone with the
             // kinds themselves (X5, X15).
             kind_stems: [
-                "workspace", "agent", "skill", "suite", "catalog",
+                "workspace",
+                "agent",
+                "skill",
+                "suite",
+                "catalog",
                 // Added with the port/loop/context-policy kinds. A file named
                 // after WHAT IT IS describes its folder, so
                 // `ports/slack/port.yaml` is the port rather than a field
                 // called `port` inside it.
-                "port", "schedule", "loop", "interceptor", "context-policy", "state",
+                "port",
+                "schedule",
+                "loop",
+                "interceptor",
+                "context-policy",
+                "state",
                 // The OBSERVE half of the event lattice. Here for the same
                 // reason `interceptor` is: `watch/slow-tools/watch.yaml` IS the
                 // watch, not a field called `watch` sitting inside it. Without
@@ -126,7 +294,9 @@ impl Default for Policy {
                 // first written, so the folder spelling the Expansion Rule
                 // accepts everywhere else was the one spelling it refused here,
                 // and the refusal named a fix that cannot be typed.
-                "tool", "policy", "resource",
+                "tool",
+                "policy",
+                "resource",
                 // `redaction` is deliberately NOT here, and the reason is the
                 // `learning.yaml` sentence above rather than an oversight.
                 // `agent.policy` is a NAME (`policy: approvals`), so the cost of
@@ -187,15 +357,47 @@ impl Policy {
     }
 
     /// Should this directory entry take part in the document at all?
-    pub fn is_ignored(&self, name: &str, is_dir: bool) -> bool {
+    ///
+    /// `None` means yes. `Some(reason)` means no, and says why so the caller
+    /// can decide whether the author needs to hear about it — see [`Ignored`].
+    /// A pure function of the name and of one bit about where it sits:
+    /// `at_workspace_root` says whether the folder holding this entry is the
+    /// top of the tree being loaded. Nothing here touches the filesystem, so
+    /// the answer is the same on every machine and the digest stays
+    /// reproducible.
+    ///
+    /// The place bit exists for prose only, and only because `README.md` means
+    /// two different things in two places — see
+    /// [`Ignored::DocumentationInsideTheTree`]. A folder's answer does not
+    /// depend on it, and neither does a structured file's.
+    pub fn is_ignored(&self, name: &str, is_dir: bool, at_workspace_root: bool) -> Option<Ignored> {
         if name.starts_with('.') {
-            return true;
+            return Some(Ignored::Hidden);
         }
         if is_dir {
-            return SKIP_DIRS.contains(&name);
+            if SPEAKING_SKIP_DIRS.contains(&name) {
+                return Some(Ignored::ToolingFolder);
+            }
+            return TOOL_ONLY_DIRS.contains(&name).then_some(Ignored::ToolArtifact);
         }
-        let stem = name.rsplit_once('.').map_or(name, |(s, _)| s);
-        NON_SPEC_STEMS.contains(&stem.to_ascii_lowercase().as_str())
+        let (stem, ext) = name.rsplit_once('.').map_or((name, ""), |(s, e)| (s, e));
+        if !NON_SPEC_STEMS.contains(&stem.to_ascii_lowercase().as_str()) {
+            return None;
+        }
+        // A readme is never written as `readme.yaml`, so a documentation stem
+        // in the form settings are written in is a collision rather than a
+        // document — and the author is the only one who can say which.
+        if STRUCTURED.contains(&ext.to_ascii_lowercase().as_str()) {
+            return Some(Ignored::SettingsNamedLikeDocumentation);
+        }
+        // Prose. At the top of the workspace this is the project's own writing
+        // and always has been. One folder down it is a file inside a folder of
+        // settings, and the collision is the loader's accident rather than the
+        // author's.
+        if at_workspace_root {
+            return Some(Ignored::Documentation);
+        }
+        Some(Ignored::DocumentationInsideTheTree)
     }
 
     /// Is this entry the directory's *self file* — the one providing the
@@ -272,7 +474,9 @@ impl Policy {
 /// and filesystem read order is not stable across platforms. Encoding order in
 /// the name keeps the tree self-describing and the digest reproducible.
 pub fn split_ordinal(stem: &str) -> (Option<u32>, &str) {
-    let digits_end = stem.find(|c: char| !c.is_ascii_digit()).unwrap_or(stem.len());
+    let digits_end = stem
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(stem.len());
     if digits_end == 0 || digits_end == stem.len() {
         return (None, stem);
     }
@@ -299,24 +503,234 @@ mod tests {
         assert_eq!(split_ordinal("01-fetch"), (Some(1), "fetch"));
         assert_eq!(split_ordinal("10_summarise"), (Some(10), "summarise"));
         assert_eq!(split_ordinal("fetch"), (None, "fetch"));
-        assert_eq!(split_ordinal("2024"), (None, "2024"), "a bare number is a name");
+        assert_eq!(
+            split_ordinal("2024"),
+            (None, "2024"),
+            "a bare number is a name"
+        );
         // The separator must be '-' or '_', so a name like `3d-model` is a
         // name, not step 3 of something called "d-model".
         assert_eq!(split_ordinal("3d-model"), (None, "3d-model"));
         assert_eq!(split_ordinal("01"), (None, "01"));
         assert_eq!(split_ordinal("01-"), (None, "01-"));
-        assert_eq!(split_ordinal("v2-agent"), (None, "v2-agent"), "must start with digits");
+        assert_eq!(
+            split_ordinal("v2-agent"),
+            (None, "v2-agent"),
+            "must start with digits"
+        );
     }
 
     #[test]
     fn documentation_files_are_not_fields() {
         let p = Policy::default();
-        assert!(p.is_ignored("README.md", false));
-        assert!(p.is_ignored("LICENSE", false));
-        assert!(p.is_ignored(".hidden.yaml", false));
-        assert!(p.is_ignored("node_modules", true));
-        assert!(!p.is_ignored("instructions.md", false));
-        assert!(!p.is_ignored("tools", true));
+        // Each answer now carries its reason, because only one of the three is
+        // said out loud and the caller has no other way to tell them apart.
+        assert_eq!(
+            p.is_ignored("README.md", false, true),
+            Some(Ignored::Documentation)
+        );
+        assert_eq!(
+            p.is_ignored("LICENSE", false, true),
+            Some(Ignored::Documentation)
+        );
+        // Same stem, and a different answer: `.yaml` is the form settings are
+        // written in and the form no readme is ever written in.
+        assert_eq!(
+            p.is_ignored("license.yaml", false, true),
+            Some(Ignored::SettingsNamedLikeDocumentation)
+        );
+        assert_eq!(
+            p.is_ignored(".hidden.yaml", false, true),
+            Some(Ignored::Hidden)
+        );
+        assert_eq!(
+            p.is_ignored("node_modules", true, true),
+            Some(Ignored::ToolArtifact)
+        );
+        assert_eq!(p.is_ignored("instructions.md", false, false), None);
+        assert_eq!(p.is_ignored("tools", true, true), None);
+    }
+
+    #[test]
+    fn every_folder_a_tool_claims_is_told_apart_from_a_readme() {
+        let p = Policy::default();
+        // The lists themselves, rather than a copy of them, so adding a name
+        // without thinking about the message is a red test rather than a new
+        // silent deletion — and so this can never quietly fall out of step with
+        // what the loader actually skips.
+        for name in SPEAKING_SKIP_DIRS {
+            assert_eq!(
+                p.is_ignored(name, true, true),
+                Some(Ignored::ToolingFolder),
+                "'{name}' is skipped, and the author has to be told"
+            );
+        }
+        for name in TOOL_ONLY_DIRS {
+            assert_eq!(
+                p.is_ignored(name, true, true),
+                Some(Ignored::ToolArtifact),
+                "'{name}' is skipped, and saying so on every run is noise"
+            );
+        }
+        // A FILE called `build` is not a folder a tool fills in; it is a
+        // setting called `build`, and nothing about it is skipped.
+        assert_eq!(p.is_ignored("build", false, true), None);
+        assert_eq!(p.is_ignored("build.yaml", false, true), None);
+    }
+
+    /// The split, stated as the property that justifies it rather than as a
+    /// second copy of the two lists.
+    ///
+    /// A name that SPEAKS costs a line of output on every tree that holds one,
+    /// and the only thing that buys is the chance that something the author
+    /// wrote is behind it. So a speaking name has to be one an author could
+    /// have typed, and a silent name has to be one no author ever would. The
+    /// two populations were one list for a release, and the consequence was
+    /// `pact check --deny-warnings` at exit 1 on any workspace where anybody
+    /// had ever run `npm install`, `cargo build` or `python -m venv venv` —
+    /// with advice, *"rename it to something else"*, that is meaningless for
+    /// `node_modules` and destructive for `venv`.
+    #[test]
+    fn a_name_only_a_tool_writes_is_told_apart_from_a_name_a_person_might_write() {
+        // Every speaking name is a word. Nothing here is a punctuation-and-
+        // underscore token or a package manager's private vocabulary.
+        for name in SPEAKING_SKIP_DIRS {
+            assert!(
+                name.chars().all(|c| c.is_ascii_lowercase()),
+                "'{name}' speaks, so it has to be a name a person could have \
+                 typed on purpose — and a person does not type underscores or \
+                 digits into a folder name they meant"
+            );
+        }
+        // And no name is on both lists, which is the failure that would make
+        // the answer depend on the order the two are consulted in.
+        for name in TOOL_ONLY_DIRS {
+            assert!(
+                !SPEAKING_SKIP_DIRS.contains(name),
+                "'{name}' is on both lists"
+            );
+        }
+    }
+
+    /// The `.md` half of the same question, and the one that was wrong for a
+    /// release: a documentation STEM is only documentation where documentation
+    /// lives.
+    #[test]
+    fn a_prose_file_named_like_documentation_is_documentation_only_at_the_top() {
+        let p = Policy::default();
+        for name in ["README.md", "notice.md", "CHANGELOG.md", "contributing.md"] {
+            assert_eq!(
+                p.is_ignored(name, false, true),
+                Some(Ignored::Documentation),
+                "'{name}' at the top of a workspace is the project's own writing"
+            );
+            assert_eq!(
+                p.is_ignored(name, false, false),
+                Some(Ignored::DocumentationInsideTheTree),
+                "'{name}' inside the tree is a file somebody wrote in a folder \
+                 of settings, and losing it in silence is B2 one file-kind over"
+            );
+        }
+        // The two answers that do NOT depend on where the file sits: a
+        // structured document is a collision wherever it is, and a name that is
+        // not a documentation stem at all is a setting wherever it is.
+        for at_root in [true, false] {
+            assert_eq!(
+                p.is_ignored("license.yaml", false, at_root),
+                Some(Ignored::SettingsNamedLikeDocumentation)
+            );
+            assert_eq!(p.is_ignored("escalation.md", false, at_root), None);
+        }
+    }
+
+    /// D5. `.venv` sat in [`SKIP_DIRS`] for a release and could never match:
+    /// the leading-dot test answers first with [`Ignored::Hidden`], which is
+    /// silent, so the entry read like a rule and decided nothing.
+    ///
+    /// It is gone, and the assertions here are what keep it gone. The first
+    /// says the answer for a dotted folder is silence and is the one that was
+    /// deliberate; the second says no future name may be added to either list
+    /// that the dot rule would swallow the same way. Together with the loops
+    /// above — which read the lists themselves — a dotted entry added here is a
+    /// red test in two places rather than a line nobody notices.
+    ///
+    /// The third assertion is the one that was missing for a release. The
+    /// reason `.venv` is silent has nothing to do with the dot: it is that a
+    /// warning there fails `--deny-warnings` on every workspace anyone ran
+    /// `python -m venv` in, and tells them to rename a folder that breaks when
+    /// renamed. `venv` sat on the speaking list with the identical property.
+    #[test]
+    fn no_folder_this_list_skips_is_one_the_dot_rule_answers_first() {
+        let p = Policy::default();
+        assert_eq!(
+            p.is_ignored(".venv", true, true),
+            Some(Ignored::Hidden),
+            "a virtual environment is hidden, and hidden is silent: warning about \
+             it would fail --deny-warnings on every workspace anyone ran \
+             `python -m venv .venv` in, and tell them to rename it"
+        );
+        for name in SPEAKING_SKIP_DIRS.iter().chain(TOOL_ONLY_DIRS) {
+            assert!(
+                !name.starts_with('.'),
+                "'{name}' is on a skip list and begins with a dot, so `is_ignored` \
+                 answers `Hidden` before the list is ever consulted and the entry \
+                 can never match. Either take it out, or move the dot test after \
+                 the list and accept that every dotted folder now gets a warning."
+            );
+        }
+        // The other spelling of the same command, which must get the same
+        // silence for the same reason.
+        assert_eq!(
+            p.is_ignored("venv", true, true),
+            Some(Ignored::ToolArtifact),
+            "`python -m venv venv` is `python -m venv .venv` with the other \
+             conventional argument. Whatever answer one gets, the other gets."
+        );
+    }
+
+    #[test]
+    fn a_documentation_stem_is_read_by_its_extension() {
+        let p = Policy::default();
+        // Written as prose or as nothing in particular: documentation, silent.
+        for name in [
+            "README.md",
+            "readme.markdown",
+            "LICENSE",
+            "licence.txt",
+            "NOTICE",
+            "CHANGELOG.md",
+            "CONTRIBUTING.md",
+            "CODEOWNERS",
+        ] {
+            assert_eq!(
+                p.is_ignored(name, false, true),
+                Some(Ignored::Documentation),
+                "'{name}' is documentation, and saying so on every run is noise"
+            );
+        }
+        // Written as a structured document: a setting, and its loss is worth a
+        // word. Every stem, so adding one to `NON_SPEC_STEMS` without thinking
+        // about the message is a red test rather than a new silent deletion.
+        for stem in [
+            "readme",
+            "license",
+            "licence",
+            "notice",
+            "changelog",
+            "contributing",
+            "codeowners",
+        ] {
+            for ext in ["yaml", "yml", "json", "YAML"] {
+                assert_eq!(
+                    p.is_ignored(&format!("{stem}.{ext}"), false, true),
+                    Some(Ignored::SettingsNamedLikeDocumentation),
+                    "'{stem}.{ext}' is far more likely to be a setting than a document"
+                );
+            }
+        }
+        // A DIRECTORY called `license` is expanded like any other: the stem
+        // rule is about files, and `tools/license/tool.yaml` is a tool.
+        assert_eq!(p.is_ignored("license", true, true), None);
     }
 
     #[test]
@@ -364,7 +778,10 @@ mod tests {
             "`redaction.yaml` at the top of a workspace is the workspace's \
              `redaction:` setting, not a second file describing the workspace"
         );
-        assert!(!p.is_self_file("refund-desk", "learning"), "the same, for `learning.yaml`");
+        assert!(
+            !p.is_self_file("refund-desk", "learning"),
+            "the same, for `learning.yaml`"
+        );
     }
 
     #[test]
@@ -382,28 +799,83 @@ mod tests {
     }
 }
 
-/// Patterns from a `.pactignore` file: one glob-ish pattern per line, `#` for
-/// comments. Deliberately simple — `*` matches within a name, `/` is not
-/// special, and there is no negation. An author who needs more than this is
-/// solving the wrong problem.
+/// One line of a `.pactignore`, and the file it was written in.
+///
+/// The file is carried because a suppression has to be reportable — EXP-10 asks
+/// for "a LoadReport line naming the entry AND the pattern", and with
+/// [`Ignore::inherited`] the pattern may have been written several folders up
+/// from the entry it removes. A message that said only *"a `.pactignore` line"*
+/// would send the reader to the wrong folder.
+#[derive(Debug, Clone)]
+pub struct Pattern {
+    /// The line as the author typed it, comment and surrounding space removed.
+    pub text: String,
+    /// The `.pactignore` file it came from.
+    pub from: Utf8PathBuf,
+}
+
+/// Patterns from the `.pactignore` files covering one directory: one glob-ish
+/// pattern per line, `#` for comments. Deliberately simple — `*` matches within
+/// a name, `/` is not special, and there is no negation. An author who needs
+/// more than this is solving the wrong problem.
 #[derive(Debug, Clone, Default)]
 pub struct Ignore {
-    patterns: Vec<String>,
+    patterns: Vec<Pattern>,
 }
 
 impl Ignore {
-    /// Read `.pactignore` from a directory. Absent file means no patterns.
+    /// Read `.pactignore` from one directory alone. Absent file means no
+    /// patterns.
     pub fn load(dir: &Utf8Path) -> Self {
-        let text = std::fs::read_to_string(dir.join(".pactignore")).unwrap_or_default();
-        Self::parse(&text)
+        let at = dir.join(".pactignore");
+        let text = std::fs::read_to_string(&at).unwrap_or_default();
+        Self::parse_from(&text, &at)
+    }
+
+    /// Read every `.pactignore` from `root` down to `dir` inclusive.
+    ///
+    /// This is what the loader uses, and the reason is what an author expects
+    /// from the only file of this shape they have ever seen. Measured on a
+    /// realistic JavaScript layout — `node_modules/` at the top and under three
+    /// packages — with the per-directory rule: a single `node_modules` line in
+    /// the workspace's own `.pactignore` left four of the five folders still
+    /// warning, so silencing a name guaranteed to recur cost one `.pactignore`
+    /// per occurrence and the `--deny-warnings` gate stayed red until every one
+    /// of them had been written.
+    ///
+    /// Outer files come first, so [`Ignore::matching`] reports the outermost
+    /// line that answers — which is the one an author would delete to bring the
+    /// entry back.
+    ///
+    /// `dir` outside `root` reads `dir` alone: nothing above the tree being
+    /// loaded may reach into it.
+    pub fn inherited(root: &Utf8Path, dir: &Utf8Path) -> Self {
+        let Ok(rel) = dir.strip_prefix(root) else {
+            return Self::load(dir);
+        };
+        let mut at = root.to_path_buf();
+        let mut all = Self::load(&at);
+        for part in rel.components() {
+            at = at.join(part.as_str());
+            all.patterns.extend(Self::load(&at).patterns);
+        }
+        all
     }
 
     pub fn parse(text: &str) -> Self {
+        Self::parse_from(text, Utf8Path::new(".pactignore"))
+    }
+
+    pub fn parse_from(text: &str, from: &Utf8Path) -> Self {
         Self {
             patterns: text
                 .lines()
                 .map(|l| l.split('#').next().unwrap_or("").trim().to_string())
                 .filter(|l| !l.is_empty())
+                .map(|text| Pattern {
+                    text,
+                    from: from.to_path_buf(),
+                })
                 .collect(),
         }
     }
@@ -413,7 +885,13 @@ impl Ignore {
     }
 
     pub fn matches(&self, name: &str) -> bool {
-        self.patterns.iter().any(|p| glob_match(p, name))
+        self.matching(name).is_some()
+    }
+
+    /// The first pattern that answers for `name`, with the file it was written
+    /// in — so the skip can be reported instead of being a bare `continue`.
+    pub fn matching(&self, name: &str) -> Option<&Pattern> {
+        self.patterns.iter().find(|p| glob_match(&p.text, name))
     }
 }
 
@@ -473,5 +951,48 @@ mod ignore_tests {
     fn an_empty_ignore_file_excludes_nothing() {
         assert!(Ignore::parse("").is_empty());
         assert!(!Ignore::parse("").matches("anything.yaml"));
+    }
+
+    /// A pattern has to be reportable, which means knowing which line answered
+    /// and which file it was written in. EXP-10 asks for the entry AND the
+    /// pattern; with [`Ignore::inherited`] the pattern can be several folders
+    /// above the entry it removes, so naming only the entry would send the
+    /// reader to the wrong `.pactignore`.
+    #[test]
+    fn a_match_says_which_line_answered_and_where_it_was_written() {
+        let ig = Ignore::parse_from("*.tmp\nscratch\n", Utf8Path::new("ws/.pactignore"));
+        let m = ig.matching("build.tmp").expect("it matches");
+        assert_eq!(m.text, "*.tmp");
+        assert_eq!(m.from, Utf8PathBuf::from("ws/.pactignore"));
+        assert!(ig.matching("agent.yaml").is_none());
+    }
+
+    /// Outer files first, so the line a reader is sent to is the outermost one
+    /// that answers — the one they would delete to bring the entry back.
+    #[test]
+    fn an_inherited_set_reports_the_outermost_line_that_answers() {
+        let base = Utf8PathBuf::from(std::env::temp_dir().to_string_lossy().to_string())
+            .join(format!("pact-ignore-chain-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join("packages/api")).unwrap();
+        std::fs::write(base.join(".pactignore"), "node_modules\n").unwrap();
+        std::fs::write(base.join("packages/api/.pactignore"), "node_modules\n").unwrap();
+
+        let deep = Ignore::inherited(&base, &base.join("packages/api"));
+        let m = deep.matching("node_modules").expect("the parent's line covers it");
+        assert_eq!(
+            m.from,
+            base.join(".pactignore"),
+            "the outermost line that answers is the one to name"
+        );
+
+        // A folder with no `.pactignore` of its own is still covered.
+        let middle = Ignore::inherited(&base, &base.join("packages"));
+        assert!(middle.matches("node_modules"));
+
+        // Nothing above the tree being loaded reaches into it.
+        let alone = Ignore::inherited(&base.join("packages"), &base.join("packages/api"));
+        assert!(alone.matches("node_modules"), "its own file still counts");
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

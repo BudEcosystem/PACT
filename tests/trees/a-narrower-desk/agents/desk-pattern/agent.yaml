@@ -1,0 +1,6 @@
+base: yes
+description: The pattern — a spend cap, a deadline, and a stop rule.
+limits:
+  cost-per-request-under: 0.05 USD
+  finishes-within: 30s
+  when-it-runs-out: stop-and-say-so

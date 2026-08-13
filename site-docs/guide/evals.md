@@ -85,7 +85,13 @@ is one line the author wrote.
 Not a `pact` verb, because it runs models:
 
 ```bash
-cd adapters/python && uv run python -m pact_adapters.scoring <PATH>
+./scripts/pact-eval <PATH>
+```
+
+Or, if you would rather name the interpreter yourself:
+
+```bash
+cd adapters/python && uv run python -m pact_adapters.evals <PATH>
 ```
 
 `pact check` tells you the suite is **well-formed**. This tells you it

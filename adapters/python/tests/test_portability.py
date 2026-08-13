@@ -504,6 +504,17 @@ def test_every_key_the_loader_emits_is_sent_to_the_second_port_or_accounted_for(
         "loop": ("loop", "loops"),
         "answers-with": ("answersWith",),
         "answers-with-mode": ("answersWithMode",),
+        # `maxSteps` is the only part of `limits:` THIS module sends, and that
+        # accounting was silently wrong for years rather than merely narrow: the
+        # payload above carries no `limits` key at all, so the money ceiling —
+        # amount AND currency — never crossed the seam here, and a reader that
+        # took `0.05 USD` and nothing else stayed green through every run of it.
+        # Money is covered by `test_both_ports_read_every_way_a_spend_cap_is_written.py`,
+        # which sends each spelling `coerce::money` accepts through both ports
+        # and compares `Reached.sentence()` byte for byte. Widening this row
+        # means widening the payload first; until then this entry is a pointer
+        # to where the rest of the block is actually held, not a claim that
+        # `maxSteps` is all of it.
         "limits": ("maxSteps",),
         # Sent by the governance test rather than this one, and reported by the
         # port on `unenforced` when they are. §7.28 list B.
@@ -513,9 +524,28 @@ def test_every_key_the_loader_emits_is_sent_to_the_second_port_or_accounted_for(
         "teamwork": ("teamwork",),
         "remembers": ("remembers",),
     }
+    # `all`, not `any`: a row that names two payload keys is a claim about both
+    # of them, and `any` let one of a pair vanish while the row still read as
+    # covered.
+    #
+    # **Measured, that change closes nothing today, and saying so is the point.**
+    # Removing the whole `skills` block from `_payload_for` leaves this test
+    # green under `any` AND under `all` (1 passed both ways), because `uses` is
+    # ALSO exempted by name in `NOT_SENT_TO_THE_SECOND_PORT` — as is `loop`, and
+    # those are the only two multi-key rows. So the live weakness is the
+    # exemption, which passes a row on a note about where it is sent rather than
+    # on the payload; `all` is the guard for the next multi-key row that is not
+    # exempted, and it is one word. The narrower hole this whole entry exists
+    # for is one level down again and structural checking does not reach it at
+    # all: `limits` is accounted for by `maxSteps` while
+    # `cost-per-request-under` never crossed the seam, and a key that IS sent
+    # but sent in one spelling out of six is inside the payload and outside the
+    # comparison. That one is held by
+    # `test_both_ports_read_every_way_a_spend_cap_is_written.py` and by nothing
+    # here.
     reaches = {
         authored for authored, keys in sent_as.items()
-        if any(k in payload for k in keys) or authored in NOT_SENT_TO_THE_SECOND_PORT
+        if all(k in payload for k in keys) or authored in NOT_SENT_TO_THE_SECOND_PORT
         or authored in {"policy", "interceptors", "context-policy", "teamwork",
                         "remembers"}
     }

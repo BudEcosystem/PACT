@@ -433,6 +433,12 @@ LIBRARIES: dict[str, str] = {
     "watches": "attaches to the bus; reached from `run` through `Watches`",
     "script": "a scripted transport's turns; a test and fixture seam",
     "suspension": "a parked run, serialised; reached from `run`",
+    # Written down even though the walk above already counts it reached — it
+    # calls `why_no_mcp` from `mcp_toolset_for`, and an edge inside one module is
+    # not somebody arriving at it. What actually reaches this is a HOST holding
+    # the agent in its own stack, exactly as for `pydantic_ai_interop.build_agent`
+    # beside it; PACT's own run never opens a connection, it parks on one.
+    "mcp_bridge": "binds a `connect:` to a live MCP client; reached from a host, never from `run`",
 }
 
 

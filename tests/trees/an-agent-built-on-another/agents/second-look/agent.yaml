@@ -1,0 +1,9 @@
+description: Answers, then asks itself for one more look before it is done.
+instructions: >
+  Answer the question. When you are unsure, ask your teammate — yourself —
+  for a second look, and prefer the more careful answer.
+team:
+  second-look: takes one more look at a drafted answer.
+limits:
+  asks-itself-at-most: 2
+  when-it-runs-out: stop-and-say-so

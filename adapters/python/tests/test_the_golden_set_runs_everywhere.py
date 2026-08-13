@@ -4,10 +4,17 @@ The criterion asks for a **golden set of ≥12 agents** run per framework. The
 register's finding was blunt and correct: *"byte-identical across seven targets
 is currently proven on ONE agent"* — an existence proof, not a conformance set.
 
-This runs **every agent in `examples/`** — twenty-eight of them across nine
-workspaces — over all seven Python targets and the TypeScript port, and asserts
-the traces are identical. It is generated from the tree rather than listed here,
-so an agent added to `examples/` joins the set by existing.
+This runs **every agent in `examples/`** — one entry per agent `pact show`
+reports under every `examples/**/workspace.yaml` — over all seven Python targets
+and the TypeScript port, and asserts the traces are identical. It is generated
+from the tree rather than listed here, so an agent added to `examples/` joins
+the set by existing.
+
+**How many that is, is deliberately not written here.** It is `len(GOLDEN)`,
+and this docstring said "twenty-eight of them across nine workspaces" while the
+tree held more — the figure went stale the first time somebody added a pattern,
+and `docs/70-PRODUCTION-GAP-REGISTER.md` had copied it. A count in prose beside
+a set built from the tree is a second copy of the set.
 
 **What this covers, precisely.** The script answers without calling a tool, so
 what is compared is everything that decides the FIRST model call and the shape
