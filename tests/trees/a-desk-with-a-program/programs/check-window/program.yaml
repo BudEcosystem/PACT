@@ -1,0 +1,18 @@
+# Six lines of date arithmetic the model gets wrong often enough to matter.
+#
+# It is DECLARED here and run nowhere near `pact check`: what this file says is
+# what the program takes, what it answers with, and what it may spend. The body
+# is a folder of files beside it, recorded by name, type, size and fingerprint —
+# never opened.
+description: Works out whether a purchase is still inside the refund window.
+engine: wasm
+determinism: pure
+takes:
+  purchased-on: text
+answers-with:
+  verdict: one of inside, outside
+fuel:
+  instructions-at-most: 10m
+  runs-for-at-most: 2s
+  memory-at-most: 64m
+  when-it-runs-out: stop-and-say-so

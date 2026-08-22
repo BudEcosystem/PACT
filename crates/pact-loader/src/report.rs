@@ -596,6 +596,22 @@ fn asking_lines(document: &Node, agent: &Node) -> Vec<(&'static str, String, Spa
             else {
                 continue; // a skill, or a tool that connects to nothing
             };
+            // And the consent to RUN a carried body (P6), reached along the
+            // same chain and for the same reason. `asks-to-run:` is a sandbox's
+            // `asks-to-connect:`: running somebody's carried program on your
+            // machine is at least as much a decision as opening a connection,
+            // and a wait that never reaches this list is a wait no scheduler can
+            // hold a timer for.
+            if let Some(entry) = resources.get(server)
+                && let Some((name, span)) = named(&entry.node, "asks-to-run")
+            {
+                found.push((
+                    NEEDS_PERMISSION,
+                    name,
+                    span,
+                    what_a_call_carries(document, &used, ""),
+                ));
+            }
             if let Some(entry) = resources.get(server)
                 && let Some((name, span)) = named(&entry.node, "asks-to-connect")
             {

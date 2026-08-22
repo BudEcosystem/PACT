@@ -200,7 +200,12 @@ groups:
         # keeping a list of them in Rust. Which is why they are declared once:
         # this file said seven and that list said six for a round, and the word
         # in the gap loaded here and was silently read as `llm` there.
-        choices: [llm, stt, tts, embedder, judge, reflector, tools]
+        # `programs` is the EIGHTH part, and it is a part rather than a model
+        # role for the same reason `tools` is. A carried program has no network
+        # unless this line says so: without it a program runs in a room with the
+        # door shut, which is the state a reviewer should be able to assume by
+        # reading nothing.
+        choices: [llm, stt, tts, embedder, judge, reflector, tools, programs]
         surface: S-EXEC
         tier: core
         help: >
@@ -242,6 +247,34 @@ groups:
         surface: S-GEN
         tier: core
         help: written procedures and reference material the agents follow
+      programs:
+        # The third hand. A PACT agent has had two: the MODEL, which understands
+        # anything and fundamentally guesses, and a CONNECTED SERVER, which is
+        # exact and is something somebody has to deploy and keep running. A
+        # program is exact like a server and travels inside the folder like a
+        # file.
+        #
+        # It is a DECLARATION here and nothing else. `pact check` reads what it
+        # takes, what it answers with and what it may spend, and never opens the
+        # body — R5's rule at the one moment it is most tempting to break, and the
+        # reason R42 refused `runs-as: code` is answered rather than outvoted:
+        # the checker decides nothing about safety, because running belongs to a
+        # sandbox the host supplies and a person consents to.
+        #
+        # `tier: expert` everywhere inside, and that is what keeps D14 true: no
+        # core capability may REQUIRE a program, a workspace that carries one
+        # simply does not earn the `no-code` badge, and deleting `programs/` must
+        # leave a working agent — the same standard the worked example's carried
+        # Python helper is held to.
+        type: map of group:program
+        surface: S-EXEC
+        tier: expert
+        help: >
+          programs this system carries and can run in a locked room — the exact
+          bits of work a model should not be guessing at, like date arithmetic or
+          a checksum. Each says what it takes, what it answers with, and what it
+          may spend. You need one only when getting it exactly right matters more
+          than being able to read it in plain words.
       values:
         # A figure written once, used wherever it belongs. The defect it closes
         # is convergence: the worked example's 200 USD threshold exists three
@@ -807,6 +840,147 @@ groups:
         help: >
           the figure itself, written exactly as you would write it where it is
           used — `200 USD`, `30s`, `4`, `80%`.
+
+  # ── PROGRAMS ────────────────────────────────────────────────────────────────
+  # Something exact, carried in the folder, run in a locked room.
+  #
+  # What it is NOT: a way for `pact check` to run anything. The body is a folder
+  # of files recorded by name, media type, size and fingerprint, and nothing in
+  # this distribution ever opens it. What runs it is a `resource` of kind
+  # `sandbox` that whatever runs your agents supplies — the same declared-and-
+  # delegated split `mcp-server` already has, and the same consent question in
+  # front of it.
+  program:
+    describe: something a carried program can have
+    fields:
+      description:
+        type: text
+        required: yes
+        surface: S-GEN
+        tier: core
+        help: >
+          what this program works out, in one line. Written for whoever has to
+          decide whether it should be allowed to run.
+      engine:
+        # A CLOSED list, and `wasm` is the one that travels. A program in the
+        # sealed portable format runs identically on every machine that hosts one
+        # and needs nothing installed, which is what D17 asks of anything in the
+        # core. The other two are legal DECLARATIONS that most targets will
+        # report `unsupported` — F-3 behaving as written: declarative-first,
+        # never declarative-only, and the degradation named before the run rather
+        # than discovered during it.
+        type: one-of
+        choices: [wasm, python, typescript]
+        required: yes
+        surface: S-CAP
+        tier: expert
+        help: >
+          what kind of program this is. `wasm` is the portable one: it runs the
+          same way anywhere and needs nothing installed, so it is the one to use
+          unless you have a reason. `python` and `typescript` run only where
+          whatever hosts your agents has them, and a run says so rather than
+          failing where you cannot see it.
+      determinism:
+        # It decides REPLAY. A run that is parked and resumed must not have to
+        # re-run something that could answer differently the second time, and a
+        # run that CAN be replayed must not be charged twice for the same work.
+        type: one-of
+        choices: [pure, deterministic, nondeterministic]
+        required: yes
+        surface: S-CTRL
+        tier: expert
+        help: >
+          whether the same question always gets the same answer. `pure` means it
+          works only from what it is given. `deterministic` means it may look at
+          something outside and still always answer the same. `nondeterministic`
+          means it may not, and a run that stops and starts again has to ask it
+          afresh rather than reusing what it said.
+      takes:
+        type: map of answer-shape
+        shapes: *the-answer-shapes
+        surface: S-CAP
+        tier: expert
+        help: >
+          what this program needs to be given, one line per value — the same
+          shapes a tool's `takes:` uses, because it is the same question.
+      answers-with:
+        type: map of answer-shape
+        shapes: *the-answer-shapes
+        surface: S-CAP
+        tier: expert
+        help: >
+          what it hands back, one line per thing. An answer that does not fit is
+          that call's failure and never a silent wrong number.
+      fuel:
+        type: group:program-fuel
+        required: yes
+        surface: S-GOV
+        tier: expert
+        help: >
+          what one run of this program may spend before it is stopped. Required:
+          a program with no ceiling is the one thing in this format that could
+          run forever without anybody having written down that it may.
+      body:
+        # The same treatment `skill.scripts` gets, and the same sentence: PACT
+        # records that it is there. What is added since is the FINGERPRINT, which
+        # is what makes a body pinnable — without it two programs with the same
+        # filenames and completely different bytes were the same to every digest
+        # in this system.
+        type: anything
+        surface: S-EXEC
+        tier: expert
+        help: >
+          the program itself, in a `body/` folder beside this file. Kept as files
+          rather than as settings: PACT records what is there, what kind of file
+          each one is, how big it is and a fingerprint of what is in it, and
+          never opens them.
+
+  # One run of one program, bounded. The same termination algebra `limits:` uses,
+  # so an author who has met one has met the other — including the rule that a
+  # ceiling never guesses what to do when it is reached.
+  program-fuel:
+    describe: something a program's ceiling can be
+    fields:
+      instructions-at-most:
+        # The ceiling that bites when nothing else can. A program with no network
+        # and no clock can still loop forever, and wall-clock is a poor bound on a
+        # machine under load — this is the one that counts the work itself, which
+        # is why `wasm` is the engine that travels: it is the one that can be
+        # metered this exactly.
+        type: size
+        needs-also: [when-it-runs-out]
+        surface: S-GOV
+        tier: expert
+        help: >
+          how much work one run may do before it is stopped, counted the way the
+          locked room counts it — `10m` is ten million steps, which is a great
+          deal of arithmetic and no time at all. This is the ceiling that still
+          holds when a program has no network and no clock to bound it.
+      runs-for-at-most:
+        type: duration
+        needs-also: [when-it-runs-out]
+        surface: S-GOV
+        tier: expert
+        help: how long one run may take on the clock before it is stopped
+      memory-at-most:
+        type: size
+        needs-also: [when-it-runs-out]
+        surface: S-GOV
+        tier: expert
+        help: how much room one run may use — `64m`, `256m`
+      when-it-runs-out:
+        # The same three words, and the same refusal to guess between them. A
+        # fourth spelling of this decision would be `same-setting-twice` in the
+        # specification the rule is written in.
+        type: one-of
+        choices: [stop-and-say-so, ask-a-person, answer-with-what-it-has]
+        surface: S-GOV
+        tier: expert
+        help: >
+          what to do when this program reaches a ceiling above. The same three
+          answers `limits:` takes, for the same reason: stopping silently, asking
+          a person and answering as if finished are three different decisions and
+          none of them is a default.
 
   # ── THE MODEL CATALOGUE, AS A WORKSPACE MAY EXTEND IT ───────────────────────
   # PACT ships a catalogue of the models it knows about — how much each one can
@@ -1464,7 +1638,14 @@ groups:
         # and the argument the `tool` group's own note makes one kind over (R60)
         # applies unchanged: a choice that leads nowhere is the "loads and does
         # nothing" failure. Each returns with the fields it needs.
-        choices: [mcp-server]
+        # `sandbox` RETURNS, on this row's own terms. It was deleted (R58)
+        # because it "had no field in this kind that only they would use —
+        # `endpoint:`, `auth:` and `asks-to-connect:` are all MCP-shaped", and
+        # the row said each of the three would come back "with the fields it
+        # needs". It comes back with two that are its alone: `engines:`, which
+        # says what it can host, and `asks-to-run:`, which is the consent in
+        # front of running a carried body at all.
+        choices: [mcp-server, sandbox]
         required: yes
         surface: S-CAP
         tier: core
@@ -1492,6 +1673,29 @@ groups:
           where the credential is kept — a reference your platform team
           publishes. Never the credential itself: a spec file may not contain
           one, ever.
+      engines:
+        # The same closed list `program.engine` offers, and it is checked in both
+        # directions: a program whose engine no sandbox here hosts is refused, and
+        # a sandbox that hosts nothing is a locked room with no door.
+        type: list of one-of
+        choices: [wasm, python, typescript]
+        surface: S-CAP
+        tier: expert
+        help: >
+          which kinds of program this locked room can run. A program written for
+          a kind nothing here hosts is refused when the file is read, rather than
+          on the first call.
+      asks-to-run:
+        type: text
+        names: questions
+        surface: S-EXEC
+        tier: expert
+        help: >
+          which question to put to a person before this machine runs a carried
+          program for the first time, by name. The run stops and waits rather
+          than failing, the same way `asks-to-connect:` does for a server —
+          running somebody's carried body is at least as much a decision as
+          opening a connection.
       asks-to-connect:
         type: text
         names: questions
@@ -2007,6 +2211,23 @@ groups:
           what this action needs to be given, one line per argument — for
           example `order-number: text` or `amount: money`. This is what the
           model is shown, so the words here are the words it will use.
+      program:
+        # WHAT RUNS, when this action's tool reaches a sandbox. It is on the
+        # ACTION and not on the tool because a tool reaches one place and may
+        # offer several things there — the same shape `actions:` already has for
+        # a server, so an author who has written one has written this.
+        #
+        # Not a fourth way for a tool to reach. R42 refused a tool naming a
+        # script for PACT to run, and its letter is kept: `connect:` still names
+        # a resource the HOST supplies, and this names what that host is being
+        # asked to run inside it.
+        type: text
+        names: programs
+        surface: S-EXEC
+        tier: expert
+        help: >
+          which carried program this action runs, by name — one of the entries in
+          `programs`. Write it on an action whose tool `connect:`s to a sandbox.
       reads-only:
         type: yes-no
         surface: S-EXEC
@@ -4073,6 +4294,14 @@ groups:
           # not nameable by `{use:}`. Mounting is the half that is unbuilt (§6),
           # and it is unbuilt uniformly rather than for this kind in particular.
           - values
+          # A carried program (P6). A bundle of ready-made capabilities is
+          # exactly where a shared checksum or a shared date calculation belongs,
+          # and `what_a_bundle_may_bring_is_what_a_workspace_can_hold` holds this
+          # list equal to the workspace's own collections — so a kind absent from
+          # here is a kind `brings:` is blind to rather than one it governs
+          # tightly. What a bundle DECLARES is checked; mounting is unbuilt for
+          # every kind alike.
+          - programs
         required: yes
         surface: S-EXEC
         tier: core

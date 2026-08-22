@@ -52,6 +52,15 @@ SOMEBODY_ELSE_ACTS_ON_THE_WORD: dict[str, str] = {
     "state.never-from": "the store refuses a write from a source this names",
     "workspace.durability": "what the system running this keeps when a run stops part-way",
     "action.same-request-key-across": "a scope wider than one run is kept outside it",
+    # §4 — a carried program (P6). PACT declares which kind of program this is
+    # and which kinds a locked room can run; the HOST is what starts one, because
+    # nothing in this distribution ever opens a body. The words are held against
+    # EACH OTHER at check time (`crates/pact-loader/src/programs.rs`) — a program
+    # written for a kind no room here hosts is refused where the author is — and
+    # what no check can do is run it.
+    "program.engine": "the host runs the program; PACT records which kind it is",
+    "program.determinism": "the host decides whether an answer may be replayed",
+    "resource.engines": "the locked room is the host's; PACT records what it says it can run",
     # §4 — the host makes the call and schedules the work.
     "tool.method": "the host makes the HTTP call; PACT records which verb it is",
     "port.if-still-running": "the scheduler decides what to do with an overlapping run",

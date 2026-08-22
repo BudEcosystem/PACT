@@ -833,6 +833,7 @@ fn node_is_collection(key: &str) -> bool {
             | "interceptors"
             | "watch"
             | "models"
+            | "programs"
             | "actions"
             | "served-by"
     )
@@ -1626,6 +1627,13 @@ fn validate(
         // can say before the run is the case that can never work: a tree that
         // asks for a name and holds nobody who could be named.
         pact_loader::handover::check(root, &schema, &mut diags);
+        // And the arrangement a carried program needs (P6). A program says which
+        // engine it is written for and a sandbox says which it can host; the
+        // schema holds each against its own closed list and cannot hold them
+        // against each other, because that is a fact about two documents. So a
+        // workspace could carry a program in one language and a locked room that
+        // cannot run it, and the first call was the only way to find out.
+        pact_loader::programs::check(root, &mut diags);
         // And the sixth, which runs the other way round from every check above:
         // `names:` asks whether a name RESOLVES, and never whether anything names
         // a document. A fully-written approval policy that no agent points at

@@ -1,0 +1,11 @@
+# The tool reaches ONE place, and that place is the sandbox — the same line an
+# MCP tool writes. What runs is named on the action.
+description: Answers whether a purchase is still inside the refund window.
+connect: local-sandbox
+actions:
+  check:
+    description: Works out the window from the purchase date.
+    program: check-window
+    takes:
+      purchased-on: text
+    reads-only: yes

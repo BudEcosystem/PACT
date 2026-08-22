@@ -112,6 +112,33 @@ DELEGATED: dict[str, str] = {
     "action.description": "shown to the model",
     "skill.description": "shown to the model",
     "skill.costs-about": "an estimate for a reviewer deciding whether to load it",
+    # A carried program (P6). PACT DECLARES what the locked room needs to know
+    # and the host RUNS it — the §4 split, and the same one `mcp-server` already
+    # has: nothing in this distribution opens a body, so nothing in this
+    # distribution reads the words that say how to run one.
+    #
+    # `program.engine` and `resource.engines` are NOT here, and the difference is
+    # the point: the checker holds them against each other
+    # (`crates/pact-loader/src/programs.rs`), because a program written for a
+    # kind no locked room here hosts is an arrangement that can never work, and
+    # that is knowable from the tree alone.
+    "program.determinism": (
+        "§4 row: whether an answer may be replayed rather than asked again is the "
+        "executor's to honour — PACT records it so a resumed run does not re-charge "
+        "work it could reuse, or reuse work it may not"
+    ),
+    "program.fuel": (
+        "§4 row: the locked room meters the run. PACT declares the ceiling so a "
+        "reviewer can read it and both ports report the same one"
+    ),
+    "program-fuel.instructions-at-most": (
+        "§4 row: counted by the engine, which is the only thing that can count it — "
+        "and the one ceiling that still bites when a program has no network and no clock"
+    ),
+    "program-fuel.memory-at-most": (
+        "§4 row: the locked room holds it; a run that cannot be given the room it "
+        "declared is refused there rather than trimmed here"
+    ),
     # Named in `docs/50-NOT-COPIED.md` §4 — PACT declares, the host executes.
     "port.who-can-reach-it": "§4 row: 'Seven ways of verifying a caller' — the host does the checking",
     "port.same-conversation-when": "§4 ports row: what makes two messages one conversation is the connector's",

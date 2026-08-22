@@ -83,6 +83,11 @@ const KINDS: &[Kind] = &[
     // waits` silently lost the whole `needs-permission` entry: a human consent
     // gate on money, gone, from the list §9.4 G14 obliges a runtime to walk.
     Kind {
+        section: "programs",
+        what: "carried program",
+        attach: "`program: {}` on a tool's action",
+    },
+    Kind {
         section: "resources",
         what: "connected system",
         attach: "`connect: {}` on a tool, or `through: {}` on a port",

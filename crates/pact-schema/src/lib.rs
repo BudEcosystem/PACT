@@ -2229,6 +2229,9 @@ fn file_for(collection: &str, name: &str) -> String {
     match collection {
         "skills" => format!("skills/{name}/SKILL.md"),
         "agents" => format!("agents/{name}/agent.yaml"),
+        // A program is a FOLDER — a declaration and a `body/` beside it — so the
+        // file to create is inside it, not `programs/<name>.yaml`.
+        "programs" => format!("programs/{name}/program.yaml"),
         other => format!("{other}/{name}.yaml"),
     }
 }

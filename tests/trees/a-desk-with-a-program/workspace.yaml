@@ -1,0 +1,5 @@
+name: a-desk-with-a-program
+workspace-id: 01JEQ8Z3M4N5P6Q7R8S9T0V6D4
+description: A desk that works out the refund window with a carried program instead of guessing at it.
+owner: platform
+allow-egress: []

@@ -297,6 +297,10 @@ impl Default for Policy {
                 "tool",
                 "policy",
                 "resource",
+                // A program's root file is `programs/<name>/program.yaml`, named
+                // after the kind, so the folder is the thing and the file
+                // describes it — the shape `agent` and `skill` already have.
+                "program",
                 // `redaction` is deliberately NOT here, and the reason is the
                 // `learning.yaml` sentence above rather than an oversight.
                 // `agent.policy` is a NAME (`policy: approvals`), so the cost of
@@ -334,7 +338,13 @@ impl Default for Policy {
             // `knowledge.documents` is not a glob — there is no path type in
             // this language, and a glob's file ORDER is load-bearing for a
             // digest the loader promises is reproducible on any machine.
-            payload_dirs: ["workspace", "assets", "references", "scripts", "documents"]
+            // `body` is a program's own files (P6), carried the way `scripts`
+            // is: by name, media type, size and fingerprint, never opened. It is
+            // a payload directory for exactly the reason the other five are —
+            // expanding `check-window.wasm` into a field called `check-window`
+            // would silently discard the extension, which is the quiet loss T7
+            // forbids.
+            payload_dirs: ["workspace", "assets", "references", "scripts", "documents", "body"]
                 .iter()
                 .map(|s| (*s).to_string())
                 .collect(),

@@ -18,8 +18,8 @@ from an earlier document.
 | TypeScript type-checks | clean | `cd adapters/typescript && npx tsc --noEmit` |
 | Lints | clean | `cargo clippy --all-targets` |
 | Worked example loads | 498 settings | `cargo run -p pact-cli -- check examples/refund-desk` |
-| Schema kinds | **45** | `python3 -c "import yaml;print(len(yaml.safe_load(open('spec/schema.yaml'))['groups']))"` |
-| Fields that resolve a name | **27** | `grep -cE '^\s*names:' spec/schema.yaml` |
+| Schema kinds | **47** | `python3 -c "import yaml;print(len(yaml.safe_load(open('spec/schema.yaml'))['groups']))"` |
+| Fields that resolve a name | **29** | `grep -cE '^\s*names:' spec/schema.yaml` |
 
 ## What is proven, and what "proven" means
 
