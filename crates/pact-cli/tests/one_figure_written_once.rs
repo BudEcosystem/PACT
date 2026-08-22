@@ -621,3 +621,51 @@ fn a_use_key_naming_no_figure_draws_nothing() {
     assert!(!said.contains("a-figure-cannot-stand-here"), "{said}");
     let _ = std::fs::remove_dir_all(&dst);
 }
+
+/// What was substituted is recorded, so a resolved tree can say where it came from.
+///
+/// `values:` and a pattern are both resolved and REMOVED — that is what makes a
+/// tree using them the same document as one written longhand, and it is the
+/// property everything downstream depends on. The cost is that afterwards
+/// nothing says which lines an author actually typed and which arrived from a
+/// figure or a pattern, so a reviewer reading `pact show` cannot tell a spend cap
+/// somebody wrote from one three desks share.
+///
+/// P2's own exit gate in `docs/41` asks for that provenance. It cannot be
+/// recomputed from the finished document — by then the reference is gone — so it
+/// is recorded as it happens and carried on the report `pact waits` already
+/// emits. Nothing is printed on `check`: this is for whoever asks, not noise on
+/// every run.
+#[test]
+fn what_was_substituted_is_on_the_report() {
+    let (code, waits, err) = run(&["waits", &tree("one-figure-in-three-places")]);
+    assert_eq!(code, Some(0), "{waits}{err}");
+    let report: serde_json::Value = serde_json::from_str(&waits).expect("waits emits JSON");
+    let subs = report["substitutions"].as_array().expect("the report carries them");
+
+    let capped: Vec<&serde_json::Value> = subs
+        .iter()
+        .filter(|s| s["name"].as_str() == Some("spend-cap"))
+        .collect();
+    assert_eq!(capped.len(), 2, "both desks used it:\n{waits}");
+    for one in capped {
+        assert_eq!(one["kind"], "figure", "{waits}");
+        assert!(
+            one["at"].as_str().is_some_and(|p| p.ends_with("agent.yaml")),
+            "and each says where it landed: {one}"
+        );
+    }
+}
+
+/// A tree that substitutes nothing carries an empty list, not a missing key.
+#[test]
+fn a_tree_that_substitutes_nothing_says_so_plainly() {
+    let (code, waits, err) = run(&["waits", &tree("one-figure-longhand")]);
+    assert_eq!(code, Some(0), "{waits}{err}");
+    let report: serde_json::Value = serde_json::from_str(&waits).expect("JSON");
+    assert_eq!(
+        report["substitutions"].as_array().map(Vec::len),
+        Some(0),
+        "an empty list and a missing key are different answers:\n{waits}"
+    );
+}

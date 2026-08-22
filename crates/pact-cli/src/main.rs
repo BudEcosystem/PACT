@@ -1397,7 +1397,7 @@ fn durability_matches_what_this_tree_does(
 fn validate(
     path: &Utf8PathBuf,
     unsafe_spec: bool,
-) -> Result<(Option<pact_doc::Node>, Diagnostics)> {
+) -> Result<(Option<pact_doc::Node>, Diagnostics, Vec<pact_loader::report::Substitution>)> {
     let (mut node, mut diags) = load(path)?;
 
     // `based-on:` is resolved BEFORE the schema sees anything (G11). A derived
@@ -1428,6 +1428,11 @@ fn validate(
         (String::new(), pact_schema::Schema::new())
     };
 
+    // Where every figure and pattern landed, recorded as it happens because it
+    // cannot be recomputed afterwards: both are REMOVED once resolved, which is
+    // what makes a tree using them the same document as one written longhand.
+    let mut substituted: Vec<pact_loader::report::Substitution> = Vec::new();
+
     // `{use: <name>}` becomes the figure BEFORE `based-on:` is resolved, and the
     // order is load-bearing in both directions. Before derivation, so a base and
     // everything derived from it read the same figure rather than each resolving
@@ -1437,7 +1442,7 @@ fn validate(
     // tree that wrote it out longhand are one document — same shape, same
     // digest, and nothing below this line ever learns the feature exists.
     if let Some(root) = node.as_mut() {
-        pact_loader::values::resolve(root, &spec, &mut diags);
+        pact_loader::values::resolve(root, &spec, &mut diags, &mut substituted);
     }
 
     if let Some(root) = node.as_mut() {
@@ -1498,7 +1503,7 @@ fn validate(
             && holds_self_file(&folder, &AGENT_SELF_FILES)
         {
             diags.sort();
-            return Ok((node, diags));
+            return Ok((node, diags, substituted));
         }
 
         // A workspace is a workspace; anything else is a single agent. See
@@ -1527,7 +1532,7 @@ fn validate(
         // reader to add `description:` to a file that does not exist.
         if nothing_to_validate {
             diags.sort();
-            return Ok((node, diags));
+            return Ok((node, diags, substituted));
         }
         match schema.group(kind) {
             Some(_) => schema.validate(root, kind, &mut diags),
@@ -1579,7 +1584,11 @@ fn validate(
         // *"OK — loaded cleanly"* and exited 0, and the warning reached a Rust
         // caller and nobody else. D13's reader runs `pact check` and nothing
         // else, so a diagnostic that does not arrive here does not arrive.
-        let report = pact_loader::report::LoadReport::of(root, &mut diags);
+        let mut report = pact_loader::report::LoadReport::of(root, &mut diags);
+        // CLONED, not taken: this report is the one the durability check reads,
+        // and the same list is handed back for `pact waits` to emit. Taking it
+        // here left the caller with an empty list and nothing saying why.
+        report.substitutions = substituted.clone();
         // A8. `durability: none` on a tree that parks is a claim the tree itself
         // disproves — and being CONTRADICTABLE is the whole reason this field is
         // worth writing. `allow-egress: []` has the same property;
@@ -1745,7 +1754,7 @@ fn validate(
         pact_loader::review::check(root, &schema, &mut diags);
         diags.sort();
     }
-    Ok((node, diags))
+    Ok((node, diags, substituted))
 }
 
 /// The folder a path names, which is the path itself when it is one.
@@ -2196,7 +2205,7 @@ fn check(path: &Utf8PathBuf, quiet: bool, unsafe_spec: bool, deny_warnings: bool
     if let Some(root) = enclosing_workspace(path) {
         return check_in_context(path, &root, quiet, unsafe_spec, deny_warnings);
     }
-    let (node, diags) = validate(path, unsafe_spec)?;
+    let (node, diags, _) = validate(path, unsafe_spec)?;
 
     if !diags.is_empty() {
         out_raw!("{}", diags.render());
@@ -2266,7 +2275,7 @@ fn check_in_context(
     deny_warnings: bool,
 ) -> Result<i32> {
     let here = agent.canonicalize_utf8().unwrap_or_else(|_| agent.clone());
-    let (_, whole) = validate(root, unsafe_spec)?;
+    let (_, whole, _) = validate(root, unsafe_spec)?;
     let mut mine = Diagnostics::new();
     for d in whole.items() {
         let inside = camino::Utf8Path::new(d.span.file.as_str())
@@ -2368,7 +2377,7 @@ fn waits_cmd(path: &Utf8PathBuf, unsafe_spec: bool) -> Result<i32> {
     // `asked-of:` deleted from a question — which `check` calls an ERROR,
     // *"names nobody to ask, so the run stops"* — `waits` handed a scheduler a
     // human-approval gate on money that nobody can answer.
-    let (node, mut diags) = validate(path, unsafe_spec)?;
+    let (node, mut diags, substituted) = validate(path, unsafe_spec)?;
     let Some(root) = node.as_ref() else {
         bail!("nothing loadable found at '{path}'");
     };
@@ -2378,7 +2387,11 @@ fn waits_cmd(path: &Utf8PathBuf, unsafe_spec: bool) -> Result<i32> {
         eprint!("{}", diags.render());
         return Ok(1);
     }
-    let report = pact_loader::report::LoadReport::of(root, &mut diags);
+    let mut report = pact_loader::report::LoadReport::of(root, &mut diags);
+    // Where every figure and pattern landed. Carried from `validate`, because it
+    // cannot be recomputed here: by the time this document exists, both have
+    // been resolved and removed.
+    report.substitutions = substituted;
     // Warnings the report itself found go to stderr, so the JSON on stdout stays
     // machine-readable for the runtime that asked for it.
     diags.sort();
@@ -2399,7 +2412,7 @@ fn discover_cmd(path: &Utf8PathBuf, unsafe_spec: bool) -> Result<i32> {
         // schema sees anything (G11), so the inventory publishes each agent as
         // the thing it becomes. The bare re-load this replaces published
         // `model: null` and `limits: null` for every derived agent (D-5).
-        let (node, mut d) = match validate(root, unsafe_spec) {
+        let (node, mut d, _) = match validate(root, unsafe_spec) {
             Ok(v) => v,
             Err(e) => {
                 // Never silent: a folder this walk found and then could not
@@ -2451,7 +2464,7 @@ fn card_cmd(agent: &str, root: &Utf8PathBuf, unsafe_spec: bool) -> Result<i32> {
     // The card is what another system reads INSTEAD of the tree. It built a
     // `Diagnostics` and threw it away unrendered, so a tree `pact check` refuses
     // was published as a valid A2A card at exit 0.
-    let (node, mut diags) = validate(root, unsafe_spec)?;
+    let (node, mut diags, _) = validate(root, unsafe_spec)?;
     if diags.has_errors() {
         eprint!("{}", diags.render());
         return Ok(1);
@@ -2518,7 +2531,7 @@ fn show(path: &Utf8PathBuf, unsafe_spec: bool) -> Result<i32> {
     // Validated, for the reason `waits_cmd` gives: every adapter in this
     // repository reads its document through `pact show`, so a tree that only
     // `check` refuses is a tree every adapter accepts.
-    let (node, mut diags) = validate(path, unsafe_spec)?;
+    let (node, mut diags, _) = validate(path, unsafe_spec)?;
     if diags.has_errors() {
         eprint!("{}", diags.render());
         return Ok(1);

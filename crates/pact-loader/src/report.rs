@@ -124,6 +124,32 @@ pub struct LoadReport {
     /// Deterministic, because a report two machines disagree about is not a
     /// contract.
     pub waits: Vec<Wait>,
+    /// Where a figure or a pattern landed, one entry per substitution.
+    ///
+    /// `values:` and a pattern are both resolved and REMOVED — that is what
+    /// makes a tree using them the same document as one written longhand, and
+    /// everything downstream depends on it. The cost is that afterwards nothing
+    /// says which lines an author typed and which arrived: a reviewer reading
+    /// `pact show` cannot tell a spend cap somebody wrote from one three desks
+    /// share.
+    ///
+    /// It cannot be recomputed from the finished document, because by then the
+    /// reference is gone. So it is recorded AS IT HAPPENS and carried here —
+    /// and it is on the report rather than in a diagnostic because it is not a
+    /// problem: printing a line on every `check` for every figure a tree uses
+    /// would be noise on the command an author runs most.
+    pub substitutions: Vec<Substitution>,
+}
+
+/// One place a figure or a pattern was filled in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Substitution {
+    /// `figure` or `pattern` — what was resolved.
+    pub kind: &'static str,
+    /// The name of the figure, or of the pattern that was built from.
+    pub name: String,
+    /// Where it landed, as the author would open it.
+    pub at: String,
 }
 
 impl LoadReport {
@@ -151,7 +177,7 @@ impl LoadReport {
             std::collections::BTreeMap::new();
 
         let Some(agents) = document.get("agents").and_then(Node::as_map) else {
-            return LoadReport { waits };
+            return LoadReport { waits, substitutions: Vec::new() };
         };
 
         for (agent_name, agent) in agents {
@@ -233,7 +259,7 @@ impl LoadReport {
             }
         }
 
-        LoadReport { waits }
+        LoadReport { waits, substitutions: Vec::new() }
     }
 
     /// The waits a scheduler sets a timer for.
@@ -252,6 +278,14 @@ impl LoadReport {
     /// output and a person reading the YAML are reading the same words.
     pub fn to_json(&self) -> serde_json::Value {
         serde_json::json!({
+            // An empty list rather than an absent key: "nothing was substituted"
+            // and "this build does not record substitutions" are different
+            // answers, and a consumer must be able to tell them apart.
+            "substitutions": self.substitutions.iter().map(|s| serde_json::json!({
+                "kind": s.kind,
+                "name": s.name,
+                "at": s.at,
+            })).collect::<Vec<_>>(),
             "waits": self.waits.iter().map(|w| serde_json::json!({
                 "reason": w.reason,
                 "agent": w.agent,

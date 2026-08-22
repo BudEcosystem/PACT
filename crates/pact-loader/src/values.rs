@@ -98,7 +98,12 @@ fn a_figure_can_stand_here(ty: &Ty) -> bool {
 }
 
 /// Resolve every `{use: <name>}` in the document, in place, then drop `values:`.
-pub fn resolve(root: &mut Node, schema: &Schema, diags: &mut Diagnostics) {
+pub fn resolve(
+    root: &mut Node,
+    schema: &Schema,
+    diags: &mut Diagnostics,
+    recorded: &mut Vec<crate::report::Substitution>,
+) {
     let Some(top) = root.as_map_mut() else { return };
     if top.get(COLLECTION).is_none() {
         // The overwhelmingly common case, and it must cost nothing: a tree that
@@ -141,7 +146,9 @@ pub fn resolve(root: &mut Node, schema: &Schema, diags: &mut Diagnostics) {
         // round-trip untouched (AD-14), and an unknown field is the schema's
         // refusal to make, not this pass's. \
         if let Some(ty) = ty {
-            substitute(&mut entry.node, &ty, schema, &figures, &mut used, diags, 0);
+            substitute(
+                &mut entry.node, &ty, schema, &figures, &mut used, diags, recorded, 0,
+            );
         }
     }
 
@@ -388,6 +395,7 @@ fn substitute(
     figures: &BTreeMap<String, Node>,
     used: &mut BTreeSet<String>,
     diags: &mut Diagnostics,
+    recorded: &mut Vec<crate::report::Substitution>,
     depth: usize,
 ) {
     // The specification is shallow and acyclic; the cap is a backstop against a
@@ -451,6 +459,14 @@ fn substitute(
         };
         match figures.get(&name) {
             Some(figure) => {
+                recorded.push(crate::report::Substitution {
+                    kind: "figure",
+                    name: name.clone(),
+                    // The USE SITE's file, which is where a reviewer would open
+                    // it — the definition is one lookup away and the same for
+                    // every use.
+                    at: node.span.file.to_string(),
+                });
                 used.insert(name);
                 // The USE SITE's span is kept, not the definition's. Whatever
                 // this figure turns out to be wrong for, the line to change is
@@ -510,13 +526,8 @@ fn substitute(
                     if let Some(args) = entry.node.as_map_mut() {
                         for (_, arg) in args.iter_mut() {
                             substitute(
-                                &mut arg.node,
-                                &Ty::Text,
-                                schema,
-                                figures,
-                                used,
-                                diags,
-                                depth + 1,
+                                &mut arg.node, &Ty::Text, schema, figures, used, diags,
+                                recorded, depth + 1,
                             );
                         }
                     }
@@ -527,23 +538,32 @@ fn substitute(
                 else {
                     continue;
                 };
-                substitute(&mut entry.node, &field.ty, schema, figures, used, diags, depth + 1);
+                substitute(
+                    &mut entry.node, &field.ty, schema, figures, used, diags, recorded,
+                    depth + 1,
+                );
             }
         }
         (Value::Map(map), Ty::MapOf(inner)) => {
             for (_, entry) in map.iter_mut() {
-                substitute(&mut entry.node, inner, schema, figures, used, diags, depth + 1);
+                substitute(
+                    &mut entry.node, inner, schema, figures, used, diags, recorded, depth + 1,
+                );
             }
         }
         (Value::List(items), Ty::ListOf(inner)) => {
             for item in items.iter_mut() {
-                substitute(item, inner, schema, figures, used, diags, depth + 1);
+                substitute(
+                    item, inner, schema, figures, used, diags, recorded, depth + 1,
+                );
             }
         }
         // A single value where a list belongs is accepted everywhere else in
         // this format (FR-1.4.7), so a figure may stand there too.
         (_, Ty::ListOf(inner)) => {
-            substitute(node, inner, schema, figures, used, diags, depth + 1);
+            substitute(
+                node, inner, schema, figures, used, diags, recorded, depth + 1,
+            );
         }
         _ => {}
     }
