@@ -321,6 +321,11 @@ class Transport(Protocol):
 
 ToolFn = Callable[[dict[str, Any]], str]
 
+#: What a CodeAct stage asks the locked room to run. Not a program name from the
+#: tree — the code was written this second, by the model — so the room is asked
+#: under a reserved word rather than a name an author could collide with.
+RUN_CODE_IN_THE_ROOM = "pact:run-code"
+
 #: What each kind of wait asks a person, when the author has named no question.
 #:
 #: These are WORDINGS, not option pairs. Every one of them wants a yes-or-no,
@@ -1576,6 +1581,58 @@ async def run(
                 and phase.does is Does.CHECK
                 else transport
             )
+            # CodeAct (P8 wave 8). The model writes the working, the locked
+            # room runs it, and what it prints comes back as this step's result.
+            #
+            # It is offered NOTHING else — `step_tools` is not passed — which is
+            # the whole safety argument in one line: a snippet cannot call a
+            # gated action, spend money or ask an agent, because none of them is
+            # in front of it. What it can do is compute, in a room with
+            # deny-by-default egress and the stage's own fuel.
+            #
+            # A stage that cannot run anything is refused rather than quietly
+            # becoming a `think` stage: an author who wrote `does: run-code`,
+            # watched it load and got prose instead has been told something
+            # untrue.
+            if phase.does is Does.RUN_CODE:
+                if run_program is None:
+                    result.halted = "no-locked-room"
+                    result.output = (
+                        f"stage {phase_name!r} writes code to be run, and nothing here can "
+                        f"run a carried program. Whatever runs your agents has to supply a "
+                        f"locked room."
+                    )
+                    result.unenforced = result.unenforced + (result.output,)
+                    return result
+                wrote, _ = await asking_now.model_call(
+                    _system_for(spec.instructions, phase, step_skills), history, []
+                )
+                _meter_usage(asking_now, meter)
+                ran = _call_tool(
+                    lambda a: run_program(RUN_CODE_IN_THE_ROOM, a),
+                    ToolCall(name=RUN_CODE_IN_THE_ROOM, args={"code": wrote}),
+                )
+                meter.tool_calls += 1
+                history.append({"role": "assistant", "content": wrote})
+                history.append({"role": "user", "content": ran})
+                result.steps.append(
+                    Step(index=i, text=wrote, tool_calls=(), tool_results=(ran,))
+                )
+                visits[phase_name] = visits.get(phase_name, 0) + 1
+                bus.emit(
+                    "step.stage.completed", at=(i,), name=phase_name, outcome="answered"
+                )
+                nxt = _where_next(
+                    loop, phase, "answered", result, bus, i,
+                    run_program=run_program, said=wrote,
+                )
+                if nxt is None:
+                    return result
+                if nxt == DONE:
+                    return _finish(result, chain, bus, i, ran, spec.facts)
+                phase_name = nxt
+                continue
+
             text, calls = await asking_now.model_call(
                 _system_for(
                     spec.instructions, phase, step_skills,

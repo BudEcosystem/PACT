@@ -52,6 +52,8 @@ class Does(str, Enum):
     CHECK = "check-its-work"
     ASK = "ask-someone"
     ANSWER = "answer"
+    #: CodeAct: the model writes the working and the locked room runs it (P8/8).
+    RUN_CODE = "run-code"
 
 
 #: The finish line. Reserved: a stage may not be called this.
@@ -82,6 +84,10 @@ SAYS: dict[Does, str] = {
     ),
     Does.ANSWER: "Give your final answer now.",
     Does.ASK: "",
+    Does.RUN_CODE: (
+        "Write the working out as code. It will be run in a locked room with "
+        "nothing else in it, and what it prints comes back to you."
+    ),
 }
 
 #: Stages that offer every tool the agent has when they name none. Every other

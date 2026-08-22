@@ -3440,7 +3440,20 @@ groups:
     fields:
       does:
         type: one-of
-        choices: [think, use-tools, check-its-work, ask-someone, answer]
+        # `run-code` is CodeAct (FR-6.1.5, AC-5.2), required for a round and
+        # never shippable because there was nowhere to run anything.
+        #
+        # It is not R16. That row refuses orchestration code the model writes —
+        # code that decides which agents exist and who is asked — because it
+        # cannot be reviewed before it runs and structural change must pass a
+        # person (D22/D23). A snippet here has no structural authority at all: it
+        # runs in the locked room under the sandbox's deny-by-default egress and
+        # the stage's fuel, it is offered no tools and no teammates, and it lands
+        # in the transcript verbatim — so it is reviewable after the fact exactly
+        # as the model's own prose already is, which is the standard that prose
+        # is held to and not a lower one. AD-83's `meta-depth = 1` is the line,
+        # and a snippet that computes a number is nowhere near it.
+        choices: [think, use-tools, check-its-work, ask-someone, answer, run-code]
         required: yes
         needed-when:
           asks: ask-someone
