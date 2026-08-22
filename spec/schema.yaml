@@ -1693,16 +1693,30 @@ groups:
           one, ever.
       engines:
         # The same closed list `program.engine` offers, and it is checked in both
-        # directions: a program whose engine no sandbox here hosts is refused, and
-        # a sandbox that hosts nothing is a locked room with no door.
+        # directions WHERE THE TREE PAIRS THEM: a tool's `connect:` names the room
+        # its action's `program:` runs in, so a program written for a kind that
+        # room cannot host is refused, and a sandbox that hosts nothing is a
+        # locked room with no door.
+        #
+        # Not against the workspace as a whole, and the narrowing is a repair. For
+        # one round the rule was "if any sandbox is declared, some sandbox must
+        # host every program reached anywhere" — which reads one declared room as
+        # a claim about every room, and no line in any tree says these are all the
+        # rooms there are. Measured: a workspace whose `wasm` program came from
+        # the host's room was refused the moment an unrelated `python` room was
+        # added beside it, and the ways out were a false `engines:` line, a room
+        # nothing could point at, or deleting a working capability.
+        #
+        # Where no tool pairs them, the room comes from whatever runs your agents
+        # — the same division `resource-kind: sandbox` makes everywhere else.
         type: list of one-of
         choices: [wasm, python, typescript]
         surface: S-CAP
         tier: expert
         help: >
-          which kinds of program this locked room can run. A program written for
-          a kind nothing here hosts is refused when the file is read, rather than
-          on the first call.
+          which kinds of program this locked room can run. A tool that
+          `connect:`s here and runs a program written for a kind this room cannot
+          host is refused when the file is read, rather than on the first call.
       asks-to-run:
         type: text
         names: questions

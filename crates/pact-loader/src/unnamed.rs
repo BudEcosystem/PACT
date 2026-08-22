@@ -164,6 +164,9 @@ pub fn nothing_points_at_it(document: &Node, schema: &Schema, diags: &mut Diagno
     let in_sentences = schema.names_in_sentences(document);
     let in_sentences: BTreeSet<&str> =
         in_sentences.iter().map(|n| n.name.trim()).collect();
+    // Whether anything here needs a locked room and has no line to name one
+    // with. Asked once, because it is a fact about the whole workspace.
+    let room_wanted = crate::programs::a_room_is_needed_with_no_tool_to_name_it(document, schema);
 
     for kind in KINDS {
         let Some(entries) = document.get(kind.section).and_then(Node::as_map) else { continue };
@@ -171,6 +174,7 @@ pub fn nothing_points_at_it(document: &Node, schema: &Schema, diags: &mut Diagno
             if mentioned.contains(name.as_str())
                 || in_sentences.contains(name.as_str())
                 || attaches_itself(&entry.node)
+                || a_room_nothing_can_point_at(kind.section, &entry.node, room_wanted)
             {
                 continue;
             }
@@ -186,6 +190,30 @@ pub fn nothing_points_at_it(document: &Node, schema: &Schema, diags: &mut Diagno
             ));
         }
     }
+}
+
+/// A locked room in a workspace whose need for one cannot write `connect:`.
+///
+/// The `resources` row's advice is *"`connect:` on a tool, or `through:` on a
+/// port"*, and both are lines on a tool or a port. A `does: run-code` stage names
+/// no tool; a program reached by `uses:`, `decided-by:`, `checked-by:` or a
+/// rewriting sentence names no tool either. Each needs a room, and none of them
+/// can write the line this warning asks for.
+///
+/// Measured: obeying the `run-code` refusal's own printed fix drew
+/// `nothing-points-at-it` on the very file it told the author to add, and
+/// `--deny-warnings` still failed. A fix that produces a warning is not a fix,
+/// and telling an author to write a line that does not exist is worse than
+/// saying nothing.
+///
+/// Narrow on purpose. Only a `resource-kind: sandbox` is excused, and only in a
+/// workspace that really has such a need — every other kind of connected system,
+/// and every sandbox in a tree whose programs all go through tools, is warned
+/// about exactly as before.
+fn a_room_nothing_can_point_at(section: &str, node: &Node, wanted: bool) -> bool {
+    wanted
+        && section == "resources"
+        && node.get("resource-kind").and_then(Node::as_str) == Some("sandbox")
 }
 
 /// A document that says, on its own line, that it applies to everything.

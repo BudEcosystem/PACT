@@ -267,9 +267,51 @@ const PROGRAMS: &str = "programs";
 struct Reach {
     /// The program's name, as the author wrote it.
     name: String,
+    /// Kept for the refusal a future reach-level check would print. Nothing
+    /// reads it since the workspace-wide engine rule was withdrawn above.
+    #[allow(dead_code)]
     at: Span,
     /// Where it was written, in the author's words — "'desk' names it in `uses:`".
     how: String,
+}
+
+/// Does anything here need a locked room that has no `connect:` to point at it?
+///
+/// `unnamed.rs` counts a resource as named by `connect:` on a tool or `through:`
+/// on a port, and both of those are lines on a tool or a port. A `does:
+/// run-code` stage names no program and no tool; a program reached by `uses:`,
+/// `decided-by:`, `checked-by:` or a rewriting sentence has no tool either. All
+/// of them need a room and none of them can write the line that would say so.
+///
+/// Measured before this existed: obeying the `run-code` refusal's own printed fix
+/// — "add a file under `resources/` whose `resource-kind:` is `sandbox`" —
+/// produced `warning: 'py-room' is a connected system that nothing here names`,
+/// and `--deny-warnings` still failed. A fix that draws a warning is not a fix.
+pub fn a_room_is_needed_with_no_tool_to_name_it(root: &Node, schema: &Schema) -> bool {
+    if let Some(loops) = root.get("loops").and_then(Node::as_map) {
+        for (_, shape) in loops {
+            let Some(steps) = shape.node.get("steps").and_then(Node::as_map) else { continue };
+            if steps
+                .iter()
+                .any(|(_, st)| st.node.get("does").and_then(Node::as_str) == Some(RUN_CODE))
+            {
+                return true;
+            }
+        }
+    }
+    let Some(programs) = root.get("programs").and_then(Node::as_map) else { return false };
+    let mut found = Vec::new();
+    reaches(root, "workspace", schema, "", 0, &mut found);
+    if found
+        .iter()
+        .any(|r| !r.how.ends_with("in `program:`") && programs.get(r.name.as_str()).is_some())
+    {
+        return true;
+    }
+    schema
+        .names_in_sentences(root)
+        .iter()
+        .any(|n| n.collection == PROGRAMS && programs.get(n.name.as_str()).is_some())
 }
 
 /// Every place this document names a carried program, found from the schema.
@@ -348,76 +390,45 @@ fn rooms(root: &Node) -> Vec<(String, Vec<String>)> {
         .collect()
 }
 
-/// A program this workspace carries that no room it declares can run.
+/// WITHDRAWN: the workspace-wide engine check, and why it is not here.
 ///
-/// `resource.engines:` says it "is checked in both directions", and its help
-/// promises the refusal arrives "when the file is read, rather than on the first
-/// call". That was true of the tool path alone. Here it is asked of every other
-/// reach, against the whole workspace rather than one tool's room — because a
-/// `decided-by:` line has no tool, and so no `connect:` to follow.
+/// It existed for one round and asked: if the workspace declares ANY sandbox,
+/// does some declared sandbox host the engine of every program reached without a
+/// tool? The trigger was `rooms(root).is_empty()`.
 ///
-/// A workspace with no room at all is silent, deliberately: see the note at the
-/// top of this file.
-fn every_reach_has_a_room_that_runs_it(root: &Node, schema: &Schema, diags: &mut Diagnostics) {
-    let declared = rooms(root);
-    if declared.is_empty() {
-        return;
-    }
-    let Some(programs) = root.get("programs").and_then(Node::as_map) else { return };
-
-    let mut found = Vec::new();
-    reaches(root, "workspace", schema, "", 0, &mut found);
-    for named in schema.names_in_sentences(root) {
-        if named.collection == PROGRAMS {
-            found.push(Reach {
-                name: named.name.clone(),
-                at: named.at.clone(),
-                how: format!("the rule \"{}\" hands work to it", named.said),
-            });
-        }
-    }
-
-    for reach in found {
-        // `action.program:` is asked the stricter question by `check` below —
-        // against the room its own tool reaches, not merely against some room.
-        // Asking both would refuse one arrangement twice, in two different
-        // words, which is worse than either refusal on its own.
-        if reach.how.ends_with("in `program:`") {
-            continue;
-        }
-        let Some(program) = programs.get(reach.name.as_str()) else { continue };
-        let Some(engine) = program.node.get("engine").and_then(Node::as_str) else { continue };
-        if declared.iter().any(|(_, hosts)| hosts.iter().any(|h| h == engine)) {
-            continue;
-        }
-        let rooms_here = declared
-            .iter()
-            .map(|(name, hosts)| {
-                if hosts.is_empty() {
-                    format!("'{name}' says nothing about what it can run")
-                } else {
-                    format!("'{name}' runs {}", hosts.join(", "))
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("; ");
-        diags.push(Diagnostic::error(
-            "loader/nothing-here-can-run-that-program",
-            reach.at.clone(),
-            format!(
-                "{} — and '{}' is written for `{engine}`, which no locked room here can \
-                 run: {rooms_here}.",
-                reach.how, reach.name
-            ),
-            format!(
-                "Add `{engine}` under `engines:` in one of the resources above, or write \
-                 '{}' for a kind a room here already runs.",
-                reach.name
-            ),
-        ));
-    }
-}
-
+/// The rule read one declared room as a claim about every room, and no line in
+/// any tree ever says "these are all the rooms there are". The tell is that the
+/// same tree with NO rooms was accepted in silence: a workspace could not be
+/// wrong until it declared something, and then it was wrong about things it had
+/// not mentioned.
+///
+/// Measured on the shipped tree this module's header cites. Take
+/// `a-desk-that-uses-a-program` — a `wasm` program named straight from `uses:`,
+/// no `resources/`, clean — and add one self-contained `python` capability
+/// beside it, with its own room, program and tool. Nothing about the `wasm`
+/// arrangement changes, and it was refused.
+///
+/// Every way out was worse than the problem. Writing `wasm` into the python
+/// room's `engines:` passes and is a false statement about a room the tree does
+/// not own — the T7 shape, a declared control that is no longer true. Adding a
+/// real `wasm` room clears the error and draws `nothing-points-at-it`, because a
+/// `uses:`-reached program has no `connect:` to write, so `--deny-warnings`
+/// still fails. And it collided with the rule one function down: a `run-code`
+/// stage is refused with a fix saying "add a sandbox", and obeying that fix
+/// refused the `uses:` program beside it. That tree had no clean state.
+///
+/// What survives is the question a tree can actually answer, and it is the one
+/// P6 always asked: a program reached THROUGH A TOOL is held against the room
+/// that tool `connect:`s to, in both directions, because that pairing is written
+/// down. Where no pairing exists the room comes from the host — P7's seam —
+/// whether the tree declares nought rooms or nine.
+///
+/// `spec/schema.yaml`'s `engines:` sentence was narrowed in the same change to
+/// say what is really checked, rather than being left as a promise about every
+/// reach that only one reach keeps.
+///
+/// Held by `a_room_declared_for_one_purpose_does_not_retract_the_seam_for_another`
+/// and `a_code_stage_and_a_directly_used_program_can_live_in_one_tree`.
 /// A stage that writes code, in a workspace with nowhere to run it.
 ///
 /// `docs/27` states it as a rule — a `does: run-code` stage is "legal only when
@@ -476,7 +487,6 @@ pub fn check(root: &Node, schema: &Schema, diags: &mut Diagnostics) {
     only_pure_programs_project(root, diags);
     only_pure_programs_decide(root, diags);
     only_pure_programs_rewrite(root, schema, diags);
-    every_reach_has_a_room_that_runs_it(root, schema, diags);
     let Some(tools) = root.get("tools").and_then(Node::as_map) else { return };
     let programs = root.get("programs").and_then(Node::as_map);
     let resources = root.get("resources").and_then(Node::as_map);

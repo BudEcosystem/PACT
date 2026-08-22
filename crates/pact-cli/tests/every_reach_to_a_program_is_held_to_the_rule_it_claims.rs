@@ -159,45 +159,134 @@ fn a_program_that_rewrites_what_is_said_must_be_pure() {
     }
 }
 
-/// A program no room here can run, reached without a tool.
+/// Declaring a room for one purpose does not retract the seam for another.
 ///
-/// The tool path has asked this since P6, by following that tool's `connect:`.
-/// A `decided-by:` line has no tool and so no `connect:`, and the question is
-/// still answerable: the workspace declares its rooms, and if not one of them
-/// runs this kind of program then nothing here can.
+/// This test replaces two that asserted the opposite, and the premise they
+/// rested on was wrong. They said: if the workspace declares ANY sandbox, then
+/// some declared sandbox must host the engine of every program reached without a
+/// tool. Nothing in a tree ever says "these are all the rooms there are", so
+/// that rule read one declared room as a claim about every room — and the same
+/// tree with NO rooms was accepted in silence, which is the tell.
+///
+/// Measured, on the shipped tree the module header cites. Take
+/// `a-desk-that-uses-a-program` — a `wasm` program named straight from `uses:`,
+/// no `resources/` at all, loads clean — and add one self-contained `python`
+/// capability beside it: its own room, its own program, its own tool. Nothing
+/// about the `wasm` arrangement changes, and it was refused: *"'check-window' is
+/// written for `wasm`, which no locked room here can run"*.
+///
+/// The author's routes out were all bad. Writing `wasm` into the python room's
+/// `engines:` passes and is a false statement about a room the tree does not
+/// own. Adding a real `wasm` room clears the error and draws
+/// `nothing-points-at-it`, because a `uses:`-reached program has no `connect:`
+/// to write — so `--deny-warnings` still fails. And two of these repairs
+/// collided head-on: a `run-code` stage is refused with a fix saying "add a
+/// sandbox", and obeying that fix refused the `uses:` program beside it. That
+/// tree had no clean state at all.
+///
+/// What survives is the question the tree can actually answer: a program reached
+/// THROUGH A TOOL is held against the room that tool `connect:`s to, in both
+/// directions. That pairing is written down. Where there is no pairing, the room
+/// comes from the host, and that is P7's seam whether the tree declares nought
+/// rooms or nine.
 #[test]
-fn a_program_no_room_here_can_run_is_refused_however_it_is_reached() {
-    for (name, file) in [
-        ("router", "programs/pick-next/program.yaml"),
-        ("rewriter", "programs/house-style/program.yaml"),
-    ] {
-        let dst = broken(&format!("engine-{name}"), &[(file, "engine: wasm", "engine: python")]);
-        let (code, said) = run(&["check", &dst]);
-        assert_eq!(code, Some(1), "a {name} nothing can run must be said out loud:\n{said}");
-        assert!(said.contains("loader/nothing-here-can-run-that-program"), "{said}");
-        assert!(said.contains("python"), "say what it needs:\n{said}");
-        assert!(said.contains("local-sandbox"), "and which room was asked:\n{said}");
-        let _ = std::fs::remove_dir_all(&dst);
-    }
+fn a_room_declared_for_one_purpose_does_not_retract_the_seam_for_another() {
+    let dst = broken(
+        "second-room",
+        &[(
+            "resources/local-sandbox.yaml",
+            "engines:\n  - wasm",
+            "engines:\n  - python",
+        )],
+    );
+    // `local-sandbox` now runs python only, and `check-window` — reached by the
+    // tool that connects to it — is still `wasm`, so the TOOL pairing must still
+    // refuse. That is the half that stays.
+    let (code, said) = run(&["check", &dst]);
+    assert_eq!(code, Some(1), "the tool pairing is decidable and still asked:\n{said}");
+    assert!(said.contains("loader/nothing-here-can-run-that-program"), "{said}");
+    let _ = std::fs::remove_dir_all(&dst);
+
+    // And the reproduction: a room for one engine beside a program reached with
+    // no tool at all. Nothing here is decidable, so nothing here is refused.
+    let two = std::env::temp_dir().join(format!("pact-two-rooms-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&two);
+    copy_dir(
+        std::path::Path::new(&format!(
+            "{}/../../tests/trees/a-desk-that-uses-a-program",
+            env!("CARGO_MANIFEST_DIR")
+        )),
+        &two,
+    );
+    std::fs::create_dir_all(two.join("resources")).unwrap();
+    std::fs::write(
+        two.join("resources/py-room.yaml"),
+        "resource-kind: sandbox\ndescription: A room for the python helper.\nengines:\n  - python\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(two.join("programs/tidy-csv/body")).unwrap();
+    std::fs::write(
+        two.join("programs/tidy-csv/program.yaml"),
+        "description: Tidies a column of numbers.\nengine: python\ndeterminism: pure\ntakes:\n  rows: text\nanswers-with:\n  tidied: text\nfuel:\n  instructions-at-most: 10m\n  runs-for-at-most: 2s\n  when-it-runs-out: stop-and-say-so\n",
+    )
+    .unwrap();
+    std::fs::write(two.join("programs/tidy-csv/body/tidy.py"), "# a placeholder\n").unwrap();
+    std::fs::create_dir_all(two.join("tools")).unwrap();
+    std::fs::write(
+        two.join("tools/tidy.yaml"),
+        "description: Tidies a column.\nconnect: py-room\nactions:\n  run:\n    description: Tidies it.\n    program: tidy-csv\n    takes:\n      rows: text\n    reads-only: yes\n",
+    )
+    .unwrap();
+    let agent = two.join("agents/desk/agent.yaml");
+    let text = std::fs::read_to_string(&agent).unwrap();
+    std::fs::write(&agent, text.replace("  - check-window\n", "  - check-window\n  - tidy\n"))
+        .unwrap();
+
+    let (code, said) = run(&["check", &two.to_string_lossy(), "--deny-warnings"]);
+    assert_eq!(
+        code,
+        Some(0),
+        "one room for one engine says nothing about a program reached without a tool:\n{said}"
+    );
+    let _ = std::fs::remove_dir_all(&two);
 }
 
-/// The same question, asked of the short door.
+/// A code stage and a directly-used program can live in one tree.
 ///
-/// `uses:` was the reach the engine promise was measured to miss: a workspace
-/// whose room runs `wasm` only, carrying a `python` program the agent names
-/// directly, printed "loaded cleanly".
+/// The collision between two of these repairs, pinned so it cannot come back. A
+/// `does: run-code` stage in a room-less workspace is refused, with a fix that
+/// says to add a sandbox; adding one used to refuse the `uses:` program beside
+/// it and warn about the room itself. The tree had no clean state.
 #[test]
-fn a_program_an_agent_names_directly_must_be_one_a_room_here_runs() {
-    let dst = broken(
-        "engine-uses",
-        &[
-            ("programs/pick-next/program.yaml", "engine: wasm", "engine: typescript"),
-            ("agents/desk/agent.yaml", "  - refund-window\n", "  - refund-window\n  - pick-next\n"),
-        ],
+fn a_code_stage_and_a_directly_used_program_can_live_in_one_tree() {
+    let dst = std::env::temp_dir().join(format!("pact-collide-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dst);
+    copy_dir(
+        std::path::Path::new(&format!(
+            "{}/../../tests/trees/a-desk-that-uses-a-program",
+            env!("CARGO_MANIFEST_DIR")
+        )),
+        &dst,
     );
-    let (code, said) = run(&["check", &dst]);
-    assert_eq!(code, Some(1), "the short door asks the same question:\n{said}");
-    assert!(said.contains("loader/nothing-here-can-run-that-program"), "{said}");
+    std::fs::create_dir_all(dst.join("loops")).unwrap();
+    std::fs::write(
+        dst.join("loops/works-it-out.yaml"),
+        "description: Write the working, run it, then answer.\nstarts-at: work\nsteps:\n  work:\n    does: run-code\n    then:\n      answered: reply\n  reply:\n    does: answer\n    then:\n      answered: done\n",
+    )
+    .unwrap();
+    // The fix the run-code refusal itself prints, obeyed verbatim.
+    std::fs::create_dir_all(dst.join("resources")).unwrap();
+    std::fs::write(
+        dst.join("resources/py-room.yaml"),
+        "resource-kind: sandbox\ndescription: Where the working is run.\nengines:\n  - python\n",
+    )
+    .unwrap();
+    let agent = dst.join("agents/desk/agent.yaml");
+    let text = std::fs::read_to_string(&agent).unwrap();
+    std::fs::write(&agent, format!("{text}loop: works-it-out\n")).unwrap();
+
+    let (code, said) = run(&["check", &dst.to_string_lossy(), "--deny-warnings"]);
+    assert_eq!(code, Some(0), "obeying one refusal must not produce another:\n{said}");
     let _ = std::fs::remove_dir_all(&dst);
 }
 
