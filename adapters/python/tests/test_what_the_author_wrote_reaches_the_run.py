@@ -344,19 +344,37 @@ def test_a_fact_the_author_marked_survivable_reaches_the_tidier_from_the_documen
     )
 
 
-def test_the_fact_is_only_read_because_the_author_asked_for_it(document: dict) -> None:
-    """The control arm. `remembers:` entries that say nothing about shortening are
-    ordinary session memory and none of this mechanism's business — so a
-    workspace that never asked for it cannot be changed by it."""
+def test_the_fact_is_only_restated_because_the_author_asked_for_it(document: dict) -> None:
+    """The control arm, on the property that survived.
+
+    It used to assert that an entry without `survives-shortening: yes` was not
+    READ at all. That premise went when `bind: remembers.<n>` and `remember-as:`
+    landed: those read and write the agent's memory, and holding only the pinned
+    entries left them with nothing to read and nowhere to write. One store now
+    holds every declared entry.
+
+    What the flag decides — and what it always meant — is what a SHORTENING puts
+    back. An entry that never asked to survive is memory the author wanted kept,
+    not evidence they wanted repeated into a summarised conversation, so it must
+    never appear in `surviving()`.
+    """
     spec = AgentSpec.from_document(document, "refund-desk")
     agent = (document.get("agents") or {})["refund-desk"]
     written = set((agent.get("remembers") or {}).keys())
 
     assert "what-the-customer-told-us" in written, "the example should still have one"
-    assert "what-the-customer-told-us" not in spec.facts.declared, (
-        "an entry with no `survives-shortening:` must not be picked up"
+    assert "what-the-customer-told-us" in spec.facts.declared, (
+        "every declared entry is held — that is what makes memory readable"
     )
-    assert len(spec.facts.declared) < len(written)
+    assert not spec.facts.declared["what-the-customer-told-us"].survives
+
+    # Held, and still never re-stated. The positive control is the entry beside
+    # it, which did ask.
+    spec.facts.record("what-the-customer-told-us", "a lamp, bought on Tuesday")
+    spec.facts.record("payments-was-approved", "yes")
+    restated = [f.name for f, _ in spec.facts.surviving()]
+    assert "what-the-customer-told-us" not in restated, restated
+    assert "payments-was-approved" in restated, restated
 
 
 # ───────────────────────────────── A2: the measured model choice has a door

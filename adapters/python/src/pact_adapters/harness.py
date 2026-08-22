@@ -411,6 +411,11 @@ SUPPLIED_BY_THE_HOST: frozenset[str] = frozenset({
     "transport", "user_input", "tool_impls", "bus", "now", "clock",
     "resume", "answer", "approved", "needs_approval", "gates",
     "ask_member", "run_inputs",
+    # The value side of `remembers:`. The NAMES, their shapes and who may write
+    # them are all authored and reach `AgentSpec.facts`; what this conversation
+    # already knows is not a fact about the document at all — `lasts:
+    # one-conversation` is longer than one `run()`, so the store is the host's.
+    "remembered",
     # The activation meter behind `limits.asks-itself-at-most:`. The FIGURE is
     # authored and reaches `Limits.asks_itself_at_most`; this parameter is the
     # count of what already happened on this request, which no document can
@@ -512,6 +517,19 @@ async def run(
     #: the dict and nothing ever reads it.
     run_program: "Callable[[str, dict[str, Any]], str] | None" = None,
     at_work: dict[str, int] | None = None,
+    #: What this conversation already knows, by the names the agent's own
+    #: `remembers:` block declares — the value side of `bind: remembers.<n>`.
+    #:
+    #: A host parameter and not a document one, because `lasts:
+    #: one-conversation` outlives a single `run()` and where a conversation's
+    #: memory is KEPT is the surrounding system's (§4). PACT says what is
+    #: remembered, what shape it is, and who may write it; the store is
+    #: somebody else's, exactly as the model and the tools are.
+    #:
+    #: A name nobody declared is ignored rather than held, the same rule
+    #: `Facts.record` follows on the way out: a fact the author did not write
+    #: down is not one a run may invent.
+    remembered: Mapping[str, Any] | None = None,
 ) -> RunResult:
     """Drive `spec` to completion over `transport`.
 
@@ -601,6 +619,12 @@ async def run(
         spec.request_keys, resume.spent_keys
     )
     supplied: dict[str, Any] = dict(run_inputs or {})
+    # What the conversation already knows, seeded into the one store `remember-as:`
+    # writes to and `bind: remembers.<n>` reads from. Through `record` rather than
+    # into `held` directly, so an undeclared name is dropped here exactly as it
+    # would be on the way out.
+    for _known, _value in (remembered or {}).items():
+        spec.facts.record(str(_known), _value)
     bus = bus or Bus()
     #: Agents this request may put to work because a VALUE named one — the
     #: dynamic half of `team:` (P4). `{name of the agent: why it is here}`.
@@ -2436,6 +2460,20 @@ async def run(
                 bus.emit("turn.run.cancelled", at=(i,), reason=decision.stop)
                 return result
             out = seen["content"]
+            # KEPT, where the author said to keep it (`remember-as:`).
+            #
+            # After the chain, and that is the point: a tool result goes into
+            # `history` and is read back to the model next turn, and a fact is
+            # re-stated into a later prompt by `context-policy`. Written before
+            # the chain it would be the one copy of the answer nothing masked,
+            # and the memory would put back exactly what the redaction took out.
+            #
+            # `Facts.record` is silent for a name the agent never declared, which
+            # is also what makes this line inert in every tree that writes none.
+            # A `never-from:` violation is refused at check time, where the author
+            # is (`loader/a-tool-may-not-write-there`), so a document that reaches
+            # a run cannot carry one.
+            _keep_what_it_answered(spec, call, out)
             outputs.append(out)
             ran.append(call)
             bus.emit("step.tool.completed", at=(i,), name=call.name)
@@ -2787,6 +2825,68 @@ def _with_binds(spec: AgentSpec, call: "ToolCall", supplied: Mapping[str, Any]) 
     return ToolCall(name=call.name, args={**call.args, **filled})
 
 
+#: The two namespaces a `bind:` source may name, and where each is filled from.
+#:
+#: `run-inputs.` is what the surrounding system passed for this run; `remembers.`
+#: is what this conversation already knows. Both are stated here rather than
+#: parsed at each site, because there were two sites and they disagreed: one
+#: stripped `run-inputs.` and left `remembers.` alone — so a bind from memory
+#: looked up the literal key `"remembers.verified-account"`, found nothing, and
+#: made the call WITHOUT the identity — and the other glued the prefix back on,
+#: reporting the miss as `run-inputs.remembers.verified-account`, a namespace
+#: that does not exist.
+RUN_INPUTS = "run-inputs."
+REMEMBERS = "remembers."
+
+
+def _bind_source(written: str) -> tuple[str, str]:
+    """A `bind:` line split into the namespace it names and the name in it.
+
+    A source with no prefix is a `run-inputs:` key written the short way, which
+    is what every tree wrote before `remembers.` existed and what the field's
+    own help still shows.
+    """
+    if written.startswith(REMEMBERS):
+        return REMEMBERS, written[len(REMEMBERS):]
+    if written.startswith(RUN_INPUTS):
+        return RUN_INPUTS, written[len(RUN_INPUTS):]
+    return RUN_INPUTS, written
+
+
+def _bind_value(spec: AgentSpec, written: str, supplied: Mapping[str, Any]) -> Any:
+    """What fills this `bind:` line on this run, or nothing.
+
+    `None` means nothing filled it — reported by the caller, never passed on as
+    an empty string: an empty customer id is worse than a call that says out loud
+    that the identity never arrived.
+    """
+    namespace, name = _bind_source(written)
+    if namespace == REMEMBERS:
+        return spec.facts.value(name)
+    return supplied.get(name)
+
+
+def _keep_what_it_answered(spec: AgentSpec, call: "ToolCall", answered: str) -> None:
+    """Write this action's answer where `remember-as:` says to put it.
+
+    Looked up by the ACTION the call names, exactly as `_bound_args` looks up a
+    bind, so the two halves of one pair are addressed the same way.
+    """
+    tool = next((t for t in spec.tools if t.name == call.name), None)
+    if tool is None or not tool.remembers:
+        return
+    named = str(call.args.get("action") or "")
+    if named in tool.remembers:
+        where = tool.remembers[named]
+    elif "" in tool.remembers:
+        where = tool.remembers[""]
+    elif len(tool.remembers) == 1 and not named:
+        where = next(iter(tool.remembers.values()))
+    else:
+        return
+    spec.facts.record(where, answered)
+
+
 def _bound_args(spec: AgentSpec, call: "ToolCall", supplied: Mapping[str, Any]) -> dict[str, str]:
     """The author's `bind:` lines for this call, filled from `run-inputs`.
 
@@ -2813,9 +2913,9 @@ def _bound_args(spec: AgentSpec, call: "ToolCall", supplied: Mapping[str, Any]) 
         return {}
     out: dict[str, str] = {}
     for arg, source in wanted.items():
-        key = source.split(".", 1)[1] if source.startswith("run-inputs.") else source
-        if key in supplied:
-            out[arg] = str(supplied[key])
+        value = _bind_value(spec, source, supplied)
+        if value is not None:
+            out[arg] = str(value)
     return out
 
 
@@ -2830,13 +2930,24 @@ def _unfilled_binds(spec: AgentSpec, supplied: Mapping[str, Any]) -> tuple[str, 
     for tool in spec.tools:
         for action, wanted in sorted(tool.binds.items()):
             for arg, source in sorted(wanted.items()):
-                key = source.split(".", 1)[1] if source.startswith("run-inputs.") else source
-                if key in supplied:
+                if _bind_value(spec, source, supplied) is not None:
                     continue
+                namespace, key = _bind_source(source)
                 where = f"{tool.name}/{action}" if action else tool.name
+                # The namespace the AUTHOR wrote. It used to print
+                # `run-inputs.` in front of whatever was written, so a bind from
+                # memory was reported as `run-inputs.remembers.verified-account`
+                # and the fix it implied did not exist — the same defect the
+                # checker's own diagnostic goes out of its way to avoid, on the
+                # other side of the same field.
+                nothing = (
+                    "this conversation remembers nothing under"
+                    if namespace == REMEMBERS
+                    else "nothing supplied"
+                )
                 out.append(
-                    f"bind: {where} needs {arg!r} filled from `run-inputs.{key}`, "
-                    f"and nothing supplied {key!r} for this run — so the call is "
+                    f"bind: {where} needs {arg!r} filled from `{namespace}{key}`, "
+                    f"and {nothing} {key!r} for this run — so the call is "
                     f"made without it."
                 )
     return tuple(out)

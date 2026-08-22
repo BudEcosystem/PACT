@@ -60,6 +60,21 @@ class Fact:
     #: the run reports happening, not evaluated — a predicate language here
     #: would be a second way to say what `when-this` already says.
     stale_when: tuple[str, ...] = ()
+    #: Whether `survives-shortening: yes` was written.
+    #:
+    #: It used to decide whether the fact was HELD at all, and that was this
+    #: module reading its own name too narrowly. `remembers:` is the agent's
+    #: memory; a summary destroying the messages behind one entry is what this
+    #: flag is about, and every OTHER entry is still memory. Holding only the
+    #: pinned ones meant `bind: remembers.x` had nothing to read and
+    #: `remember-as:` had nowhere to write, on the two fields whose whole purpose
+    #: is to make memory a thing the format can name.
+    #:
+    #: Defaults to True because a `Fact` built directly, rather than read off a
+    #: document, is one somebody wrote out in order to pin it — which is what
+    #: every such construction in this repository means. `from_document` always
+    #: says which it is.
+    survives: bool = True
 
     def said(self, value: Any) -> str:
         """How the fact reads once the messages behind it are gone.
@@ -83,11 +98,14 @@ class Facts:
 
     @staticmethod
     def from_document(doc: Mapping[str, Any], agent_key: str) -> "Facts":
-        """Read `remembers:` and keep the entries that say they survive.
+        """Read `remembers:` — every entry, and what each one asks for.
 
-        A `state` entry with no `survives-shortening: yes` is ordinary session
-        memory and is none of this module's business — it is not lost by a
-        shortening, because it was never in the conversation to begin with.
+        It used to keep only the entries writing `survives-shortening: yes`, on
+        the argument that anything else "is none of this module's business". That
+        was true while this was only about a summary, and it stopped being true
+        the moment `bind: remembers.<n>` and `remember-as:` existed: those read
+        and write the agent's memory, and there was no memory here to read or
+        write. One store, and the flag decides only what a shortening re-states.
         """
         agents = doc.get("agents") or {}
         block = ((agents.get(agent_key) or {}).get("remembers")) or {}
@@ -95,13 +113,12 @@ class Facts:
         for name, raw in block.items():
             if not isinstance(raw, Mapping):
                 continue
-            if not said_yes(raw.get("survives-shortening")):
-                continue
             stale = raw.get("stops-being-true-when") or []
             out[str(name)] = Fact(
                 name=str(name),
                 description=str(raw.get("description") or name),
                 stale_when=tuple(str(s) for s in stale),
+                survives=said_yes(raw.get("survives-shortening")),
             )
         return Facts(declared=out)
 
@@ -126,8 +143,28 @@ class Facts:
                 self.forgotten.append(n)
         return gone
 
+    def value(self, name: str) -> Any:
+        """What this run knows under that name, or nothing.
+
+        The read half of the pair `record` is the write half of. Silent for a
+        name nobody declared, for the same reason `record` is: a fact the author
+        did not write down is not one this module may invent.
+        """
+        return self.held.get(name) if name in self.declared else None
+
     def surviving(self) -> list[tuple[Fact, Any]]:
-        return [(self.declared[n], v) for n, v in self.held.items() if n in self.declared]
+        """The facts a shortening must re-state — the pinned ones alone.
+
+        Filtered HERE rather than at the door, so ordinary memory is held without
+        being pushed back into a summarised conversation. An entry that never
+        said `survives-shortening: yes` is memory the author wanted kept, not
+        evidence they wanted repeated.
+        """
+        return [
+            (self.declared[n], v)
+            for n, v in self.held.items()
+            if n in self.declared and self.declared[n].survives
+        ]
 
     def restated(self, make_message) -> list[Any]:
         """One message per surviving fact, for the tail of a shortened history.

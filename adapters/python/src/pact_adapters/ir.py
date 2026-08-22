@@ -188,6 +188,14 @@ class ToolSpec:
     #: and never `customer-id`, so the identity of whoever the run was for never
     #: reached the call, and `RunResult.unenforced` said nothing.
     binds: dict[str, dict[str, str]] = field(default_factory=dict)
+    #: Per action, the `remembers:` name the answer is kept under — the author's
+    #: own `remember-as:` line, keyed the way `binds` is.
+    #:
+    #: The other direction of the same pair, and it shipped as a checker with no
+    #: runtime: `pact check` refused a tool writing where `never-from:` says no
+    #: tool may, while no run ever wrote anything at all. A guard biting on a
+    #: write that never happens is a guarantee about nothing.
+    remembers: dict[str, str] = field(default_factory=dict)
     #: WHERE this tool reaches — the one of `connect:`, `url:` and `says:` the
     #: author wrote, with the server a `connect:` names already resolved.
     #:
@@ -648,6 +656,7 @@ class AgentSpec:
                 description=_text(t.get("description", "")),
                 parameters=_takes(t),
                 binds=_binds(t),
+                remembers=_remembers(t),
                 # The whole `resources:` map is handed over, not the workspace:
                 # the resolution happens HERE, once, so that what crosses the
                 # boundary is a server an adapter can reach rather than a name it
@@ -870,17 +879,39 @@ def _takes(tool: dict[str, Any]) -> dict[str, Any]:
     `parameters` was `{}` by default and never assigned, so every tool in every
     workspace was offered with no arguments at all, and `inspects:`, `bind:` and
     `same-request-key:` all named arguments nothing declared.
+
+    A BOUND argument is left out, because `bind:`'s own help says the model
+    "cannot see them, name them, or change them" and the model sees exactly this
+    dict. It was in here, so on the shipped fixture the model was offered
+    `account` — the argument whose whole purpose is that the model does not
+    choose it — and could have written any value, which the author's own bind
+    then quietly overwrote. Offered-and-overwritten is the worst of the three
+    possible behaviours: the model spends a decision on a value that is thrown
+    away, and a reader of the trace cannot tell which one the tool got.
+
+    Left out only when EVERY action taking that argument binds it. One action
+    binding `account` and another taking it from the model is a real thing to
+    write, and the argument is still the second action's to fill.
     """
     out: dict[str, Any] = {}
     actions = tool.get("actions") or {}
     if isinstance(actions, dict):
+        asked: dict[str, int] = {}
+        bound: dict[str, int] = {}
         for name, action in sorted(actions.items()):
             if not isinstance(action, dict):
                 continue
             takes = action.get("takes") or {}
+            binds = action.get("bind") or {}
             if isinstance(takes, dict):
                 for arg, shape in takes.items():
                     out.setdefault(str(arg), str(shape))
+                    asked[str(arg)] = asked.get(str(arg), 0) + 1
+                    if isinstance(binds, dict) and str(arg) in binds:
+                        bound[str(arg)] = bound.get(str(arg), 0) + 1
+        for arg, times in asked.items():
+            if bound.get(arg, 0) == times:
+                out.pop(arg, None)
         if actions:
             # Which action, by name. It is how a call becomes `<tool>/<action>`,
             # which is what an approval rule guards and what `must-call-before:`
@@ -922,6 +953,25 @@ def _binds(tool: dict[str, Any]) -> dict[str, dict[str, str]]:
         bind = action.get("bind") or {}
         if isinstance(bind, dict) and bind:
             out[str(name)] = {str(k): str(v) for k, v in bind.items()}
+    return out
+
+
+def _remembers(tool: dict[str, Any]) -> dict[str, str]:
+    """One tool's `remember-as:` lines, per action.
+
+    Keyed the way `_binds` is, and for the same reason: two actions of one tool
+    keeping their answers under different names is an ordinary thing to write.
+    """
+    out: dict[str, str] = {}
+    actions = tool.get("actions") or {}
+    if not isinstance(actions, dict):
+        return out
+    for name, action in sorted(actions.items()):
+        if not isinstance(action, dict):
+            continue
+        named = action.get("remember-as")
+        if isinstance(named, str) and named.strip():
+            out[str(name)] = named.strip()
     return out
 
 

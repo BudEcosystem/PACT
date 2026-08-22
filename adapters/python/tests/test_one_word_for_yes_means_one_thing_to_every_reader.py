@@ -228,7 +228,16 @@ def _every_reader(tmp: Path, spelling: str) -> dict[str, bool]:
 
     return {
         # facts.py — the approval a `policy:` reads outlives the summary.
-        "survives-shortening": "payments-was-approved" in spec.facts.declared,
+        #
+        # Read off the FLAG, not off membership. Every declared `remembers:`
+        # entry is held now, because `bind: remembers.<n>` and `remember-as:`
+        # read and write the agent's memory and there has to be a memory for them
+        # to reach; what this word decides, and always decided, is whether a
+        # shortening puts the fact back.
+        "survives-shortening": any(
+            f.name == "payments-was-approved" and f.survives
+            for f in spec.facts.declared.values()
+        ),
         # resolve.py — the model filter keeps the requirement.
         "needs.images": "images" in needs_of(doc, "refund-desk")["capabilities"],
         # egress.py — speech is recognised as crossing the boundary.

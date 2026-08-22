@@ -30,8 +30,33 @@ through tools, memory, metrics, questions, interceptor sentences, routing
 | P5 learning widening | done, NOT as written — see below | `295db17` |
 | P6 `program` kind + sandbox + egress role | done; the egress half NOT as written — see below | `f1fbdc8`, this |
 | P7 executor | done as a SEAM, not an engine — see below | `c18fa28` |
-| P8 capability wiring | **done** — all 8 waves | `26993a1`, `3985b5d`, `6a62b4e`, `30e4efc`, `6c8aa91`, this |
+| P8 capability wiring | **done** — all 8 waves; wave 2's runtime landed later, see below | `26993a1`, `3985b5d`, `6a62b4e`, `30e4efc`, `6c8aa91`, this |
 | P9 self-authored lane | done, with one residual named below | this |
+
+**Five places this plan was wrong, and what was built instead.**
+
+*P8 wave 2 shipped a checker and called it a pair.* The commit said "memory
+becomes readable and writable from the format" and "together they are a variable
+a run can read and write". Measured: `bind: remembers.verified-account` filled
+NOTHING — `_bound_args` stripped only the `run-inputs.` prefix, so it looked up
+the literal key `"remembers.verified-account"` and the tool was called without the
+account — and `remember-as:` was read by no runtime at all, so the `never-from:`
+guard bit on a write that never happened. The sentence reporting the miss said
+`run-inputs.remembers.verified-account`, a namespace that does not exist.
+
+Three things were missing and all three are now built. The fact store held only
+entries writing `survives-shortening: yes`, so the fixture's own memory was not
+in it — every declared entry is held now and the flag decides only what a
+shortening RE-STATES, which is what it always meant. Nothing seeded the store —
+`remembered=` does, beside `run_inputs=` in `SUPPLIED_BY_THE_HOST`, because
+`lasts: one-conversation` outlives a single `run()`. And the write had nowhere
+safe to go — it happens after the interceptor chain, so a redaction rule sees the
+answer before the memory keeps it.
+
+One more thing the tests found on the way: a bound argument was in the dict the
+model is shown, while `bind:`'s own help says the model "cannot see them, name
+them, or change them". Offered-and-then-overwritten is the worst of the three
+possible behaviours.
 
 **Four places this plan was wrong, and what was built instead.**
 
