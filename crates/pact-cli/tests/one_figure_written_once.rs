@@ -269,3 +269,249 @@ fn a_circle_of_values_is_refused_with_the_circle_written_out() {
     assert!(said.contains("→"), "the circle is written out:\n{said}");
     let _ = std::fs::remove_dir_all(&dst);
 }
+
+/// An author's own `use:` key, in a slot the schema types `anything`, is data.
+///
+/// The defect this pins was found by an audit and reproduced: `looks_like_a_use`
+/// fired on ANY map carrying a `use` key, anywhere in the document, and
+/// `substitute` walked every node of every top-level key. So a workspace that
+/// had a `values/` folder at all hijacked the author's own data wherever it
+/// happened to use that word — `case.with:`, `case.expect:`, `metric.with:`,
+/// `knowledge.documents:` and `state.starts-as:` are all `anything`-typed, which
+/// is the schema saying *these keys are the author's, read them verbatim*. Two
+/// failure modes, and the quiet one is worse: a name that matches no figure was
+/// hard-refused, and a name that happened to match one was silently REPLACED.
+///
+/// `metric.with:`'s own help is the sharpest statement of the contract being
+/// broken — *"written exactly as its own documentation names them. Nothing is
+/// renamed and nothing is filled in for you"*.
+///
+/// So substitution is schema-aware: a `{use:}` is only a use site where the
+/// specification says a scalar belongs, and an `anything` slot is never
+/// descended into at all.
+///
+/// Mutation: drop the `Ty` from `substitute` and walk untyped — this refuses a
+/// document whose only mistake was using an ordinary English word as a key.
+#[test]
+fn an_authors_own_use_key_in_a_verbatim_slot_is_left_alone() {
+    let dst = broken(
+        "verbatim",
+        "one-figure-in-three-places",
+        &[(
+            "workspace.yaml",
+            "allow-egress: []",
+            "allow-egress: []\nevals:\n  description: checks\n  population: authored-enumeration\n  cases:\n    one:\n      when: a customer asks about an order\n      with:\n        use: the winter catalogue\n      expect: an answer\n",
+        )],
+    );
+    let (code, out, err) = run(&["check", &dst]);
+    let said = format!("{out}{err}");
+    assert_eq!(
+        code,
+        Some(0),
+        "an ordinary English word as an author's own key is not a reference:\n{said}"
+    );
+    assert!(!said.contains("loader/no-such-value"), "{said}");
+
+    // And it is still there, verbatim, rather than replaced or dropped.
+    let (_, shown, _) = run(&["show", &dst]);
+    let doc: serde_json::Value = serde_json::from_str(&shown).expect("JSON");
+    assert_eq!(
+        doc["evals"]["cases"]["one"]["with"]["use"], "the winter catalogue",
+        "the author's data reaches the document as written:\n{shown}"
+    );
+    let _ = std::fs::remove_dir_all(&dst);
+}
+
+/// And the quiet direction: a name that DOES match a figure is still not a
+/// reference when it sits in a verbatim slot.
+///
+/// This is the half that would never have been noticed — no diagnostic, no
+/// failure, just an author's own string replaced by a figure somewhere else in
+/// the tree.
+#[test]
+fn a_verbatim_slot_is_not_rewritten_even_when_the_name_matches_a_figure() {
+    let dst = broken(
+        "verbatim-match",
+        "one-figure-in-three-places",
+        &[(
+            "workspace.yaml",
+            "allow-egress: []",
+            "allow-egress: []\nevals:\n  description: checks\n  population: authored-enumeration\n  cases:\n    one:\n      when: a customer asks about an order\n      with:\n        use: spend-cap\n      expect: an answer\n",
+        )],
+    );
+    let (code, out, err) = run(&["check", &dst]);
+    assert_eq!(code, Some(0), "{out}{err}");
+    let (_, shown, _) = run(&["show", &dst]);
+    let doc: serde_json::Value = serde_json::from_str(&shown).expect("JSON");
+    assert_eq!(
+        doc["evals"]["cases"]["one"]["with"]["use"], "spend-cap",
+        "a figure's NAME is not a figure when the author wrote it as data:\n{shown}"
+    );
+    let _ = std::fs::remove_dir_all(&dst);
+}
+
+/// A figure cannot reach the model catalogue, and is refused where it is written.
+///
+/// `models:` is the one collection BOTH ports read directly rather than through
+/// the loaded document: `adapters/python/src/pact_adapters/resolve.py` opens
+/// `<workspace>/models/catalog.yaml` off disk with its own reader (D8, §4.2),
+/// because the catalogue is distribution data and the override layer is applied
+/// row by row rather than merged into the tree.
+///
+/// So a figure written there would be substituted by the Rust loader — making
+/// `pact check` pass — and NOT by the port that binds the model, which would see
+/// the raw map and read no id at all. That is the "free below the loader" claim
+/// failing in the one place it can, and the run would fail later, in another
+/// language, in a process the author never starts. Refused here instead, naming
+/// why.
+///
+/// Mutation: substitute under `models:` and this passes silently while the
+/// second port cannot read the catalogue it was handed.
+#[test]
+fn a_figure_cannot_reach_the_model_catalogue() {
+    let dst = broken(
+        "catalogue",
+        "one-figure-in-three-places",
+        &[(
+            "workspace.yaml",
+            "allow-egress: []",
+            "allow-egress: []\nvalues:\n  house-model:\n    description: the model every desk here shares\n    value: qwen2.5-7b-instruct\nmodels:\n  version: '1'\n  default: {use: house-model}\n",
+        )],
+    );
+    let (code, out, err) = run(&["check", &dst]);
+    let said = format!("{out}{err}");
+    assert_eq!(code, Some(1), "{said}");
+    assert!(said.contains("loader/a-figure-cannot-reach-the-catalogue"), "{said}");
+    assert!(said.contains("house-model"), "name the figure:\n{said}");
+    let _ = std::fs::remove_dir_all(&dst);
+}
+
+/// Every message this format prints reads as one sentence.
+///
+/// A `format!` string wrapped across source lines without a `\` continuation
+/// carries the source indentation into the sentence, and the author sees twenty
+/// spaces in the middle of the line telling them what to type. Four messages
+/// shipped that way and an audit found them; O7.3 makes the diagnostic the
+/// product surface, so this is a defect in the product rather than in the
+/// source.
+///
+/// Held here rather than at each site, because the next one will be written
+/// somewhere else.
+#[test]
+fn no_message_carries_the_indentation_of_the_file_it_was_written_in() {
+    let mut mangled: Vec<String> = Vec::new();
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../pact-loader/src");
+    for entry in std::fs::read_dir(&src).expect("the loader's source").flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("rs") {
+            continue;
+        }
+        let text = std::fs::read_to_string(&path).unwrap();
+        for (n, line) in text.lines().enumerate() {
+            // A string literal's interior, on one source line, holding a run of
+            // spaces between two words. Indentation is at the START of a line
+            // and is not this.
+            let trimmed = line.trim_start();
+            if !trimmed.starts_with('"') && !trimmed.starts_with("format!(") && !line.contains('"')
+            {
+                continue;
+            }
+            if let Some(body) = line.split('"').nth(1)
+                && body.trim_start().len() == body.len()
+                && body.contains("  ")
+                && body.trim().contains(' ')
+                // A fixture, not a sentence. Test modules hold YAML as string
+                // literals and YAML is indented, so a run of spaces there is the
+                // document rather than a mangled message. A diagnostic is one
+                // sentence of prose and never carries a newline.
+                && !body.contains("\\n")
+                && !body.contains(": ")
+            {
+                mangled.push(format!(
+                    "{}:{}: {}",
+                    path.file_name().unwrap().to_string_lossy(),
+                    n + 1,
+                    body.trim()
+                ));
+            }
+        }
+    }
+    assert!(
+        mangled.is_empty(),
+        "{} message(s) carry the indentation of the file they were written in — an author \
+         reading one sees a gap in the middle of the sentence. Add the missing `\\` line \
+         continuation:\n  {}",
+        mangled.len(),
+        mangled.join("\n  ")
+    );
+}
+
+/// The shapes a figure may declare are the shapes the specification offers.
+///
+/// `values:` is resolved and removed before the schema could hold anything
+/// against it, so the vocabulary is enforced in Rust — which means the two lists
+/// can drift, and a word the schema offers would be refused by the loader, or
+/// the reverse. Held equal here.
+#[test]
+fn a_figure_may_declare_exactly_the_shapes_the_specification_offers() {
+    let text = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/schema.yaml"),
+    )
+    .unwrap();
+    let doc = pact_doc::parse_yaml(&text, camino::Utf8Path::new("spec/schema.yaml")).unwrap();
+    let choices = doc
+        .get("groups")
+        .and_then(|g| g.get("value"))
+        .and_then(|v| v.get("fields"))
+        .and_then(|f| f.get("shape"))
+        .and_then(|s| s.get("choices"))
+        .and_then(pact_doc::Node::as_list)
+        .expect("`value.shape` declares its choices");
+    let offered: Vec<String> =
+        choices.iter().filter_map(|c| c.as_str().map(str::to_owned)).collect();
+
+    // Every word the specification offers is one the loader can read, checked
+    // through the real binary: a figure declaring it must load.
+    for word in &offered {
+        let dst =
+            std::env::temp_dir().join(format!("pact-shape-{word}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dst);
+        std::fs::create_dir_all(dst.join("agents/desk")).unwrap();
+        std::fs::write(
+            dst.join("workspace.yaml"),
+            format!(
+                "name: shapes\nworkspace-id: 01JEQ8Z3M4N5P6Q7R8S9T0V7X7\n\
+                 description: one shape.\nowner: platform\nallow-egress: []\n\
+                 values:\n  it:\n    description: a figure\n    shape: {word}\n\
+                 \x20   value: {}\n",
+                example_for(word)
+            ),
+        )
+        .unwrap();
+        std::fs::write(
+            dst.join("agents/desk/agent.yaml"),
+            "description: A desk.\ninstructions: Answer briefly.\nname: {use: it}\n",
+        )
+        .unwrap();
+        let (_, out, err) = run(&["check", dst.to_str().unwrap()]);
+        assert!(
+            !format!("{out}{err}").contains("not a kind of figure this format knows"),
+            "the specification offers `{word}` and the loader does not know it:\n{out}{err}"
+        );
+        let _ = std::fs::remove_dir_all(&dst);
+    }
+}
+
+/// A figure of each declared shape, written the way an author would.
+fn example_for(shape: &str) -> &'static str {
+    match shape {
+        "money" => "0.05 USD",
+        "duration" => "30s",
+        "percent" => "80%",
+        "size" => "32k",
+        "number" => "1.5",
+        "whole-number" => "4",
+        "yes-or-no" => "yes",
+        _ => "some words",
+    }
+}

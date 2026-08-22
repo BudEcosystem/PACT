@@ -4060,15 +4060,18 @@ groups:
           - bundles
           - interceptors
           - watch
-          # A shared figure. A bundle that ships a compliance retention period or
-          # a house spend cap ships it here, and the workspace's own documents
-          # write `{use: <name>}` against it exactly as they would against one of
-          # their own — the substitution happens after mounting, so a bundle's
-          # figure and a local one are indistinguishable by the time anything
-          # reads them. Listed because `what_a_bundle_may_bring_is_what_a_
-          # workspace_can_hold` holds this list equal to the workspace's own
-          # collections: a kind absent from here is not narrower governance, it
-          # is a kind `brings:` is blind to.
+          # A shared figure — a compliance retention period, a house spend cap.
+          #
+          # Listed because `what_a_bundle_may_bring_is_what_a_workspace_can_hold`
+          # holds this list equal to the workspace's own collections: a kind
+          # absent from here is not narrower governance, it is a kind `brings:`
+          # is blind to, which is the defect that made `watch` unreachable.
+          #
+          # What a bundle DECLARES it brings is checked. What it contributes is
+          # not yet merged into the workspace's own collections — for any kind:
+          # a bundle's tool is not nameable by `uses:` either, and its figure is
+          # not nameable by `{use:}`. Mounting is the half that is unbuilt (§6),
+          # and it is unbuilt uniformly rather than for this kind in particular.
           - values
         required: yes
         surface: S-EXEC

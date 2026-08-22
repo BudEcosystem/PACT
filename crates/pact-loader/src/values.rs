@@ -50,20 +50,60 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use pact_diag::{Diagnostic, Diagnostics};
 use pact_doc::{Node, Value};
-use pact_schema::Ty;
+use pact_schema::{Schema, Ty};
 
 /// The workspace field holding the figures.
 const COLLECTION: &str = "values";
+/// The one collection a figure may not reach.
+///
+/// `models:` is distribution data, and it is the one thing BOTH ports read
+/// DIRECTLY rather than through the loaded document — `resolve.py` opens
+/// `<workspace>/models/catalog.yaml` off disk with its own reader, because the
+/// override layer is applied row by row (D8, §4.2). A figure written there would
+/// be substituted here, making `pact check` pass, and not there, where the model
+/// is actually bound. The whole claim of this pass is that a tree using figures
+/// and a tree written longhand are one document for everything downstream, and
+/// this is the one key where that would be false.
+const READ_DIRECTLY: &str = "models";
 /// The one key a use site carries.
 const USE: &str = "use";
 
+/// Whether a figure may stand where this type belongs.
+///
+/// SCALARS ONLY, and the exclusion is the point. `Ty::Anything` is the
+/// specification saying *these keys are the author's own, read them verbatim* —
+/// `case.with:`, `case.expect:`, `metric.with:`, `knowledge.documents:` and
+/// `state.starts-as:` are all typed that way, and `metric.with:`'s own help is
+/// the sharpest statement of the contract: "written exactly as its own
+/// documentation names them. Nothing is renamed and nothing is filled in for
+/// you". A word an author used as a key is not a reference because this feature
+/// exists.
+fn a_figure_can_stand_here(ty: &Ty) -> bool {
+    matches!(
+        ty,
+        Ty::Text
+            | Ty::YesNo
+            | Ty::Number
+            | Ty::Integer
+            | Ty::Duration
+            | Ty::Money
+            | Ty::Percent
+            | Ty::Threshold
+            | Ty::Size
+            | Ty::FileName
+            | Ty::AnswerShape(_)
+            | Ty::OneOf(_)
+            | Ty::EventAddress(_, _)
+    )
+}
+
 /// Resolve every `{use: <name>}` in the document, in place, then drop `values:`.
-pub fn resolve(root: &mut Node, diags: &mut Diagnostics) {
+pub fn resolve(root: &mut Node, schema: &Schema, diags: &mut Diagnostics) {
     let Some(top) = root.as_map_mut() else { return };
     if top.get(COLLECTION).is_none() {
         // The overwhelmingly common case, and it must cost nothing: a tree that
         // writes no values is not walked at all, so P1 cannot change the meaning
-        // of a document that never opted in.
+        // of a document that never opted in. \
         return;
     }
 
@@ -72,18 +112,37 @@ pub fn resolve(root: &mut Node, diags: &mut Diagnostics) {
         None => {
             // The definitions could not be read. Every use site would then draw
             // a second, misleading refusal naming a value that was never the
-            // problem — `derive.rs` makes the same call for the same reason.
+            // problem — `derive.rs` makes the same call for the same reason. \
             top.shift_remove(COLLECTION);
             return;
         }
     };
 
+    // A TYPED walk from the workspace down, so a `{use:}` is only ever read as
+    // one where the specification says a scalar belongs. Walking untyped meant
+    // any map carrying the word `use` was a reference wherever it sat, which
+    // hijacked the author's own data in every `anything`-typed slot — refusing
+    // it when the name matched no figure, and silently REPLACING it when it did.
     let mut used: BTreeSet<String> = BTreeSet::new();
+    let workspace = schema.group("workspace").cloned();
     for (key, entry) in top.iter_mut() {
         if key == COLLECTION {
             continue;
         }
-        substitute(&mut entry.node, &figures, &mut used, diags);
+        if key == READ_DIRECTLY {
+            refuse_under_the_catalogue(&entry.node, diags, 0);
+            continue;
+        }
+        let ty = workspace
+            .as_ref()
+            .and_then(|g| g.fields.iter().find(|f| f.name == *key || f.aliases.contains(key)))
+            .map(|f| f.ty.clone());
+        // A key the specification does not know is left alone: `x-` blocks
+        // round-trip untouched (AD-14), and an unknown field is the schema's
+        // refusal to make, not this pass's. \
+        if let Some(ty) = ty {
+            substitute(&mut entry.node, &ty, schema, &figures, &mut used, diags, 0);
+        }
     }
 
     // A figure nothing reads. The generic `nothing-points-at-it` check cannot
@@ -145,7 +204,7 @@ fn figure(
 ) -> Result<Node, Box<Diagnostic>> {
     let Some(entry) = defs.get(name) else {
         // Reached when one figure is built from another that is not there. The
-        // span is the line that referred to it, which is the line to change.
+        // span is the line that referred to it, which is the line to change. \
         return Err(Box::new(Diagnostic::error(
             "loader/no-such-value",
             at.clone(),
@@ -157,9 +216,21 @@ fn figure(
     if definition.as_map().is_none() {
         return Ok(definition.clone());
     }
+    // `value.value` is `required: yes` in the specification and the requirement
+    // could never fire: `values:` is removed before the schema sees it, so the
+    // whole group's annotations were decoration (R41 — an unvalidated group is
+    // an unclassified group). The two checks the group really makes are made
+    // here instead, at the definition, which is where the wrong line is.
     let Some(held) = definition.get("value") else {
-        // `value:` is `required: yes`; the schema says so where the author is.
-        return Ok(definition.clone());
+        return Err(Box::new(Diagnostic::error(
+            "loader/a-figure-with-nothing-in-it",
+            entry.key_span.clone(),
+            format!("'{name}' is a figure with no figure in it."),
+            format!(
+                "Add a line: `value: ...` under `{name}:` — the figure itself, written the way \
+                 you would write it where it is used."
+            ),
+        )));
     };
 
     // A circle has no bottom. Written out with arrows, the way `derive.rs`
@@ -195,6 +266,19 @@ fn figure(
 
     // The declared shape, held against the figure. Optional to write; a claim
     // once written, and a claim nothing holds is decoration.
+    // A word this format does not know turned the check OFF in silence, which
+    // is worse than having no check: the author wrote a claim and was told
+    // nothing about it.
+    if let Some(written) = definition.get("shape").and_then(Node::as_str)
+        && ty_of(written).is_none()
+    {
+        return Err(Box::new(Diagnostic::error(
+            "loader/not-a-shape-a-figure-can-have",
+            definition.get("shape").map_or_else(|| entry.key_span.clone(), |n| n.span.clone()),
+            format!("'{written}' is not a kind of figure this format knows."),
+            format!("Use one of: {}.", SHAPES.join(", ")),
+        )));
+    }
     if let Some(ty) = definition.get("shape").and_then(Node::as_str).and_then(ty_of)
         && pact_schema::coerce::check(&resolved, &ty).is_none()
     {
@@ -211,12 +295,26 @@ fn figure(
     Ok(resolved)
 }
 
-/// The scalar vocabulary a value may declare, as the author spells it.
+/// The words `value.shape` accepts, and what each one means.
 ///
 /// Deliberately the SETTING types and not the answer shapes: a value stands
-/// where a setting stands, and no answer is ever a length of time. The list is
-/// the schema's own `choices:` on `value.shape`, and a word outside it never
-/// reaches here — the schema refuses it first.
+/// where a setting stands, and no answer is ever a length of time.
+///
+/// The specification carries the same list as `value.shape`'s `choices:`, and
+/// this is not a second copy that can drift from it — the collection is removed
+/// before the schema could hold anything against it, so THIS is where the
+/// vocabulary is enforced, and a test holds the two equal.
+pub(crate) const SHAPES: &[&str] = &[
+    "text",
+    "yes-or-no",
+    "number",
+    "whole-number",
+    "duration",
+    "money",
+    "percent",
+    "size",
+];
+
 pub(crate) fn ty_of(shape: &str) -> Option<Ty> {
     Some(match shape {
         "text" => Ty::Text,
@@ -246,13 +344,58 @@ fn looks_like_a_use(node: &Node) -> bool {
     node.as_map().is_some() && node.get(USE).is_some()
 }
 
+/// A figure written where the catalogue is read directly, refused by name.
+fn refuse_under_the_catalogue(node: &Node, diags: &mut Diagnostics, depth: usize) {
+    if depth > 16 {
+        return;
+    }
+    if let Some(name) = names_a_value(node) {
+        diags.push(Diagnostic::error(
+            "loader/a-figure-cannot-reach-the-catalogue",
+            node.span.clone(),
+            format!(
+                "'{name}' is a figure, and a figure cannot stand inside `models:` — the model \
+                 catalogue is read straight off disk by whatever runs your agents, so a figure \
+                 here would be filled in when the tree is checked and not when a model is \
+                 bound."
+            ),
+            "Write the id itself here. A figure is for the lines an agent writes, not for the \
+             catalogue."
+                .to_string(),
+        ));
+        return;
+    }
+    match &node.value {
+        Value::Map(map) => {
+            for (_, entry) in map {
+                refuse_under_the_catalogue(&entry.node, diags, depth + 1);
+            }
+        }
+        Value::List(items) => {
+            for item in items {
+                refuse_under_the_catalogue(item, diags, depth + 1);
+            }
+        }
+        _ => {}
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn substitute(
     node: &mut Node,
+    ty: &Ty,
+    schema: &Schema,
     figures: &BTreeMap<String, Node>,
     used: &mut BTreeSet<String>,
     diags: &mut Diagnostics,
+    depth: usize,
 ) {
-    if looks_like_a_use(node) {
+    // The specification is shallow and acyclic; the cap is a backstop against a
+    // group that names itself, not a design.
+    if depth > 16 {
+        return;
+    }
+    if looks_like_a_use(node) && a_figure_can_stand_here(ty) {
         let map = node.as_map().expect("checked");
         let keys: Vec<String> = map.keys().cloned().collect();
         if keys.len() != 1 {
@@ -312,16 +455,57 @@ fn substitute(
         return;
     }
 
-    match &mut node.value {
-        Value::Map(map) => {
-            for (_, entry) in map.iter_mut() {
-                substitute(&mut entry.node, figures, used, diags);
+    // Otherwise walk INTO it, guided by the type. `Ty::Anything` is deliberately
+    // absent from every arm below: nothing under it is ever descended into, so
+    // an author's own keys are read exactly as written.
+    match (&mut node.value, ty) {
+        (Value::Map(map), Ty::Group(kind)) => {
+            let Some(group) = schema.group(kind).cloned() else { return };
+            for (key, entry) in map.iter_mut() {
+                // A pattern's arguments. `with:` is not a field of any group —
+                // it is stripped before the schema sees it, like `based-on:` —
+                // so a typed walk would step straight past it and a figure
+                // handed to a pattern would never be filled in. Each argument is
+                // a scalar slot: `an-argument-is-a-figure-not-a-block` is what
+                // makes that true rather than assumed. \
+                if key == crate::templates::WITH {
+                    if let Some(args) = entry.node.as_map_mut() {
+                        for (_, arg) in args.iter_mut() {
+                            substitute(
+                                &mut arg.node,
+                                &Ty::Text,
+                                schema,
+                                figures,
+                                used,
+                                diags,
+                                depth + 1,
+                            );
+                        }
+                    }
+                    continue;
+                }
+                let Some(field) =
+                    group.fields.iter().find(|f| f.name == *key || f.aliases.contains(key))
+                else {
+                    continue;
+                };
+                substitute(&mut entry.node, &field.ty, schema, figures, used, diags, depth + 1);
             }
         }
-        Value::List(items) => {
-            for item in items.iter_mut() {
-                substitute(item, figures, used, diags);
+        (Value::Map(map), Ty::MapOf(inner)) => {
+            for (_, entry) in map.iter_mut() {
+                substitute(&mut entry.node, inner, schema, figures, used, diags, depth + 1);
             }
+        }
+        (Value::List(items), Ty::ListOf(inner)) => {
+            for item in items.iter_mut() {
+                substitute(item, inner, schema, figures, used, diags, depth + 1);
+            }
+        }
+        // A single value where a list belongs is accepted everywhere else in
+        // this format (FR-1.4.7), so a figure may stand there too.
+        (_, Ty::ListOf(inner)) => {
+            substitute(node, inner, schema, figures, used, diags, depth + 1);
         }
         _ => {}
     }

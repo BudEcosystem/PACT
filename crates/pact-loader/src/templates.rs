@@ -119,7 +119,7 @@ pub(crate) fn holes_of(node: &Node, into: &mut BTreeSet<String>) {
         Value::Map(m) => {
             for (key, entry) in m {
                 // A hole in a KEY is refused rather than filled (rule 1), and it
-                // is collected here so the refusal can name it.
+                // is collected here so the refusal can name it. \
                 into.extend(holes_in(key));
                 holes_of(&entry.node, into);
             }
@@ -166,7 +166,7 @@ pub(crate) fn arguments(
     let Some(declared) = declared else {
         // Not a pattern. `with:` on an ordinary base has nothing to fill, and
         // saying so beats letting the schema call `with` an unknown field on a
-        // document whose real mistake is that its base takes no arguments.
+        // document whose real mistake is that its base takes no arguments. \
         if supplied.is_some() {
             return Err(Box::new(Diagnostic::error(
                 "loader/arguments-with-no-pattern",
@@ -203,6 +203,55 @@ pub(crate) fn arguments(
         }
     }
 
+    // Rule 1 holds against the CALLER, not only against the pattern. `fill`
+    // splices an argument's value in whole where a value is exactly one hole, so
+    // a Map argument would land where a Map was never written — and the
+    // governance surface of what a pattern makes would be decided by whoever
+    // called it, which is the property this rule exists to deny (LOAD-13).
+    //
+    // A hole inside an argument is refused for the mirror reason: a caller
+    // writes figures, not templates. The one exception is a pattern FORWARDING
+    // its own parameter — `with: {domain: <domain>}` on an entry that itself
+    // declares `domain` — which is how a chain of patterns passes a value down,
+    // and is checkable because the caller's own declarations are right here.
+    let forwards = parameters(caller);
+    for (given, entry) in supplied_map {
+        if as_text(&entry.node).is_none() {
+            return Err(Box::new(Diagnostic::error(
+                "loader/an-argument-is-a-figure-not-a-block",
+                entry.node.span.clone(),
+                format!(
+                    "'{given}' here is a set of settings, and an argument to a pattern is a \
+                     figure — a pattern may say what a setting IS, and never what settings \
+                     there are."
+                ),
+                format!(
+                    "Write a single figure for `{given}:`. To change the shape of what \
+                     '{base_name}' makes, edit the pattern itself."
+                ),
+            )));
+        }
+        if let Some(text) = entry.node.as_str() {
+            let loose: Vec<String> =
+                holes_in(text).into_iter().filter(|h| !forwards.contains(h)).collect();
+            if !loose.is_empty() {
+                return Err(Box::new(Diagnostic::error(
+                    "loader/an-argument-is-not-a-pattern",
+                    entry.node.span.clone(),
+                    format!(
+                        "'{given}' here carries {}, and an argument is a figure rather than \
+                         something with holes left in it.",
+                        loose.iter().map(|h| format!("`<{h}>`")).collect::<Vec<_>>().join(", ")
+                    ),
+                    "Write the words out. A hole is only passed on when this entry declares it \
+                     under its own `expects:` — that is how one pattern hands a figure down to \
+                     another."
+                        .to_string(),
+                )));
+            }
+        }
+    }
+
     for (want, spec) in declared {
         let Some(given) = supplied_map.get(want.as_str()) else {
             let what = spec
@@ -224,7 +273,7 @@ pub(crate) fn arguments(
 
         // The declared shape, held where the argument was written. Same
         // vocabulary a shared figure declares, for the same reason: a claim
-        // nothing holds is decoration.
+        // nothing holds is decoration. \
         if let Some(ty) = spec.node.get("shape").and_then(Node::as_str).and_then(crate::values::ty_of)
             && pact_schema::coerce::check(&given.node, &ty).is_none()
         {

@@ -269,3 +269,141 @@ fn an_argument_may_be_a_shared_figure() {
     );
     let _ = std::fs::remove_dir_all(&dst);
 }
+
+/// Rule 1 holds against the CALLER too: an argument is a figure, not a block.
+///
+/// The rule the whole feature is defended with — *"holes fill VALUES, never
+/// keys, never structure"* — was checked against the PATTERN and never against
+/// what a caller handed it. `fill`'s exactly-one-hole branch splices the
+/// argument's value in whole, so a Map argument landed where a Map was never
+/// written: the caller, not the pattern, decided the governance surface of the
+/// result, which is exactly the property the rule exists to deny. Found by
+/// audit.
+///
+/// Mutation: accept a non-scalar argument and a caller can manufacture fields
+/// the classifier has never seen (LOAD-13).
+#[test]
+fn an_argument_is_a_figure_and_not_a_block_of_settings() {
+    let dst = broken(
+        "block-arg",
+        "two-desks-one-pattern",
+        &[("agents/refunds/agent.yaml", "  daily-cap: 0.05 USD", "  daily-cap:\n    run-arbitrary: yes\n    cost-per-request-under: 0.05 USD")],
+    );
+    let (code, out, err) = run(&["check", &dst]);
+    let said = format!("{out}{err}");
+    assert_eq!(code, Some(1), "{said}");
+    assert!(said.contains("loader/an-argument-is-a-figure-not-a-block"), "{said}");
+    assert!(said.contains("daily-cap"), "name the parameter:\n{said}");
+    let _ = std::fs::remove_dir_all(&dst);
+}
+
+/// A hole inside an ARGUMENT is not a hole, and is refused.
+///
+/// The other direction of the same rule: `fill` walks the merged document, so
+/// text a caller supplied is walked too — and an argument whose own text carries
+/// `<something>` would be filled by a later parameter. A caller writes figures,
+/// not templates.
+#[test]
+fn a_hole_inside_an_argument_is_refused() {
+    let dst = broken(
+        "hole-arg",
+        "two-desks-one-pattern",
+        &[("agents/refunds/agent.yaml", "  domain: refunds", "  domain: refunds for <domain>")],
+    );
+    let (code, out, err) = run(&["check", &dst]);
+    let said = format!("{out}{err}");
+    assert_eq!(code, Some(1), "{said}");
+    assert!(said.contains("loader/an-argument-is-not-a-pattern"), "{said}");
+    let _ = std::fs::remove_dir_all(&dst);
+}
+
+/// A pattern built on a pattern is still a pattern, and still leaves the tree.
+///
+/// `derive_one` stripped `expects:` from the merged result unconditionally,
+/// which is right for the BASE's declarations and wrong for the deriving
+/// entry's own. An entry that both derives from a pattern and declares its own
+/// parameters therefore stopped being a pattern before the removal pass looked,
+/// so it survived into the document carrying literal unfilled `<holes>` — a
+/// document nobody wrote and nothing could run. Found by audit.
+///
+/// Mutation: strip the deriving entry's own `expects:` again and a half-filled
+/// pattern ships in `canonical.json`.
+#[test]
+fn a_pattern_built_on_a_pattern_is_still_a_pattern() {
+    let dst = broken(
+        "pattern-on-pattern",
+        "two-desks-one-pattern",
+        &[
+            // A middle layer: fixes the cap, still expects the domain.
+            ("agents/refunds/agent.yaml",
+             "based-on: desk-pattern\nwith:\n  domain: refunds\n  daily-cap: 0.05 USD\n",
+             "based-on: desk-pattern\nexpects:\n  domain:\n    shape: text\n    help: what this desk answers about\nwith:\n  domain: <domain>\n  daily-cap: 0.05 USD\n"),
+            // And a leaf built on the middle layer.
+            ("agents/returns/agent.yaml",
+             "based-on: desk-pattern\nwith:\n  domain: returns\n  daily-cap: 0.10 USD\n",
+             "based-on: refunds\nwith:\n  domain: returns\n"),
+        ],
+    );
+    let (code, out, err) = run(&["check", &dst]);
+    let said = format!("{out}{err}");
+    assert_eq!(code, Some(0), "a pattern chain is legal:\n{said}");
+
+    let (_, shown, _) = run(&["show", &dst]);
+    let doc: serde_json::Value = serde_json::from_str(&shown).expect("JSON");
+    let agents = doc["agents"].as_object().expect("agents");
+    assert!(!agents.contains_key("desk-pattern"), "the root pattern is gone:\n{shown}");
+    assert!(
+        !agents.contains_key("refunds"),
+        "and so is the middle one — it declares `expects:`, so it is a way of making a desk:\n{shown}"
+    );
+    assert!(agents.contains_key("returns"), "the leaf is the only desk:\n{shown}");
+    assert!(
+        !shown.contains('<'),
+        "and no unfilled hole survives into the document:\n{shown}"
+    );
+    assert_eq!(agents["returns"]["description"], "A desk that answers questions about returns.");
+    let _ = std::fs::remove_dir_all(&dst);
+}
+
+/// A figure whose `shape:` word is not one the format knows is refused.
+///
+/// `values:` is stripped before the schema sees it, so the `value` group's own
+/// `choices:` never fired: a misspelt `shape:` turned OFF the only check that
+/// line exists to perform, in silence. That is R41's shape — an unvalidated
+/// group is an unclassified group — and it is refused here, at the definition,
+/// because that is where the wrong word is.
+#[test]
+fn a_figure_whose_shape_is_not_a_shape_is_refused() {
+    let dst = broken(
+        "bad-shape",
+        "two-desks-longhand",
+        &[("workspace.yaml", "allow-egress: []", "allow-egress: []\nvalues:\n  cap:\n    description: a figure\n    shape: munny\n    value: 0.05 USD\n")],
+    );
+    let (code, out, err) = run(&["check", &dst]);
+    let said = format!("{out}{err}");
+    assert_eq!(code, Some(1), "{said}");
+    assert!(said.contains("loader/not-a-shape-a-figure-can-have"), "{said}");
+    assert!(said.contains("munny"), "the word they typed:\n{said}");
+    assert!(said.contains("money"), "and the ones that work:\n{said}");
+    let _ = std::fs::remove_dir_all(&dst);
+}
+
+/// A figure with no figure in it is refused at the definition.
+///
+/// `value.value` is `required: yes` in the specification and the requirement
+/// never fired, because the collection is removed before validation. The
+/// definition site is where it is missing, so that is where it is said.
+#[test]
+fn a_figure_with_nothing_in_it_is_refused() {
+    let dst = broken(
+        "no-value",
+        "two-desks-longhand",
+        &[("workspace.yaml", "allow-egress: []", "allow-egress: []\nvalues:\n  cap:\n    description: a figure nobody finished writing\n")],
+    );
+    let (code, out, err) = run(&["check", &dst]);
+    let said = format!("{out}{err}");
+    assert_eq!(code, Some(1), "{said}");
+    assert!(said.contains("loader/a-figure-with-nothing-in-it"), "{said}");
+    assert!(said.contains("cap"), "{said}");
+    let _ = std::fs::remove_dir_all(&dst);
+}

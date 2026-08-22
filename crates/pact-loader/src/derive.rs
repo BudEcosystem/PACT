@@ -110,10 +110,10 @@ fn resolve_collection(kind: &str, entries: &mut Map, diags: &mut Diagnostics) {
                 "loader/arguments-with-no-pattern",
                 at,
                 format!(
-                    "'{name}' supplies arguments and is based on nothing, so there is no                      pattern for them to fill."
+                    "'{name}' supplies arguments and is based on nothing, so there is no pattern for them to fill."
                 ),
                 format!(
-                    "Add `based-on: <pattern>` naming something in `{kind}:` that declares                      `expects:`, or remove the `with:` block."
+                    "Add `based-on: <pattern>` naming something in `{kind}:` that declares `expects:`, or remove the `with:` block."
                 ),
             ));
         }
@@ -131,7 +131,7 @@ fn resolve_collection(kind: &str, entries: &mut Map, diags: &mut Diagnostics) {
             // was never going to restate, a required `may:` likewise, and
             // `'based-on' is not something an interceptor can have`, which is
             // only true because resolution failed. Removing it here is the same
-            // move `not_a_workspace` makes in the CLI, for the same reason.
+            // move `not_a_workspace` makes in the CLI, for the same reason. \
             entries.shift_remove(name);
         }
     }
@@ -156,10 +156,10 @@ fn resolve_collection(kind: &str, entries: &mut Map, diags: &mut Diagnostics) {
                 "loader/nothing-uses-this-pattern",
                 crate::templates::where_it_is(&entry.key_span),
                 format!(
-                    "'{name}' is a pattern nothing here is based on, so nothing is made from                      it — the file loads, and no document comes out of it."
+                    "'{name}' is a pattern nothing here is based on, so nothing is made from it — the file loads, and no document comes out of it."
                 ),
                 format!(
-                    "Write `based-on: {name}` with a `with:` block on something in `{kind}:`,                      or delete it."
+                    "Write `based-on: {name}` with a `with:` block on something in `{kind}:`, or delete it."
                 ),
             ));
         }
@@ -183,7 +183,7 @@ fn derive_one(
     let base_name = base_name.trim().to_owned();
     if base_name.is_empty() || base_name.starts_with("pact:") {
         // A library shape. `loops.rs` owns those; this pass only joins entries
-        // that live in the same tree.
+        // that live in the same tree. \
         return Ok(());
     }
 
@@ -266,7 +266,7 @@ fn derive_one(
         // Replacement is the rule — shallow, so narrowing stays expressible —
         // and replacing a whole BLOCK is said out loud, naming what fell out
         // of it: "removal expressible" and "removal silent" are different
-        // sentences (C8 §7 D-1).
+        // sentences (C8 §7 D-1). \
         if let (Some(base_had), Some(own_map)) = (merged.get(k), v.node.as_map())
             && let Some(base_inner) = base_had.node.as_map()
         {
@@ -296,9 +296,18 @@ fn derive_one(
         merged.insert(k.clone(), v.clone());
     }
     merged.shift_remove("based-on");
-    // The declarations belong to the pattern, not to what it made.
+    // The BASE's declarations belong to the base, not to what it made — but the
+    // deriving entry's OWN `expects:` is its own, and an entry that both derives
+    // from a pattern and declares parameters of its own is still a pattern.
+    // Stripping both left such an entry looking like an ordinary document, so
+    // the removal pass walked past it and it shipped into `canonical.json`
+    // carrying literal unfilled holes: a document nobody wrote and nothing could
+    // run.
     merged.shift_remove(crate::templates::EXPECTS);
     merged.shift_remove(crate::templates::WITH);
+    if let Some(mine) = own.get(crate::templates::EXPECTS) {
+        merged.insert(crate::templates::EXPECTS.to_string(), mine.clone());
+    }
 
     if let Some(slot) = entries.get_mut(name) {
         let keep = slot.node.span.clone();
@@ -386,7 +395,7 @@ mod tests {
     #[test]
     fn the_based_on_line_is_gone_once_it_is_resolved() {
         // So a derived document reads like one written out longhand, and its
-        // digest is comparable with an expanded tree's.
+        // digest is comparable with an expanded tree's. \
         let mut root = doc(&[
             ("base", map(&[("description", "a")])),
             ("derived", map(&[("based-on", "base")])),
@@ -519,7 +528,7 @@ mod tests {
             w.message
         );
         // The replacement itself still holds — the warning reports it, it
-        // does not undo it.
+        // does not undo it. \
         let limits = agent(&root, "desk").get("limits").unwrap().node.as_map().unwrap().clone();
         assert!(limits.get("steps-at-most").is_some());
         assert!(limits.get("cost-per-request-under").is_none());
@@ -547,7 +556,7 @@ mod tests {
     #[test]
     fn deriving_from_a_base_does_not_make_you_one() {
         // The strip asserts on a key the schema has not met yet — legal here,
-        // derive runs before validation.
+        // derive runs before validation. \
         let (root, d) = resolved(
             "agents:\n\
              \x20 house:\n\

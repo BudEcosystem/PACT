@@ -1436,7 +1436,7 @@ fn validate(
     // tree that wrote it out longhand are one document — same shape, same
     // digest, and nothing below this line ever learns the feature exists.
     if let Some(root) = node.as_mut() {
-        pact_loader::values::resolve(root, &mut diags);
+        pact_loader::values::resolve(root, &spec, &mut diags);
     }
 
     if let Some(root) = node.as_mut() {
