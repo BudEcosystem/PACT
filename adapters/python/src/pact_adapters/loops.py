@@ -31,7 +31,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 
 class LoopError(ValueError):
@@ -56,6 +56,11 @@ class Does(str, Enum):
 
 #: The finish line. Reserved: a stage may not be called this.
 DONE = "done"
+
+#: Keys of `then:` that are not outcomes. They say who decides where a stage goes
+#: and which stages it may pick between, rather than naming a way the stage
+#: ended — so the outcome vocabulary stays the closed three it has always been.
+ROUTING_KEYS: frozenset[str] = frozenset({"decided-by", "may-go-to"})
 
 #: Everything a stage can end in. Closed (see the module note).
 OUTCOMES = ("used-a-tool", "answered", "too-many-times")
@@ -96,6 +101,11 @@ class Phase:
     says: str = ""
     may_use: tuple[str, ...] | None = None
     at_most: int | None = None
+    #: A carried program that says where to go next, and the stages it may pick
+    #: between (P8 wave 7). Empty for every ordinary stage, which is why nothing
+    #: about the three-outcome table changes.
+    decided_by: str = ""
+    may_go_to: tuple[str, ...] = ()
     #: For a `does: ask-someone` stage, the question it puts to a person, by
     #: name. Without it the stage parks carrying wording and nothing else — no
     #: audience, no deadline, no shape for the answer — which from the outside
@@ -156,7 +166,13 @@ class Loop:
                 f"`{name}:` stage under `steps:`."
             ) from None
 
-    def route(self, phase: Phase, outcome: str) -> str:
+    def route(
+        self,
+        phase: Phase,
+        outcome: str,
+        run_program: "Callable[[str, dict[str, Any]], str] | None" = None,
+        said: str = "",
+    ) -> str:
         """Where a stage goes next, given how it ended.
 
         `answered` with nowhere to go means finished. That is the one outcome
@@ -172,6 +188,37 @@ class Loop:
         is what `examples/refund-desk/loops/careful.yaml` relies on; the
         schema's help under `then:` says it in the author's own words.
         """
+        # A carried program decides, among the stops the author declared (P8
+        # wave 7). Asked BEFORE the ordinary table, because a stage that has one
+        # wrote it to decide this outcome — and after every ceiling, which is
+        # checked by the harness before a stage runs and after every model call.
+        # Fuel outranks routing: "the router said continue" must never mean "the
+        # money cap did not apply".
+        if phase.decided_by and outcome != "too-many-times":
+            if run_program is None:
+                raise LoopError(
+                    f"stage {phase.name!r} of loop {self.name!r} decides where to go with "
+                    f"the program {phase.decided_by!r}, and nothing here can run a carried "
+                    f"program — so there is nothing to say where this run goes next. Fix: "
+                    f"whatever runs your agents has to supply a locked room for programs."
+                )
+            try:
+                chosen = str(run_program(phase.decided_by, {"said": said})).strip()
+            except Exception as e:  # noqa: BLE001 — a program's failure is data
+                raise LoopError(
+                    f"stage {phase.name!r} of loop {self.name!r} asked {phase.decided_by!r} "
+                    f"where to go next and it could not run: {e}."
+                ) from e
+            if chosen not in phase.may_go_to:
+                raise LoopError(
+                    f"stage {phase.name!r} of loop {self.name!r} asked "
+                    f"{phase.decided_by!r} where to go next and it said {chosen!r}, which is "
+                    f"not one of the stages it may pick between: "
+                    f"{', '.join(phase.may_go_to)}. Fix: have the program answer one of "
+                    f"those, or add {chosen!r} to `may-go-to:`."
+                )
+            return chosen
+
         target = phase.then.get(outcome)
         if target is not None:
             return target
@@ -292,6 +339,11 @@ class Loop:
 
         for phase in steps.values():
             for outcome, target in phase.then.items():
+                # The two routing keys are not outcomes and never were: they say
+                # WHO decides and WHERE it may go, beside the three ways a stage
+                # can end (P8 wave 7).
+                if outcome in ROUTING_KEYS:
+                    continue
                 if outcome not in OUTCOMES:
                     raise LoopError(
                         f"stage {phase.name!r} of loop {name!r} routes on "
@@ -403,6 +455,10 @@ def _read_phase(loop_name: str, key: str, raw: Any) -> Phase:
         says=str(raw.get("says") or "").strip(),
         may_use=may_use,
         at_most=at_most,
+        decided_by=str(then.get("decided-by") or "").strip(),
+        may_go_to=tuple(
+            str(x).strip() for x in (raw.get("then") or {}).get("may-go-to") or ()
+        ),
         asks=str(raw.get("asks") or "").strip(),
     )
 

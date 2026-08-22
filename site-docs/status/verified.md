@@ -19,7 +19,7 @@ from an earlier document.
 | Lints | clean | `cargo clippy --all-targets` |
 | Worked example loads | 498 settings | `cargo run -p pact-cli -- check examples/refund-desk` |
 | Schema kinds | **47** | `python3 -c "import yaml;print(len(yaml.safe_load(open('spec/schema.yaml'))['groups']))"` |
-| Fields that resolve a name | **31** | `grep -cE '^\s*names:' spec/schema.yaml` |
+| Fields that resolve a name | **33** | `grep -cE '^\s*names:' spec/schema.yaml` |
 
 ## What is proven, and what "proven" means
 

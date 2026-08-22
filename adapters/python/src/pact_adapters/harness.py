@@ -1472,7 +1472,13 @@ async def run(
             history.append({"role": "user", "content": said})
             visits[phase_name] = visits.get(phase_name, 0) + 1
             bus.emit("step.stage.completed", at=(i,), name=phase_name, outcome="answered")
-            nxt = _where_next(loop, phase, "answered", result, bus, i)
+            # `said` here, not `text`: in this branch the words are the PERSON'S
+            # answer, and `text` is not bound at all. A router reads what the
+            # stage produced, and what an `ask-someone` stage produces is the
+            # reply somebody typed.
+            nxt = _where_next(
+                loop, phase, "answered", result, bus, i, run_program=run_program, said=said
+            )
             if nxt is None:
                 return result
             if nxt == DONE:
@@ -1630,7 +1636,9 @@ async def run(
         if not calls:
             visits[phase_name] = visits.get(phase_name, 0) + 1
             bus.emit("step.stage.completed", at=(i,), name=phase_name, outcome="answered")
-            nxt = _where_next(loop, phase, "answered", result, bus, i)
+            nxt = _where_next(
+                loop, phase, "answered", result, bus, i, run_program=run_program, said=text
+            )
             if nxt is None:
                 return result
             if nxt == DONE:
@@ -2418,7 +2426,9 @@ async def run(
         # reading the stage the way the author wrote it.
         outcome = "answered" if phase.does is Does.ANSWER else "used-a-tool"
         bus.emit("step.stage.completed", at=(i,), name=phase_name, outcome=outcome)
-        nxt = _where_next(loop, phase, outcome, result, bus, i)
+        nxt = _where_next(
+            loop, phase, outcome, result, bus, i, run_program=run_program, said=text
+        )
         if nxt is None:
             return result
         if nxt == DONE:
@@ -3431,7 +3441,14 @@ def _stage_to_run(
 
 
 def _where_next(
-    loop: Loop, phase: Phase, outcome: str, result: RunResult, bus: Bus, at: int
+    loop: Loop,
+    phase: Phase,
+    outcome: str,
+    result: RunResult,
+    bus: Bus,
+    at: int,
+    run_program: "Callable[[str, dict[str, Any]], str] | None" = None,
+    said: str = "",
 ) -> str | None:
     """The next stage's name, or `None` when the loop cannot say.
 
@@ -3442,7 +3459,7 @@ def _where_next(
     meeting a missing `then:` should still show those eight.
     """
     try:
-        return loop.route(phase, outcome)
+        return loop.route(phase, outcome, run_program=run_program, said=said)
     except LoopError as e:
         result.halted = "loop-error"
         result.output = str(e)

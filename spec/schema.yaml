@@ -3556,6 +3556,52 @@ groups:
         surface: S-CTRL
         tier: expert
         help: where to go when the stage has run its `at-most:` times
+      decided-by:
+        # THE ESCAPE §5.5 LISTS AS `router`, realised with the `program` kind.
+        #
+        # The three outcomes are complete and deliberately blind: they know what
+        # KIND of thing happened and never what the answer said. So a checking
+        # stage can write "I found a contradiction with the policy" and the loop
+        # still marches to `reply`, because that is where `answered:` points —
+        # leaving the correction to the model noticing its own prose, which is
+        # the one thing this format never relies on anywhere else.
+        #
+        # `docs/remediation/F1` refuses a predicate over content and that refusal
+        # STANDS for the authored surface: a condition language would be a second
+        # programming language inside the file meant to remove the first. This is
+        # not that. It is a named escape, priced as one — `tier: expert`, and a
+        # workspace that uses it does not earn the `no-code` badge — and the
+        # program it names is a file in the folder, fingerprinted, declared, and
+        # refused unless it is `pure`.
+        type: text
+        names: programs
+        needs-also: [may-go-to]
+        surface: S-CTRL
+        tier: expert
+        help: >
+          a carried program that says which stage to go to next, by name — for
+          when where to go depends on what was actually said rather than on what
+          kind of thing happened. It picks between the stages under
+          `may-go-to:` and may not name any other. Most loops never need this:
+          the three outcomes above cover the ordinary shapes, and a workspace
+          that uses this line is no longer one a non-technical author could have
+          written.
+      may-go-to:
+        # The declared destinations. Written down so a reader can see where this
+        # loop can go without running the program, and so `reachability.rs` can
+        # compute what is reachable at all — a stage nothing can reach is still
+        # a stage nothing can reach when a program does the choosing.
+        type: list of text
+        names: ^steps
+        or-one-of: [done]
+        needs-also: [decided-by]
+        surface: S-CTRL
+        tier: expert
+        help: >
+          every stage the program above may send this one to, and `done` for
+          finishing. It picks between these and nothing else — a name outside
+          this list stops the run rather than going somewhere nobody wrote
+          down.
 
   # ── CONTEXT POLICY ──────────────────────────────────────────────────────────
   # What to do when the conversation outgrows what the model can hold.
