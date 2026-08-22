@@ -421,6 +421,20 @@ SUPPLIED_BY_THE_HOST: frozenset[str] = frozenset({
     # of documents exist, how they are found and whether a source must be cited,
     # and all of that reaches `AgentSpec.knowledge`.
     "retrieved_by",
+    # What starts a carried program (P6/P7). The DOCUMENT says which programs
+    # exist, what they take, what they answer with and what they may spend; what
+    # can actually start one is a property of the machine, exactly as `transport`
+    # and `tool_impls` are. Nothing in `src/` builds one — this port does not
+    # bundle a WebAssembly engine, because fetching one would put a network
+    # dependency in the core of a project whose promise is that everything runs
+    # air-gapped (D17), and vendoring one would make the portable artifact carry
+    # a runtime it cannot keep current.
+    #
+    # A host that has one passes it. A host that has not gets the sentence:
+    # every program this agent could have reached is named on `unenforced`
+    # before the first call, because the failure otherwise is `error: no tool
+    # named ...`, which reads as a mistake in the author's own file.
+    "run_program",
 })
 
 
@@ -467,6 +481,7 @@ async def run(
     #: circle spends one figure per ACTIVATION rather than one per level of
     #: nesting. Hosts pass nothing; a document that never writes the line fills
     #: the dict and nothing ever reads it.
+    run_program: "Callable[[str, dict[str, Any]], str] | None" = None,
     at_work: dict[str, int] | None = None,
 ) -> RunResult:
     """Drive `spec` to completion over `transport`.
@@ -1060,6 +1075,21 @@ async def run(
     # who wrote `context-policy: long-threads` and got neither tidying nor a word
     # about it has been told something untrue. Silence here is the T7 breach
     # `unmetered` exists to prevent.
+    # A carried program with nothing to start it (P7). Named BEFORE the first
+    # call, one sentence per program, because the alternative an author meets is
+    # `error: no tool named ...` on the tool that reaches it — a true sentence
+    # about a different thing, which reads as a typo in a file that is correct.
+    #
+    # The same door `context-policy` uses one line down, and for the same reason:
+    # a capability this run could not honour is said out loud rather than
+    # discovered.
+    if run_program is None:
+        result.unenforced = result.unenforced + tuple(
+            f"program `{p.name}`: nothing here can run a carried program, so "
+            f"{', '.join(p.reached_by)} reaches nothing. Whatever runs your agents has to "
+            f"supply a locked room that hosts `{p.engine or 'this kind of program'}`."
+            for p in spec.programs
+        )
     if spec.context_policy is not None and tidy is None:
         result.unmetered = result.unmetered + ("context-policy",)
     # Everything the policy itself could not resolve. `ContextPolicy.problems`

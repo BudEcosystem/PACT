@@ -254,6 +254,18 @@ def test_every_spec_field_that_holds_authored_state_is_filled_from_the_document(
         # `knowledge` makes above, where the mechanism is demonstrated whole in
         # the example that exists for it rather than bolted onto this one.
         "agent_valued_inputs",
+        # Authored, and this example carries no `programs:` — its exactness comes
+        # from a written procedure and a connected server, which is the shape
+        # every no-code workspace should reach for first. A program is
+        # `tier: expert` everywhere and no core capability may require one, so an
+        # example that demonstrates the no-code ceiling (D14/D20) is exactly the
+        # example that has none.
+        #
+        # What proves the field reaches the spec is
+        # `test_a_program_a_run_cannot_start_is_said_out_loud.py`, whose document
+        # declares one and whose run reports what it could not start — the same
+        # division `knowledge` makes above.
+        "programs",
     }
     empty: list[str] = []
     for f in dataclass_fields(spec):

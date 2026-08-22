@@ -258,6 +258,36 @@ class KnowledgeSpec:
 
 
 @dataclass(frozen=True)
+class ProgramSpec:
+    """One carried program, as the run is told about it (P6/P7).
+
+    Names and shapes only. The BODY is a folder of files the loader recorded by
+    name, media type, size and fingerprint, and nothing in this port ever opens
+    one — running a body is the host's, the way serving a model and calling a
+    tool are, and for the same reason: `pact check` must stay a reading of the
+    tree (R5) and this port must stay something an air-gapped machine can run
+    without fetching an engine (D17).
+
+    Carried at all so a run can say what it could NOT do. A workspace that
+    declares programs, run by a host with no runner, has to be told before the
+    first call — otherwise the author meets `error: no tool named ...`, which
+    reads as a mistake in their own file and is not one.
+    """
+
+    name: str
+    description: str = ""
+    #: `wasm`, `python` or `typescript`. Which of them a host can start is the
+    #: host's business; what this port does with the word is report it.
+    engine: str = ""
+    #: `pure`, `deterministic` or `nondeterministic` — what a resumed run may
+    #: reuse rather than ask again. Declared and delegated (§4).
+    determinism: str = ""
+    #: The tool actions that reach it, `<tool>/<action>`, so the sentence a run
+    #: reports can name where the author wrote it.
+    reached_by: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class SkillSpec:
     """One written procedure, as the model is shown it.
 
@@ -466,6 +496,12 @@ class AgentSpec:
     #: private list of spellings is the defect `every_shape_the_spellings_accept_can_be_read`
     #: was written against, one module over.
     agent_valued_inputs: tuple[str, ...] = ()
+    #: The carried programs this agent's own tools reach (P6/P7).
+    #:
+    #: Narrowed to what THIS agent can get to, the same way `tools` is: a program
+    #: another agent's tool reaches is not something this run could have called,
+    #: so reporting it here would be a sentence about somebody else's document.
+    programs: tuple[ProgramSpec, ...] = ()
     #: The agent's own key in `agents:` — the folder name, not the display name.
     #: Carried because a diagnostic about this agent has to name the file the
     #: author would open (`agents/refund-desk/limits.yaml`), and `name:` is
@@ -680,6 +716,7 @@ class AgentSpec:
             # author's pin on even if it wanted to. `_text` gives "" for absent,
             # which is the "did not choose" this field documents.
             model=_text(a.get("model", "")),
+            programs=_programs_reached_by(doc, a),
             run_inputs=tuple(sorted((a.get("run-inputs") or {}))),
             agent_valued_inputs=_agent_valued(a.get("run-inputs")),
             # Declaration order, not sorted: the author's order IS the search
@@ -692,6 +729,47 @@ class AgentSpec:
             workspace=str(root) if root is not None else "",
             key=agent_key,
         )
+
+
+def _programs_reached_by(doc: dict[str, Any], agent: dict[str, Any]) -> tuple[ProgramSpec, ...]:
+    """The carried programs this agent's own tools can reach.
+
+    Walked the way a RUN reaches one: the agent's `uses:` names a tool, the
+    tool's action names a program. A program no tool of this agent's names is not
+    something this run could have called.
+    """
+    declared = doc.get("programs") or {}
+    if not isinstance(declared, Mapping) or not declared:
+        return ()
+    tools = doc.get("tools") or {}
+    reached: dict[str, list[str]] = {}
+    for used in sorted(_as_list(agent.get("uses"))):
+        tool = tools.get(used) if isinstance(tools, Mapping) else None
+        if not isinstance(tool, Mapping):
+            continue
+        actions = tool.get("actions") or {}
+        if not isinstance(actions, Mapping):
+            continue
+        for action_name, action in sorted(actions.items()):
+            if not isinstance(action, Mapping):
+                continue
+            named = action.get("program")
+            if isinstance(named, str) and named in declared:
+                reached.setdefault(named, []).append(f"{used}/{action_name}")
+    out = []
+    for name in sorted(reached):
+        block = declared[name]
+        block = block if isinstance(block, Mapping) else {}
+        out.append(
+            ProgramSpec(
+                name=name,
+                description=_text(block.get("description", "")),
+                engine=_text(block.get("engine", "")),
+                determinism=_text(block.get("determinism", "")),
+                reached_by=tuple(reached[name]),
+            )
+        )
+    return tuple(out)
 
 
 def _agent_valued(declared: Any) -> tuple[str, ...]:
