@@ -50,7 +50,7 @@ import re
 from collections.abc import Mapping as MappingABC
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Iterator, Mapping
+from typing import Any, Callable, Iterator, Mapping
 
 #: One diagnostic shape for the whole adapter — see `diagnostics`. A rule this
 #: vocabulary cannot decide names the real file and the real line, exactly as a
@@ -403,6 +403,10 @@ class Question:
     answer_within: str = ""
     if_nobody_answers: str = "decline"
     escalates_to: tuple[str, ...] = ()
+    #: A carried program that looks at the answer before the run goes on with it
+    #: (P8 wave 4) — the check a SHAPE cannot make. Empty for almost every
+    #: question, which is why nothing about the ordinary path changes.
+    checked_by: str = ""
 
     # -- approval is one of these, not a kind of its own --------------------
 
@@ -458,7 +462,11 @@ class Question:
 
     # -- answers ------------------------------------------------------------
 
-    def validate(self, raw: Mapping[str, Any]) -> "Answer":
+    def validate(
+        self,
+        raw: Mapping[str, Any],
+        run_program: "Callable[[str, dict[str, Any]], str] | None" = None,
+    ) -> "Answer":
         """Read an answer, or raise `Rejected` saying exactly what to type.
 
         Every field the schema declares must be present. There is no optional
@@ -492,6 +500,36 @@ class Question:
 
         if problems:
             raise Rejected(problems)
+
+        # The check a shape cannot make (P8 wave 4). LAST, so the program is
+        # handed values that are already the kind the author declared and never
+        # has to re-implement the shape vocabulary.
+        if self.checked_by:
+            if run_program is None:
+                # Refused, not passed. An author who wrote a check, watched it
+                # load and never had it run is the failure this line exists to
+                # remove, arriving one level up — and a person told nothing is a
+                # person who believes they were checked.
+                raise Rejected([
+                    f"'{self.name}' is checked by the program '{self.checked_by}', and "
+                    f"nothing here can run a carried program — so this answer could not "
+                    f"be checked and has not been accepted. Whatever runs your agents "
+                    f"has to supply a locked room for programs."
+                ])
+            try:
+                said = run_program(self.checked_by, dict(values))
+            except Exception as e:  # noqa: BLE001 — a grader's failure is data
+                raise Rejected([
+                    f"'{self.name}' is checked by the program '{self.checked_by}', and it "
+                    f"could not run: {e}. The answer has not been accepted."
+                ]) from e
+            # An empty answer, or the word `ok`, is the program saying nothing is
+            # wrong. Anything else is what it wants the person to read — its own
+            # sentence, because it is the thing that knows why.
+            objection = str(said).strip()
+            if objection and objection.lower() not in {"ok", "yes", "true"}:
+                raise Rejected([objection])
+
         return Answer(question=self.name, about=self.about, values=values)
 
     # -- the deadline -------------------------------------------------------
@@ -551,6 +589,7 @@ class Question:
             "answer-within": self.answer_within,
             "if-nobody-answers": self.if_nobody_answers,
             "escalates-to": list(self.escalates_to),
+            "checked-by": self.checked_by,
         }
 
     @staticmethod
@@ -567,6 +606,7 @@ class Question:
             answer_within=str(d.get("answer-within", "")),
             if_nobody_answers=str(d.get("if-nobody-answers", "decline")),
             escalates_to=tuple(d.get("escalates-to") or ()),
+            checked_by=str(d.get("checked-by", "")),
         )
 
     # -- from the authored document ----------------------------------------
@@ -627,6 +667,7 @@ class Question:
             answer_within=str(q.get("answer-within", "")).strip(),
             if_nobody_answers=str(q.get("if-nobody-answers", "decline")).strip(),
             escalates_to=escalates,
+            checked_by=str(q.get("checked-by", "")).strip(),
         )
 
     @staticmethod

@@ -2695,6 +2695,33 @@ groups:
         surface: S-EXEC
         tier: core
         help: who it goes to next, when the line above says escalate
+      checked-by:
+        # The check a SHAPE cannot make. `answer:` holds each field to a kind of
+        # value — `money`, `yes or no` — and some answers have more to them than
+        # a kind: an account number has a checksum, a refund has a ceiling, a
+        # date has to be one that happened. None of those is a shape, and the
+        # only place to put them was after the fact, once the run had resumed on
+        # the answer and the tool had been called with it.
+        #
+        # The shape is checked FIRST and the program never sees a value that is
+        # not the kind the author declared — otherwise every grader would have to
+        # re-implement the shape vocabulary, and two of them would disagree about
+        # what `money` is.
+        #
+        # A check nothing can run REFUSES the answer rather than passing it. An
+        # author who wrote a check, watched it load and never had it run is the
+        # exact failure this line exists to remove, arriving one level up.
+        type: text
+        names: programs
+        surface: S-EXEC
+        tier: expert
+        help: >
+          a carried program that looks at the answer before the run goes on with
+          it, by name — for the checks a shape cannot make, like an account
+          number that has to add up or an amount that has a ceiling. Whatever it
+          says back is shown to the person while they are still standing there,
+          which is the one moment a correction is free. Leave it out and the
+          answer only has to be the right kind of thing.
 
   # How you know it works. This is the oracle for everything else — model
   # swapping, learning, and portability all resolve against these checks.

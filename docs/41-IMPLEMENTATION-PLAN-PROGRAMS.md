@@ -30,7 +30,7 @@ through tools, memory, metrics, questions, interceptor sentences, routing
 | P5 learning widening | done, NOT as written — see below | `295db17` |
 | P6 `program` kind + sandbox + egress role | done | `f1fbdc8` |
 | P7 executor | done as a SEAM, not an engine — see below | `c18fa28` |
-| P8 capability wiring | wave 1 of 8 (`uses:` takes a program) | `26993a1` |
+| P8 capability wiring | waves 1–4 of 8 | `26993a1`, `3985b5d`, `6a62b4e`, this |
 | P9 self-authored lane | not started | — |
 
 **Three places this plan was wrong, and what was built instead.**
@@ -57,6 +57,12 @@ in P1/P2 were found by adversarial audit rather than by the tests written for
 them, and **two of those were introduced by fixes for the other three**. The
 lesson is recorded where it belongs, in the protocol below: a fix aimed at one
 case must be re-checked against the case it was fixing before.
+
+**P8's waves, individually:** 1 `uses:` takes a pure program · 2 `bind:
+remembers.<name>` and `remember-as:` · 3 the `program:` metric scheme · 4
+`question.checked-by:` · 5 `action.projects-with:` · 6 program-holed interceptor
+sentences · 7 `decided-by:`/`may-go-to:` · 8 `does: run-code` + codeact. Four
+built, four to go.
 
 **Known open, recorded rather than dropped:** a figure inside a sentence
 (interpolation — a new capability, not a defect); list-valued pattern arguments;
