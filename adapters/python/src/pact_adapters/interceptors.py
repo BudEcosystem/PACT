@@ -1284,6 +1284,9 @@ def _compile_rules(
         )
 
     def body(payload: dict[str, Any]) -> Decision:
+        #: Set when a rewriting sentence changed the words, so the hiders below
+        #: work on what will really be said and the decision carries both.
+        rewritten: Power | None = None
         for check in guards:
             decided = check(payload)
             if decided is not None:
@@ -1324,9 +1327,22 @@ def _compile_rules(
                         by = None
                         break
                 if by is not None:
-                    return Decision(changed=out, by=by)
+                    # FALLS THROUGH to the hiders rather than returning. Returning
+                    # here skipped every masking rule in the same document, so a
+                    # rewriting rule silently disabled the redaction beside it —
+                    # measured, a card number survived a chain whose own first
+                    # rule was written to remove it. An author who reads two
+                    # rules and gets one is worse off than one whose rewrite was
+                    # refused outright, and it is the attack §8.5 says a rewrite
+                    # cannot mount.
+                    #
+                    # Rewrite THEN hide, in that order: the hiders have to see
+                    # the words that will actually be said, including any a
+                    # rewriter introduced.
+                    payload = out
+                    rewritten = by
         if not patterns:
-            return Decision()
+            return Decision(changed=payload, by=rewritten) if rewritten else Decision()
         # Which field to mask comes from the payload in hand, not from how the
         # binding was spelled. `step.message` and `step.message.before` are the
         # same rule to the chain, and they used to be different rules here.
@@ -1339,7 +1355,12 @@ def _compile_rules(
             if after != payload[name]:
                 out[name] = after
                 touched = True
-        return Decision(changed=out, by=Power.HIDE_VALUES) if touched else Decision()
+        if touched:
+            # `hide-values` is the power reported when both happened: it is the
+            # one a reviewer cares that the chain still had, and the rewrite is
+            # visible in the words themselves.
+            return Decision(changed=out, by=Power.HIDE_VALUES)
+        return Decision(changed=payload, by=rewritten) if rewritten else Decision()
 
     return body, frozenset(destinations)
 

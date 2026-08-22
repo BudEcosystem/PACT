@@ -158,3 +158,63 @@ def test_a_sentence_naming_a_program_the_tree_does_not_have_is_refused() -> None
     with pytest.raises(Exception) as raised:
         Chain.from_document(doc, "desk", run_program=_shout)
     assert "no-such-program" in str(raised.value)
+
+
+#: A document that BOTH hides and rewrites. The commonest real shape — a desk
+#: that speaks in its own words and must never print a card number — and the one
+#: the first version of this feature broke.
+HIDES_AND_REWRITES = {
+    "programs": REWRITES["programs"],
+    "interceptors": {
+        "in-house-style": {
+            "description": "Says everything the way this desk says it, and hides card numbers.",
+            "when": "turn.message.after",
+            "may": ["change-the-answer", "hide-values"],
+            "rules": [
+                "anything that looks like a card number",
+                "replace the answer with what house-style returns",
+            ],
+        }
+    },
+    "agents": {
+        "desk": {
+            "description": "Answers customers.",
+            "instructions": "Answer the question.",
+            "interceptors": ["in-house-style"],
+        }
+    },
+}
+
+
+def test_a_rewrite_does_not_delete_the_hiding_rules_beside_it() -> None:
+    """The attack §8.5 says a rewrite cannot mount, which it could.
+
+    `body` returned as soon as a rewriter had run, so every hiding rule in the
+    same document was skipped: measured, a card number survived a chain whose own
+    first rule was written to remove it. A rewriting rule silently disabling the
+    redaction beside it is worse than the rewrite being refused outright, because
+    the author reads two rules and gets one.
+
+    The order is rewrite THEN hide, and it is that way round on purpose: the
+    hiders must see the words that will actually be said, including any a
+    rewriter introduced.
+    """
+    chain = Chain.from_document(HIDES_AND_REWRITES, "desk", run_program=_shout)
+    seen, _ = chain.run("turn.message.after", {"content": "card 4111111111111111 here"})
+    assert "4111111111111111" not in seen["content"], seen
+    # And the rewrite still happened: the words the rewriter produced are its
+    # own. The whole line is NOT uppercase, and that is the correct result --
+    # `[removed]` is put there by the hider, which runs after, and the hider
+    # writes it in its own words rather than the rewriter's.
+    assert "CARD" in seen["content"] and "HERE" in seen["content"], seen
+    assert "[removed]" in seen["content"], seen
+
+
+def test_a_rewriter_that_introduces_a_card_number_is_still_masked() -> None:
+    """The reason the order is rewrite-then-hide rather than the reverse."""
+    chain = Chain.from_document(
+        HIDES_AND_REWRITES, "desk",
+        run_program=lambda n, a: "your card 4111111111111111 was refunded",
+    )
+    seen, _ = chain.run("turn.message.after", {"content": "done"})
+    assert "4111111111111111" not in seen["content"], seen
