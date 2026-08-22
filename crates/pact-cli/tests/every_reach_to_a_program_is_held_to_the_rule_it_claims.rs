@@ -222,3 +222,59 @@ fn the_fixture_itself_was_never_edited() {
     let (code, said) = run(&["check", &tree(), "--deny-warnings"]);
     assert_eq!(code, Some(0), "the refusals prove nothing unless this still passes:\n{said}");
 }
+
+/// A stage that writes code needs somewhere to run it, said before the run.
+///
+/// `docs/27` states it as a rule — a `does: run-code` stage is "legal only when
+/// the agent's workspace declares a sandbox resource" — and the adapter test's
+/// own header repeats it: "it requires a sandbox at check time — a `does:
+/// run-code` stage in a workspace with no locked room is refused before anything
+/// runs, rather than discovered on the first step."
+///
+/// Nothing in the loader had ever heard of `run-code`. The only thing holding
+/// the rule was a halt at run time, which is a true sentence arriving in the
+/// wrong place: the author is gone, a customer is waiting, and the file it is
+/// about loaded cleanly.
+///
+/// This is the one reach where the absence of a room is refused rather than
+/// passed over. Every other reach names a program the author WROTE, and the room
+/// for it may reasonably come from the host; a `run-code` stage names nothing at
+/// all, so a workspace with no room is a stage that can never be anything but
+/// the halt.
+#[test]
+fn a_stage_that_writes_code_needs_a_room_declared_to_run_it() {
+    let dst = broken(
+        "run-code-no-room",
+        &[(
+            "loops/works-it-out.yaml",
+            "  think-again:\n    does: check-its-work",
+            "  think-again:\n    does: run-code",
+        )],
+    );
+    // The room this tree does declare, taken away — the stage stays.
+    std::fs::remove_dir_all(std::path::Path::new(&dst).join("resources")).unwrap();
+    // And the program that needed it, so the refusal under test is the only one.
+    std::fs::remove_dir_all(std::path::Path::new(&dst).join("programs")).unwrap();
+    let (code, said) = run(&["check", &dst]);
+    assert_eq!(code, Some(1), "a stage that can only ever halt is not a stage:\n{said}");
+    assert!(said.contains("loader/nothing-here-can-run-that-program"), "{said}");
+    assert!(said.contains("run-code") || said.contains("writes code"), "{said}");
+    assert!(said.contains("sandbox"), "and say what to add:\n{said}");
+    let _ = std::fs::remove_dir_all(&dst);
+}
+
+/// The same stage, with a room, loads.
+#[test]
+fn a_stage_that_writes_code_loads_where_a_room_is_declared() {
+    let dst = broken(
+        "run-code-with-room",
+        &[(
+            "loops/works-it-out.yaml",
+            "  think-again:\n    does: check-its-work",
+            "  think-again:\n    does: run-code",
+        )],
+    );
+    let (code, said) = run(&["check", &dst]);
+    assert_eq!(code, Some(0), "the refusal above proves nothing unless this passes:\n{said}");
+    let _ = std::fs::remove_dir_all(&dst);
+}

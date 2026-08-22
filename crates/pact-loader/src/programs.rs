@@ -418,8 +418,60 @@ fn every_reach_has_a_room_that_runs_it(root: &Node, schema: &Schema, diags: &mut
     }
 }
 
+/// A stage that writes code, in a workspace with nowhere to run it.
+///
+/// `docs/27` states it as a rule — a `does: run-code` stage is "legal only when
+/// the agent's workspace declares a sandbox resource" — and the adapter test's
+/// own header repeats it. Nothing in the loader had ever heard of `run-code`;
+/// the only thing holding the rule was a halt at run time, which is a true
+/// sentence arriving in the wrong place.
+///
+/// This is the ONE reach where the absence of a room is refused rather than
+/// passed over, and the difference is what the line names. Every other reach
+/// names a program the AUTHOR wrote, and P7's seam says the room for it may
+/// reasonably come from the host — `a-desk-that-uses-a-program` depends on
+/// exactly that. A `run-code` stage names nothing at all: there is no program
+/// document, no engine, no fuel, and nothing for a host to match against. In a
+/// workspace with no room it is a stage that can never be anything but the halt.
+fn a_stage_that_writes_code_has_a_room(root: &Node, diags: &mut Diagnostics) {
+    if !rooms(root).is_empty() {
+        return;
+    }
+    let Some(loops) = root.get("loops").and_then(Node::as_map) else { return };
+    for (loop_name, shape) in loops {
+        let Some(steps) = shape.node.get("steps").and_then(Node::as_map) else { continue };
+        for (stage_name, stage) in steps {
+            if stage.node.get("does").and_then(Node::as_str) != Some(RUN_CODE) {
+                continue;
+            }
+            let at = stage
+                .node
+                .get("does")
+                .map_or_else(|| stage.key_span.clone(), |n| n.span.clone());
+            diags.push(Diagnostic::error(
+                "loader/nothing-here-can-run-that-program",
+                at,
+                format!(
+                    "'{loop_name}/{stage_name}' writes code to be run, and this \
+                     workspace declares no locked room to run it in — so the stage can \
+                     only ever stop and say so."
+                ),
+                "Add a file under `resources/` whose `resource-kind:` is `sandbox`, \
+                 with an `engines:` line saying what it can run. A stage that writes \
+                 code names no program, so there is nothing for whoever runs your \
+                 agents to match a room against — the room has to be in the tree."
+                    .to_string(),
+            ));
+        }
+    }
+}
+
+/// The stage kind that writes its own code, as `phase.does` spells it.
+const RUN_CODE: &str = "run-code";
+
 /// Refuse an arrangement where nothing can run the program that was named.
 pub fn check(root: &Node, schema: &Schema, diags: &mut Diagnostics) {
+    a_stage_that_writes_code_has_a_room(root, diags);
     only_pure_programs_are_used_directly(root, diags);
     only_pure_programs_project(root, diags);
     only_pure_programs_decide(root, diags);

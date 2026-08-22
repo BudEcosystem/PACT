@@ -1653,11 +1653,39 @@ async def run(
                     _system_for(spec.instructions, phase, step_skills), history, []
                 )
                 _meter_usage(asking_now, meter)
+                # THE SNIPPET IS WORDS THE MODEL PRODUCED, and it goes into
+                # `history` like any others — so it meets the rules at the same
+                # address a stage's prose does. A card number typed into a
+                # comment was the same leak by a shorter route, and this was the
+                # one thing a model wrote in this harness that no rule ever saw.
+                written, decision = chain.run("step.message.after", {"content": wrote})
+                if decision.stop is not None:
+                    result.halted = "stopped-by-rule"
+                    result.output = decision.stop
+                    bus.emit("turn.run.cancelled", at=(i,), reason=decision.stop)
+                    return result
+                wrote = written["content"]
                 ran = _call_tool(
                     lambda a: run_program(RUN_CODE_IN_THE_ROOM, a),
                     ToolCall(name=RUN_CODE_IN_THE_ROOM, args={"code": wrote}),
                 )
                 meter.tool_calls += 1
+                # AND WHAT THE ROOM PRINTED IS A TOOL RESULT. It is metered as
+                # one and appended to `history` as one, and the argument the tool
+                # path makes in its own comment applies unchanged: a result read
+                # back to the model next turn "leaves by the same door as
+                # anything else". `redaction.yaml`'s promise is "what must never
+                # leave this workspace", and a locked room's output was outside
+                # it.
+                came_back, decision = chain.run(
+                    "step.tool.completed", {"name": RUN_CODE_IN_THE_ROOM, "content": ran}
+                )
+                if decision.stop is not None:
+                    result.halted = "stopped-by-rule"
+                    result.output = decision.stop
+                    bus.emit("turn.run.cancelled", at=(i,), reason=decision.stop)
+                    return result
+                ran = came_back["content"]
                 history.append({"role": "assistant", "content": wrote})
                 history.append({"role": "user", "content": ran})
                 result.steps.append(

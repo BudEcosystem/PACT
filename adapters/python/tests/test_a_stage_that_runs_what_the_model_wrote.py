@@ -152,3 +152,93 @@ def test_a_run_code_stage_with_no_room_says_so() -> None:
     result = _run()
     said = " ".join(result.unenforced) + str(result.output)
     assert "run-code" in said or "locked room" in said
+
+
+# ────────────────────────────────── what a snippet says, and what the room says
+
+
+#: The same desk with the workspace's one redaction file beside it. `hide:` is
+#: the workspace-wide spelling of the same act an interceptor's `rules:` writes,
+#: and its own promise is *"what must never leave this workspace"*.
+def _guarded() -> dict:
+    doc = {k: dict(v) if isinstance(v, dict) else v for k, v in CODEACT.items()}
+    doc["redaction"] = {
+        "description": "Never let a card number out.",
+        "hide": ["anything that looks like a card number"],
+    }
+    return doc
+
+
+def _run_guarded(script: Script, **kw):
+    return asyncio.run(
+        run(AgentSpec.from_document(_guarded(), "desk"), ReferenceTransport(script),
+            "how much do we refund?", {}, **kw)
+    )
+
+
+def test_what_the_room_printed_meets_the_rules_like_any_other_result() -> None:
+    """A locked room's output is a tool result, and it leaves by the same door.
+
+    The tool path already makes this argument in its own comment: what a tool
+    handed back "goes into `history` and is read back to the model on the next
+    turn, so an unmasked one leaves by the same door as anything else". A
+    snippet's output is the same thing — it is metered as a tool call and it is
+    appended to `history` — and it was the one result in this harness that no
+    rule ever saw.
+    """
+    result = _run_guarded(
+        Script([Turn("print(look_up())"), Turn("Done.")]),
+        run_program=lambda name, args: "the card on file is 4111111111111111",
+    )
+    said = json.dumps(result.trace()) + " ".join(s.text for s in result.steps)
+    assert "4111111111111111" not in said, said
+
+
+def test_what_the_model_wrote_meets_the_rules_too() -> None:
+    """The snippet itself is words the model produced, and they go into
+    `history` unchanged. A card number typed into a comment is the same leak by a
+    shorter route."""
+    result = _run_guarded(
+        Script([Turn("# refund the card 4111111111111111\nprint(45)"), Turn("Done.")]),
+        run_program=lambda name, args: "45",
+    )
+    said = json.dumps(result.trace()) + " ".join(s.text for s in result.steps)
+    assert "4111111111111111" not in said, said
+
+
+def test_a_rule_can_stop_a_run_on_what_the_model_wrote() -> None:
+    """A snippet is words the model produced, so the rule that stops on words
+    stops on it.
+
+    `stop and say "..."` is offered at `step.message.after` and
+    `turn.message.after` and at no other moment — so it reaches what the model
+    WROTE and deliberately not what the room printed. That boundary is the
+    schema's, held where an author can read it: nothing in the closed vocabulary
+    ends a run on a tool result, and a rule that claimed to would be refused when
+    the file was read.
+    """
+    doc = _guarded()
+    doc["interceptors"] = {
+        "no-secrets": {
+            "description": "Stops the run if the working mentions a password.",
+            "when": "step.message.after",
+            "may": ["stop-the-run"],
+            "rules": ['if the answer mentions "password", stop and say "not done here"'],
+        }
+    }
+    doc["agents"]["desk"] = {**doc["agents"]["desk"], "interceptors": ["no-secrets"]}
+    result = asyncio.run(
+        run(AgentSpec.from_document(doc, "desk"),
+            ReferenceTransport(Script([Turn("print(password)"), Turn("Done.")])),
+            "how much do we refund?", {},
+            run_program=lambda name, args: "45")
+    )
+    assert result.halted == "stopped-by-rule", result.halted
+    assert "not done here" in (result.output or ""), result.output
+
+
+def test_a_workspace_with_no_rules_is_unchanged_by_any_of_this() -> None:
+    """Additive inertness. The control every assertion above depends on."""
+    plain = _run(run_program=lambda name, args: "45.0")
+    assert plain.steps[0].tool_results == ("45.0",)
+    assert "40.00 + 5.00" in plain.steps[0].text
