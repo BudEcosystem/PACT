@@ -2359,14 +2359,39 @@ groups:
           and a run that cannot keep the scope you wrote tells you rather than
           quietly narrowing it.
       bind:
+        # TWO namespaces now, and the second closes a hole the first could not
+        # reach. `run-inputs.<name>` is what the surrounding system supplied for
+        # this run; `remembers.<name>` is what this conversation ESTABLISHED —
+        # an account somebody proved they hold, an approval a person gave. Until
+        # the second existed a fact the run already knew could only reach a tool
+        # by the model retyping it, which is exactly the value you least want the
+        # model choosing.
         type: map of text
         surface: S-EXEC
         tier: core
         help: >
-          arguments filled in by the surrounding system, not by the model.
-          Written `<argument>: run-inputs.<name>`, naming one of the agent's own
-          `run-inputs:`. The model cannot see them, name them, or change them.
+          arguments filled in by the surrounding system or by what this
+          conversation already knows, not by the model. Written
+          `<argument>: run-inputs.<name>`, naming one of the agent's own
+          `run-inputs:`, or `<argument>: remembers.<name>`, naming one of its own
+          `remembers:`. The model cannot see them, name them, or change them.
           This is how "whose order" stops being something the model decides.
+      remember-as:
+        # The other direction, and the line that finally gives `never-from:`
+        # something to bite on. That field named the sources that may never write
+        # to a remembered fact — `tool output` first among them — and no line in
+        # this format was a write, so the guard could not fire. This is that
+        # line, and it is refused by default where the state says so.
+        type: text
+        surface: S-EXEC
+        tier: expert
+        help: >
+          keep what this action answered, under one of the agent's own
+          `remembers:` names. A fact a tool handed back may not be kept where the
+          state says `never-from: tool output` — that line is what stops one
+          poisoned page becoming something the agent goes on believing — so
+          either keep it somewhere else, or take that line off the fact you mean.
+          The agent doing the remembering is the one whose tool this is.
       inspects:
         type: list of text
         surface: S-EXEC

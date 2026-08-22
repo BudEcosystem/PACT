@@ -79,35 +79,133 @@ fn bindings_resolve(document: &Node, diags: &mut Diagnostics) {
     // may be used by several agents, and a binding is legitimate if ANY of them
     // supplies the name — narrowing it per agent would refuse a shared tool.
     let mut inputs: std::collections::BTreeSet<String> = Default::default();
+    // And every fact any agent remembers, collected the same way and for the
+    // same reason. `remembers.<name>` is the second thing a binding may be
+    // filled from: what the surrounding system supplied is one kind of value the
+    // model must not choose, and what this conversation ESTABLISHED — an account
+    // somebody proved they hold — is the other.
+    let mut remembered: std::collections::BTreeSet<String> = Default::default();
+    // The ones a tool's answer may never be written into, by the author's own
+    // `never-from:` line.
+    let mut refuses_tool_output: std::collections::BTreeSet<String> = Default::default();
     if let Some(agents) = document.get("agents").and_then(Node::as_map) {
         for (_, agent) in agents {
             if let Some(m) = agent.node.get("run-inputs").and_then(Node::as_map) {
                 inputs.extend(m.keys().cloned());
+            }
+            if let Some(m) = agent.node.get("remembers").and_then(Node::as_map) {
+                remembered.extend(m.keys().cloned());
+                for (fact, state) in m {
+                    let refuses = match state.node.get("never-from").map(|n| &n.value) {
+                        Some(pact_doc::Value::List(items)) => {
+                            items.iter().any(|i| i.as_str() == Some("tool output"))
+                        }
+                        Some(pact_doc::Value::Str(one)) => one == "tool output",
+                        _ => false,
+                    };
+                    if refuses {
+                        refuses_tool_output.insert(fact.clone());
+                    }
+                }
             }
         }
     }
     for (tool, entry) in tools {
         let Some(actions) = entry.node.get("actions").and_then(Node::as_map) else { continue };
         for (action, a) in actions {
+            // What this action keeps, and whether it may. `never-from:` named the
+            // sources that may never write to a fact and NOTHING in the format
+            // was a write, so the guard could not fire; this is that line.
+            if let Some(kept) = a.node.get("remember-as").and_then(Node::as_str).map(str::trim) {
+                let at = a.node.get("remember-as").map_or_else(
+                    || a.key_span.clone(),
+                    |n| n.span.clone(),
+                );
+                if !remembered.is_empty() && !remembered.contains(kept) {
+                    diags.push(Diagnostic::error(
+                        "loader/no-such-remembered-fact",
+                        at.clone(),
+                        format!(
+                            "`{tool}/{action}` keeps what it answered as '{kept}', and no agent \
+                             here remembers anything by that name."
+                        ),
+                        format!(
+                            "Change it to one of: {} — or add `{kept}:` under `remembers:` in \
+                             the agent that uses this tool.",
+                            remembered.iter().cloned().collect::<Vec<_>>().join(", ")
+                        ),
+                    ));
+                } else if refuses_tool_output.contains(kept) {
+                    diags.push(Diagnostic::error(
+                        "loader/a-tool-may-not-write-there",
+                        at,
+                        format!(
+                            "`{tool}/{action}` keeps what it answered as '{kept}', and '{kept}' \
+                             says `never-from: tool output` — which is the line that stops one \
+                             poisoned page becoming something this agent goes on believing."
+                        ),
+                        format!(
+                            "Keep it under a different name, or take `tool output` off \
+                             `never-from:` on '{kept}' if a tool really may decide it."
+                        ),
+                    ));
+                }
+            }
             let Some(bind) = a.node.get("bind").and_then(Node::as_map) else { continue };
             for (arg, value) in bind {
                 let Some(written) = value.node.as_str().map(str::trim) else { continue };
+                // The second namespace, checked against what agents remember.
+                if let Some(fact) = written.strip_prefix("remembers.") {
+                    if remembered.is_empty() || remembered.contains(fact) {
+                        continue;
+                    }
+                    diags.push(Diagnostic::error(
+                        "loader/no-such-remembered-fact",
+                        value.node.span.clone(),
+                        format!(
+                            "`{tool}/{action}` fills `{arg}:` from a remembered fact called \
+                             '{fact}', and no agent here remembers one by that name — so the \
+                             model would choose that value after all, which is the one thing \
+                             `bind:` exists to stop."
+                        ),
+                        format!(
+                            "Change it to one of: {} — or add `{fact}:` under `remembers:` in \
+                             the agent that uses this tool.",
+                            remembered.iter().cloned().collect::<Vec<_>>().join(", ")
+                        ),
+                    ));
+                    continue;
+                }
                 let Some(name) = written.strip_prefix("run-inputs.") else {
                     diags.push(Diagnostic::error(
                         "loader/not-a-binding",
                         value.node.span.clone(),
                         format!(
-                            "`{arg}:` is filled in from '{written}', and the only thing a \
-                             binding can be filled in from is one of the agent's own \
-                             `run-inputs:`."
+                            "`{arg}:` is filled in from '{written}', and a binding is filled \
+                             in from one of the agent's own `run-inputs:` or one of the facts \
+                             it `remembers:`, and nothing else."
                         ),
-                        offer(
-                            "bind",
-                            written,
-                            &inputs.iter().map(String::as_str).collect::<Vec<_>>(),
-                            "add it under `run-inputs:` in the agent that uses this tool",
-                        )
-                        .replace("Change the `bind:` to one of: ", "Write `run-inputs.<name>`, naming one of: "),
+                        // Written here rather than through `offer`, because the
+                        // two namespaces have to be named even when one of them
+                        // is empty: a desk that remembers things and supplies no
+                        // run inputs was told "nothing is declared there yet",
+                        // which is true of one namespace and false of the other.
+                        {
+                            let mut both: Vec<String> = inputs
+                                .iter()
+                                .map(|n| format!("`run-inputs.{n}`"))
+                                .chain(remembered.iter().map(|n| format!("`remembers.{n}`")))
+                                .collect();
+                            both.sort();
+                            if both.is_empty() {
+                                "Write `run-inputs.<name>`, naming something under \
+                                 `run-inputs:` on the agent that uses this tool — or \
+                                 `remembers.<name>`, naming something under its `remembers:`."
+                                    .to_string()
+                            } else {
+                                format!("Change it to one of: {}.", both.join(", "))
+                            }
+                        },
                     ));
                     continue;
                 };

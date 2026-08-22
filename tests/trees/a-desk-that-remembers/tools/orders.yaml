@@ -1,0 +1,17 @@
+description: Looks orders up.
+connect: orders-server
+actions:
+  look-up:
+    description: Finds an order.
+    takes:
+      order-number: text
+      account: text
+    reads-only: yes
+    # The account is not the model's to choose. It was verified once, earlier in
+    # this conversation, and remembered — so it is bound from there, the same way
+    # `run-inputs.` binds something the surrounding system supplied.
+    bind:
+      account: remembers.verified-account
+    # And the other direction: what comes back is worth keeping for the rest of
+    # the conversation, so it is written where the author declared it.
+    remember-as: last-order-seen
