@@ -1,11 +1,11 @@
-# The 44 kinds
+# The 45 kinds
 
 Generated from `spec/schema.yaml`. Every kind, what it is for, and how
 many fields it has. You do not need to learn these — `pact check` names the
 right one when you need it.
 
 
-**44 kinds.** A kind is a *shape a document can take*, not a file you must
+**45 kinds.** A kind is a *shape a document can take*, not a file you must
 write: most workspaces use a dozen.
 
 
@@ -20,8 +20,9 @@ write: most workspaces use a dozen.
 | `skill` | 11 | `name`, `description`, `use-when`, `do-not-use-when`, `if-unsure` |
 | `stage` | 6 | `says`, `asks` |
 | `tool` | 7 | `description`, `connect`, `url`, `method`, `says` |
+| `value` | 3 | `description`, `value` |
 | `variant` | 5 | — |
-| `workspace` | 25 | `name`, `workspace-id`, `description`, `owner`, `profile` |
+| `workspace` | 26 | `name`, `workspace-id`, `description`, `owner`, `profile` |
 
 ## People and permission
 
@@ -92,7 +93,7 @@ write: most workspaces use a dozen.
 
 ## How to read a kind
 
-Every kind follows the same shape, so 44 is not 44 things to learn:
+Every kind follows the same shape, so 45 is not 45 things to learn:
 
 ```yaml
 description: what this is, in one line     # every kind has this

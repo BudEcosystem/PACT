@@ -1,0 +1,6 @@
+description: Answers a colleague's question about the same orders.
+instructions: >
+  Answer the question, briefly. Say when you are not sure.
+limits:
+  cost-per-request-under: 0.05 USD
+  when-it-runs-out: stop-and-say-so

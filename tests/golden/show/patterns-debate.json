@@ -1,0 +1,65 @@
+{
+  "name": "Debate",
+  "description": "Two sides argue their case over bounded rounds; a judge that argued for neither decides.",
+  "agents": {
+    "against": {
+      "name": "Against",
+      "description": "Argues the case against.",
+      "instructions": "Argue the case AGAINST the proposition you are given. Make the strongest\nversion of it, not the easiest.\n\nYou are not deciding and you do not concede. If the other side makes a point\nyou cannot answer, say that you cannot answer it — the judge is the one who\nweighs that, and a side that concedes has taken the judge's job."
+    },
+    "for": {
+      "name": "For",
+      "description": "Argues the case for.",
+      "instructions": "Argue the case FOR the proposition you are given. Make the strongest version\nof it, not the easiest.\n\nYou are not deciding and you do not concede. If the other side makes a point\nyou cannot answer, say that you cannot answer it — the judge is the one who\nweighs that, and a side that concedes has taken the judge's job."
+    },
+    "judge": {
+      "name": "Judge",
+      "description": "Hears both sides over bounded rounds and decides.",
+      "instructions": "You are given a question with a real case on both sides.\n\nHear both sides. Work out where they actually disagree, put that back to them,\nhear them again, then decide.\n\nYou do not argue. If you find yourself making a case neither side made, that\nis a third position and it does not belong in the verdict — say the sides did\nnot cover it instead.",
+      "loop": "two-rounds",
+      "team": {
+        "for": "argues the case for",
+        "against": "argues the case against"
+      },
+      "teamwork": {
+        "waits-for": "everyone",
+        "starts": "all-at-once",
+        "divides-the-budget": "evenly",
+        "if-someone-fails": "stop-the-others"
+      }
+    }
+  },
+  "loops": {
+    "two-rounds": {
+      "description": "Hear both sides, say where they actually disagree, hear them again on that point, then decide.",
+      "starts-at": "hear",
+      "steps": {
+        "hear": {
+          "does": "use-tools",
+          "says": "Put the point to both sides and collect what each of them says. Do not argue with either of them here.",
+          "then": {
+            "used-a-tool": "hear",
+            "answered": "weigh"
+          }
+        },
+        "weigh": {
+          "does": "check-its-work",
+          "says": "Say where the two sides actually disagree — the one point that, if it went the other way, would change the answer. Ignore everything they agree on and everything that is a difference of emphasis.",
+          "at-most": 2,
+          "then": {
+            "used-a-tool": "weigh",
+            "answered": "hear",
+            "too-many-times": "decide"
+          }
+        },
+        "decide": {
+          "does": "answer",
+          "says": "Give the answer, say which side it went to, and say what the strongest point against it was. A verdict that does not name the best argument it rejected has not been reached, it has been announced.",
+          "then": {
+            "answered": "done"
+          }
+        }
+      }
+    }
+  }
+}

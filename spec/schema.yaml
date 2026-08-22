@@ -242,6 +242,36 @@ groups:
         surface: S-GEN
         tier: core
         help: written procedures and reference material the agents follow
+      values:
+        # A figure written once, used wherever it belongs. The defect it closes
+        # is convergence: the worked example's 200 USD threshold exists three
+        # times — the gate's `more-than:`, the runaway-refund sentence, and an
+        # eval case — and nothing holds the three together, so the tree that has
+        # had two of the three edits has a gate and a test that disagree about
+        # what the rule is, and every line is individually correct.
+        #
+        # S-GOV, and it is the only surface that can be right. A value's whole
+        # point is that it lands somewhere else, and the somewhere else includes
+        # `more-than:` on a money gate — so a value is at least as governed as
+        # the most governed line that reads it, and the only figure this file can
+        # state ahead of knowing that is the ceiling. An optimiser that could
+        # rewrite a value could move an approval threshold without touching the
+        # policy, which is the governance surface changing with nothing in the
+        # governance surface changing.
+        #
+        # Resolved and then REMOVED, the way `based-on:` is (derive.rs:28-30):
+        # a tree that used a value and a tree that wrote the figure out are the
+        # same document, so the digest is comparable and nothing below the
+        # loader — no adapter, no second port, no runtime — learns that values
+        # exist.
+        type: map of group:value
+        surface: S-GOV
+        tier: core
+        help: >
+          figures this system uses in more than one place — an approval
+          threshold, a deadline, a step count. Write one here and put
+          `{use: <name>}` wherever it belongs, so raising it is one edit
+          instead of three that can disagree.
       policies:
         type: map of group:policy
         surface: S-EXEC
@@ -719,6 +749,65 @@ groups:
         help: >
           narrow the tools and procedures to these, for this way of working
           only. Leave it out to keep all of them.
+  # ── VALUES ──────────────────────────────────────────────────────────────────
+  # One figure, written once. `{use: <name>}` stands where the figure would and
+  # the loader puts the figure there before anything else looks — before
+  # `based-on:` is resolved, so a base and everything derived from it read the
+  # same number, and long before the schema, so a value that lands where it does
+  # not belong draws the ordinary `schema/wrong-type` at the line the author
+  # wrote `{use:}` on.
+  #
+  # It is deliberately NOT a variable. There is nothing to read it back, nothing
+  # to write it during a run, and no way to compute with it: it is one figure,
+  # fixed when the file was written, in as many places as the author needs it.
+  # That is what keeps it outside every argument F1 and F4 settle — a value
+  # cannot be branched on, because after the loader there is no value, only the
+  # figure.
+  value:
+    describe: something a named figure can have
+    fields:
+      description:
+        type: text
+        surface: S-GEN
+        tier: core
+        help: what this figure is, in one line — written for whoever changes it next
+      shape:
+        # OPTIONAL, and checked when written. Optional because the shortest
+        # useful spelling is two lines and a support lead should not have to
+        # name a type to share a number; checked because a claim nothing holds
+        # is decoration, and this one is cheap to hold: the figure is right
+        # here.
+        #
+        # NOT `answer-shape`, and the difference is the point. The answer shapes
+        # are what a MODEL or a PERSON hands over — they carry `images`, `audio`,
+        # `file` and `agent`, and they do not carry `duration`, `percent` or
+        # `size`, because nobody answers a question with a length of time. A
+        # value stands where a SETTING stands, so its vocabulary is the scalar
+        # types a setting really has. Writing `shape: duration` against the
+        # answer shapes was refused as not-a-shape, on the first fixture that
+        # shared a deadline.
+        type: one-of
+        choices: [text, yes-or-no, number, whole-number, duration, money, percent, size]
+        surface: S-CAP
+        tier: expert
+        help: >
+          what kind of figure this is — `money`, `duration`, `whole-number`,
+          `percent`, `size`, `number`, `text` or `yes-or-no`. Leave it out and
+          the figure is read as written. Write it and a figure that is not one
+          is refused here, at the line that is wrong, instead of at every line
+          that uses it.
+      value:
+        # `anything`, because the shape is the other field's job and this one
+        # holds whatever the author is sharing. A value may itself be written
+        # `{use: <other>}`; circles are refused with the circle written out.
+        type: anything
+        required: yes
+        surface: S-GOV
+        tier: core
+        help: >
+          the figure itself, written exactly as you would write it where it is
+          used — `200 USD`, `30s`, `4`, `80%`.
+
   # ── THE MODEL CATALOGUE, AS A WORKSPACE MAY EXTEND IT ───────────────────────
   # PACT ships a catalogue of the models it knows about — how much each one can
   # hold, which runtimes serve it, what it costs — and the author never writes
@@ -3971,6 +4060,16 @@ groups:
           - bundles
           - interceptors
           - watch
+          # A shared figure. A bundle that ships a compliance retention period or
+          # a house spend cap ships it here, and the workspace's own documents
+          # write `{use: <name>}` against it exactly as they would against one of
+          # their own — the substitution happens after mounting, so a bundle's
+          # figure and a local one are indistinguishable by the time anything
+          # reads them. Listed because `what_a_bundle_may_bring_is_what_a_
+          # workspace_can_hold` holds this list equal to the workspace's own
+          # collections: a kind absent from here is not narrower governance, it
+          # is a kind `brings:` is blind to.
+          - values
         required: yes
         surface: S-EXEC
         tier: core

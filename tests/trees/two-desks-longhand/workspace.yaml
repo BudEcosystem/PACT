@@ -1,0 +1,5 @@
+name: two-desks-one-pattern
+workspace-id: 01JEQ8Z3M4N5P6Q7R8S9T0V3B2
+description: Two desks made from one pattern, each supplying its own domain and its own cap.
+owner: platform
+allow-egress: []

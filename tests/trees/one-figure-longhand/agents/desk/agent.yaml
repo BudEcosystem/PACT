@@ -1,0 +1,8 @@
+description: Answers a customer's question about an order.
+instructions: >
+  Answer the question, briefly, and say where the answer came from.
+limits:
+  cost-per-request-under: 0.05 USD
+  finishes-within: 30s
+  steps-at-most: 4
+  when-it-runs-out: stop-and-say-so

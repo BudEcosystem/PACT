@@ -1,0 +1,282 @@
+action.bind	map of text | S-EXEC | core | optional
+action.description	text | S-ROUTE | core | optional
+action.inspects	list of text | S-EXEC | core | optional
+action.needs-a-person	yes-no | S-EXEC | core | optional
+action.reads-only	yes-no | S-EXEC | core | optional
+action.same-request-key	text | S-EXEC | core | optional
+action.same-request-key-across	one-of | S-EXEC | expert | optional
+action.spends-money	yes-no | S-EXEC | core | optional
+action.takes	map of answer-shape | S-CAP | core | optional
+agent.accepts	map of answer-shape | S-CAP | core | optional
+agent.answers-with	map of answer-shape | S-CAP | core | optional
+agent.answers-with-mode	one-of | S-CAP | expert | optional
+agent.base	yes-no | S-GOV | expert | optional
+agent.context-policy	text | S-CTRL | core | optional
+agent.description	text | S-GEN | core | required
+agent.evals	text | S-GOV | core | optional
+agent.instructions	text | S-GEN | core | required
+agent.interceptors	list of text | S-EXEC | expert | optional
+agent.limits	group:limits | S-GOV | core | optional
+agent.loop	text | S-CTRL | expert | optional
+agent.model	text | S-CAP | core | optional
+agent.model-for-checking	text | S-CAP | expert | optional
+agent.name	text | S-GEN | core | optional
+agent.needs	group:needs | S-CAP | core | optional
+agent.policy	text | S-EXEC | core | optional
+agent.remembers	map of group:state | S-GOV | core | optional
+agent.run-inputs	map of answer-shape | S-CAP | core | optional
+agent.settings	group:settings | S-CTRL | core | optional
+agent.team	map of text | S-TOPO | core | optional
+agent.teamwork	group:teamwork | S-TOPO | core | optional
+agent.uses	list of text | S-ROUTE | core | optional
+agent.variants	map of group:variant | S-CTRL | expert | optional
+bundle.brings	list of one-of | S-EXEC | core | required
+bundle.contributes	map of anything | S-CAP | expert | optional
+bundle.description	text | S-GEN | core | required
+bundle.from	text | S-CAP | core | required
+bundle.version	text | S-META | core | optional
+call-order.call	text | S-GOV | core | required
+call-order.first	text | S-GOV | core | required
+case.because	text | S-GOV | core | optional
+case.expect	anything | S-GOV | core | optional
+case.from-these-passages	list of text | S-GOV | expert | optional
+case.must-also	list of group:eval-rule | S-GOV | core | optional
+case.split	one-of | S-GOV | expert | optional
+case.when	text | S-GOV | core | required
+case.with	map of anything | S-GOV | core | optional
+catalog.default	text | S-CAP | expert | optional
+catalog.models	map of group:model | S-CAP | expert | optional
+catalog.version	text | S-GEN | expert | optional
+context-policy.always-keep	list of text | S-CTRL | core | optional
+context-policy.asks	text | S-EXEC | core | optional
+context-policy.description	text | S-GEN | core | optional
+context-policy.if-it-still-does-not-fit	one-of | S-GOV | core | optional
+context-policy.summarised-by	text | S-CAP | expert | optional
+context-policy.then	list of group:tidy-step | S-CTRL | expert | optional
+context-policy.when-full	percent | S-CTRL | core | optional
+credential-reference.by-reference	text | S-CAP | core | required
+cycle-limits.evals	integer | S-GOV | core | optional
+cycle-limits.per-cycle	integer | S-GOV | core | optional
+cycle-limits.per-month	money | S-GOV | core | optional
+drift.at-most	percent | S-GOV | core | optional
+eval-rule.because	text | S-GEN | core | optional
+eval-rule.judged	text | S-GOV | core | optional
+eval-rule.must-call-before	group:call-order | S-GOV | core | optional
+eval-rule.must-contain	list of text | S-GOV | core | optional
+eval-rule.must-not-contain	list of text | S-GOV | core | optional
+eval-rule.must-say-one-of	list of text | S-GOV | core | optional
+evals.cases	map of group:case | S-GOV | core | optional
+evals.description	text | S-GEN | core | optional
+evals.graded-by	text | S-GOV | core | optional
+evals.metrics	list of group:metric | S-GOV | expert | optional
+evals.must-pass	percent | S-GOV | core | optional
+evals.population	one-of | S-GOV | core | required
+evals.rules	list of group:eval-rule | S-GOV | core | optional
+figure.provenance	group:provenance | S-GOV | expert | optional
+figure.value	text | S-CAP | expert | required
+interceptor.applies-to	one-of | S-EXEC | core | optional
+interceptor.description	text | S-GEN | core | required
+interceptor.may	list of one-of | S-EXEC | core | required
+interceptor.rules	list of text | S-EXEC | core | optional
+interceptor.runs-at	integer | S-CTRL | expert | optional
+interceptor.when	list of event-address | S-CTRL | core | required
+knowledge.description	text | S-GEN | core | required
+knowledge.do-not-use-when	text | S-ROUTE | core | optional
+knowledge.documents	anything | S-CAP | core | optional
+knowledge.if-unsure	text | S-ROUTE | core | optional
+knowledge.looked-up-by	one-of | S-CTRL | expert | optional
+knowledge.must-cite	yes-no | S-GOV | core | optional
+knowledge.passages-at-most	integer | S-GOV | core | optional
+knowledge.split-by	one-of | S-CTRL | expert | optional
+knowledge.use-when	text | S-ROUTE | core | optional
+learning-model.model	text | S-CAP | expert | optional
+learning-model.role	one-of | S-CAP | expert | required
+learning.cycle-limits	group:cycle-limits | S-GOV | core | optional
+learning.drift	group:drift | S-GOV | expert | optional
+learning.enabled	one-of | S-GOV | core | required
+learning.keep-only-if	one-of | S-GOV | core | optional
+learning.may-improve-on-its-own	list of one-of | S-GOV | core | optional
+learning.models	map of group:learning-model | S-CAP | expert | optional
+learning.needs-a-person-to-approve	list of one-of | S-GOV | core | optional
+learning.review	one-of | S-GOV | core | optional
+limits.asks	text | S-EXEC | core | optional
+limits.asks-itself-at-most	integer | S-GOV | expert | optional
+limits.cost-per-request-under	money | S-GOV | core | optional
+limits.feel	one-of | S-GOV | core | optional
+limits.finishes-within	duration | S-GOV | core | optional
+limits.first-reply-within	duration | S-GOV | expert | optional
+limits.measured-at	one-of | S-GOV | expert | optional
+limits.per-word-under	duration | S-GOV | expert | optional
+limits.runs-for-at-most	duration | S-GOV | core | optional
+limits.steps-at-most	integer | S-GOV | core | optional
+limits.tokens-at-most	integer | S-GOV | core | optional
+limits.tool-calls-at-most	integer | S-GOV | core | optional
+limits.when-it-runs-out	one-of | S-GOV | core | optional
+loop.based-on	text | S-CTRL | core | optional
+loop.description	text | S-GEN | core | optional
+loop.starts-at	text | S-CTRL | expert | optional
+loop.steps	map of group:stage | S-CTRL | expert | optional
+metric.threshold	percent | S-GOV | expert | optional
+metric.uri	text | S-GOV | expert | required
+metric.with	map of anything | S-GOV | expert | optional
+model-can.computer-use	yes-no | S-CAP | expert | optional
+model-can.context-window	group:figure | S-CAP | expert | optional
+model-can.modality-in	list of one-of | S-CAP | expert | optional
+model-can.modality-out	list of one-of | S-CAP | expert | optional
+model-can.tool-calling	one-of | S-CAP | expert | optional
+model-cost.input-per-mtok	text | S-GOV | expert | optional
+model-cost.output-per-mtok	text | S-GOV | expert | optional
+model.also-known-as	list of text | S-CAP | expert | optional
+model.capabilities	group:model-can | S-CAP | expert | optional
+model.cost	group:model-cost | S-GOV | expert | optional
+model.description	text | S-GEN | expert | optional
+model.family	text | S-GEN | expert | optional
+model.reasoning	group:figure | S-CAP | expert | optional
+model.served-by	list of group:served-by | S-CAP | expert | optional
+model.tier	one-of | S-CAP | expert | optional
+needs.audio	yes-no | S-CAP | core | optional
+needs.because	text | S-GEN | core | required
+needs.computer-use	yes-no | S-CAP | core | optional
+needs.context-at-least	size | S-CAP | core | optional
+needs.images	yes-no | S-CAP | core | optional
+needs.reasoning	one-of | S-CAP | core | optional
+needs.scores	map of threshold | S-CAP | expert | optional
+needs.tool-calling	one-of | S-CAP | core | optional
+outcome.answered	text | S-CTRL | expert | optional
+outcome.too-many-times	text | S-CTRL | expert | optional
+outcome.used-a-tool	text | S-CTRL | expert | optional
+policy.applies-to	one-of | S-EXEC | core | optional
+policy.ask-a-person	list of group:question-rule | S-EXEC | core | optional
+port.answers	text | S-TOPO | core | required
+port.description	text | S-GEN | core | required
+port.every	text | S-TOPO | core | optional
+port.if-still-running	one-of | S-CTRL | core | optional
+port.kind	one-of | S-TOPO | core | optional
+port.remembers	map of group:state | S-GOV | expert | optional
+port.same-conversation-when	list of text | S-TOPO | core | optional
+port.says	text | S-GEN | core | optional
+port.through	text | S-CAP | core | optional
+port.who-can-reach-it	list of text | S-EXEC | core | optional
+provenance.as-of	text | S-GOV | expert | optional
+provenance.contamination	text | S-GOV | expert | optional
+provenance.date	text | S-GOV | expert | optional
+provenance.harness	text | S-GOV | expert | optional
+provenance.recorded-by	text | S-GOV | expert | optional
+provenance.source	text | S-GOV | expert | required
+question-rule.because	text | S-GEN | core | required
+question-rule.question	text | S-EXEC | core | required
+question-rule.when	list of group:when-this | S-EXEC | core | required
+question.answer	map of answer-shape | S-EXEC | core | required
+question.answer-within	duration | S-GOV | core | optional
+question.asked-of	list of text | S-EXEC | core | required
+question.description	text | S-GEN | core | required
+question.escalates-to	list of text | S-EXEC | core | optional
+question.if-nobody-answers	one-of | S-EXEC | core | required
+question.says	text | S-EXEC | core | required
+question.shows	list of text | S-EXEC | core | optional
+redaction.description	text | S-GEN | core | optional
+redaction.hide	list of text | S-EXEC | core | required
+resource.asks-to-connect	text | S-EXEC | core | optional
+resource.auth	group:credential-reference | S-CAP | core | optional
+resource.available-when	one-of | S-ROUTE | expert | optional
+resource.description	text | S-GEN | core | optional
+resource.endpoint	text | S-CAP | core | optional
+resource.resource-kind	one-of | S-CAP | core | required
+resource.tool-snapshot-digest	text | S-GOV | expert | optional
+resource.tool-snapshot-max-age	duration | S-GOV | expert | optional
+resource.tool-snapshot-taken-at	text | S-GOV | expert | optional
+served-by.endpoint	text | S-CAP | expert | optional
+served-by.runtime	text | S-CAP | expert | required
+settings.frequency-penalty	number | S-CTRL | expert | optional
+settings.max-tokens	integer | S-CTRL | core | optional
+settings.parallel-tool-calls	yes-no | S-CTRL | expert | optional
+settings.presence-penalty	number | S-CTRL | expert | optional
+settings.seed	integer | S-CTRL | expert | optional
+settings.service-tier	text | S-CTRL | expert | optional
+settings.stop-sequences	list of text | S-CTRL | expert | optional
+settings.temperature	number | S-CTRL | expert | optional
+settings.thinking	one-of | S-CTRL | core | optional
+settings.tool-choice	text | S-CTRL | expert | optional
+settings.top-k	integer | S-CTRL | expert | optional
+settings.top-p	number | S-CTRL | expert | optional
+skill.assets	anything | S-GEN | expert | optional
+skill.available-when	one-of | S-ROUTE | expert | optional
+skill.content	text | S-GEN | core | optional
+skill.costs-about	size | S-GOV | expert | optional
+skill.description	text | S-ROUTE | core | required
+skill.do-not-use-when	text | S-ROUTE | core | optional
+skill.if-unsure	text | S-ROUTE | core | optional
+skill.name	text | S-GEN | core | optional
+skill.references	anything | S-GEN | core | optional
+skill.scripts	anything | S-GEN | expert | optional
+skill.use-when	text | S-ROUTE | core | optional
+stage.asks	text | S-EXEC | core | optional
+stage.at-most	integer | S-GOV | expert | optional
+stage.does	one-of | S-CTRL | expert | required
+stage.may-use	list of text | S-ROUTE | expert | optional
+stage.says	text | S-GEN | core | optional
+stage.then	group:outcome | S-CTRL | expert | optional
+state.description	text | S-GEN | core | required
+state.forget-after	duration | S-GOV | core | optional
+state.lasts	one-of | S-GOV | core | required
+state.never-from	list of one-of | S-EXEC | core | optional
+state.shaped-like	map of anything | S-CAP | expert | optional
+state.starts-as	anything | S-GEN | expert | optional
+state.stops-being-true-when	list of text | S-EXEC | core | optional
+state.survives-shortening	yes-no | S-EXEC | core | optional
+teamwork.asks	text | S-EXEC | core | optional
+teamwork.divides-the-budget	one-of | S-GOV | core | optional
+teamwork.enough-is	integer | S-TOPO | core | optional
+teamwork.gives-up-after	duration | S-GOV | core | optional
+teamwork.if-someone-fails	one-of | S-EXEC | core | optional
+teamwork.shares	map of percent | S-GOV | core | optional
+teamwork.starts	one-of | S-CTRL | core | optional
+teamwork.waits-for	one-of | S-TOPO | core | optional
+tidy-step.applies-to	text | S-CTRL | expert | optional
+tidy-step.down-to	text | S-CTRL | expert | optional
+tidy-step.what	one-of | S-CTRL | expert | required
+tool.actions	map of group:action | S-CAP | core | optional
+tool.available-when	one-of | S-ROUTE | expert | optional
+tool.connect	text | S-CAP | core | optional
+tool.description	text | S-ROUTE | core | required
+tool.method	one-of | S-CAP | core | optional
+tool.says	text | S-GEN | core | optional
+tool.url	text | S-CAP | core | optional
+variant.instructions	text | S-GEN | expert | optional
+variant.may-use	list of text | S-ROUTE | expert | optional
+variant.says	text | S-GEN | expert | optional
+variant.steps-at-most	integer | S-CTRL | expert | optional
+variant.when	text | S-GEN | expert | optional
+watch.description	text | S-GEN | core | required
+watch.when	event-address | S-GOV | core | required
+watch.writes-to	file-name | S-GOV | core | required
+when-this.arg	text | S-EXEC | core | optional
+when-this.is	text | S-EXEC | core | optional
+when-this.is-one-of	list of text | S-EXEC | core | optional
+when-this.more-than	text | S-EXEC | core | optional
+when-this.tool	text | S-EXEC | core | required
+workspace.agents	map of group:agent | S-TOPO | core | optional
+workspace.allow-egress	list of one-of | S-EXEC | core | optional
+workspace.bundles	map of group:bundle | S-CAP | expert | optional
+workspace.context-policies	map of group:context-policy | S-CTRL | core | optional
+workspace.description	text | S-GEN | core | optional
+workspace.durability	one-of | S-GOV | expert | optional
+workspace.evals	group:evals | S-GOV | core | optional
+workspace.interceptors	map of group:interceptor | S-EXEC | expert | optional
+workspace.knowledge	map of group:knowledge | S-CAP | core | optional
+workspace.learning	group:learning | S-GOV | core | optional
+workspace.loops	map of group:loop | S-CTRL | expert | optional
+workspace.models	group:catalog | S-CAP | expert | optional
+workspace.name	text | S-GOV | core | required
+workspace.owner	text | S-GOV | core | optional
+workspace.pact-version	text | S-GOV | expert | optional
+workspace.policies	map of group:policy | S-EXEC | core | optional
+workspace.ports	map of group:port | S-TOPO | core | optional
+workspace.profile	text | S-GOV | core | optional
+workspace.questions	map of group:question | S-EXEC | core | optional
+workspace.redaction	group:redaction | S-EXEC | core | optional
+workspace.resources	map of group:resource | S-CAP | core | optional
+workspace.skills	map of group:skill | S-GEN | core | optional
+workspace.tools	map of group:tool | S-CAP | core | optional
+workspace.watch	map of group:watch | S-GOV | core | optional
+workspace.workspace-id	text | S-GOV | core | optional

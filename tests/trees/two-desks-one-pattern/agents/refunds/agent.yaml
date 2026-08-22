@@ -1,0 +1,4 @@
+based-on: desk-pattern
+with:
+  domain: refunds
+  daily-cap: 0.05 USD

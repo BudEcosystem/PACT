@@ -1,0 +1,695 @@
+{
+  "name": "refund-desk",
+  "workspace-id": "01J8ZK4Q7M2XN5V3B9C1D6F0AE",
+  "description": "The refund decision system for the customer support team.",
+  "owner": "support-operations",
+  "allow-egress": [],
+  "agents": {
+    "fraud-checker": {
+      "name": "Fraud Checker",
+      "description": "Looks for signs that a refund request is not genuine.",
+      "uses": [
+        "zendesk"
+      ],
+      "answers-with": {
+        "concern": "one of none, low, high",
+        "why": "text"
+      },
+      "instructions": "Look at this refund request and say whether anything about it looks wrong.\n\nThings worth noticing:\n\n- The same customer has asked for several refunds recently.\n- The delivery address does not match previous orders.\n- The photo does not show the item that was ordered.\n- The story changed between messages.\n\nSay \"none\" unless you can point at something specific. Being suspicious\nwithout a reason is worse than being wrong."
+    },
+    "policy-checker": {
+      "name": "Policy Checker",
+      "description": "Says whether our refund policy allows this request.",
+      "uses": [
+        "refund-policy"
+      ],
+      "answers-with": {
+        "allowed": "yes or no",
+        "clause": "text"
+      },
+      "instructions": "You are given the details of a purchase and what went wrong.\n\nSay whether our refund policy allows a refund, and quote the exact part of the\npolicy that decides it.\n\nDo not consider whether the customer seems honest. That is someone else's job.\nIf the policy genuinely does not cover the situation, say so plainly rather\nthan guessing."
+    },
+    "refund-desk": {
+      "name": "Refund Desk",
+      "description": "Decides whether a customer's refund request should be approved.",
+      "team": {
+        "policy-checker": "Checks the request against our written refund policy.",
+        "fraud-checker": "Looks for signs the request is not genuine."
+      },
+      "uses": [
+        "zendesk",
+        "payments",
+        "refund-policy"
+      ],
+      "accepts": {
+        "message": "text",
+        "photos": "list of images"
+      },
+      "answers-with": {
+        "decision": "one of approved, declined",
+        "reason": "text",
+        "amount": "money"
+      },
+      "policy": "approvals",
+      "evals": "/evals/suite.yaml",
+      "context-policy": "long-threads",
+      "remembers": {
+        "what-the-customer-told-us": {
+          "description": "Details the customer has already given about the item and the order, so they are not asked for the same thing twice in one conversation.",
+          "lasts": "one-conversation",
+          "forget-after": "30d",
+          "never-from": [
+            "tool output"
+          ]
+        },
+        "payments-was-approved": {
+          "description": "that a person approved this refund",
+          "lasts": "one-conversation",
+          "survives-shortening": "yes",
+          "stops-being-true-when": [
+            "the turn ends"
+          ]
+        }
+      },
+      "loop": "careful",
+      "interceptors": [
+        "stop-runaway-refunds"
+      ],
+      "variants": {
+        "decomposed": {
+          "when": "the model is smaller and skips steps",
+          "says": "Always look the order up with the ticket tool before deciding anything.",
+          "steps-at-most": 6
+        }
+      },
+      "instructions": "You decide whether a customer should get a refund.\n\nWork in this order:\n\n1. Read the ticket and find out what was bought, when, and what went wrong.\n2. Ask **policy-checker** whether our policy allows a refund for this case.\n3. Ask **fraud-checker** whether anything about the request looks wrong.\n4. Make the call.\n\nRules you must never break:\n\n- Never approve a refund for something bought more than 30 days ago.\n- Never promise a date. Say \"within 5 working days\" and nothing more specific.\n- If policy-checker and fraud-checker disagree, decline and explain that a\n  person will look at it.\n\nAlways give your reason in one plain sentence. The customer reads it.",
+      "limits": {
+        "feel": "interactive",
+        "finishes-within": "30s",
+        "cost-per-request-under": "0.05 USD",
+        "steps-at-most": 12,
+        "tool-calls-at-most": 40,
+        "when-it-runs-out": "ask-a-person",
+        "asks": "keep-going"
+      },
+      "needs": {
+        "reasoning": "careful",
+        "tool-calling": "yes",
+        "images": "yes",
+        "context-at-least": "32k",
+        "because": "it weighs a four-clause policy against a photo and a ticket history"
+      },
+      "run-inputs": {
+        "customer-id": "text"
+      },
+      "teamwork": {
+        "waits-for": "everyone",
+        "starts": "all-at-once",
+        "divides-the-budget": "by-share",
+        "shares": {
+          "policy-checker": "60%",
+          "fraud-checker": "40%"
+        },
+        "if-someone-fails": "ask-a-person",
+        "asks": "carry-on-without-a-check"
+      }
+    }
+  },
+  "context-policies": {
+    "long-threads": {
+      "description": "Keeps a long back-and-forth inside what the model can hold.",
+      "when-full": "85%",
+      "always-keep": [
+        "anything a person approved or declined",
+        "the customer's original request",
+        "anything the payments tool said"
+      ],
+      "then": [
+        {
+          "what": "shorten-long-results",
+          "applies-to": "anything a tool returned earlier",
+          "down-to": "2000 characters"
+        },
+        {
+          "what": "summarise-older",
+          "applies-to": "everything before the last few messages"
+        },
+        {
+          "what": "drop-parts",
+          "applies-to": "the model's own thinking"
+        },
+        {
+          "what": "keep-recent-only",
+          "down-to": "everything since the last approval"
+        }
+      ],
+      "summarised-by": "qwen2.5-14b-instruct",
+      "if-it-still-does-not-fit": "ask-a-person",
+      "asks": "too-long-to-send"
+    }
+  },
+  "evals": {
+    "description": "Checks the Refund Desk makes the right call and explains itself.",
+    "population": "authored-enumeration",
+    "must-pass": "70%",
+    "rules": [
+      {
+        "must-say-one-of": [
+          "approved",
+          "declined"
+        ],
+        "because": "the customer needs a clear answer"
+      },
+      {
+        "must-not-contain": [
+          "refund by",
+          "arrive on"
+        ],
+        "because": "we must never promise a date we do not control"
+      },
+      {
+        "must-call-before": {
+          "call": "payments/issue-refund",
+          "first": "payments/look-up-order"
+        },
+        "because": "issuing money without looking up the order is the expensive mistake"
+      },
+      {
+        "judged": "gives the reason in one sentence a customer can understand",
+        "because": "a wall of policy text reads as a refusal even when we approve"
+      }
+    ],
+    "metrics": [
+      {
+        "uri": "pact:at_most_words",
+        "threshold": "80%",
+        "with": {
+          "words": 60
+        }
+      }
+    ],
+    "graded-by": "qwen2.5-14b-instruct",
+    "cases": {
+      "clear-approve": {
+        "when": "A customer bought a lamp 6 days ago for 40 USD. It arrived with a cracked\nbase. They have attached a photo showing the crack. They want their money back.",
+        "expect": {
+          "decision": "approved",
+          "amount": "40 USD"
+        },
+        "because": "Within 30 days and the item arrived damaged, so policy allows a full refund.",
+        "must-also": [
+          {
+            "must-call-before": {
+              "call": "payments/issue-refund",
+              "first": "payments/look-up-order"
+            }
+          }
+        ]
+      },
+      "outside-window": {
+        "when": "A customer bought headphones 45 days ago. They say they never really liked\nthem and would like a refund.",
+        "expect": {
+          "decision": "declined"
+        },
+        "because": "More than 30 days have passed, and change of mind is not covered after that.",
+        "must-also": [
+          {
+            "must-contain": [
+              "30 days"
+            ],
+            "because": "the customer needs to know which rule applied"
+          },
+          {
+            "must-not-contain": [
+              "your fault",
+              "you should have"
+            ],
+            "because": "a decline is not an accusation"
+          }
+        ]
+      },
+      "fraud-signal": {
+        "when": "A customer is asking for their fourth refund this month. The delivery address\nis different from all their previous orders. The photo they sent shows a\ndifferent model than the one they ordered.",
+        "expect": {
+          "decision": "declined"
+        },
+        "because": "Several signs point to this not being genuine, so a person should look at it.",
+        "must-also": [
+          {
+            "must-contain": [
+              "review"
+            ],
+            "because": "the customer should be told a person is looking at it"
+          },
+          {
+            "must-not-contain": [
+              "fraud",
+              "fraudulent",
+              "stealing"
+            ],
+            "because": "we never accuse a customer in writing"
+          }
+        ]
+      },
+      "partial-gift-card": {
+        "when": "A customer paid 60 USD for a kettle, 20 USD of it on a gift card. It arrived\nfaulty after 10 days. They want their money back.",
+        "expect": {
+          "decision": "approved"
+        },
+        "because": "Faulty within 30 days, so a full refund — split back across both payment methods.",
+        "must-also": [
+          {
+            "must-contain": [
+              "gift card"
+            ],
+            "because": "a refund split across two payment methods has to say so"
+          }
+        ]
+      },
+      "personalised-item": {
+        "when": "A customer ordered a mug printed with their dog's name 8 days ago. They have\nchanged their mind and want to return it. Nothing is wrong with the mug.",
+        "expect": {
+          "decision": "declined"
+        },
+        "because": "Personalised items cannot be returned unless faulty.",
+        "must-also": [
+          {
+            "must-contain": [
+              "personalised"
+            ],
+            "because": "a decline the customer cannot trace back to a rule reads as arbitrary"
+          }
+        ],
+        "split": "held-out"
+      },
+      "sale-item-damaged": {
+        "when": "A customer bought a discounted jacket 3 days ago in the sale. The zip was\nbroken on arrival. They ask whether sale items can be refunded.",
+        "expect": {
+          "decision": "approved"
+        },
+        "because": "Sale items follow the same rules as full-price items, and this one was faulty.",
+        "split": "held-out"
+      }
+    }
+  },
+  "interceptors": {
+    "redact-card-numbers": {
+      "description": "Stops card numbers reaching the model, a tool, or the transcript.",
+      "applies-to": "every-agent",
+      "when": [
+        "step.message.before",
+        "step.tool.before"
+      ],
+      "may": [
+        "hide-values"
+      ],
+      "rules": [
+        "replace anything that looks like a card number with \"[card number removed]\"",
+        "do the same for anything that looks like a bank account"
+      ]
+    },
+    "stop-runaway-refunds": {
+      "description": "Stops the run if it tries to issue more than one refund per request.",
+      "when": "step.tool.before",
+      "may": [
+        "stop-the-run"
+      ],
+      "rules": [
+        "if payments is called more than 1 time in one run, stop and say \"A second refund in one conversation needs a person. Nothing further has been done.\""
+      ]
+    }
+  },
+  "learning": {
+    "enabled": "propose-only",
+    "may-improve-on-its-own": [
+      "phrasing",
+      "examples",
+      "skill-notes"
+    ],
+    "needs-a-person-to-approve": [
+      "tools",
+      "permissions",
+      "team",
+      "limits",
+      "evals",
+      "policy-clauses"
+    ],
+    "keep-only-if": "a-person-approves-it",
+    "review": "weekly",
+    "cycle-limits": {
+      "per-cycle": 4,
+      "per-month": "20 USD",
+      "evals": 2000
+    },
+    "models": {
+      "execution": {
+        "role": "llm"
+      },
+      "reflection": {
+        "role": "reflector"
+      }
+    }
+  },
+  "loops": {
+    "careful": {
+      "description": "Look things up, then read the decision back against the written refund policy before the customer sees it.",
+      "starts-at": "gather",
+      "steps": {
+        "gather": {
+          "does": "use-tools",
+          "then": {
+            "used-a-tool": "gather",
+            "answered": "re-read"
+          }
+        },
+        "re-read": {
+          "does": "check-its-work",
+          "may-use": [
+            "zendesk",
+            "refund-policy"
+          ],
+          "says": "Check the decision you just made against the refund policy, rule by rule. Say which rule allows it, or which rule it breaks. If the ticket does not say when the item was delivered, read the ticket again.",
+          "at-most": 2,
+          "then": {
+            "used-a-tool": "re-read",
+            "answered": "reply"
+          }
+        },
+        "reply": {
+          "does": "answer",
+          "then": {
+            "answered": "done"
+          }
+        }
+      }
+    }
+  },
+  "policies": {
+    "approvals": {
+      "applies-to": "every-agent",
+      "ask-a-person": [
+        {
+          "when": [
+            {
+              "tool": "payments/issue-refund",
+              "arg": "amount",
+              "more-than": "200 USD"
+            }
+          ],
+          "because": "a refund over 200 USD is a management decision",
+          "question": "is-this-ok"
+        },
+        {
+          "when": [
+            {
+              "tool": "payments/issue-refund",
+              "arg": "amount",
+              "more-than": "500 USD"
+            }
+          ],
+          "because": "above 500 USD a person sets the figure, rather than approving one the model chose",
+          "question": "how-much-to-refund"
+        },
+        {
+          "when": [
+            {
+              "tool": "zendesk/reply"
+            }
+          ],
+          "because": "nothing goes to a customer without a person seeing it first",
+          "question": "is-this-ok"
+        }
+      ]
+    }
+  },
+  "ports": {
+    "email": {
+      "description": "Refund requests that arrive by email.",
+      "kind": "inbound-call",
+      "through": "helpdesk",
+      "answers": "refund-desk",
+      "same-conversation-when": [
+        "they are replies to the same email"
+      ],
+      "who-can-reach-it": [
+        "anyone who emails support@"
+      ]
+    },
+    "slack": {
+      "description": "Where customers reach us — the",
+      "kind": "conversation",
+      "through": "slack",
+      "answers": "refund-desk",
+      "same-conversation-when": [
+        "they are in the same thread"
+      ],
+      "who-can-reach-it": [
+        "people in our Slack workspace"
+      ]
+    },
+    "weekly-review": {
+      "description": "Summarise the week's refund decisions for the team.",
+      "kind": "schedule",
+      "every": "Friday at 4pm",
+      "answers": "refund-desk",
+      "says": "Summarise this week's refund decisions. How many approved, how many\ndeclined, and anything a person had to step in on.",
+      "if-still-running": "skip"
+    }
+  },
+  "questions": {
+    "carry-on-without-a-check": {
+      "description": "Asked when one of the specialists could not answer at all.",
+      "says": "One of the checks could not be completed. Decide whether to carry on with what we have.",
+      "answer": {
+        "approved": "yes or no",
+        "because": "text"
+      },
+      "shows": [
+        "who-could-not-answer",
+        "why-they-could-not",
+        "who-did-answer"
+      ],
+      "asked-of": [
+        "support-leads"
+      ],
+      "answer-within": "30m",
+      "if-nobody-answers": "escalate",
+      "escalates-to": [
+        "support-manager"
+      ]
+    },
+    "how-much-to-refund": {
+      "description": "Asks a person to set the refund figure themselves, above 500 USD.",
+      "says": "How much should we refund on this order?",
+      "answer": {
+        "amount": "money",
+        "because": "text"
+      },
+      "shows": [
+        "amount",
+        "order-number"
+      ],
+      "asked-of": [
+        "support-leads"
+      ],
+      "answer-within": "4h",
+      "if-nobody-answers": "decline"
+    },
+    "is-this-ok": {
+      "description": "The yes-or-no a person is asked before money moves or a customer hears from us.",
+      "says": "Please check this before it happens.",
+      "answer": {
+        "approved": "yes or no",
+        "because": "text"
+      },
+      "shows": [
+        "amount",
+        "order-number",
+        "message",
+        "ticket-id"
+      ],
+      "asked-of": [
+        "support-leads"
+      ],
+      "answer-within": "30m",
+      "if-nobody-answers": "escalate",
+      "escalates-to": [
+        "support-manager"
+      ]
+    },
+    "keep-going": {
+      "description": "Asked when a run reaches one of its limits before it has an answer.",
+      "says": "This is taking longer than it should. Keep going?",
+      "answer": {
+        "keep-going": "yes or no"
+      },
+      "shows": [
+        "spent-so-far",
+        "steps-taken"
+      ],
+      "asked-of": [
+        "support-leads"
+      ],
+      "answer-within": "10m",
+      "if-nobody-answers": "stop-and-say-so"
+    },
+    "may-we-connect": {
+      "description": "Asks a person to allow this desk to use the payments connection.",
+      "says": "May we use the payments connection for this?",
+      "answer": {
+        "approved": "yes or no",
+        "because": "text"
+      },
+      "shows": [
+        "order-number",
+        "amount"
+      ],
+      "asked-of": [
+        "support-leads",
+        "support-manager"
+      ],
+      "answer-within": "1h",
+      "if-nobody-answers": "stop-and-say-so"
+    },
+    "too-long-to-send": {
+      "description": "Asked when a refund conversation cannot be shortened enough to send.",
+      "says": "This conversation is too long to send in full. Carry on with what fits?",
+      "answer": {
+        "approved": "yes or no",
+        "because": "text"
+      },
+      "shows": [
+        "how-much-over"
+      ],
+      "asked-of": [
+        "support-leads"
+      ],
+      "answer-within": "15m",
+      "if-nobody-answers": "stop-and-say-so"
+    }
+  },
+  "redaction": {
+    "description": "What may never leave this workspace in a case or a report.",
+    "hide": [
+      "anything that looks like a card number",
+      "anything that looks like a bank account",
+      "anything that looks like an email address"
+    ]
+  },
+  "resources": {
+    "payments-server": {
+      "resource-kind": "mcp-server",
+      "endpoint": "host/payments-mcp",
+      "auth": {
+        "by-reference": "host/payments-credential"
+      },
+      "asks-to-connect": "may-we-connect",
+      "description": "Our payment system, as the platform team publishes it."
+    },
+    "zendesk-server": {
+      "resource-kind": "mcp-server",
+      "endpoint": "host/zendesk-mcp",
+      "auth": {
+        "by-reference": "host/zendesk-credential"
+      },
+      "description": "Our customer support system, as the platform team publishes it."
+    }
+  },
+  "skills": {
+    "refund-policy": {
+      "name": "refund-policy",
+      "description": "How to decide a refund, step by step.",
+      "use-when": "the customer is asking for money back",
+      "do-not-use-when": "the customer wants an exchange or a repair",
+      "if-unsure": "decline and hand to a person",
+      "costs-about": 550,
+      "content": "\n# Refund policy\n\n## Rules\n\n1. Refunds are available for **30 days** from the delivery date.\n2. Damaged or faulty items are always refunded in full, including postage.\n3. Change-of-mind returns are refunded minus postage.\n4. Personalised items cannot be returned unless faulty.\n5. Sale items follow the same rules as full-price items.\n\n## Notes\n\nIf the order was paid partly with a gift card, refund the gift card portion to\na new gift card and the rest to the original payment method.",
+      "references": {
+        "$payload": "skills/refund-policy/references",
+        "files": [
+          {
+            "$file": "window-table.md",
+            "contentType": "application/md",
+            "sizeBytes": 194
+          }
+        ]
+      },
+      "scripts": {
+        "$payload": "skills/refund-policy/scripts",
+        "files": [
+          {
+            "$file": "check_window.py",
+            "contentType": "application/py",
+            "sizeBytes": 235
+          }
+        ]
+      }
+    }
+  },
+  "tools": {
+    "payments": {
+      "description": "Where refunds are actually issued.",
+      "connect": "payments-server",
+      "actions": {
+        "look-up-order": {
+          "description": "Find an order by its number.",
+          "takes": {
+            "order-number": "text"
+          },
+          "reads-only": "yes",
+          "bind": {
+            "customer-id": "run-inputs.customer-id"
+          }
+        },
+        "issue-refund": {
+          "description": "Send money back to the customer.",
+          "takes": {
+            "order-number": "text",
+            "amount": "money"
+          },
+          "spends-money": "yes",
+          "same-request-key": "order-number",
+          "bind": {
+            "customer-id": "run-inputs.customer-id"
+          },
+          "inspects": [
+            "amount"
+          ]
+        }
+      }
+    },
+    "zendesk": {
+      "description": "Our customer support system. Used to read tickets and reply.",
+      "connect": "zendesk-server",
+      "actions": {
+        "read-ticket": {
+          "description": "Read a support ticket and its history.",
+          "takes": {
+            "ticket-id": "text"
+          },
+          "reads-only": "yes",
+          "bind": {
+            "customer-id": "run-inputs.customer-id"
+          }
+        },
+        "reply": {
+          "description": "Send a reply to the customer.",
+          "takes": {
+            "ticket-id": "text",
+            "message": "text"
+          },
+          "bind": {
+            "customer-id": "run-inputs.customer-id"
+          }
+        }
+      }
+    }
+  },
+  "watch": {
+    "tool-calls": {
+      "description": "Records every tool call the desk finishes, so that afterwards you can read back what it actually did rather than take its word for it.",
+      "when": "step.tool.completed",
+      "writes-to": "tool-calls.jsonl"
+    }
+  }
+}

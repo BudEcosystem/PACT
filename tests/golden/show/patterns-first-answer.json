@@ -1,0 +1,31 @@
+{
+  "name": "First Answer",
+  "description": "Take the first reply of any kind — the one shape here where a failure can win.",
+  "agents": {
+    "mirror-a": {
+      "name": "Mirror A",
+      "description": "Answers the lookup.",
+      "instructions": "Answer the lookup you are given, directly and briefly.\n\nYou are one of two interchangeable mirrors. Do not qualify or hedge — if you\ncannot answer, fail plainly, because the router is taking whichever of us\nreplies first and a hedged non-answer is worse than an error it can see."
+    },
+    "mirror-b": {
+      "name": "Mirror B",
+      "description": "Answers the lookup.",
+      "instructions": "Answer the lookup you are given, directly and briefly.\n\nYou are one of two interchangeable mirrors. Do not qualify or hedge — if you\ncannot answer, fail plainly, because the router is taking whichever of us\nreplies first and a hedged non-answer is worse than an error it can see."
+    },
+    "router": {
+      "name": "Router",
+      "description": "Takes the first reply of any kind from two interchangeable mirrors.",
+      "instructions": "You are given a lookup. Two mirrors can answer it and they are\ninterchangeable.\n\nAsk both and use the first reply. If that reply is an error, say so and stop —\ndo not quietly fall back to the other one. Falling back would make this a\ndifferent shape from the one written down, and the next person reading the\nfile would be reading about a system that no longer exists.",
+      "team": {
+        "mirror-a": "answers the lookup",
+        "mirror-b": "answers the lookup"
+      },
+      "teamwork": {
+        "waits-for": "anyone",
+        "starts": "all-at-once",
+        "divides-the-budget": "evenly",
+        "if-someone-fails": "carry-on"
+      }
+    }
+  }
+}

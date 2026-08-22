@@ -1,0 +1,38 @@
+{
+  "name": "Quorum",
+  "description": "Carry on once two of three readers agree, without waiting for the third.",
+  "agents": {
+    "reader-a": {
+      "name": "Reader A",
+      "description": "Reads the passage and answers the question on its own.",
+      "instructions": "Read the passage you are given and answer the question about it.\n\nAnswer from the passage alone. If the passage does not settle it, say that it\ndoes not rather than reasoning from anything else you know — a reader that\nfills gaps is one the referee cannot tell apart from a reader that read\ncarefully."
+    },
+    "reader-b": {
+      "name": "Reader B",
+      "description": "Reads the passage and answers the question on its own.",
+      "instructions": "Read the passage you are given and answer the question about it.\n\nAnswer from the passage alone. If the passage does not settle it, say that it\ndoes not rather than reasoning from anything else you know — a reader that\nfills gaps is one the referee cannot tell apart from a reader that read\ncarefully."
+    },
+    "reader-c": {
+      "name": "Reader C",
+      "description": "Reads the passage and answers the question on its own.",
+      "instructions": "Read the passage you are given and answer the question about it.\n\nAnswer from the passage alone. If the passage does not settle it, say that it\ndoes not rather than reasoning from anything else you know — a reader that\nfills gaps is one the referee cannot tell apart from a reader that read\ncarefully."
+    },
+    "referee": {
+      "name": "Referee",
+      "description": "Decides once enough readers have come back.",
+      "instructions": "You are given a passage and a question about it. Three readers are looking at\nit independently.\n\nAsk all three. As soon as two of them have answered, decide — do not wait for\nthe third. Say which two you used and whether they agreed with each other.\n\nIf the two you got disagree, say so plainly rather than picking one.",
+      "team": {
+        "reader-a": "reads the passage and answers the question",
+        "reader-b": "reads the passage and answers the question",
+        "reader-c": "reads the passage and answers the question"
+      },
+      "teamwork": {
+        "waits-for": "enough-of-them",
+        "enough-is": 2,
+        "starts": "all-at-once",
+        "divides-the-budget": "evenly",
+        "if-someone-fails": "carry-on"
+      }
+    }
+  }
+}

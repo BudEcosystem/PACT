@@ -1,0 +1,41 @@
+{
+  "name": "Staff desk",
+  "description": "Answers staff questions out of the handbook, and cites it.",
+  "allow-egress": [],
+  "agents": {
+    "helpdesk": {
+      "name": "Staff desk",
+      "description": "Answers questions about leave, expenses and working hours.",
+      "uses": [
+        "staff-handbook"
+      ],
+      "instructions": "Answer only from the staff handbook, and say which part of it you used.\n\nIf the handbook does not cover what somebody asked, say so and tell them to\nemail the people team. Do not guess, and do not fill a gap from what you happen\nto know about other companies — the handbook is the only thing that is true\nhere."
+    }
+  },
+  "knowledge": {
+    "staff-handbook": {
+      "description": "The staff handbook everyone asks about.",
+      "looked-up-by": "words",
+      "passages-at-most": 3,
+      "must-cite": "yes",
+      "use-when": "somebody asks about leave, expenses, working hours or notice periods",
+      "do-not-use-when": "somebody asks about their own pay or a personal grievance",
+      "if-unsure": "say the handbook does not cover it and point them at the people team",
+      "documents": {
+        "$payload": "knowledge/staff-handbook/documents",
+        "files": [
+          {
+            "$file": "expenses.md",
+            "contentType": "application/md",
+            "sizeBytes": 282
+          },
+          {
+            "$file": "leave.md",
+            "contentType": "application/md",
+            "sizeBytes": 222
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "Weighted",
+  "description": "Split one request's budget by how much work each teammate actually does.",
+  "agents": {
+    "assessor": {
+      "name": "Assessor",
+      "description": "Runs a researcher and a summariser on one shared budget.",
+      "instructions": "You are given a topic to report on.\n\nAsk the researcher to find out what is true, and the summariser to put it into\none paragraph. Both are working from the same budget, so if the researcher\ncomes back thin, say so rather than padding the summary.",
+      "team": {
+        "researcher": "finds out what is true, which takes reading",
+        "summariser": "puts what was found into one paragraph"
+      },
+      "teamwork": {
+        "waits-for": "everyone",
+        "starts": "one-after-another",
+        "divides-the-budget": "by-share",
+        "shares": {
+          "researcher": "75%",
+          "summariser": "25%"
+        },
+        "if-someone-fails": "stop-the-others"
+      }
+    },
+    "researcher": {
+      "name": "Researcher",
+      "description": "Finds out what is true about the topic.",
+      "instructions": "Find out what is true about the topic you are given, and say where each thing\ncame from.\n\nYou have most of the budget for this request, which is deliberate: reading is\nthe expensive part. Spend it on reading rather than on writing well — somebody\nelse is doing the writing."
+    },
+    "summariser": {
+      "name": "Summariser",
+      "description": "Puts what was found into one paragraph.",
+      "instructions": "Put what the researcher found into one paragraph a busy person can read.\n\nKeep the attributions. A summary that drops where each thing came from is not\nshorter, it is weaker — the reader can no longer tell a sourced claim from an\nassumed one."
+    }
+  }
+}

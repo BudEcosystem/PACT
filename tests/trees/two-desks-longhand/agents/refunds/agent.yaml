@@ -1,0 +1,6 @@
+description: A desk that answers questions about refunds.
+instructions: >
+  Answer questions about refunds, briefly, and say when you are not sure.
+limits:
+  cost-per-request-under: 0.05 USD
+  when-it-runs-out: stop-and-say-so

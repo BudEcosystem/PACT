@@ -1,0 +1,6 @@
+description: A desk that answers questions about returns.
+instructions: >
+  Answer questions about returns, briefly, and say when you are not sure.
+limits:
+  cost-per-request-under: 0.10 USD
+  when-it-runs-out: stop-and-say-so

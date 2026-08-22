@@ -80,9 +80,49 @@ pub fn resolve(root: &mut Node, schema: &Schema, diags: &mut Diagnostics) {
 
 fn resolve_collection(kind: &str, entries: &mut Map, diags: &mut Diagnostics) {
     let names: Vec<String> = entries.keys().cloned().collect();
+
+    // A pattern is held to its own declarations before anything is built from
+    // it, so a loose hole is one message about the pattern rather than one per
+    // caller about a document that was never written wrong.
+    for name in &names {
+        if let Some(entry) = entries.get(name)
+            && crate::templates::is_a_pattern(&entry.node)
+            && let Err(d) = crate::templates::holes_match_declarations(name, &entry.node)
+        {
+            diags.push(*d);
+        }
+    }
+
+    // Arguments with nothing to fill. `derive_one` never sees these — it starts
+    // at `based-on:` — so without this the schema meets them instead and calls
+    // `with` an unknown field, which is true and is not the mistake: the mistake
+    // is that the line naming the pattern is missing.
+    for name in &names {
+        let Some(entry) = entries.get(name) else { continue };
+        if entry.node.get(crate::templates::WITH).is_some()
+            && entry.node.get("based-on").is_none()
+        {
+            let at = entry
+                .node
+                .get(crate::templates::WITH)
+                .map_or_else(|| entry.key_span.clone(), |n| n.span.clone());
+            diags.push(Diagnostic::error(
+                "loader/arguments-with-no-pattern",
+                at,
+                format!(
+                    "'{name}' supplies arguments and is based on nothing, so there is no                      pattern for them to fill."
+                ),
+                format!(
+                    "Add `based-on: <pattern>` naming something in `{kind}:` that declares                      `expects:`, or remove the `with:` block."
+                ),
+            ));
+        }
+    }
+
+    let mut used: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     for name in &names {
         let mut seen: Vec<String> = Vec::new();
-        if let Err(d) = derive_one(kind, entries, name, &mut seen, diags) {
+        if let Err(d) = derive_one(kind, entries, name, &mut seen, &mut used, diags) {
             diags.push(*d);
             // One mistake, one message. An entry whose base did not resolve is
             // not a half-built entry, it is a document nobody can read: it holds
@@ -95,6 +135,36 @@ fn resolve_collection(kind: &str, entries: &mut Map, diags: &mut Diagnostics) {
             entries.shift_remove(name);
         }
     }
+
+    // A pattern is a way of making a document, not a document. Its body carries
+    // holes, so it is not something that could be run, offered, published or
+    // validated — and leaving it in would mean either validating a document that
+    // cannot be valid, or inventing a second exemption beside `base: yes`. It
+    // goes, exactly as `based-on:` and `values:` go, so a tree that used a
+    // pattern and a tree that wrote every document out longhand are one
+    // document.
+    let patterns: Vec<String> = entries
+        .iter()
+        .filter(|(_, e)| crate::templates::is_a_pattern(&e.node))
+        .map(|(k, _)| k.clone())
+        .collect();
+    for name in patterns {
+        if !used.contains(&name)
+            && let Some(entry) = entries.get(&name)
+        {
+            diags.push(Diagnostic::warning(
+                "loader/nothing-uses-this-pattern",
+                crate::templates::where_it_is(&entry.key_span),
+                format!(
+                    "'{name}' is a pattern nothing here is based on, so nothing is made from                      it — the file loads, and no document comes out of it."
+                ),
+                format!(
+                    "Write `based-on: {name}` with a `with:` block on something in `{kind}:`,                      or delete it."
+                ),
+            ));
+        }
+        entries.shift_remove(&name);
+    }
 }
 
 fn derive_one(
@@ -102,6 +172,7 @@ fn derive_one(
     entries: &mut Map,
     name: &str,
     seen: &mut Vec<String>,
+    used: &mut std::collections::BTreeSet<String>,
     diags: &mut Diagnostics,
 ) -> Result<(), Box<Diagnostic>> {
     let Some(entry) = entries.get(name) else { return Ok(()) };
@@ -156,8 +227,23 @@ fn derive_one(
     // The base may itself derive. Resolve it first so this entry inherits the
     // finished thing, not a half-derived one.
     seen.push(name.to_owned());
-    derive_one(kind, entries, &base_name, seen, diags)?;
+    derive_one(kind, entries, &base_name, seen, used, diags)?;
     seen.pop();
+
+    // The arguments, held against what the base declares, BEFORE anything is
+    // merged: a caller that supplied the wrong ones gets one message naming
+    // them, rather than a merged document full of holes and a refusal per hole.
+    let (args, base_is_a_pattern) = {
+        let Some(base_node) = entries.get(&base_name).map(|e| e.node.clone()) else {
+            return Ok(());
+        };
+        let Some(own_node) = entries.get(name).map(|e| e.node.clone()) else { return Ok(()) };
+        let pattern = crate::templates::is_a_pattern(&base_node);
+        (crate::templates::arguments(kind, name, &base_name, &base_node, &own_node)?, pattern)
+    };
+    if base_is_a_pattern {
+        used.insert(base_name.clone());
+    }
 
     let base_map = match entries.get(&base_name).and_then(|e| e.node.as_map()) {
         Some(m) => m.clone(),
@@ -174,7 +260,7 @@ fn derive_one(
     // laid back over the top below.
     merged.shift_remove("base");
     for (k, v) in own.iter() {
-        if k == "based-on" {
+        if k == "based-on" || k == crate::templates::WITH {
             continue;
         }
         // Replacement is the rule — shallow, so narrowing stays expressible —
@@ -210,10 +296,17 @@ fn derive_one(
         merged.insert(k.clone(), v.clone());
     }
     merged.shift_remove("based-on");
+    // The declarations belong to the pattern, not to what it made.
+    merged.shift_remove(crate::templates::EXPECTS);
+    merged.shift_remove(crate::templates::WITH);
 
     if let Some(slot) = entries.get_mut(name) {
         let keep = slot.node.span.clone();
-        slot.node = Node::new(Value::Map(merged), keep);
+        let mut built = Node::new(Value::Map(merged), keep);
+        if !args.is_empty() {
+            crate::templates::fill(&mut built, &args);
+        }
+        slot.node = built;
     }
     Ok(())
 }

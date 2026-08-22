@@ -1,0 +1,16 @@
+# A pattern, not a desk. `expects:` is what makes it one: the body carries holes,
+# so it is not a document anybody could run, and it is gone from the tree once
+# every caller has filled it in.
+expects:
+  domain:
+    shape: text
+    help: what this desk answers questions about
+  daily-cap:
+    shape: money
+    help: the most one request may cost on this desk
+description: A desk that answers questions about <domain>.
+instructions: >
+  Answer questions about <domain>, briefly, and say when you are not sure.
+limits:
+  cost-per-request-under: <daily-cap>
+  when-it-runs-out: stop-and-say-so

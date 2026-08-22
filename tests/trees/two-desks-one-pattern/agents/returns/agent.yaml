@@ -1,0 +1,4 @@
+based-on: desk-pattern
+with:
+  domain: returns
+  daily-cap: 0.10 USD

@@ -1427,6 +1427,18 @@ fn validate(
         (String::new(), pact_schema::Schema::new())
     };
 
+    // `{use: <name>}` becomes the figure BEFORE `based-on:` is resolved, and the
+    // order is load-bearing in both directions. Before derivation, so a base and
+    // everything derived from it read the same figure rather than each resolving
+    // it again; before the schema, so a figure landing where it does not belong
+    // draws the ordinary `schema/wrong-type` at the line the author wrote
+    // `{use:}` on. `values:` is then removed, so a tree that used a figure and a
+    // tree that wrote it out longhand are one document — same shape, same
+    // digest, and nothing below this line ever learns the feature exists.
+    if let Some(root) = node.as_mut() {
+        pact_loader::values::resolve(root, &mut diags);
+    }
+
     if let Some(root) = node.as_mut() {
         pact_loader::derive::resolve(root, &spec, &mut diags);
     }

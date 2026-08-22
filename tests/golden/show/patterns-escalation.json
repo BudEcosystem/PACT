@@ -1,0 +1,39 @@
+{
+  "name": "Escalation",
+  "description": "When the valuer cannot say, a person decides — not a default and not a failure.",
+  "agents": {
+    "approver": {
+      "name": "Approver",
+      "description": "Approves a claim, and asks a person when the valuer cannot help.",
+      "instructions": "You are given a claim to approve or decline.\n\nAsk the valuer what the item is worth. If it comes back with a figure, decide\non it. If it cannot say, do not guess and do not decline — the run stops and a\nperson is asked.",
+      "team": {
+        "valuer": "says what the item is worth"
+      },
+      "teamwork": {
+        "waits-for": "everyone",
+        "starts": "all-at-once",
+        "divides-the-budget": "evenly",
+        "if-someone-fails": "ask-a-person",
+        "asks": "what-is-it-worth"
+      }
+    },
+    "valuer": {
+      "name": "Valuer",
+      "description": "Says what the item is worth.",
+      "instructions": "Say what the item described is worth, and how you arrived at the figure.\n\nIf you cannot value it — the description is too vague, or it is something you\nhave no basis for — say that you cannot rather than producing a number you\nwould not defend. Somebody is going to be asked instead, which is the correct\noutcome and not a failure."
+    }
+  },
+  "questions": {
+    "what-is-it-worth": {
+      "description": "The valuer could not value this item. What is it worth?",
+      "says": "We could not work out what this item is worth, so this claim is waiting on you. What is it worth, and what are you going by?",
+      "answer": {
+        "amount": "money",
+        "because": "text"
+      },
+      "asked-of": "claims-team",
+      "answer-within": "4h",
+      "if-nobody-answers": "stop-and-say-so"
+    }
+  }
+}

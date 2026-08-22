@@ -1,0 +1,3 @@
+description: How long anything here may take before it must stop.
+shape: duration
+value: 30s
