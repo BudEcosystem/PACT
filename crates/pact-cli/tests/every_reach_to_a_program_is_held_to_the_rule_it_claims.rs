@@ -278,3 +278,77 @@ fn a_stage_that_writes_code_loads_where_a_room_is_declared() {
     assert_eq!(code, Some(0), "the refusal above proves nothing unless this passes:\n{said}");
     let _ = std::fs::remove_dir_all(&dst);
 }
+
+/// The one thing that makes the `no-code` badge mean anything about programs.
+///
+/// `workspace.programs`' own comment states the D14 bargain: "no core capability
+/// may REQUIRE a program, a workspace that carries one simply does not earn the
+/// `no-code` badge, and deleting `programs/` must leave a working agent."
+///
+/// The badge is not a computed artifact and does not need to be. What makes the
+/// sentence true is the TIER: every door into a carried program is `tier:
+/// expert`, so the author D13 describes — who builds everything in YAML and
+/// Markdown — never meets one, and every capability a program reaches has a
+/// plain-words way to do the same thing written beside it. That is checkable,
+/// and it was checked by nothing: `governance_is_complete` asks that every field
+/// HAS a tier and never which tier this one has.
+///
+/// `description` is the exception and is core in every group in the
+/// specification — it is the line you write first whatever you are writing, and
+/// a group nobody core-tier reaches cannot be entered through it.
+///
+/// Mutation: change `workspace.programs`' tier to `core`. Red, naming the field.
+#[test]
+fn every_door_into_a_carried_program_is_priced_as_an_expert_one() {
+    let text =
+        std::fs::read_to_string(format!("{}/../../spec/schema.yaml", env!("CARGO_MANIFEST_DIR")))
+            .expect("the specification is there");
+    let doc = pact_doc::parse_yaml(&text, camino::Utf8Path::new("spec/schema.yaml"))
+        .expect("the specification parses");
+    let groups = doc.get("groups").and_then(pact_doc::Node::as_map).expect("groups:");
+
+    let tier = |group: &str, field: &str| -> String {
+        groups
+            .get(group)
+            .and_then(|g| g.node.get("fields"))
+            .and_then(pact_doc::Node::as_map)
+            .and_then(|f| f.get(field))
+            .and_then(|f| f.node.get("tier"))
+            .and_then(pact_doc::Node::as_str)
+            .unwrap_or_else(|| panic!("the specification declares `{group}.{field}` with a tier"))
+            .to_owned()
+    };
+
+    // The door itself, and the room a program runs in.
+    for (group, field) in [
+        ("workspace", "programs"),
+        ("resource", "engines"),
+        ("resource", "asks-to-run"),
+    ] {
+        assert_eq!(
+            tier(group, field),
+            "expert",
+            "`{group}.{field}` is a door into a carried program, and a core-tier door \
+             is one the author D13 describes is expected to walk through"
+        );
+    }
+
+    // And everything a program itself is made of, `description:` aside.
+    for group in ["program", "program-fuel"] {
+        let fields = groups
+            .get(group)
+            .and_then(|g| g.node.get("fields"))
+            .and_then(pact_doc::Node::as_map)
+            .unwrap_or_else(|| panic!("the specification declares the `{group}` kind"));
+        for (name, _) in fields {
+            if name == "description" {
+                continue;
+            }
+            assert_eq!(
+                tier(group, name),
+                "expert",
+                "`{group}.{name}` is part of writing a program, and it is priced as core"
+            );
+        }
+    }
+}
