@@ -86,9 +86,54 @@ fn only_pure_programs_are_used_directly(root: &Node, diags: &mut Diagnostics) {
     }
 }
 
+/// A projection must be pure, for a reason the short door does not share.
+///
+/// `projects-with:` decides what the model is TOLD. A projection that could read
+/// the outside world, or answer differently the second time, would make the
+/// conversation unreproducible — and the trace is what the portability claim is
+/// measured on, so two runs of one document have to agree about what the model
+/// read. That is a stronger requirement than the one on `uses:`, where purity
+/// buys the absence of anything to govern; here it buys determinism itself.
+fn only_pure_programs_project(root: &Node, diags: &mut Diagnostics) {
+    let Some(tools) = root.get("tools").and_then(Node::as_map) else { return };
+    let programs = root.get("programs").and_then(Node::as_map);
+    for (tool_name, tool) in tools {
+        let Some(actions) = tool.node.get("actions").and_then(Node::as_map) else { continue };
+        for (action_name, action) in actions {
+            let Some(named) = action.node.get("projects-with").and_then(Node::as_str) else {
+                continue;
+            };
+            let Some(program) = programs.and_then(|p| p.get(named)) else { continue };
+            let how = program.node.get("determinism").and_then(Node::as_str).unwrap_or("");
+            if how == "pure" {
+                continue;
+            }
+            let at = action
+                .node
+                .get("projects-with")
+                .map_or_else(|| action.key_span.clone(), |n| n.span.clone());
+            diags.push(Diagnostic::error(
+                "loader/only-a-pure-program-projects",
+                at,
+                format!(
+                    "'{tool_name}/{action_name}' shortens what it answers with using \
+                     '{named}', and '{named}' says it is `{how}` rather than `pure` — so what \
+                     the model is told could be different the second time the same thing \
+                     happens."
+                ),
+                format!(
+                    "Mark '{named}' `determinism: pure`, or shorten this answer with a \
+                     program that works only from what it is given."
+                ),
+            ));
+        }
+    }
+}
+
 /// Refuse an arrangement where nothing can run the program that was named.
 pub fn check(root: &Node, diags: &mut Diagnostics) {
     only_pure_programs_are_used_directly(root, diags);
+    only_pure_programs_project(root, diags);
     let Some(tools) = root.get("tools").and_then(Node::as_map) else { return };
     let programs = root.get("programs").and_then(Node::as_map);
     let resources = root.get("resources").and_then(Node::as_map);

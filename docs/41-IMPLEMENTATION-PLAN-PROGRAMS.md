@@ -30,7 +30,7 @@ through tools, memory, metrics, questions, interceptor sentences, routing
 | P5 learning widening | done, NOT as written — see below | `295db17` |
 | P6 `program` kind + sandbox + egress role | done | `f1fbdc8` |
 | P7 executor | done as a SEAM, not an engine — see below | `c18fa28` |
-| P8 capability wiring | waves 1–4 of 8 | `26993a1`, `3985b5d`, `6a62b4e`, this |
+| P8 capability wiring | waves 1–5 of 8 | `26993a1`, `3985b5d`, `6a62b4e`, `30e4efc`, this |
 | P9 self-authored lane | not started | — |
 
 **Three places this plan was wrong, and what was built instead.**

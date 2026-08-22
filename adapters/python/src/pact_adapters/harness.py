@@ -447,6 +447,29 @@ def _and_list(names: "Sequence[str]") -> str:
     return f"{', '.join(quoted[:-1])} and {quoted[-1]}"
 
 
+def _projection_for(
+    spec: AgentSpec, tool: str, args: "Mapping[str, Any]"
+) -> str:
+    """The program that shortens what this call answered, if the author named one.
+
+    A call carries which ACTION it is (`ir._takes` declares `action:` on every
+    tool with an `actions:` block), so a tool offering several actions projects
+    only the one the author wrote it on. A call that names no action matches a
+    projection only when the tool has exactly one — otherwise there is nothing to
+    say which projection was meant, and guessing is how the wrong one runs.
+    """
+    named = [(where, prog) for where, prog in spec.projections if where.startswith(f"{tool}/")]
+    if not named:
+        return ""
+    action = str(args.get("action", "")).strip()
+    if action:
+        for where, prog in named:
+            if where == f"{tool}/{action}":
+                return prog
+        return ""
+    return named[0][1] if len(named) == 1 else ""
+
+
 async def run(
     spec: AgentSpec,
     transport: Transport,
@@ -1086,6 +1109,11 @@ async def run(
     # discovered.
     if run_program is None:
         result.unenforced = result.unenforced + tuple(
+            f"`{where}` shortens what it answers with using the program "
+            f"`{prog}`, and nothing here can run a carried program — so the whole "
+            f"answer reaches the model."
+            for where, prog in spec.projections
+        ) + tuple(
             f"program `{p.name}`: nothing here can run a carried program, so "
             f"{'it is offered to the model and answers nothing' if p.reached_by == ('uses',) else ', '.join(p.reached_by) + ' reaches nothing'}. "
             f"Whatever runs your agents has to supply a locked room that hosts "
@@ -2276,6 +2304,23 @@ async def run(
             # at-most-once record reads the same call the tool receives.
             out = _call_tool(tool_impls.get(call.name), sent)
             meter.tool_calls += 1
+            # SHORTENED AT THE SOURCE, before anything reads it (P8 wave 5).
+            #
+            # Before the interceptor chain, deliberately: a redaction rule should
+            # see what the model will actually be told, and running it over
+            # thirty-six fields nobody will read is work for nothing. Before
+            # `history`, necessarily — the whole point is that the payload never
+            # becomes something paid for on every later turn.
+            #
+            # A projection nothing can run leaves the answer WHOLE and says so on
+            # `unenforced` (built above): silently serving the full payload while
+            # reporting success is the failure this line exists to remove.
+            projecting = _projection_for(spec, call.name, sent.args)
+            if projecting and run_program is not None:
+                try:
+                    out = str(run_program(projecting, {"result": out}))
+                except Exception as e:  # noqa: BLE001 — a program's failure is data
+                    out = f"error: the projection {projecting!r} could not run: {e}"
             # WHAT CAME BACK, through the same rules as everything else.
             #
             # Every other moment the chain is offered is "words are about to

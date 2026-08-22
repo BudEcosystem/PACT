@@ -496,6 +496,10 @@ class AgentSpec:
     #: private list of spellings is the defect `every_shape_the_spellings_accept_can_be_read`
     #: was written against, one module over.
     agent_valued_inputs: tuple[str, ...] = ()
+    #: `<tool>/<action>` → the program that shortens what it hands back (P8
+    #: wave 5). Keyed by both halves because a tool may offer several actions and
+    #: only one of them answer with something worth projecting.
+    projections: tuple[tuple[str, str], ...] = ()
     #: The carried programs this agent's own tools reach (P6/P7).
     #:
     #: Narrowed to what THIS agent can get to, the same way `tools` is: a program
@@ -717,6 +721,7 @@ class AgentSpec:
             # which is the "did not choose" this field documents.
             model=_text(a.get("model", "")),
             programs=_programs_reached_by(doc, a),
+            projections=_projections(doc, a),
             run_inputs=tuple(sorted((a.get("run-inputs") or {}))),
             agent_valued_inputs=_agent_valued(a.get("run-inputs")),
             # Declaration order, not sorted: the author's order IS the search
@@ -777,6 +782,32 @@ def _programs_reached_by(doc: dict[str, Any], agent: dict[str, Any]) -> tuple[Pr
                 reached_by=tuple(reached[name]),
             )
         )
+    return tuple(out)
+
+
+def _projections(doc: dict[str, Any], agent: dict[str, Any]) -> tuple[tuple[str, str], ...]:
+    """`<tool>/<action>` → the program that shortens what it answers with.
+
+    Walked over this agent's OWN `uses:`, like everything else here: a projection
+    on a tool this agent cannot reach is not something its runs could apply.
+    """
+    tools = doc.get("tools") or {}
+    if not isinstance(tools, Mapping):
+        return ()
+    out: list[tuple[str, str]] = []
+    for used in sorted(_as_list(agent.get("uses"))):
+        tool = tools.get(used)
+        if not isinstance(tool, Mapping):
+            continue
+        actions = tool.get("actions") or {}
+        if not isinstance(actions, Mapping):
+            continue
+        for action_name, action in sorted(actions.items()):
+            if not isinstance(action, Mapping):
+                continue
+            named = action.get("projects-with")
+            if isinstance(named, str) and named.strip():
+                out.append((f"{used}/{action_name}", named.strip()))
     return tuple(out)
 
 

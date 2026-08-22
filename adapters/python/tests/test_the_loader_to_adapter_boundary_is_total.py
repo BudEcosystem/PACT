@@ -266,6 +266,15 @@ def test_every_spec_field_that_holds_authored_state_is_filled_from_the_document(
         # declares one and whose run reports what it could not start — the same
         # division `knowledge` makes above.
         "programs",
+        # Same reason, one field over: a projection shortens what a CARRIED
+        # PROGRAM's tool answers with, and this example carries no programs. It
+        # is also `tier: expert`, and the worked example is the one that
+        # demonstrates the no-code ceiling.
+        #
+        # `test_a_result_shortened_before_the_model_reads_it.py` is where the
+        # mechanism is shown whole — including the half that is not about size:
+        # a poisoned field the model never needed does not reach it.
+        "projections",
     }
     empty: list[str] = []
     for f in dataclass_fields(spec):

@@ -2376,6 +2376,35 @@ groups:
           `run-inputs:`, or `<argument>: remembers.<name>`, naming one of its own
           `remembers:`. The model cannot see them, name them, or change them.
           This is how "whose order" stops being something the model decides.
+      projects-with:
+        # Eve's `toModelOutput`, which `docs/50-NOT-COPIED.md` §6 recorded as
+        # DEFERRED with a named re-admission condition — "a case where
+        # `shorten-long-results` in a context policy is measurably worse than
+        # projecting at the source" — and a stated shape: "a projection on
+        # `tool.actions.<a>`, and a way to write one that is not code".
+        #
+        # Both halves are answerable now. Tidying happens LATER and by SIZE: it
+        # trims whatever is longest once the conversation stops fitting, which is
+        # a different question from "the model needs four of these forty fields".
+        # Three costs follow from deciding late — every token of the other
+        # thirty-six is paid on every turn until the tidy fires; the trim is by
+        # length rather than meaning, so which fields survive is an accident; and
+        # a poisoned record buried in field thirty-seven reaches the model in
+        # full. The way to write one that is not code is the `program` kind.
+        #
+        # `pure` only, held by `programs.rs`: a projection that could read the
+        # outside world or answer differently twice would make what the model was
+        # told unreproducible, and the trace is the portability oracle.
+        type: text
+        names: programs
+        surface: S-CTRL
+        tier: expert
+        help: >
+          a carried program that shortens what this action hands back, before the
+          model reads it — for a system that answers with forty fields when the
+          decision needs four. It must be a `pure` program, because what the
+          model was told has to be the same twice. Leave it out and the whole
+          answer is read.
       remember-as:
         # The other direction, and the line that finally gives `never-from:`
         # something to bite on. That field named the sources that may never write
