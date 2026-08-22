@@ -1642,13 +1642,13 @@ fn validate(
         // against each other, because that is a fact about two documents. So a
         // workspace could carry a program in one language and a locked room that
         // cannot run it, and the first call was the only way to find out.
-        pact_loader::programs::check(root, &mut diags);
+        pact_loader::programs::check(root, &schema, &mut diags);
         // And the sixth, which runs the other way round from every check above:
         // `names:` asks whether a name RESOLVES, and never whether anything names
         // a document. A fully-written approval policy that no agent points at
         // loaded cleanly and gated nothing, which is the commonest way to author
         // a gate that does not exist.
-        pact_loader::unnamed::nothing_points_at_it(root, &mut diags);
+        pact_loader::unnamed::nothing_points_at_it(root, &schema, &mut diags);
         // G12. The schema holds `available-when:` against its closed list and
         // cannot hold it against the agent that names the capability — whether
         // this agent has a `team:` is a fact about a different document. A

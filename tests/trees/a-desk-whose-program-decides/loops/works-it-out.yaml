@@ -1,0 +1,37 @@
+# The escape §5.5 calls `router`, written out. The three outcomes below know what
+# KIND of thing happened and never what was said, so a desk that wants to look
+# again *because of what it just wrote* has nowhere to put that. `decided-by:`
+# names a carried program that reads the words and picks from `may-go-to:`.
+description: >
+  Look things up, then let a carried program say whether the answer is ready or
+  wants another look.
+
+starts-at: gather
+
+steps:
+  gather:
+    does: use-tools
+    then:
+      used-a-tool: gather
+      answered: reply
+      decided-by: pick-next
+      # The program may name these and nothing else. Without this line there is
+      # no way to know which stages the loop can reach, so a stage only the
+      # program sends work to would read as one nothing can reach.
+      may-go-to:
+        - reply
+        - think-again
+
+  think-again:
+    does: check-its-work
+    says: >
+      Read your answer back against what the customer asked, and say plainly
+      whether it answers the question.
+    at-most: 2
+    then:
+      answered: reply
+
+  reply:
+    does: answer
+    then:
+      answered: done

@@ -1,0 +1,15 @@
+# Pure for the reason the schema gives beside the rewriting sentences: what a
+# rewrite does has to be as readable as the instructions it sits beside, and the
+# same twice. A rewriter that answered differently the second time would be a
+# mid-run change to the words nobody could review.
+description: Puts an answer into the words this desk says things in.
+engine: wasm
+determinism: pure
+takes:
+  content: text
+answers-with:
+  content: text
+fuel:
+  instructions-at-most: 10m
+  runs-for-at-most: 2s
+  when-it-runs-out: stop-and-say-so

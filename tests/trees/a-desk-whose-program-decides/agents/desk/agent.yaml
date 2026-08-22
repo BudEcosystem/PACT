@@ -1,0 +1,12 @@
+description: Decides whether a refund is still inside the window.
+instructions: >
+  Work out whether the purchase is inside the refund window, and say which it is.
+  Use the tool for the date arithmetic rather than working it out yourself.
+loop: works-it-out
+uses:
+  - refund-window
+interceptors:
+  - in-house-style
+limits:
+  when-it-runs-out: stop-and-say-so
+  steps-at-most: 6

@@ -1,0 +1,10 @@
+# The two reaches P8 added that have no tool between them and the program: the
+# line that says where the run goes next, and the line that says how the answer
+# is worded. Both name a carried program by name, and both are held to the same
+# two rules the tool path is held to — the program must be `pure`, and this
+# workspace's locked room must be able to run the kind of program it is.
+name: a-desk-whose-program-decides
+workspace-id: 01JEQ8Z3M4N5P6Q7R8S9T0V6D5
+description: A desk whose route through the loop, and whose choice of words, are both worked out by a carried program.
+owner: platform
+allow-egress: []

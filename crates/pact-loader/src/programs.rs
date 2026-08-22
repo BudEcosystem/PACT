@@ -20,12 +20,46 @@
 //! host that program's engine. The refusal names the program, the engine it
 //! needs, and what the sandbox actually hosts.
 //!
+//! **And for every OTHER way of reaching a program, the same question against
+//! the whole workspace.** P8 opened seven more doors to a carried body — `uses:`,
+//! `projects-with:`, `checked-by:`, `decided-by:`, a metric's `program:`
+//! address, a rewriting interceptor sentence — and none of them has a tool, so
+//! none of them has a `connect:` line to follow. The question is still
+//! answerable: the workspace declares its rooms, and if not one of them runs
+//! this kind of program then nothing here can. Measured before this existed: a
+//! workspace whose only room runs `wasm`, carrying a `python` program its agent
+//! named directly, printed *"loaded cleanly"* — the exact arrangement this file
+//! was written to remove, arriving through a door it did not watch.
+//!
+//! A workspace that declares NO room is left alone, and that is a decision
+//! rather than an oversight: PACT declares a locked room and whatever runs your
+//! agents supplies it, so a tree with no `resources/` is not broken — it is one
+//! whose room comes from the host, which is the seam P7 shipped and the shape
+//! `tests/trees/a-desk-that-uses-a-program` demonstrates.
+//!
+//! # Purity, where the document says purity
+//!
+//! Four lines in `spec/schema.yaml` say the program they name is refused unless
+//! it is `pure`, and each says it for its own reason: `uses:` because a pure
+//! program has no act for an approval rule to be about; `projects-with:` because
+//! what the model is told has to be the same twice; `decided-by:` because where
+//! a run goes next has to be the same twice; and the two rewriting sentences
+//! because that is the whole argument for giving `change-the-answer` back to
+//! authors after R24 took it away.
+//!
+//! `checked-by:` and a metric's `program:` address are deliberately NOT held to
+//! it. Neither line claims it, and neither wants it: a check on an answer may
+//! reasonably hold an account number against a ledger, and a grader that reads a
+//! stored rubric is an ordinary grader. A restriction the document never asked
+//! for costs an author a capability and buys nobody anything.
+//!
 //! It deliberately does NOT check that a program is reachable from some tool —
 //! `unnamed.rs` already says that about every kind, in the same words, and a
 //! second sentence about it here would be two places to keep one rule.
 
-use pact_diag::{Diagnostic, Diagnostics};
+use pact_diag::{Diagnostic, Diagnostics, Span};
 use pact_doc::Node;
+use pact_schema::{Schema, Ty};
 
 /// The engines a resource says it can host.
 fn hosted_by(resource: &Node) -> Vec<String> {
@@ -130,10 +164,267 @@ fn only_pure_programs_project(root: &Node, diags: &mut Diagnostics) {
     }
 }
 
+/// A router must be pure, because a path through a loop has to be the same twice.
+///
+/// `decided-by:` is the escape §5.5 lists as `router`: the three outcomes beside
+/// it know what KIND of thing happened and never what was said, so a stage that
+/// wants to look again *because of the words it just produced* has nowhere else
+/// to put that. The schema prices the escape at `tier: expert` and says the
+/// program it names is "refused unless it is `pure`".
+///
+/// The reason is the trace. Two runs of one document that take different paths,
+/// for a reason no line in the document records, cannot be compared — and
+/// comparing them is what the portability claim is measured on. It is the same
+/// argument `projects-with:` makes about what the model READS, one level up: this
+/// one is about where the run GOES.
+fn only_pure_programs_decide(root: &Node, diags: &mut Diagnostics) {
+    let Some(loops) = root.get("loops").and_then(Node::as_map) else { return };
+    let programs = root.get("programs").and_then(Node::as_map);
+    for (loop_name, shape) in loops {
+        let Some(steps) = shape.node.get("steps").and_then(Node::as_map) else { continue };
+        for (stage_name, stage) in steps {
+            let Some(then) = stage.node.get("then") else { continue };
+            let Some(named) = then.get("decided-by").and_then(Node::as_str) else { continue };
+            let Some(program) = programs.and_then(|p| p.get(named)) else { continue };
+            let how = program.node.get("determinism").and_then(Node::as_str).unwrap_or("");
+            if how == "pure" {
+                continue;
+            }
+            let at = then
+                .get("decided-by")
+                .map_or_else(|| stage.key_span.clone(), |n| n.span.clone());
+            diags.push(Diagnostic::error(
+                "loader/only-a-pure-program-decides",
+                at,
+                format!(
+                    "'{loop_name}/{stage_name}' lets '{named}' say where the run goes next, \
+                     and '{named}' says it is `{how}` rather than `pure` — so the same \
+                     request could take a different path the second time, for a reason no \
+                     line in this tree records."
+                ),
+                format!(
+                    "Mark '{named}' `determinism: pure`, or route this stage with the \
+                     `used-a-tool:`, `answered:` and `too-many-times:` lines beside it, \
+                     which say where to go from what KIND of thing happened."
+                ),
+            ));
+        }
+    }
+}
+
+/// A rewriting sentence must name a pure program, and this is the one that
+/// matters most.
+///
+/// R24 took `change-the-answer` and `change-the-request` off `may:` and was
+/// right to: no sentence could carry them out, so declaring either got the rule
+/// refused by the next check down. §6 recorded them host-only with the condition
+/// that would let them back — a sentence somebody actually wants — and noted the
+/// worry, that a mid-run rewrite "is not reviewable in a way `instructions:` and
+/// a stage's `says:` are".
+///
+/// §8.5 withdrew half of R24 on one argument: a carried program answers that
+/// worry rather than dodging it, because it is "a file in the folder,
+/// fingerprinted, declared with what it takes and answers with, and refused
+/// unless it is `pure` — so what the rewrite does is as readable as the
+/// instructions it sits beside, and the same twice".
+///
+/// Every clause of that was true except the last one, which nothing enforced. A
+/// `nondeterministic` rewriter loaded cleanly, and with it the withdrawal's
+/// whole argument was untrue of the file that had just been accepted.
+fn only_pure_programs_rewrite(root: &Node, schema: &Schema, diags: &mut Diagnostics) {
+    let programs = root.get("programs").and_then(Node::as_map);
+    for named in schema.names_in_sentences(root) {
+        if named.collection != PROGRAMS {
+            continue;
+        }
+        let Some(program) = programs.and_then(|p| p.get(named.name.as_str())) else { continue };
+        let how = program.node.get("determinism").and_then(Node::as_str).unwrap_or("");
+        if how == "pure" {
+            continue;
+        }
+        diags.push(Diagnostic::error(
+            "loader/only-a-pure-program-rewrites",
+            named.at.clone(),
+            format!(
+                "'{}' says it is `{}` rather than `pure`, and this rule hands it what is \
+                 about to be said: \"{}\". A rewrite has to be readable and the same twice, \
+                 which is the whole reason a rule is allowed to make one at all.",
+                named.name, how, named.said
+            ),
+            format!(
+                "Mark '{}' `determinism: pure`, or take this sentence out and say the same \
+                 thing in the agent's `instructions:`, where a person can read it.",
+                named.name
+            ),
+        ));
+    }
+}
+
+/// The collection a program lives in, as `names:` spells it.
+const PROGRAMS: &str = "programs";
+
+/// One place this document reaches a carried program.
+struct Reach {
+    /// The program's name, as the author wrote it.
+    name: String,
+    at: Span,
+    /// Where it was written, in the author's words — "'desk' names it in `uses:`".
+    how: String,
+}
+
+/// Every place this document names a carried program, found from the schema.
+///
+/// By walking the specification's own `names:` declarations rather than keeping
+/// a list of the seven fields that reach a program today. A field added to
+/// `spec/schema.yaml` with `names: programs` joins this check by existing, which
+/// is the rule `currency.rs`, `available.rs` and `handover.rs` are all written
+/// to — and the rule this file broke, by watching one door and letting P8 cut
+/// six more.
+fn reaches(
+    node: &Node,
+    group: &str,
+    schema: &Schema,
+    trail: &str,
+    depth: usize,
+    out: &mut Vec<Reach>,
+) {
+    if depth > 12 {
+        return;
+    }
+    let Some(g) = schema.group(group) else { return };
+    let Some(map) = node.as_map() else { return };
+    for field in &g.fields {
+        let Some(entry) = map.get(field.name.as_str()) else { continue };
+        if field.names.iter().any(|n| n == PROGRAMS) {
+            let items: Vec<&Node> = match &entry.node.value {
+                pact_doc::Value::List(l) => l.iter().collect(),
+                _ => vec![&entry.node],
+            };
+            for item in items {
+                let Some(name) = item.as_str() else { continue };
+                out.push(Reach {
+                    name: name.trim().to_string(),
+                    at: item.span.clone(),
+                    how: format!("'{trail}' names it in `{}:`", field.name),
+                });
+            }
+        }
+        match &field.ty {
+            Ty::Group(kind) => reaches(&entry.node, kind, schema, trail, depth + 1, out),
+            Ty::MapOf(inner) | Ty::ListOf(inner) => {
+                if let Ty::Group(kind) = inner.as_ref() {
+                    match &entry.node.value {
+                        pact_doc::Value::Map(m) => {
+                            for (key, child) in m {
+                                let below = if trail.is_empty() {
+                                    key.clone()
+                                } else {
+                                    format!("{trail}/{key}")
+                                };
+                                reaches(&child.node, kind, schema, &below, depth + 1, out);
+                            }
+                        }
+                        pact_doc::Value::List(l) => {
+                            for child in l {
+                                reaches(child, kind, schema, trail, depth + 1, out);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Every room this workspace declares, and what each says it can run.
+fn rooms(root: &Node) -> Vec<(String, Vec<String>)> {
+    let Some(resources) = root.get("resources").and_then(Node::as_map) else { return Vec::new() };
+    resources
+        .iter()
+        .filter(|(_, r)| r.node.get("resource-kind").and_then(Node::as_str) == Some("sandbox"))
+        .map(|(name, r)| (name.clone(), hosted_by(&r.node)))
+        .collect()
+}
+
+/// A program this workspace carries that no room it declares can run.
+///
+/// `resource.engines:` says it "is checked in both directions", and its help
+/// promises the refusal arrives "when the file is read, rather than on the first
+/// call". That was true of the tool path alone. Here it is asked of every other
+/// reach, against the whole workspace rather than one tool's room — because a
+/// `decided-by:` line has no tool, and so no `connect:` to follow.
+///
+/// A workspace with no room at all is silent, deliberately: see the note at the
+/// top of this file.
+fn every_reach_has_a_room_that_runs_it(root: &Node, schema: &Schema, diags: &mut Diagnostics) {
+    let declared = rooms(root);
+    if declared.is_empty() {
+        return;
+    }
+    let Some(programs) = root.get("programs").and_then(Node::as_map) else { return };
+
+    let mut found = Vec::new();
+    reaches(root, "workspace", schema, "", 0, &mut found);
+    for named in schema.names_in_sentences(root) {
+        if named.collection == PROGRAMS {
+            found.push(Reach {
+                name: named.name.clone(),
+                at: named.at.clone(),
+                how: format!("the rule \"{}\" hands work to it", named.said),
+            });
+        }
+    }
+
+    for reach in found {
+        // `action.program:` is asked the stricter question by `check` below —
+        // against the room its own tool reaches, not merely against some room.
+        // Asking both would refuse one arrangement twice, in two different
+        // words, which is worse than either refusal on its own.
+        if reach.how.ends_with("in `program:`") {
+            continue;
+        }
+        let Some(program) = programs.get(reach.name.as_str()) else { continue };
+        let Some(engine) = program.node.get("engine").and_then(Node::as_str) else { continue };
+        if declared.iter().any(|(_, hosts)| hosts.iter().any(|h| h == engine)) {
+            continue;
+        }
+        let rooms_here = declared
+            .iter()
+            .map(|(name, hosts)| {
+                if hosts.is_empty() {
+                    format!("'{name}' says nothing about what it can run")
+                } else {
+                    format!("'{name}' runs {}", hosts.join(", "))
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("; ");
+        diags.push(Diagnostic::error(
+            "loader/nothing-here-can-run-that-program",
+            reach.at.clone(),
+            format!(
+                "{} — and '{}' is written for `{engine}`, which no locked room here can \
+                 run: {rooms_here}.",
+                reach.how, reach.name
+            ),
+            format!(
+                "Add `{engine}` under `engines:` in one of the resources above, or write \
+                 '{}' for a kind a room here already runs.",
+                reach.name
+            ),
+        ));
+    }
+}
+
 /// Refuse an arrangement where nothing can run the program that was named.
-pub fn check(root: &Node, diags: &mut Diagnostics) {
+pub fn check(root: &Node, schema: &Schema, diags: &mut Diagnostics) {
     only_pure_programs_are_used_directly(root, diags);
     only_pure_programs_project(root, diags);
+    only_pure_programs_decide(root, diags);
+    only_pure_programs_rewrite(root, schema, diags);
+    every_reach_has_a_room_that_runs_it(root, schema, diags);
     let Some(tools) = root.get("tools").and_then(Node::as_map) else { return };
     let programs = root.get("programs").and_then(Node::as_map);
     let resources = root.get("resources").and_then(Node::as_map);

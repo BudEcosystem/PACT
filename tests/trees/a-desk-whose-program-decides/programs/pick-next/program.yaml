@@ -1,0 +1,15 @@
+# Pure, and it has to be: where the run goes next is the one thing that must be
+# the same twice for a trace to mean anything. A router that could read the
+# outside world would make two runs of one document take different paths for a
+# reason no line in the document records.
+description: Says whether the answer is ready for the customer or wants another look.
+engine: wasm
+determinism: pure
+takes:
+  said: text
+answers-with:
+  next: text
+fuel:
+  instructions-at-most: 10m
+  runs-for-at-most: 2s
+  when-it-runs-out: stop-and-say-so

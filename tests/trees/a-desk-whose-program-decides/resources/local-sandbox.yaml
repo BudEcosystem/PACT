@@ -1,0 +1,8 @@
+# The locked room. PACT declares it; whatever runs your agents supplies it — the
+# same division `mcp-server` makes, and the reason `resource-kind:` has more than
+# one choice again: this kind carries fields only it needs.
+resource-kind: sandbox
+description: The machine-local executor for this workspace's programs.
+engines:
+  - wasm
+asks-to-run: may-we-run

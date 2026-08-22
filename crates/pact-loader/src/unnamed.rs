@@ -32,6 +32,7 @@
 
 use pact_diag::{Diagnostic, Diagnostics};
 use pact_doc::Node;
+use pact_schema::Schema;
 use std::collections::BTreeSet;
 
 /// One kind, and every line that can name one.
@@ -136,7 +137,7 @@ const OMITTED: &[(&str, &str)] = &[
 ];
 
 /// Warn about a document in the tree that nothing anywhere names.
-pub fn nothing_points_at_it(document: &Node, diags: &mut Diagnostics) {
+pub fn nothing_points_at_it(document: &Node, schema: &Schema, diags: &mut Diagnostics) {
     // Every string anywhere in the tree, once. Crude on purpose: asking "does
     // any line name this?" is a different question from "is this name valid
     // here?", and enumerating the twenty-odd fields that can name one of these
@@ -146,11 +147,31 @@ pub fn nothing_points_at_it(document: &Node, diags: &mut Diagnostics) {
     // something already attached.
     let mut mentioned: BTreeSet<&str> = BTreeSet::new();
     collect(document, &mut mentioned);
+    // And the names that are inside a sentence rather than being one.
+    //
+    // A rewriting interceptor rule is one prose string — `replace the answer
+    // with what house-style returns` — so the walk above inserts the whole line
+    // and never the name in the middle of it. That produced exactly the false
+    // positive the paragraph above rules out: the ONE authoring path §8.5 gives
+    // for `change-the-answer` drew a warning saying its program "never takes
+    // effect", about a reference the resolver follows and refuses when it is
+    // absent. Two checks disagreed about one line.
+    //
+    // The repair is not to split every string on whitespace — that would make
+    // any word of any `description:` count as a mention and silence this check
+    // wherever a name happens to appear in prose. It is to read the same holes
+    // the resolver reads, from the same parse.
+    let in_sentences = schema.names_in_sentences(document);
+    let in_sentences: BTreeSet<&str> =
+        in_sentences.iter().map(|n| n.name.trim()).collect();
 
     for kind in KINDS {
         let Some(entries) = document.get(kind.section).and_then(Node::as_map) else { continue };
         for (name, entry) in entries {
-            if mentioned.contains(name.as_str()) || attaches_itself(&entry.node) {
+            if mentioned.contains(name.as_str())
+                || in_sentences.contains(name.as_str())
+                || attaches_itself(&entry.node)
+            {
                 continue;
             }
             diags.push(Diagnostic::warning(
@@ -211,10 +232,20 @@ mod tests {
     use super::*;
     use pact_doc::parse_yaml;
 
+    /// The shipped specification, so a sentence in a test reads the same
+    /// vocabulary an author's file does.
+    fn spec() -> Schema {
+        const SPEC: &str = include_str!("../../../spec/schema.yaml");
+        let mut d = Diagnostics::new();
+        let schema = pact_schema::from_doc::schema_from_yaml(SPEC, &mut d);
+        assert!(!d.has_errors(), "the shipped specification does not load:\n{}", d.render());
+        schema
+    }
+
     fn check(text: &str) -> Diagnostics {
         let node = parse_yaml(text, camino::Utf8Path::new("w.yaml")).expect("parses");
         let mut d = Diagnostics::new();
-        nothing_points_at_it(&node, &mut d);
+        nothing_points_at_it(&node, &spec(), &mut d);
         d
     }
 

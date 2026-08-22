@@ -26,7 +26,7 @@ pub mod suggest;
 pub mod summary;
 
 use indexmap::IndexMap;
-use pact_diag::{Diagnostic, Diagnostics};
+use pact_diag::{Diagnostic, Diagnostics, Span};
 use pact_doc::{Map, Node, Value};
 
 /// What a field is allowed to hold.
@@ -473,6 +473,24 @@ pub struct Known {
     pub names: std::collections::BTreeSet<String>,
 }
 
+/// A name a sentence named, and where the author wrote it.
+///
+/// Produced by [`Schema::names_in_sentences`]. It carries the whole sentence as
+/// well as the name, because a refusal about one word inside a line of prose is
+/// unreadable without the line.
+#[derive(Debug, Clone)]
+pub struct SentenceName {
+    /// The workspace collection the hole resolves against — `tools`, `programs`.
+    pub collection: String,
+    /// What the author wrote in the hole, with the article stripped.
+    pub name: String,
+    /// The whole sentence, as typed.
+    pub said: String,
+    /// The field the sentence was written in — `rules`, `hide`.
+    pub field: String,
+    pub at: Span,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Schema {
     groups: IndexMap<String, Group>,
@@ -514,6 +532,87 @@ impl Schema {
     /// the core had not been updated to know about it.
     pub fn groups(&self) -> impl Iterator<Item = &Group> {
         self.groups.values()
+    }
+
+    /// Every name a sentence hole resolved against a workspace map.
+    ///
+    /// A field with `forms:` holds prose — `replace the answer with what
+    /// house-style returns` — and the words inside the angle brackets are names
+    /// of real documents. [`Schema::validate`] already resolves them, which is
+    /// what refuses a sentence naming a program this workspace has not got.
+    ///
+    /// Two checks outside this crate need the same answer, and were each getting
+    /// it wrong in their own way for want of it. `unnamed.rs` asks "does any line
+    /// name this?" by looking at whole string values, so a name inside a sentence
+    /// was invisible and the program it named was reported as one nothing
+    /// reaches — a false positive on a reference that resolves. `programs.rs`
+    /// asks whether a rewriting program is `pure`, which it cannot ask without
+    /// knowing which program the sentence names.
+    ///
+    /// So the walk happens once, here, beside the vocabulary it reads, and both
+    /// of them read the result. Doing it twice would be two parsers for one
+    /// sentence, which is how the resolver and the reachability register came to
+    /// disagree about the same line in the first place.
+    pub fn names_in_sentences(&self, document: &Node) -> Vec<SentenceName> {
+        let mut found = Vec::new();
+        self.sentences_of(document, "workspace", 0, &mut found);
+        found
+    }
+
+    /// The recursive half of [`Schema::names_in_sentences`].
+    fn sentences_of(&self, node: &Node, group: &str, depth: usize, out: &mut Vec<SentenceName>) {
+        // The specification is a few levels deep and acyclic; the cap is a
+        // backstop, not a design — the same one `handover.rs` writes.
+        if depth > 12 {
+            return;
+        }
+        let Some(g) = self.groups.get(group) else { return };
+        let Some(map) = node.as_map() else { return };
+        for field in &g.fields {
+            let Some(entry) = map.get(field.name.as_str()) else { continue };
+            if let Some(forms) = &field.forms
+                && !forms.resolve.is_empty()
+            {
+                let items: Vec<&Node> = match &entry.node.value {
+                    Value::List(l) => l.iter().collect(),
+                    _ => vec![&entry.node],
+                };
+                for item in items {
+                    let Some(said) = item.as_str() else { continue };
+                    let Some((_, holes)) = forms.capture(said) else { continue };
+                    for (hole, written) in holes {
+                        let Some((_, collection)) =
+                            forms.resolve.iter().find(|(name, _)| *name == hole)
+                        else {
+                            continue;
+                        };
+                        out.push(SentenceName {
+                            collection: collection.clone(),
+                            name: written,
+                            said: said.to_string(),
+                            field: field.name.clone(),
+                            at: item.span.clone(),
+                        });
+                    }
+                }
+            }
+            match &field.ty {
+                Ty::Group(kind) => self.sentences_of(&entry.node, kind, depth + 1, out),
+                Ty::MapOf(inner) | Ty::ListOf(inner) => {
+                    if let Ty::Group(kind) = inner.as_ref() {
+                        let children: Vec<&Node> = match &entry.node.value {
+                            Value::Map(m) => m.values().map(|e| &e.node).collect(),
+                            Value::List(l) => l.iter().collect(),
+                            _ => Vec::new(),
+                        };
+                        for child in children {
+                            self.sentences_of(child, kind, depth + 1, out);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
     }
 
     /// Validate `node` against the group named `group`, reporting into `diags`.

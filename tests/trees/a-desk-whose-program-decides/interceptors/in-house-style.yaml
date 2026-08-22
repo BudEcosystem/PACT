@@ -1,0 +1,9 @@
+# The rewriting sentence R24 took away and §8.5 gave back. What it does is a file
+# in the folder — declared, fingerprinted, and `pure` — rather than a model
+# rewriting the answer on its own judgement, which is what R24 refused.
+description: Says everything the way this desk says it.
+when: turn.message.after
+may:
+  - change-the-answer
+rules:
+  - replace the answer with what house-style returns
