@@ -168,10 +168,24 @@ class MetricResult:
 
 PACT = "pact"
 DEEPEVAL = "deepeval"
+#: A grader the author CARRIES (P8 wave 3).
+#:
+#: The gap it closes is exactness. A refund amount, a checksum, a date window
+#: each have a right answer, and grading one meant either a `judged:` rule put to
+#: a model — which costs money, needs a judge binding and cannot be decided
+#: offline — or a `must-contain:` string match that grades the wording rather
+#: than the number.
+#:
+#: It belongs in the DETERMINISTIC-FIRST band beside `pact:`, so a suite that can
+#: be fully decided still never invokes a model (AC-4.5), and it is air-gapped by
+#: construction: the body is in the folder. Like every other program, what RUNS
+#: it is the host's — this module declares the seam and reports honestly when
+#: nothing supplies one.
+PROGRAM = "program"
 
 #: Every scheme this build answers to. Named once so the diagnostic for a scheme
 #: nobody provides offers the real list rather than a hand-kept copy of it.
-PROVIDERS: tuple[str, ...] = (PACT, DEEPEVAL)
+PROVIDERS: tuple[str, ...] = (PACT, DEEPEVAL, PROGRAM)
 
 
 def _wanted(expected: str, with_: dict[str, Any]) -> str:
@@ -422,7 +436,7 @@ def coverage() -> dict[str, Any]:
 # ----------------------------------------------------- what nothing can measure
 
 
-def why_unavailable(spec: MetricSpec) -> str:
+def why_unavailable(spec: MetricSpec, can_run_programs: bool = False) -> str:
     """Why this machine cannot take this measurement, or `""` when it can.
 
     Everything decidable WITHOUT running anything — no model, no network, no run
@@ -460,6 +474,22 @@ def why_unavailable(spec: MetricSpec) -> str:
             f"front of the colon, for example "
             f"`uri: {DEEPEVAL}:{spec.metric or 'faithfulness'}`."
         )
+
+    if spec.scheme == PROGRAM:
+        if not spec.metric:
+            return (
+                f"{spec.where} — `{spec.uri}` names no program, so nothing says which "
+                f"grader to run. fix: write the program's name after the colon, as "
+                f"`uri: program:<name>`, naming one of the entries in `programs`."
+            )
+        if not can_run_programs:
+            return (
+                f"{spec.where} — `{spec.metric}` is a grader this workspace carries, and "
+                f"nothing here can run a carried program, so `{spec.uri}` was not "
+                f"measured. fix: whatever runs your agents has to supply a locked room "
+                f"for programs; until it does, this score is reported rather than taken."
+            )
+        return ""
 
     if spec.scheme == PACT:
         if spec.metric in PACT_METRICS:
@@ -628,6 +658,7 @@ def evaluate_metric(
     asked: str = "",
     judge: Any = None,
     retrieval_context: "list[str] | None" = None,
+    run_program: "Callable[[str, dict[str, Any]], str] | None" = None,
 ) -> MetricResult:
     """Take one measurement. Deterministic providers never touch a model.
 
@@ -635,10 +666,49 @@ def evaluate_metric(
     `graded-by:` line. `None` for a `deepeval:` score is an unenforced result
     with something to type, not a default judge — see the module docstring.
     """
-    refused = why_unavailable(spec)
+    refused = why_unavailable(spec, can_run_programs=run_program is not None)
     if refused:
         return MetricResult(spec.uri, unenforced=refused,
                             deterministic=spec.deterministic)
+
+    if spec.scheme == PROGRAM:
+        # A grader the author carries. It is handed what was answered and what
+        # was expected, and says how right the answer was — a number, because a
+        # metric is a number against a bar and that is what separates one from a
+        # `rules:` entry.
+        #
+        # A runner that raises is THIS SCORE's failure and not the suite's: the
+        # same reading `_call_tool` gives a tool that could not run, because one
+        # grader that could not answer must not take the other scores down with
+        # it.
+        assert run_program is not None  # `why_unavailable` refused otherwise
+        try:
+            said = run_program(spec.metric, {
+                "actual": actual,
+                "expected": expected,
+                "asked": asked,
+                **spec.with_,
+            })
+        except Exception as e:  # noqa: BLE001 — a grader's failure is data
+            return MetricResult(
+                spec.uri, 0.0, False,
+                f"`{spec.metric}` could not run: {e}",
+                deterministic=spec.deterministic,
+            )
+        try:
+            score = float(str(said).strip())
+        except ValueError:
+            return MetricResult(
+                spec.uri, 0.0, False,
+                f"`{spec.metric}` answered {said!r}, and a score is a number between "
+                f"0 and 1.",
+                deterministic=spec.deterministic,
+            )
+        return MetricResult(
+            spec.uri, score, score >= spec.threshold,
+            f"`{spec.metric}` scored {score}",
+            deterministic=spec.deterministic,
+        )
 
     if spec.scheme == PACT:
         answered = PACT_METRICS[spec.metric](actual, expected, spec.with_)
