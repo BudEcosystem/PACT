@@ -242,6 +242,9 @@ tool.description	text | S-ROUTE | core | required
 tool.method	one-of | S-CAP | core | optional
 tool.says	text | S-GEN | core | optional
 tool.url	text | S-CAP | core | optional
+value.description	text | S-GEN | core | optional
+value.shape	one-of | S-CAP | expert | optional
+value.value	anything | S-GOV | core | required
 variant.instructions	text | S-GEN | expert | optional
 variant.may-use	list of text | S-ROUTE | expert | optional
 variant.says	text | S-GEN | expert | optional
@@ -278,5 +281,6 @@ workspace.redaction	group:redaction | S-EXEC | core | optional
 workspace.resources	map of group:resource | S-CAP | core | optional
 workspace.skills	map of group:skill | S-GEN | core | optional
 workspace.tools	map of group:tool | S-CAP | core | optional
+workspace.values	map of group:value | S-GOV | core | optional
 workspace.watch	map of group:watch | S-GOV | core | optional
 workspace.workspace-id	text | S-GOV | core | optional

@@ -211,6 +211,7 @@ dependencies = [
  "pact-doc",
  "pact-schema",
  "serde_json",
+ "sha2",
  "unicode-normalization",
 ]
 

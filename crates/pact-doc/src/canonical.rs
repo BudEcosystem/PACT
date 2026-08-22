@@ -99,7 +99,12 @@ fn write_node(out: &mut String, node: &Node) {
             write_string(out, &f.path);
             out.push_str(",\"contentType\":");
             write_string(out, &f.content_type);
-            let _ = write!(out, ",\"sizeBytes\":{}}}", f.size_bytes);
+            let _ = write!(out, ",\"sizeBytes\":{}", f.size_bytes);
+            if !f.digest.is_empty() {
+                out.push_str(",\"digest\":");
+                write_string(out, &f.digest);
+            }
+            out.push('}');
         }
         Value::Payload(p) => {
             out.push_str("{\"$payload\":");
@@ -116,7 +121,12 @@ fn write_node(out: &mut String, node: &Node) {
                 write_string(out, &f.path);
                 out.push_str(",\"contentType\":");
                 write_string(out, &f.content_type);
-                let _ = write!(out, ",\"sizeBytes\":{}}}", f.size_bytes);
+                let _ = write!(out, ",\"sizeBytes\":{}", f.size_bytes);
+                if !f.digest.is_empty() {
+                    out.push_str(",\"digest\":");
+                    write_string(out, &f.digest);
+                }
+                out.push('}');
             }
             out.push_str("]}");
         }

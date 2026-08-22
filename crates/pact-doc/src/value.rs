@@ -23,6 +23,18 @@ pub struct FileRef {
     /// Best-effort media type derived from the extension.
     pub content_type: String,
     pub size_bytes: u64,
+    /// sha256 of the file's contents, in lower-case hex.
+    ///
+    /// EXP-8 asked for this from the start and it was not built, so two trees
+    /// holding the same filenames at the same sizes and completely different
+    /// bytes had the same `workspace-digest`: signing a tree said nothing about
+    /// the scripts inside it, and a reviewer who had read a body could not say
+    /// later that it was still the body they read.
+    ///
+    /// The BYTES never enter the document — that is what keeps reading a tree
+    /// from being an act of loading it. What is recorded is a fingerprint of
+    /// them, and an unreadable file carries an empty one rather than a guess.
+    pub digest: String,
 }
 
 /// A directory carried through verbatim as a set of files, rather than
@@ -180,7 +192,7 @@ impl Node {
             Value::Str(s) => s.len(),
             Value::List(items) => items.iter().map(Node::text_bytes).sum(),
             Value::Map(m) => m.iter().map(|(k, e)| k.len() + e.node.text_bytes()).sum(),
-            Value::File(f) => f.path.len() + f.content_type.len(),
+            Value::File(f) => f.path.len() + f.content_type.len() + f.digest.len(),
             Value::Payload(p) => {
                 p.root.len()
                     + p.files.iter().map(|f| f.path.len() + f.content_type.len()).sum::<usize>()
@@ -239,6 +251,9 @@ fn file_ref_json(f: &FileRef) -> serde_json::Value {
     o.insert("$file".into(), serde_json::Value::String(f.path.clone()));
     o.insert("contentType".into(), serde_json::Value::String(f.content_type.clone()));
     o.insert("sizeBytes".into(), serde_json::Value::Number(f.size_bytes.into()));
+    if !f.digest.is_empty() {
+        o.insert("digest".into(), serde_json::Value::String(f.digest.clone()));
+    }
     serde_json::Value::Object(o)
 }
 
@@ -293,12 +308,15 @@ mod tests {
                 path: "assets/logo.png".into(),
                 content_type: "image/png".into(),
                 size_bytes: 2048,
+                digest: "b".repeat(64),
             }),
             sp(),
         );
         let j = n.to_json();
         assert_eq!(j["$file"], "assets/logo.png");
         assert_eq!(j["sizeBytes"], 2048);
+        // The fingerprint of the contents, and never the contents.
+        assert_eq!(j["digest"], "b".repeat(64));
         assert!(j.get("data").is_none(), "binary payloads must never be inlined");
     }
 

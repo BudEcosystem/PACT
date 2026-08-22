@@ -239,6 +239,37 @@ struct Candidate {
     name_only: bool,
 }
 
+
+/// A file's contents, as a fingerprint and never as content.
+///
+/// EXP-8 asks for this and it was not built, so a body could be swapped for
+/// another body of the same length and nothing in the document moved — which
+/// makes signing a tree a statement about its filenames rather than about what
+/// is in them. It matters more the moment a body is something a runtime will
+/// execute.
+///
+/// Read in fixed-size chunks rather than into a `String`, for two reasons: a
+/// payload is arbitrary bytes and need not be UTF-8 at all, and a large asset
+/// must not be held in memory to be described. A file that cannot be read
+/// carries an EMPTY fingerprint rather than a guess — the walk already reports
+/// unreadable entries, and a made-up digest would be worse than none, because
+/// the whole value of the field is that it can be compared.
+fn fingerprint(path: &Utf8Path) -> String {
+    use sha2::{Digest, Sha256};
+    let Ok(file) = std::fs::File::open(path) else { return String::new() };
+    let mut reader = std::io::BufReader::new(file);
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        match std::io::Read::read(&mut reader, &mut buf) {
+            Ok(0) => break,
+            Ok(n) => hasher.update(&buf[..n]),
+            Err(_) => return String::new(),
+        }
+    }
+    format!("{:x}", hasher.finalize())
+}
+
 impl Loader {
     pub fn new(root: impl Into<Utf8PathBuf>) -> Self {
         Self::with_policy(root, Policy::default())
@@ -434,6 +465,7 @@ impl Loader {
                     path: self.relative(path),
                     content_type: self.policy.content_type(path),
                     size_bytes: size,
+                    digest: fingerprint(path),
                 }),
                 Span::whole_file(path),
             ));
@@ -977,6 +1009,7 @@ impl Loader {
                     .unwrap_or_else(|_| name.clone()),
                 content_type: self.policy.content_type(&path),
                 size_bytes,
+                digest: fingerprint(&path),
             });
         }
     }

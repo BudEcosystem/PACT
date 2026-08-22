@@ -27,12 +27,14 @@
           {
             "$file": "expenses.md",
             "contentType": "application/md",
-            "sizeBytes": 282
+            "sizeBytes": 282,
+            "digest": "7316f082844aeaab5871663b6f27eb7b5645be40734be20b35ff6f3f193d10c0"
           },
           {
             "$file": "leave.md",
             "contentType": "application/md",
-            "sizeBytes": 222
+            "sizeBytes": 222,
+            "digest": "871cef1012dc338b5f723450319737bf4d8083bc8c575d4c97d10aabb3b71b3a"
           }
         ]
       }

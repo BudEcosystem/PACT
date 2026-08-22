@@ -610,7 +610,8 @@
           {
             "$file": "window-table.md",
             "contentType": "application/md",
-            "sizeBytes": 194
+            "sizeBytes": 194,
+            "digest": "4e3c22237e07f0381b3c8141851766393b32024d3060f52582010aeb97d7f4cb"
           }
         ]
       },
@@ -620,7 +621,8 @@
           {
             "$file": "check_window.py",
             "contentType": "application/py",
-            "sizeBytes": 235
+            "sizeBytes": 235,
+            "digest": "765a193ff3c4edd8e4582558d9acfabaf4fa3a15554559ad9d956b2080f24440"
           }
         ]
       }

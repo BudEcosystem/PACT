@@ -8,6 +8,7 @@ description.workspace = true
 repository.workspace = true
 
 [dependencies]
+sha2 = { workspace = true }
 pact-diag = { workspace = true }
 pact-doc = { workspace = true }
 # `report` reads `answer-within: 1m30s` through the schema's own duration
