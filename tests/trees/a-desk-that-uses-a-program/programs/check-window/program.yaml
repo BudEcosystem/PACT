@@ -1,0 +1,14 @@
+# Pure: it works out an answer from the date it is given and touches nothing.
+# That is what lets an agent name it in `uses:` with no tool round it — there is
+# no act here for an approval rule to be about.
+description: Works out whether a purchase is still inside the refund window.
+engine: wasm
+determinism: pure
+takes:
+  purchased-on: text
+answers-with:
+  verdict: one of inside, outside
+fuel:
+  instructions-at-most: 10m
+  runs-for-at-most: 2s
+  when-it-runs-out: stop-and-say-so

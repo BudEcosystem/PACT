@@ -1086,8 +1086,9 @@ async def run(
     if run_program is None:
         result.unenforced = result.unenforced + tuple(
             f"program `{p.name}`: nothing here can run a carried program, so "
-            f"{', '.join(p.reached_by)} reaches nothing. Whatever runs your agents has to "
-            f"supply a locked room that hosts `{p.engine or 'this kind of program'}`."
+            f"{'it is offered to the model and answers nothing' if p.reached_by == ('uses',) else ', '.join(p.reached_by) + ' reaches nothing'}. "
+            f"Whatever runs your agents has to supply a locked room that hosts "
+            f"`{p.engine or 'this kind of program'}`."
             for p in spec.programs
         )
     if spec.context_policy is not None and tidy is None:

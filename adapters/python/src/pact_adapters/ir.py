@@ -743,6 +743,14 @@ def _programs_reached_by(doc: dict[str, Any], agent: dict[str, Any]) -> tuple[Pr
         return ()
     tools = doc.get("tools") or {}
     reached: dict[str, list[str]] = {}
+    # Named straight from `uses:` (P8). Only a `pure` program may be — the
+    # checker refuses anything else where the author is — so what arrives here
+    # is a calculation that works from what it is given and touches nothing.
+    # `uses` is the whole address: there is no tool and no action, which is the
+    # point of the short door.
+    for used in sorted(_as_list(agent.get("uses"))):
+        if used in declared:
+            reached.setdefault(used, []).append("uses")
     for used in sorted(_as_list(agent.get("uses"))):
         tool = tools.get(used) if isinstance(tools, Mapping) else None
         if not isinstance(tool, Mapping):

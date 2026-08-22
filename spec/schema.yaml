@@ -526,13 +526,28 @@ groups:
           between them. Leave it out and it waits for all of them, asks them at
           the same time, and gives each an equal share.
       uses:
+        # `programs` joins the three (P8). A carried program named here is
+        # offered to the model as itself — its `takes:` is the argument list and
+        # its `answers-with:` the result — with no tool file, no `connect:` line,
+        # no action and no resource in between.
+        #
+        # It is allowed only for a program whose `determinism:` is `pure`, and
+        # `crates/pact-loader/src/programs.rs` holds that: a pure program works
+        # from what it is given and touches nothing, so there is no act for an
+        # approval rule to be about and nothing an `inspects:` line could look
+        # at. Anything else keeps its tool, where `needs-a-person:`,
+        # `spends-money:` and `same-request-key:` are — otherwise the short door
+        # is the way round the gate.
         type: list of text
-        names: [tools, skills, knowledge]
+        names: [tools, skills, knowledge, programs]
         surface: S-ROUTE
         tier: core
         help: >
-          the tools, skills and sets of documents this agent may use — a tool
-          it may call, a procedure it may read, a corpus it may look things up in
+          the tools, skills, sets of documents and carried programs this agent
+          may use — a tool it may call, a procedure it may read, a corpus it may
+          look things up in, a calculation it may run. A program can be named
+          here only when it is `pure`; anything else is reached through a tool,
+          where you can say who has to approve it.
       accepts:
         # Was `map of text` and checked by nothing, while `question.answer` — the
         # same mini-language, one field over — was held to a closed vocabulary by
@@ -775,13 +790,16 @@ groups:
           how many turns this way of working may take. A model that has to be
           walked through the work needs more of them.
       may-use:
+        # `programs` for the same reason `stage.may-use:` has it (P8): a variant
+        # only ever NARROWS what the agent has, so a kind the agent can use and a
+        # variant cannot name is a hole rather than a narrowing.
         type: list of text
-        names: [tools, skills, knowledge]
+        names: [tools, skills, knowledge, programs]
         surface: S-ROUTE
         tier: expert
         help: >
-          narrow the tools and procedures to these, for this way of working
-          only. Leave it out to keep all of them.
+          narrow the tools, procedures and calculations to these, for this way of
+          working only. Leave it out to keep all of them.
   # ── VALUES ──────────────────────────────────────────────────────────────────
   # One figure, written once. `{use: <name>}` stands where the figure would and
   # the loader puts the figure there before anything else looks — before
@@ -3405,7 +3423,11 @@ groups:
         # `skills/refund-policy/SKILL.md` and could not say so, and was told to
         # write `tools/refund-policy.yaml` — a second copy of a document already
         # in the tree, under a kind nothing reads it as.
-        names: [tools, skills, knowledge, agents]
+        # `programs` joins these because `agent.uses:` now takes one (P8). A
+        # stage only ever NARROWS what the agent already has, so a kind the agent
+        # can use and no stage can name is a hole rather than a narrowing —
+        # exactly the argument that put `skills` here, held by a test.
+        names: [tools, skills, knowledge, agents, programs]
         surface: S-ROUTE
         tier: expert
         help: >

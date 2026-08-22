@@ -1,0 +1,11 @@
+description: Decides whether a refund is still inside the window.
+instructions: >
+  Work out whether the purchase is inside the refund window and say which it is.
+  Use the calculation rather than working the dates out yourself.
+# Named like any other capability. Four files shorter than wrapping it in a tool,
+# and it is allowed because the program is pure.
+uses:
+  - check-window
+limits:
+  when-it-runs-out: stop-and-say-so
+  steps-at-most: 4

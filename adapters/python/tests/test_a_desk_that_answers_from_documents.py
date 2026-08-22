@@ -174,7 +174,7 @@ def test_a_typo_in_uses_teaches_the_construct_to_somebody_who_never_heard_of_it(
     assert "`knowledge:`" in said, said
     assert "knowledge/staff-handbok" in said, "and the file to write"
     # And the sentence is grammatical: `or_list`, not `.join(" or ")`.
-    assert "`tools:`, `skills:` or `knowledge:`" in said, said
+    assert "`tools:`, `skills:`, `knowledge:` or `programs:`" in said, said
     shutil.rmtree(dst.parent)
 
 

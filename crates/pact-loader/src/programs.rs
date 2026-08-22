@@ -40,8 +40,55 @@ fn hosted_by(resource: &Node) -> Vec<String> {
     }
 }
 
+/// Only a pure program may be named straight from `uses:`.
+///
+/// The short door exists because a pure program works from what it is given and
+/// touches nothing: there is no act for an approval rule to be about, and
+/// nothing an `inspects:` line could usefully look at. A program that may read
+/// the outside world, or answer differently the second time, is exactly the kind
+/// of call the governance vocabulary exists for — so it keeps its tool, where
+/// `needs-a-person:`, `spends-money:` and `same-request-key:` can be written.
+/// Letting it in through `uses:` would make the shortcut the way round the gate.
+fn only_pure_programs_are_used_directly(root: &Node, diags: &mut Diagnostics) {
+    let Some(agents) = root.get("agents").and_then(Node::as_map) else { return };
+    let programs = root.get("programs").and_then(Node::as_map);
+    for (agent_name, agent) in agents {
+        let Some(uses) = agent.node.get("uses") else { continue };
+        let named: Vec<(&str, &Node)> = match &uses.value {
+            pact_doc::Value::List(items) => {
+                items.iter().filter_map(|i| i.as_str().map(|s| (s, i))).collect()
+            }
+            pact_doc::Value::Str(one) => vec![(one.as_str(), uses)],
+            _ => continue,
+        };
+        for (name, at) in named {
+            let Some(program) = programs.and_then(|p| p.get(name)) else { continue };
+            let how = program.node.get("determinism").and_then(Node::as_str).unwrap_or("");
+            if how == "pure" {
+                continue;
+            }
+            diags.push(Diagnostic::error(
+                "loader/only-a-pure-program-is-used-directly",
+                at.span.clone(),
+                format!(
+                    "'{agent_name}' names the program '{name}' directly, and '{name}' says it \
+                     is `{how}` rather than `pure` — so it may look at something outside what \
+                     it was given, and a call like that is one somebody may need to approve."
+                ),
+                format!(
+                    "Reach it through a tool instead: give the tool a `connect:` to a locked \
+                     room and an action with `program: {name}`, where you can write \
+                     `needs-a-person:` beside it. Or mark '{name}' `determinism: pure` if it \
+                     really does work only from what it is given."
+                ),
+            ));
+        }
+    }
+}
+
 /// Refuse an arrangement where nothing can run the program that was named.
 pub fn check(root: &Node, diags: &mut Diagnostics) {
+    only_pure_programs_are_used_directly(root, diags);
     let Some(tools) = root.get("tools").and_then(Node::as_map) else { return };
     let programs = root.get("programs").and_then(Node::as_map);
     let resources = root.get("resources").and_then(Node::as_map);
