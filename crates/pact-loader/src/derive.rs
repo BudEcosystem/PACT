@@ -69,16 +69,26 @@ fn collections(schema: &Schema) -> Vec<String> {
 }
 
 /// Resolve every `based-on:` in the document, in place.
-pub fn resolve(root: &mut Node, schema: &Schema, diags: &mut Diagnostics) {
+pub fn resolve(
+    root: &mut Node,
+    schema: &Schema,
+    diags: &mut Diagnostics,
+    recorded: &mut Vec<crate::report::Substitution>,
+) {
     let Some(top) = root.as_map_mut() else { return };
     for name in collections(schema) {
         let Some(slot) = top.get_mut(&name) else { continue };
         let Some(entries) = slot.node.as_map_mut() else { continue };
-        resolve_collection(&name, entries, diags);
+        resolve_collection(&name, entries, diags, recorded);
     }
 }
 
-fn resolve_collection(kind: &str, entries: &mut Map, diags: &mut Diagnostics) {
+fn resolve_collection(
+    kind: &str,
+    entries: &mut Map,
+    diags: &mut Diagnostics,
+    recorded: &mut Vec<crate::report::Substitution>,
+) {
     let names: Vec<String> = entries.keys().cloned().collect();
 
     // A pattern is held to its own declarations before anything is built from
@@ -122,7 +132,7 @@ fn resolve_collection(kind: &str, entries: &mut Map, diags: &mut Diagnostics) {
     let mut used: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     for name in &names {
         let mut seen: Vec<String> = Vec::new();
-        if let Err(d) = derive_one(kind, entries, name, &mut seen, &mut used, diags) {
+        if let Err(d) = derive_one(kind, entries, name, &mut seen, &mut used, diags, recorded) {
             diags.push(*d);
             // One mistake, one message. An entry whose base did not resolve is
             // not a half-built entry, it is a document nobody can read: it holds
@@ -174,6 +184,7 @@ fn derive_one(
     seen: &mut Vec<String>,
     used: &mut std::collections::BTreeSet<String>,
     diags: &mut Diagnostics,
+    recorded: &mut Vec<crate::report::Substitution>,
 ) -> Result<(), Box<Diagnostic>> {
     let Some(entry) = entries.get(name) else { return Ok(()) };
     let Some(map) = entry.node.as_map() else { return Ok(()) };
@@ -227,7 +238,7 @@ fn derive_one(
     // The base may itself derive. Resolve it first so this entry inherits the
     // finished thing, not a half-derived one.
     seen.push(name.to_owned());
-    derive_one(kind, entries, &base_name, seen, used, diags)?;
+    derive_one(kind, entries, &base_name, seen, used, diags, recorded)?;
     seen.pop();
 
     // The arguments, held against what the base declares, BEFORE anything is
@@ -243,6 +254,21 @@ fn derive_one(
     };
     if base_is_a_pattern {
         used.insert(base_name.clone());
+        // WHERE THIS DOCUMENT CAME FROM, recorded as it happens.
+        //
+        // A pattern is resolved and REMOVED, exactly as a figure is, so the
+        // finished document cannot be asked afterwards — and here the answer
+        // matters more than it does for a figure, because changing a pattern
+        // changes every document built from it. The report's own type has said
+        // `figure` or `pattern` since P2 and only ever carried the first, so a
+        // reviewer reading a tree where every desk came out of one shape was
+        // told nothing at all about the feature whose selling point is exactly
+        // that they share it.
+        recorded.push(crate::report::Substitution {
+            kind: "pattern",
+            name: base_name.clone(),
+            at: span.file.to_string(),
+        });
     }
 
     let base_map = match entries.get(&base_name).and_then(|e| e.node.as_map()) {
@@ -385,7 +411,7 @@ mod tests {
             ("derived", map(&[("based-on", "base"), ("description", "same, on tool calls")])),
         ]);
         let mut d = Diagnostics::default();
-        resolve(&mut root, &spec(), &mut d);
+        resolve(&mut root, &spec(), &mut d, &mut Vec::new());
         let got = interceptors(&root, "derived");
         assert_eq!(got.get("may").unwrap().node.as_str(), Some("hide-values"));
         assert_eq!(got.get("description").unwrap().node.as_str(), Some("same, on tool calls"));
@@ -400,7 +426,7 @@ mod tests {
             ("base", map(&[("description", "a")])),
             ("derived", map(&[("based-on", "base")])),
         ]);
-        resolve(&mut root, &spec(), &mut Diagnostics::default());
+        resolve(&mut root, &spec(), &mut Diagnostics::default(), &mut Vec::new());
         assert!(interceptors(&root, "derived").get("based-on").is_none());
     }
 
@@ -410,7 +436,7 @@ mod tests {
             ("base", map(&[("may", "hide-values, stop-the-run")])),
             ("derived", map(&[("based-on", "base"), ("may", "hide-values")])),
         ]);
-        resolve(&mut root, &spec(), &mut Diagnostics::default());
+        resolve(&mut root, &spec(), &mut Diagnostics::default(), &mut Vec::new());
         assert_eq!(
             interceptors(&root, "derived").get("may").unwrap().node.as_str(),
             Some("hide-values"),
@@ -425,7 +451,7 @@ mod tests {
             ("b", map(&[("based-on", "a"), ("description", "middle")])),
             ("c", map(&[("based-on", "b")])),
         ]);
-        resolve(&mut root, &spec(), &mut Diagnostics::default());
+        resolve(&mut root, &spec(), &mut Diagnostics::default(), &mut Vec::new());
         let c = interceptors(&root, "c");
         assert_eq!(c.get("may").unwrap().node.as_str(), Some("hide-values"));
         assert_eq!(c.get("description").unwrap().node.as_str(), Some("middle"));
@@ -438,7 +464,7 @@ mod tests {
             ("b", map(&[("based-on", "a")])),
         ]);
         let mut d = Diagnostics::default();
-        resolve(&mut root, &spec(), &mut d);
+        resolve(&mut root, &spec(), &mut d, &mut Vec::new());
         let e = d.items().first().expect("a ring must be refused");
         assert_eq!(e.rule, "loader/based-on-goes-in-a-circle");
         assert!(e.message.contains("→"), "the ring is shown: {}", e.message);
@@ -451,7 +477,7 @@ mod tests {
             ("mine", map(&[("based-on", "carefull")])),
         ]);
         let mut d = Diagnostics::default();
-        resolve(&mut root, &spec(), &mut d);
+        resolve(&mut root, &spec(), &mut d, &mut Vec::new());
         let e = d.items().first().expect("a typo must be refused");
         assert_eq!(e.rule, "loader/no-such-name");
         assert!(e.fix.contains("`careful`"), "the fix names the real one: {}", e.fix);
@@ -461,7 +487,7 @@ mod tests {
     fn a_library_shape_is_left_for_the_kind_that_owns_it() {
         let mut root = doc(&[("mine", map(&[("based-on", "pact:loop/standard")]))]);
         let mut d = Diagnostics::default();
-        resolve(&mut root, &spec(), &mut d);
+        resolve(&mut root, &spec(), &mut d, &mut Vec::new());
         assert!(!d.has_errors());
         assert_eq!(
             interceptors(&root, "mine").get("based-on").unwrap().node.as_str(),
@@ -477,7 +503,7 @@ mod tests {
         let mut root = pact_doc::parse_yaml(text, camino::Utf8Path::new("derive-test.yaml"))
             .expect("parses");
         let mut d = Diagnostics::new();
-        resolve(&mut root, &spec(), &mut d);
+        resolve(&mut root, &spec(), &mut d, &mut Vec::new());
         (root, d)
     }
 

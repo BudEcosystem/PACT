@@ -657,6 +657,38 @@ fn what_was_substituted_is_on_the_report() {
     }
 }
 
+/// A document built from a pattern says which pattern it came from.
+///
+/// The report's own type says `figure` or `pattern`, and only `figure` was ever
+/// written: a reviewer reading a tree where every desk came out of one pattern
+/// was told nothing at all, on the feature whose whole selling point is that
+/// several documents share one shape.
+///
+/// It is the same argument the figure half makes, one level up. A pattern is
+/// resolved and REMOVED, so the finished document cannot be asked where it came
+/// from — and the answer matters more here than for a figure, because changing a
+/// pattern changes every document built from it.
+#[test]
+fn a_document_built_from_a_pattern_says_which_one() {
+    let (code, waits, err) = run(&["waits", &tree("two-desks-one-pattern")]);
+    assert_eq!(code, Some(0), "{waits}{err}");
+    let report: serde_json::Value = serde_json::from_str(&waits).expect("waits emits JSON");
+    let subs = report["substitutions"].as_array().expect("the report carries them");
+
+    let built: Vec<&serde_json::Value> = subs
+        .iter()
+        .filter(|s| s["kind"].as_str() == Some("pattern"))
+        .collect();
+    assert_eq!(built.len(), 2, "both desks came out of the pattern:\n{waits}");
+    for one in built {
+        assert_eq!(one["name"], "desk-pattern", "name the pattern: {one}");
+        assert!(
+            one["at"].as_str().is_some_and(|p| p.ends_with("agent.yaml")),
+            "and where it landed: {one}"
+        );
+    }
+}
+
 /// A tree that substitutes nothing carries an empty list, not a missing key.
 #[test]
 fn a_tree_that_substitutes_nothing_says_so_plainly() {

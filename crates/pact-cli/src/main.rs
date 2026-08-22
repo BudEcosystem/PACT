@@ -1446,7 +1446,7 @@ fn validate(
     }
 
     if let Some(root) = node.as_mut() {
-        pact_loader::derive::resolve(root, &spec, &mut diags);
+        pact_loader::derive::resolve(root, &spec, &mut diags, &mut substituted);
     }
 
     if let Some(root) = node.as_ref() {

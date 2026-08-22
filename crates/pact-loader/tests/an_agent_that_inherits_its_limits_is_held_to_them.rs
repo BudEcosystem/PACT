@@ -55,7 +55,7 @@ fn resolved() -> (Node, Diagnostics) {
         load.render()
     );
     let mut d = Diagnostics::new();
-    pact_loader::derive::resolve(&mut doc, &spec(), &mut d);
+    pact_loader::derive::resolve(&mut doc, &spec(), &mut d, &mut Vec::new());
     d.sort();
     (doc, d)
 }

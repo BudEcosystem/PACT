@@ -2910,12 +2910,13 @@ groups:
         tier: expert
         help: >
           which score to use, written as who provides it, a colon, then what it
-          measures — `deepeval:faithfulness`. Two providers ship: `deepeval:`
-          reaches every score that library has, and `pact:` is the small set
-          PACT takes on its own with no model and nothing installed. A name with
-          no colon in it is refused rather than guessed at, because guessing
-          which provider was meant is how a suite comes to measure something
-          nobody asked for.
+          measures — `deepeval:faithfulness`. Three providers ship: `deepeval:`
+          reaches every score that library has, `pact:` is the small set PACT
+          takes on its own with no model and nothing installed, and `program:`
+          names one of this workspace's own carried programs, for a bar only you
+          can define. A name with no colon in it is refused rather than guessed
+          at, because guessing which provider was meant is how a suite comes to
+          measure something nobody asked for.
       threshold:
         # `percent`, so `0.8` and `80%` are one setting with one range. It was
         # tempting to make this `number`: DeepEval writes `0.8` and an expert
