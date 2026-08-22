@@ -16,6 +16,53 @@ through tools, memory, metrics, questions, interceptor sentences, routing
 
 ---
 
+## 0.1 Status — what is built, and where the plan was wrong
+
+**Built and committed** (`06ac849` … `ffd1540`, suite green at every step):
+
+| Phase | State | Commit |
+|---|---|---|
+| P0 the inertness net | done | `06ac849` |
+| P1 `values:` | done, then hardened twice | `06ac849`, `498875c`, `ffd1540` |
+| P2 `expects:`/`with:` | done, then hardened twice | `06ac849`, `498875c`, `3aace86` |
+| P3 payload digests | done | `2b3b735` |
+| P4 dynamic-bottom rule | done, both halves; base door closed later | `bf9a29b`, `3aace86` |
+| P5 learning widening | done, NOT as written — see below | `295db17` |
+| P6 `program` kind + sandbox + egress role | done | `f1fbdc8` |
+| P7 executor | done as a SEAM, not an engine — see below | `c18fa28` |
+| P8 capability wiring | wave 1 of 8 (`uses:` takes a program) | `26993a1` |
+| P9 self-authored lane | not started | — |
+
+**Three places this plan was wrong, and what was built instead.**
+
+*P5 named a class vocabulary the product does not have.* It proposed
+`learning.applies-up-to: CLASS-2`; `classify()` answers LOW, HIGH or UNKNOWN,
+and UNKNOWN is treated as HIGH. A four-class dial in front of a three-value
+judgement would have been a second spelling of one decision — R59's mistake, in
+the file R59 is about. The real gap was that `may-improve-on-its-own:` is
+`tier: core`, offers four words, and three of them named fields
+`CAN_BE_APPLIED` could not apply: the author's grant was unusable. That is what
+was closed.
+
+*P7 said "the wasm executor".* Building one means fetching a runtime into the
+core of a project whose D17 promise is that everything runs air-gapped, or
+vendoring one the portable artifact cannot keep current. A program runner is a
+transport, and every transport here is host-supplied: `Transport` and
+`tool_impls` are both in `SUPPLIED_BY_THE_HOST` and nothing in `src/` builds
+either. So P7 shipped the seam, the metering and the honest absence — a run with
+no runner names every program it could not start, before the first call.
+
+*The plan assumed its own analysis was sound.* It was, mostly — but five defects
+in P1/P2 were found by adversarial audit rather than by the tests written for
+them, and **two of those were introduced by fixes for the other three**. The
+lesson is recorded where it belongs, in the protocol below: a fix aimed at one
+case must be re-checked against the case it was fixing before.
+
+**Known open, recorded rather than dropped:** a figure inside a sentence
+(interpolation — a new capability, not a defect); list-valued pattern arguments;
+templates reading inside `x-` blocks (AD-14); substitution provenance in the
+LoadReport (P2's own exit gate); P8 waves 2–8; P9.
+
 ## 1. The TDD protocol, calibrated to this repo
 
 Extreme TDD here is not a slogan; the repo already runs on four standing
