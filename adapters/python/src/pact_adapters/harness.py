@@ -1125,6 +1125,27 @@ async def run(
             f"`{p.engine or 'this kind of program'}`."
             for p in spec.programs
         )
+    # And the other half of the same honesty, for the run that CAN start one.
+    # `allow-egress:` gained `programs` as its eighth part and the schema's
+    # sentence for it is that without the word "a program runs in a room with the
+    # door shut". PACT never opens the body and never watches the room, so it
+    # cannot hold that door — the host that supplied `run_program` does, and it
+    # is handed the author's answer on every `ProgramSpec.may_reach_outside`.
+    #
+    # What is left is a promise this run is trusting somebody else to keep, and
+    # R30's rule is that such a promise is said out loud rather than assumed:
+    # "`allow-egress: []` is a sentence a person approved, and a check that passes
+    # under it turns that approval into decoration". One sentence, not one per
+    # program, because there is one door and one host.
+    withheld = [p for p in spec.programs if not p.may_reach_outside]
+    if run_program is not None and withheld:
+        result.unenforced = result.unenforced + (
+            f"`allow-egress:` does not name `programs`, so "
+            f"{', '.join('`' + p.name + '`' for p in withheld)} "
+            f"{'runs' if len(withheld) == 1 else 'run'} with the door shut — and PACT "
+            f"cannot check that it is: it never opens a carried body and never watches "
+            f"the room. Whatever supplied the runner holds that door.",
+        )
     if spec.context_policy is not None and tidy is None:
         result.unmetered = result.unmetered + ("context-policy",)
     # Everything the policy itself could not resolve. `ContextPolicy.problems`

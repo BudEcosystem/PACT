@@ -28,10 +28,31 @@ through tools, memory, metrics, questions, interceptor sentences, routing
 | P3 payload digests | done | `2b3b735` |
 | P4 dynamic-bottom rule | done, both halves; base door closed later | `bf9a29b`, `3aace86` |
 | P5 learning widening | done, NOT as written — see below | `295db17` |
-| P6 `program` kind + sandbox + egress role | done | `f1fbdc8` |
+| P6 `program` kind + sandbox + egress role | done; the egress half NOT as written — see below | `f1fbdc8`, this |
 | P7 executor | done as a SEAM, not an engine — see below | `c18fa28` |
 | P8 capability wiring | **done** — all 8 waves | `26993a1`, `3985b5d`, `6a62b4e`, `30e4efc`, `6c8aa91`, this |
 | P9 self-authored lane | done, with one residual named below | this |
+
+**Four places this plan was wrong, and what was built instead.**
+
+*P6 planned a refusal the tree cannot support.* It named
+`a_reaching_program_under_an_empty_egress_list_is_refused_where_the_author_is`
+and a check for "reaching program under empty egress refused". Neither was
+built, and neither should be: nothing in the tree says a program reaches
+outward. `nothing_reaches_outside_the_box` works because `reaches-outside:` is
+DATA in the schema and there are exactly three such fields, none of them on
+`program`; the body is never opened (R5); and `determinism:` is no proxy, since
+`deterministic` covers reading a pinned local table. A check would have to guess,
+which R25 and R28 refuse — and refusing on a guess would make `programs`
+mandatory boilerplate on every workspace that carries a pure calculation, which
+is the over-grant `egress.rs` exists to remove.
+
+What shipped instead is honest delegation: `ProgramSpec.may_reach_outside`
+carries the author's own answer to whatever supplies the runner, a run that
+withheld the grant says on `unenforced` that it is trusting the host to hold the
+door, and `every_part_the_boundary_offers_has_something_that_reads_it` holds
+every word of `allow-egress:` against a reader or a written delegation so a ninth
+part cannot ship as decoration the way this one nearly did.
 
 **Three places this plan was wrong, and what was built instead.**
 
@@ -362,9 +383,10 @@ opts into nothing) inert.
   `tools/refund-window.yaml` (`connect: local-sandbox`,
   `actions.check.program: check-window`); `pact check --deny-warnings` exit 0.
 - `a_program_action_naming_no_program_is_refused_naming_the_ones_there_are`.
-- `a_reaching_program_under_an_empty_egress_list_is_refused_where_the_author_is`
-  (R30 pattern, with the `programs` role as the fix line) + positive control
-  (non-reaching program loads clean under `allow-egress: []`).
+- ~~`a_reaching_program_under_an_empty_egress_list_is_refused_where_the_author_is`~~
+  **WITHDRAWN, not skipped.** Nothing in the tree says a program reaches outward,
+  so the refusal would rest on a guess. See §0.1 for the whole reason and for
+  what was built in its place.
 - `a_program_with_no_fuel_is_refused` (`needs-also:` chain) and
   `fuel_without_when_it_runs_out_is_refused`.
 - `a_sandbox_that_does_not_host_the_engine_is_refused_at_check`.

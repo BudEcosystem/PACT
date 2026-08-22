@@ -274,6 +274,62 @@ fn the_specification_says_which_parts_may_talk_outside_the_box() {
     );
 }
 
+/// Every part `allow-egress:` offers is a part something actually reads.
+///
+/// The loops below all iterate `learning-model.role`, which is the six MODEL
+/// roles. `allow-egress:` offers more than that — `tools` since v1 and
+/// `programs` since P8 — and nothing in this file, or anywhere else, ever asked
+/// whether those extra words reach a reader. `programs` shipped as decoration
+/// for a round because of that gap: no check read it, no run reported it, and
+/// the Python guard that would have caught an unread value passes by accident,
+/// because it greps the shipping corpus for the string `"programs"` and every
+/// occurrence is a lookup of the `programs:` COLLECTION. The word collides with
+/// a collection name, so it can never be reported orphaned there.
+///
+/// This is the same protection in the port that owns the boundary, where no such
+/// collision exists. A word is covered when it is a model role — those are read
+/// by `egress.rs::plays`, and every loop below measures them one tree at a time
+/// — or when it has a row here saying what reads it. A ninth part arrives red by
+/// existing, which is the whole point.
+///
+/// Mutation: delete the `programs` row. Red, naming the word and asking for its
+/// reader.
+#[test]
+fn every_part_the_boundary_offers_has_something_that_reads_it() {
+    /// The parts that are not model roles, and what each is answered by.
+    ///
+    /// Prose a schema cannot generate — which port reads the word, and whether
+    /// it is a rule this side ENFORCES or a fact it DELEGATES with the datum
+    /// delivered. The set is held against the specification; only the sentences
+    /// are written down.
+    const ANSWERED_BY: &[(&str, &str)] = &[
+        (
+            "tools",
+            "`nothing_reaches_outside_the_box` in main.rs, which walks every field the              schema marks `reaches-outside:` and refuses an address the author did not grant",
+        ),
+        (
+            "programs",
+            "DELEGATED, with the datum delivered: `ProgramSpec.may_reach_outside` carries              the author's answer to whatever supplies the runner, and a run that withheld              the grant says so on `unenforced`. PACT never opens a carried body and never              watches the room (R5, D17), so it cannot hold this door itself — the same              split the locked room makes, said out loud instead of assumed",
+        ),
+    ];
+
+    let roles = role_words();
+    for part in choices("workspace", "allow-egress") {
+        if roles.contains(&part) {
+            continue;
+        }
+        assert!(
+            ANSWERED_BY.iter().any(|(word, _)| *word == part),
+            "`allow-egress:` offers `{part}`, which is not a model role and has no row here \
+             saying what reads it. A word a person can type and nothing can exercise reads \
+             as a capability, which is worse than an absent one.\n  \
+             fix: give `{part}` a reader, and add a row to `ANSWERED_BY` naming it — or, if \
+             the word is somebody else's to honour, say that in the row and make sure the \
+             answer reaches them as data."
+        );
+    }
+}
+
 /// Every word a `role:` may say is a word `allow-egress:` can grant.
 ///
 /// `learning-model.role`'s help is *"one of the model roles `allow-egress:`

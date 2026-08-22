@@ -285,6 +285,20 @@ class ProgramSpec:
     #: The tool actions that reach it, `<tool>/<action>`, so the sentence a run
     #: reports can name where the author wrote it.
     reached_by: tuple[str, ...] = ()
+    #: Whether this workspace's `allow-egress:` names `programs`.
+    #:
+    #: The eighth part of the boundary, and for a round it was decoration: no
+    #: check read the word, no run reported it, and this class — the only thing a
+    #: host is ever handed about a program — did not carry it. A choice a
+    #: non-coder can type and nothing can exercise reads as a capability, which is
+    #: worse than an absent one.
+    #:
+    #: It is a fact carried rather than a rule enforced, and the split is the same
+    #: one the room itself makes: PACT declares the locked room and whatever runs
+    #: your agents supplies it, so nothing in this port can hold a door shut on a
+    #: body it never opens (R5, D17). What it can do is hand the host the author's
+    #: own answer, and say on `unenforced` that the answer is being trusted.
+    may_reach_outside: bool = False
 
 
 @dataclass(frozen=True)
@@ -769,6 +783,11 @@ def _programs_reached_by(doc: dict[str, Any], agent: dict[str, Any]) -> tuple[Pr
             named = action.get("program")
             if isinstance(named, str) and named in declared:
                 reached.setdefault(named, []).append(f"{used}/{action_name}")
+    # The workspace's own boundary line, read once and carried on every program.
+    # On the program rather than beside it, because a host that is starting one
+    # body has the spec for that body in its hand and should not have to go and
+    # find the workspace to learn whether the door may be open.
+    outward = "programs" in [str(w).strip() for w in _as_list(doc.get("allow-egress"))]
     out = []
     for name in sorted(reached):
         block = declared[name]
@@ -780,6 +799,7 @@ def _programs_reached_by(doc: dict[str, Any], agent: dict[str, Any]) -> tuple[Pr
                 engine=_text(block.get("engine", "")),
                 determinism=_text(block.get("determinism", "")),
                 reached_by=tuple(reached[name]),
+                may_reach_outside=outward,
             )
         )
     return tuple(out)

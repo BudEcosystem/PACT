@@ -1,10 +1,10 @@
 """What each word in `allow-egress:` actually gates.
 
 `workspace.yaml` offers a closed list of parts of the system — six MODEL roles
-(`llm`, `stt`, `tts`, `embedder`, `judge`, `reflector`) and `tools`, which is
-the tool documents' own outbound addresses and is held by the checker rather
-than here — and until this module existed **one of them was read and the rest
-were not**. Every check in the repository asked the same question,
+(`llm`, `stt`, `tts`, `embedder`, `judge`, `reflector`), `tools`, which is the
+tool documents' own outbound addresses and is held by the checker rather than
+here, and `programs`, which is the carried bodies and is DELEGATED (see below) —
+and until this module existed **one of them was read and the rest were not**. Every check in the repository asked the same question,
 `"llm" in egress`,
 in three places (`resolve.needs_of`, `judge.why_no_judge`, `scoring._pick_model`)
 and one more in Rust. A per-role list was one boolean wearing six names, and
@@ -35,8 +35,21 @@ The Rust half of the same rule is `crates/pact-cli/src/egress.rs`, which reaches
 the author at `pact check` time. This half reaches whoever runs a suite or asks
 for a recommendation, which is where the same mistake arrives second.
 
+`programs` is answered by neither half, and that is written down rather than left
+as an absence. PACT never opens a carried body and never watches the locked room
+— that is R5 and D17, and it is the same split the room itself makes: PACT
+declares it and whatever runs your agents supplies it. So the word is DELEGATED
+with the datum delivered: `ProgramSpec.may_reach_outside` carries the author's
+own answer to the host that starts the body, and a run that withheld the grant
+says on `unenforced` that it is trusting somebody else to hold the door. The word
+went a round as pure decoration — read by nothing, reported by nothing — which is
+the failure this module was written to end, arriving on the newest part of the
+list. `every_part_the_boundary_offers_has_something_that_reads_it` in the Rust
+tests now holds every part against a reader or a written delegation, so a ninth
+one cannot repeat it.
+
 **There is deliberately no list of the roles in this file.** There was one — a
-`ROLES` tuple that named six of the seven words `allow-egress:` accepts and was
+`ROLES` tuple that named six of the words `allow-egress:` accepts and was
 read by nothing, in this port or its tests, for as long as it existed. Nothing
 here reads a document's `role:` line: every caller of :func:`admits` passes the
 role it means as a literal, so a vocabulary table would be a second copy of the
