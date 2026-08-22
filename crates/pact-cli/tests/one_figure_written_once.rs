@@ -552,3 +552,72 @@ fn a_kind_that_declares_with_keeps_its_own() {
     );
     let _ = std::fs::remove_dir_all(&dst);
 }
+
+/// A figure written where one cannot stand is said out loud.
+///
+/// The verbatim rule and the never-quietly-ignored rule pull in opposite
+/// directions, and both are right. `case.expect:` and `case.with:` are typed
+/// `anything`, so a map carrying the word `use` there is the author's own data
+/// and is read as written — that is the contract, and it is what stops an
+/// ordinary English word becoming a reference.
+///
+/// But an author who wrote `{use: spend-cap}` and meant the figure gets nothing:
+/// no substitution, no message, and the literal map ships into the document and
+/// on to whatever reads it. "Loads and does nothing" is the failure this format
+/// refuses everywhere else.
+///
+/// The two are separable, and the separator is whether the name is a figure this
+/// workspace actually has. `{use: the winter catalogue}` names nothing and is
+/// plainly data. `{use: spend-cap}` names a figure, in a slot that cannot take
+/// one — so it is said, as a warning, with what to do about it.
+///
+/// Found by audit.
+#[test]
+fn a_figure_written_where_one_cannot_stand_is_said_out_loud() {
+    let dst = broken(
+        "unsubstitutable",
+        "one-figure-in-three-places",
+        &[(
+            "workspace.yaml",
+            "allow-egress: []",
+            "allow-egress: []\nevals:\n  description: checks\n  population: authored-enumeration\n  cases:\n    one:\n      when: a customer asks\n      expect:\n        use: spend-cap\n",
+        )],
+    );
+    let (code, out, err) = run(&["check", &dst]);
+    let said = format!("{out}{err}");
+    assert_eq!(code, Some(0), "a warning, not a wall — the data is still valid:\n{said}");
+    assert!(said.contains("loader/a-figure-cannot-stand-here"), "{said}");
+    assert!(said.contains("spend-cap"), "name it:\n{said}");
+
+    // And it was NOT substituted: the contract for a verbatim slot holds.
+    let (_, shown, _) = run(&["show", &dst]);
+    let doc: serde_json::Value = serde_json::from_str(&shown).expect("JSON");
+    assert_eq!(doc["evals"]["cases"]["one"]["expect"]["use"], "spend-cap", "{shown}");
+
+    let (strict, _, _) = run(&["check", &dst, "--deny-warnings"]);
+    assert_eq!(strict, Some(1), "and it has teeth for whoever asks for them");
+    let _ = std::fs::remove_dir_all(&dst);
+}
+
+/// A word that names no figure is data, and draws nothing.
+///
+/// The other side of the separator, and the reason it is a separator: an
+/// author's ordinary English key must not become a warning because a feature
+/// they never used exists.
+#[test]
+fn a_use_key_naming_no_figure_draws_nothing() {
+    let dst = broken(
+        "plain-data",
+        "one-figure-in-three-places",
+        &[(
+            "workspace.yaml",
+            "allow-egress: []",
+            "allow-egress: []\nevals:\n  description: checks\n  population: authored-enumeration\n  cases:\n    one:\n      when: a customer asks\n      expect:\n        use: the winter catalogue\n",
+        )],
+    );
+    let (code, out, err) = run(&["check", &dst, "--deny-warnings"]);
+    let said = format!("{out}{err}");
+    assert_eq!(code, Some(0), "an ordinary word is not a mistake:\n{said}");
+    assert!(!said.contains("a-figure-cannot-stand-here"), "{said}");
+    let _ = std::fs::remove_dir_all(&dst);
+}

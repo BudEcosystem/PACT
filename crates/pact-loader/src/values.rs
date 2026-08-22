@@ -395,6 +395,30 @@ fn substitute(
     if depth > 16 {
         return;
     }
+    // A figure written where one cannot stand. The verbatim rule and the
+    // never-quietly-ignored rule pull opposite ways and both are right, and what
+    // separates them is whether the name is a figure this workspace HAS: `{use:
+    // the winter catalogue}` names nothing and is plainly an author's own key,
+    // while `{use: spend-cap}` names a figure and was written by somebody who
+    // meant it. Said, and still not substituted — the slot's contract holds.
+    if looks_like_a_use(node)
+        && !a_figure_can_stand_here(ty)
+        && let Some(name) = names_a_value(node)
+        && figures.contains_key(&name)
+    {
+        diags.push(Diagnostic::warning(
+            "loader/a-figure-cannot-stand-here",
+            node.span.clone(),
+            format!(
+                "'{name}' is a figure, and this line is read exactly as you wrote it — so the \
+                 figure is not put here and `{{use: {name}}}` is what gets used."
+            ),
+            "Write the figure itself here. A figure stands where a single setting does, \
+             and this line holds whatever you type."
+                .to_string(),
+        ));
+        return;
+    }
     if looks_like_a_use(node) && a_figure_can_stand_here(ty) {
         let map = node.as_map().expect("checked");
         let keys: Vec<String> = map.keys().cloned().collect();
