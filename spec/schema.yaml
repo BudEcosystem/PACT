@@ -3816,7 +3816,13 @@ groups:
           should run before one that counts what was said.
       may:
         type: list of one-of
-        choices: [hide-values, stop-the-run, send-elsewhere]
+        # Five again. The two rewriting words came off this list under R24
+        # because nothing could reach them; the two sentences above reach them
+        # now, so a rule that declares one can be written and carried out. The
+        # withdrawal is recorded in `docs/50-NOT-COPIED.md` rather than the row
+        # being deleted — a row that quietly disappears is indistinguishable from
+        # one nobody noticed.
+        choices: [hide-values, stop-the-run, send-elsewhere, change-the-answer, change-the-request]
         required: yes
         needs-also: [rules]
         surface: S-EXEC
@@ -3871,6 +3877,10 @@ groups:
           # first model call, which is the earliest anything can.
           resolve:
             a tool: tools
+            # A carried program, held against `programs:` the way `<a tool>` is
+            # held against `tools:` — so a rewriting sentence naming a program
+            # this workspace does not have is refused where it was written.
+            a program: programs
           one-of:
             - say: 'replace anything that looks like <a thing> with "<text?>"'
               needs: hide-values
@@ -3968,6 +3978,31 @@ groups:
               at:
                 - step.message.after
                 - turn.message.after
+            # THE TWO SENTENCES THAT REWRITE, and the reason `change-the-answer`
+            # and `change-the-request` are on `may:` again.
+            #
+            # R24 took them off, and was right: no sentence here rewrote, so
+            # declaring either got the rule refused by the next check down, and a
+            # choice a non-coder can type and nothing can exercise reads as a
+            # capability. §6 recorded them host-only with the condition that
+            # would let them back — "a sentence somebody actually wants" — and
+            # noted the worry, that a mid-run rewrite "is not reviewable in a way
+            # `instructions:` and a stage's `says:` are".
+            #
+            # A carried program answers that worry rather than dodging it: it is
+            # a file in the folder, fingerprinted, declared with what it takes
+            # and answers with, and refused unless it is `pure` — so what the
+            # rewrite does is as readable as the instructions it sits beside, and
+            # the same twice.
+            - say: replace the answer with what <a program> returns
+              needs: change-the-answer
+              at:
+                - step.message.after
+                - turn.message.after
+            - say: replace what the model is told with what <a program> returns
+              needs: change-the-request
+              at:
+                - step.message.before
         surface: S-EXEC
         tier: core
         help: >

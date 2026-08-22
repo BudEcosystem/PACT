@@ -450,7 +450,7 @@ a restatement, and points at the section that argues it.
 | R16 | Orchestration code the model writes while it runs | it cannot be reviewed before it runs, diffed, signed, or reproduced — and structural change is exactly what needs a person | `team:` and `teamwork:`; structural change arrives as a diff | §3.2 |
 | R17 | Extensions as installable packages | naming already solves sharing, and a package layer costs the property that everything the system does is in the folder you were handed | put the shared thing at the workspace root and name it | §3.3 |
 | R18 | Checks that can only be written as code | the evaluation suite is what decides whether a port worked, so a suite most authors cannot write makes most agents unportable | example cases, plain rules, or promoted conversations; code stays possible, never necessary | §3.4 |
-| R24 | An interceptor power a written rule cannot reach — `change-the-request` and `change-the-answer` were choices in `may:` that no sentence in the vocabulary produces, so declaring one and then writing any rule got the rule refused by the next check down | a choice a non-coder can type that nothing can ever use reads as a capability and is worse than an absent one; and offering it made the list of five look like five answers when three of them were the answers | the three that reach something: `hide-values`, `stop-the-run`, `send-elsewhere`. Rewriting a request or an answer stays available to the system running the agent, through the typed escape §5.5 requires — see §6 below | §2 (G5) |
+| R24 | An interceptor power a written rule cannot reach — `change-the-request` and `change-the-answer` were choices in `may:` that no sentence in the vocabulary produces, so declaring one and then writing any rule got the rule refused by the next check down | a choice a non-coder can type that nothing can ever use reads as a capability and is worse than an absent one; and offering it made the list of five look like five answers when three of them were the answers | the three that reach something: `hide-values`, `stop-the-run`, `send-elsewhere`. Rewriting a request or an answer stays available to the system running the agent, through the typed escape §5.5 requires — see §6 below | §2 (G5), **amended — see §8.5** |
 | R25 | A **guessed** number for how much a model can hold, so that `context-policy:` always appears to work | a policy measured against an invented budget tidies at the wrong moment and reports that it tidied, which is the silent degradation T7 exists to name; a spend cap with no price list is already reported rather than guessed and this is the same shape | a **sourced** row in `models/catalog.yaml` — a figure with the place it was read from and the date beside it, or the word `unknown`. A model no row covers, on a transport that will not say, leaves the policy on `unmetered` with `session.limit.failed` naming it | §4 |
 | R26 | A default context policy for a workspace that never asked for one | every framework's built-in recipe throws the model's own reasoning away and never mentions it, and the one thing that must never happen quietly is losing information | write a `context-policy:`; with none, nothing is dropped and a conversation that outgrows the model fails where it is visible | §2 (G3) |
 | R27 | A model pin the run quietly measures around — binding one model and tidying for another's window | the two disagreeing means the run is answering on a model nobody chose, and either half of the obvious fix hides something: measuring against the pin tidies for a window the running model does not have, and ignoring the pin hides that the wrong model answered | the running model's window is used and the disagreement is named, both ids, on `unmetered` with `session.limit.failed` | §4 |
@@ -809,6 +809,47 @@ A withdrawal is recorded rather than deleted for the same reason a refusal is
 recorded at all. A row that quietly disappears is indistinguishable from one
 nobody noticed, and the next reader would have no way to tell whether the
 capability was provided or the refusal was forgotten.
+
+### 8.5 Half of R24 is withdrawn, and this is the row that says so
+
+**R24 refused an interceptor power a written rule cannot reach**, and named two:
+`change-the-request` and `change-the-answer`. The reason was exact and is worth
+restating, because it is the reason the withdrawal is now correct: no sentence in
+the closed vocabulary rewrote — every one hides, stops, or sends the run
+elsewhere — so declaring either got the rule refused by the next check down. *A
+choice a non-coder can type and nothing can ever exercise reads as a capability*,
+which is worse than an absent one. §6 recorded them as **host-only rather than
+absent**, with the condition that would bring them back: *"a sentence somebody
+actually wants"*.
+
+That sentence exists now, and what made it writable is the `program` kind:
+
+```
+replace the answer with what house-style returns
+replace what the model is told with what redact-clinical-terms returns
+```
+
+§6's own worry was the sharper half — that a mid-run rewrite *"is not reviewable
+in a way `instructions:` and a stage's `says:` are"*. A carried program answers
+that rather than dodging it. It is a file in the folder, fingerprinted since the
+digest landed, declared with what it takes and what it answers with, and refused
+unless it is `pure` — so what the rewrite does is as readable as the instructions
+it sits beside, and the same twice.
+
+So the powers are back on `interceptor.may:` and back in `AUTHORABLE`. By §0's
+rule a provided capability moves from (c) to (a) — but only half of the row
+moves: **the general refusal stands**. A power a written rule cannot reach is
+still refused, and the list is still held to it; what changed is that two of them
+can now be reached. The row is amended rather than deleted for the reason §8.3
+gives about R29: a row that quietly disappears is indistinguishable from one
+nobody noticed, and the next reader would have no way to tell whether the
+capability was provided or the refusal forgotten.
+
+What did NOT change: a rewriting rule must still declare its power under `may:`,
+still name a program this workspace carries, and still be bound at a moment that
+carries the thing it rewrites. A rewriter with nothing to run it leaves the words
+exactly as they were and says so — half-applying would leave an author believing
+their program had run.
 
 ### 8.4 What this section used to say, and why it changed
 

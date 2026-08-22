@@ -107,9 +107,26 @@ def test_the_powers_a_rule_may_take_are_a_closed_list_with_no_general_escape() -
     It is closed, and every member is a named effect rather than a way in."""
     may = SCHEMA["interceptor"]["fields"]["may"]
     assert may["type"] == "list of one-of"
+    # FIVE now, not three. `change-the-answer` and `change-the-request` came back
+    # when a sentence could reach them (P8 wave 6, `50-NOT-COPIED.md` §8.5) —
+    # they were removed under R24 for being unreachable, not for being unsafe.
+    #
+    # The property this test is about is unchanged and is the important one: each
+    # member is a NAMED EFFECT rather than a way in. A rewriting rule names a
+    # carried program — declared, fingerprinted, and refused unless it is `pure`
+    # — so what it does is as readable as the instructions beside it. None of the
+    # five is "run this code", which is the cascade this test exists to keep out.
+    assert set(may["choices"]) == {
+        "hide-values",
+        "stop-the-run",
+        "send-elsewhere",
+        "change-the-answer",
+        "change-the-request",
+    }, "a new power here needs its own argument, not a passing test"
     for choice in may["choices"]:
-        assert choice in {"hide-values", "stop-the-run", "send-elsewhere"}, (
-            f"`{choice}` is a new power; if it can run author code the cascade is back"
+        assert not any(w in choice for w in ("code", "script", "run-", "eval", "exec")), (
+            f"`{choice}` reads as a way in rather than a named effect; if a power "
+            f"can run author code the cascade is back"
         )
 
 

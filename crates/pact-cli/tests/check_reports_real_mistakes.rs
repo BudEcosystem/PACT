@@ -194,22 +194,83 @@ fn an_interceptor_the_adapter_would_refuse_is_refused_here_first() {
 }
 
 #[test]
-fn a_power_no_written_rule_can_reach_is_not_a_choice_the_schema_offers() {
-    // `change-the-request` and `change-the-answer` reach nothing from a file —
-    // no sentence in the closed vocabulary rewrites. A choice a non-coder can
-    // type that nothing can ever use reads as a capability, so it is gone from
-    // `interceptor.may` and recorded in `50-NOT-COPIED.md` §6 instead.
+fn a_power_the_rules_do_not_use_is_refused_naming_what_they_need() {
+    // WHAT THIS USED TO TEST, and why it changed. It asserted that
+    // `change-the-request` was not a choice `interceptor.may` offers at all,
+    // because "no sentence in the closed vocabulary rewrites" — true when it was
+    // written and false since two rewriting sentences landed (P8 wave 6,
+    // `50-NOT-COPIED.md` §8.5). The premise went stale rather than being wrong,
+    // which is exactly R29's shape, so the test moves to the property that
+    // survives instead of being deleted.
+    //
+    // That property is the one R24 really states: `may:` and the rules have to
+    // AGREE. Declaring a rewrite power beside rules that only hide is still
+    // refused — and the refusal now names what those rules actually need, which
+    // is the more useful half and was never available while the choice did not
+    // exist.
     let root = broken(
-        "host-only-power",
+        "power-the-rules-do-not-use",
         &[("interceptors/redact-card-numbers.yaml", "  - hide-values", "  - change-the-request")],
     );
     let out = pact().args(["check", &root]).output().unwrap();
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(!out.status.success(), "{text}");
-    assert!(
-        text.contains("Change it to one of: hide-values, stop-the-run, send-elsewhere"),
-        "{text}"
+    assert!(text.contains("schema/rule-without-the-power"), "{text}");
+    assert!(text.contains("hide values"), "name what the rules need: {text}");
+    assert!(text.contains("`- hide-values`"), "and the line to type: {text}");
+}
+
+/// And the other direction: a rewrite power WITH a rewriting sentence loads.
+///
+/// The positive control for the refusal above, and the thing §8.5's withdrawal
+/// actually claims — without it, "still refused" would be indistinguishable from
+/// "never possible".
+#[test]
+fn a_rewrite_power_beside_a_rewriting_sentence_is_accepted() {
+    // A NEW rule rather than an edit to the card-number one, and the difference
+    // is the point: that rule hides, is bound at `step.message.before` and
+    // `step.tool.before`, and `change-the-answer` works at neither. Bolting a
+    // rewrite onto it drew three correct refusals — the power reaches nothing at
+    // those moments, the sentence can be carried out at neither, and its own two
+    // hiding rules still need `hide-values`. Every one of those is the checker
+    // being right, so the fixture is what was wrong.
+    let root = broken("rewrite-with-sentence", &[]);
+    let at = std::path::Path::new(&root);
+    std::fs::create_dir_all(at.join("programs/house-style/body")).unwrap();
+    std::fs::write(at.join("programs/house-style/body/house-style.wasm"), b"placeholder").unwrap();
+    std::fs::write(
+        at.join("programs/house-style/program.yaml"),
+        "description: Puts an answer into this desk's own words.\n\
+         engine: wasm\n\
+         determinism: pure\n\
+         takes:\n  content: text\n\
+         answers-with:\n  content: text\n\
+         fuel:\n  instructions-at-most: 1m\n  when-it-runs-out: stop-and-say-so\n",
+    )
+    .unwrap();
+    std::fs::write(
+        at.join("interceptors/in-house-style.yaml"),
+        "description: Says everything the way this desk says it.\n\
+         when: turn.message.after\n\
+         may:\n  - change-the-answer\n\
+         rules:\n  - replace the answer with what house-style returns\n",
+    )
+    .unwrap();
+    let agent = at.join("agents/refund-desk/agent.yaml");
+    let text = std::fs::read_to_string(&agent).unwrap();
+    std::fs::write(
+        &agent,
+        text.replace("  - stop-runaway-refunds", "  - stop-runaway-refunds\n  - in-house-style"),
+    )
+    .unwrap();
+
+    let out = pact().args(["check", &root]).output().unwrap();
+    let said = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
     );
+    assert!(out.status.success(), "a rewrite backed by a program is writable now:\n{said}");
 }
 
 #[test]

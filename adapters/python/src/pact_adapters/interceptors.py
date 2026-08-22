@@ -207,7 +207,20 @@ class Power(str, Enum):
 #: process. A choice no YAML can exercise is worse than an absent one: it reads
 #: as a capability.
 AUTHORABLE: frozenset[Power] = frozenset(
-    {Power.HIDE_VALUES, Power.STOP, Power.REDIRECT}
+    {
+        Power.HIDE_VALUES,
+        Power.STOP,
+        Power.REDIRECT,
+        # BACK, because a sentence reaches them now. R24's argument was that a
+        # choice nothing can exercise reads as a capability; the two rewriting
+        # sentences added to `forms:` exercise these, so the same argument puts
+        # them back. What made the sentence writable is the `program` kind: §6's
+        # worry was that a mid-run rewrite is not reviewable the way
+        # `instructions:` is, and a carried program is — a file in the folder,
+        # fingerprinted, declared, and refused unless it is `pure`.
+        Power.CHANGE_ANSWER,
+        Power.CHANGE_REQUEST,
+    }
 )
 
 #: The powers that END a chain. `Chain.run` returns at the first stop or
@@ -418,7 +431,12 @@ class Interceptor:
 
     @staticmethod
     def from_document(
-        name: str, raw: Mapping[str, Any], source: "Path | None" = None
+        name: str,
+        raw: Mapping[str, Any],
+        source: "Path | None" = None,
+        programs: "Mapping[str, Any] | None" = None,
+        run_program: "Callable[[str, dict[str, Any]], str] | None" = None,
+        unenforced: "list[str] | None" = None,
     ) -> "Interceptor":
         """Build one from the document shape — `when`, `may`, `rules`.
 
@@ -458,7 +476,12 @@ class Interceptor:
 
         may = _powers(_where(source, name, "may:"), raw.get("may"))
         rules = _rule_list(where, raw.get("rules"))
-        body, goes_to = _compile_rules(source, name, rules, when, may)
+        body, goes_to = _compile_rules(
+            source, name, rules, when, may,
+            programs=programs,
+            run_program=run_program,
+            unenforced=unenforced,
+        )
 
         return Interceptor(
             name=name,
@@ -537,6 +560,14 @@ class Chain:
     """The interceptors registered for a run, applied in the order they say."""
 
     interceptors: list[Interceptor] = field(default_factory=list)
+    #: What the rules in this chain could NOT do, in sentences (P8 wave 6).
+    #:
+    #: A rewriting rule with nothing to run its program leaves the words exactly
+    #: as they were and records why here, so the run can report it. Silently
+    #: passing the words through would leave the author believing their program
+    #: had run — the "loads and does nothing" failure this whole vocabulary
+    #: exists to refuse, one level up.
+    unenforced: list[str] = field(default_factory=list)
 
     def add(self, i: Interceptor) -> None:
         """Put it where it RUNS, not where it arrived.
@@ -603,7 +634,10 @@ class Chain:
 
     @staticmethod
     def from_document(
-        doc: Mapping[str, Any], agent_key: str, source: "Path | None" = None
+        doc: Mapping[str, Any],
+        agent_key: str,
+        source: "Path | None" = None,
+        run_program: "Callable[[str, dict[str, Any]], str] | None" = None,
     ) -> "Chain":
         """Every rule that covers one agent, in the order those rules state.
 
@@ -661,7 +695,14 @@ class Chain:
         named = _as_list(agent.get("interceptors"))
         for name in everywhere:
             if name not in named:
-                chain.add(Interceptor.from_document(name, declared[name], source))
+                chain.add(
+                    Interceptor.from_document(
+                        name, declared[name], source,
+                        programs=doc.get("programs"),
+                        run_program=run_program,
+                        unenforced=chain.unenforced,
+                    )
+                )
         for name in named:
             entry = declared.get(name)
             if entry is None:
@@ -672,7 +713,14 @@ class Chain:
                     f"Fix: change that line to one of those, or add a file "
                     f"`interceptors/{name}.yaml`."
                 )
-            chain.add(Interceptor.from_document(name, entry, source))
+            chain.add(
+                Interceptor.from_document(
+                    name, entry, source,
+                    programs=doc.get("programs"),
+                    run_program=run_program,
+                    unenforced=chain.unenforced,
+                )
+            )
         _hiding_runs_first(chain, source)
         return chain
 
@@ -873,6 +921,19 @@ _CALL_REDIRECT = re.compile(
     re.IGNORECASE,
 )
 
+#: `replace the answer with what <a program> returns` — and the same for what the
+#: model is about to be told. Two sentences, one shape, because the difference is
+#: only which end of the step they stand at.
+_REWRITE_ANSWER = re.compile(
+    r"^replace\s+the\s+answer\s+with\s+what\s+(?P<program>[A-Za-z0-9-]+)\s+returns$",
+    re.IGNORECASE,
+)
+_REWRITE_REQUEST = re.compile(
+    r"^replace\s+what\s+the\s+model\s+is\s+told\s+with\s+what\s+"
+    r"(?P<program>[A-Za-z0-9-]+)\s+returns$",
+    re.IGNORECASE,
+)
+
 _MENTIONS = re.compile(
     r'^if\s+the\s+answer\s+mentions\s+(?P<words>.+?)\s*,\s*'
     r'stop\s+and\s+say\s+"(?P<why>.*)"$',
@@ -990,6 +1051,9 @@ def _compile_rules(
     *,
     where: str = "",
     fixed_powers: bool = False,
+    programs: "Mapping[str, Any] | None" = None,
+    run_program: "Callable[[str, dict[str, Any]], str] | None" = None,
+    unenforced: "list[str] | None" = None,
 ) -> tuple[Body, frozenset[str]]:
     """Turn an interceptor's sentences into one body, and name where it may go.
 
@@ -1011,6 +1075,7 @@ def _compile_rules(
     interceptor wording every existing message already carries.
     """
     doc = where or "this interceptor"
+    at_document = _where(source, name, "")
     patterns: list[tuple[re.Pattern[str], str]] = []
     destinations: set[str] = set()
     # A guard returns the decision it reached, not a reason string. One list
@@ -1018,6 +1083,10 @@ def _compile_rules(
     # same test with different endings, and a second list beside this one would
     # be a second place for "no more than one refund" to be counted differently.
     guards: list[Callable[[dict[str, Any]], Decision | None]] = []
+    #: `(program, power)` per rewriting sentence, applied after the hiders and
+    #: before the guards — a rewriter should see what the redactions left, and a
+    #: guard should read what will actually be said.
+    rewriters: list[tuple[str, Power]] = []
     last_replacement: str | None = None
 
     for n, sentence in enumerate(rules, start=1):
@@ -1105,6 +1174,25 @@ def _compile_rules(
                     f"{WHERE_HIDING_WORKS}."
                 )
             patterns.append((re.compile(RECOGNISES[thing]), last_replacement))
+            continue
+
+        rewrite = _REWRITE_ANSWER.match(text)
+        rewrites_request = None if rewrite else _REWRITE_REQUEST.match(text)
+        if rewrite or rewrites_request:
+            found = rewrite or rewrites_request
+            assert found is not None
+            power = Power.CHANGE_ANSWER if rewrite else Power.CHANGE_REQUEST
+            if power not in may:
+                raise InterceptorError(_lacks(at, doc, may, power, fixed_powers))
+            named = found.group("program")
+            if programs is not None and named not in programs:
+                raise InterceptorError(
+                    f"{at}: this rule replaces what it was given with what '{named}' "
+                    f"returns, and '{named}' is not a program this workspace carries. "
+                    f"Fix: write it in `programs/{named}/program.yaml`, or name one of: "
+                    f"{', '.join(sorted(programs)) or 'nothing here yet'}."
+                )
+            rewriters.append((named, power))
             continue
 
         if m := _MENTIONS.match(text):
@@ -1200,6 +1288,43 @@ def _compile_rules(
             decided = check(payload)
             if decided is not None:
                 return decided
+        # A rewriting sentence, applied after the hiders below have had their say
+        # about the value and before anything reads what will be said.
+        #
+        # A rewriter with nothing to run it leaves the words EXACTLY as they were
+        # and says so, rather than half-applying: a rule that silently passed the
+        # words through would have the author believing their program had run,
+        # which is the "loads and does nothing" failure the whole vocabulary
+        # exists to refuse.
+        if rewriters and "content" in payload:
+            if run_program is None:
+                for named, _ in rewriters:
+                    said = (
+                        f"the rule at {at_document} replaces what it was given with what "
+                        f"`{named}` returns, and nothing here can run a carried program — "
+                        f"so the words were left exactly as they were."
+                    )
+                    if unenforced is not None and said not in unenforced:
+                        unenforced.append(said)
+            else:
+                out = dict(payload)
+                by: Power | None = None
+                for named, power in rewriters:
+                    try:
+                        out["content"] = str(run_program(named, {"content": out["content"]}))
+                        by = power
+                    except Exception as e:  # noqa: BLE001 — a program's failure is data
+                        said = (
+                            f"the rule at {at_document} could not run `{named}`: {e} — "
+                            f"so the words were left exactly as they were."
+                        )
+                        if unenforced is not None and said not in unenforced:
+                            unenforced.append(said)
+                        out = dict(payload)
+                        by = None
+                        break
+                if by is not None:
+                    return Decision(changed=out, by=by)
         if not patterns:
             return Decision()
         # Which field to mask comes from the payload in hand, not from how the

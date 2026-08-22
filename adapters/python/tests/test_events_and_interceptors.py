@@ -456,25 +456,28 @@ def test_a_rule_that_masks_inside_a_tool_call_must_have_declared_hide_values() -
     assert "- hide-values" in said, f"the fix must be typeable: {said}"
 
 
-def test_a_power_no_written_rule_can_reach_is_not_offered_to_someone_writing_one() -> None:
-    """`change-the-request` and `change-the-answer` are host-only, and said so.
+def test_a_power_the_rules_do_not_use_is_refused_naming_what_they_need() -> None:
+    """WHAT THIS USED TO TEST, and why it changed.
 
-    No sentence in the closed vocabulary rewrites — every one of them hides,
-    stops, or sends the run elsewhere — so for a round these were two of five
-    choices a non-coder could type in `may:` that nothing could ever use: the
-    rule they were declared for was refused by the next check down. They are out
-    of `interceptor.may` in the schema, out of the list every refusal prints,
-    and recorded in `50-NOT-COPIED.md` §6. They remain in `Power` because §5.5's
-    typed escape can still produce one from a host's own process — which is what
-    the test below this measures.
+    It held that `change-the-request` and `change-the-answer` were host-only,
+    because "no sentence in the closed vocabulary rewrites". That was true when
+    it was written and is false since two rewriting sentences landed (P8 wave 6,
+    `50-NOT-COPIED.md` §8.5): a carried program is something a sentence can name,
+    and §6's own condition for letting the powers back was "a sentence somebody
+    actually wants".
+
+    The premise went stale rather than being wrong — R29's shape — so the test
+    moves to the property that survives, which is the one R24 really states:
+    `may:` and the rules have to AGREE. Declaring a rewrite power beside rules
+    that only mask is still refused, and the refusal now names what those rules
+    actually need, which is the more useful half.
     """
-    for host_only in ("change-the-request", "change-the-answer"):
+    for declared in ("change-the-request", "change-the-answer"):
         with pytest.raises(InterceptorError) as e:
-            Chain.from_document(_masking_tool_args(may=[host_only]), "a")
+            Chain.from_document(_masking_tool_args(may=[declared]), "a")
         said = str(e.value)
-        assert "only to the system running this" in said, said
-        assert "hide-values, stop-the-run, send-elsewhere" in said, said
-        assert "change-the-request" not in said.split("Fix:")[1], "not offered as a fix"
+        assert "hide" in said.lower(), said
+        assert "hide-values" in said, "and the line to type: " + said
 
 
 def test_the_three_change_powers_are_told_apart_rather_than_counted_as_one() -> None:
