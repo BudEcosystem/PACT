@@ -169,3 +169,58 @@ fn the_fingerprint_is_the_same_on_every_run() {
     assert_eq!(digest_of(&root), digest_of(&root));
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// Leaving a carried file out moves the workspace digest, and says so on the way.
+///
+/// This is the laundering channel P3 was written to close, and it is the half
+/// the plan proposed to close a different way. The plan asked for the ignore
+/// FILE to be lifted into the canonical document, on the theory that otherwise
+/// `.pactignore` could take a body out of a workspace with nothing moving.
+///
+/// It cannot, and the reason is that a rule which takes effect takes a FILE out
+/// of the payload — and the payload is what the digest is over. So the digest
+/// moves because the tree really is different, which is the honest reason for it
+/// to move, and a `.pactignore` line that matches nothing changes nothing at all
+/// — which is right, and is what lifting the file into the document would have
+/// broken: two trees that behave identically would have digested differently.
+///
+/// Nothing is silent about it either: a note names the file, the rule, and the
+/// line to delete to bring it back.
+///
+/// Written here because it was measured and never pinned. See docs/41 §0.1 for
+/// the withdrawal of `an_ignore_rule_is_part_of_the_document`.
+#[test]
+fn leaving_a_carried_file_out_moves_the_digest_and_is_said_out_loud() {
+    let root = copy_of("ignored");
+    let before = digest_of(&root);
+
+    std::fs::write(root.join(".pactignore"), "check_window.py\n").unwrap();
+    let after = digest_of(&root);
+    assert_ne!(before, after, "a body taken out of the workspace is a different workspace");
+
+    let out = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
+    let said = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(said.contains("loader/ignored-on-purpose"), "{said}");
+    assert!(said.contains("check_window.py"), "name the file:\n{said}");
+    assert!(said.contains(".pactignore"), "and where the line is:\n{said}");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A rule that matches nothing changes nothing.
+///
+/// The control the test above needs, and the reason the ignore file is not part
+/// of the document: a line about a file that is not there is not a fact about
+/// this workspace, and a digest that moved for it would be reporting a change
+/// nobody made.
+#[test]
+fn an_ignore_rule_that_matches_nothing_moves_nothing() {
+    let root = copy_of("ignored-nothing");
+    let before = digest_of(&root);
+    std::fs::write(root.join(".pactignore"), "a-file-that-is-not-here.txt\n").unwrap();
+    assert_eq!(before, digest_of(&root), "nothing was left out, so nothing changed");
+    let _ = std::fs::remove_dir_all(&root);
+}

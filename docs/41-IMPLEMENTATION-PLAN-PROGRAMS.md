@@ -33,6 +33,19 @@ through tools, memory, metrics, questions, interceptor sentences, routing
 | P8 capability wiring | **done** — all 8 waves; wave 2's runtime landed later, see below | `26993a1`, `3985b5d`, `6a62b4e`, `30e4efc`, `6c8aa91`, this |
 | P9 self-authored lane | done, with one residual named below | this |
 
+**Six places this plan was wrong, and what was built instead.**
+
+*P3 proposed to close the laundering channel by lifting `.pactignore` into the
+document, and it was already closed a better way.* The plan named
+`an_ignore_rule_is_part_of_the_document`; nothing of the kind was built and
+nothing should be. A rule that takes effect takes a FILE out of the payload, and
+the payload is what the digest is over — so ignoring a carried body moves the
+workspace digest because the tree really is different, and a note names the file,
+the rule and the line to delete to bring it back. Lifting the file in would have
+made two trees that behave identically digest differently, whenever one carried a
+line matching nothing. Both halves are now pinned by tests that were measured and
+never written down.
+
 **Five places this plan was wrong, and what was built instead.**
 
 *P8 wave 2 shipped a checker and called it a pair.* The commit said "memory
@@ -355,9 +368,10 @@ LoadReport for every substitution.
 *Tests first:*
 - `a_payload_file_carries_its_digest` (golden manifest for the refund-desk
   script); `removing_a_script_moves_the_workspace_digest`.
-- `an_ignore_rule_is_part_of_the_document`: `.pactignore` appears in
-  canonical form; `ignoring_a_script_moves_the_digest_too` — the laundering
-  channel closes.
+- ~~`an_ignore_rule_is_part_of_the_document`~~ **WITHDRAWN** — see §0.1. The
+  laundering channel is closed by the payload walk, not by lifting the file:
+  `leaving_a_carried_file_out_moves_the_digest_and_is_said_out_loud`, with
+  `an_ignore_rule_that_matches_nothing_moves_nothing` as the control.
 *Implementation:* `pact-doc` `FileRef.digest`; `L/lib.rs` payload walk
 hashing (sha2 already a dependency); ignore-file lift into the document.
 *Exit gate:* suite green; **known cost recorded**: every payload-carrying
