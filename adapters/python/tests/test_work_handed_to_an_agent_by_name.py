@@ -358,3 +358,67 @@ def test_a_dynamically_named_agent_spends_the_same_meter() -> None:
     # And the two dispatches are the same run, not two similar ones.
     assert value_built == team_built
     assert json.dumps(by_value.trace()) == json.dumps(by_team.trace())
+
+
+#: A workspace whose named agent is an ABSTRACT BASE. It carries the figure, so
+#: the dynamic-bottom rule is satisfied — and `base: yes` says it never runs.
+#:
+#: The checker refuses a workspace whose only handable agent is a base
+#: (`crates/pact-loader/src/handover.rs`), and the checker is not the only door:
+#: a VALUE arrives at run time, from a surrounding system the tree cannot see, so
+#: the name it carries was never checked against anything. `base: yes`'s own
+#: promise is "say yes and it never runs", and five doors already hold it —
+#: `team:`, a port's `answers:`, a stage's `may-use:`, `discover` and `card`.
+#: A name handed over at run time is the sixth, and it is the only one the
+#: harness has to hold itself.
+A_BASE_BY_VALUE = {
+    "agents": {
+        "desk": {
+            "description": "Passes work to whichever agent it is given.",
+            "instructions": "Hand the work over and report what came back.",
+            "run-inputs": {"takes-this-one": "agent"},
+        },
+        "night-shift": {
+            "base": "yes",
+            "description": "A pattern other desks are built on.",
+            "instructions": "Answer briefly.",
+            "limits": {"asks-itself-at-most": 2, "when-it-runs-out": "stop-and-say-so"},
+        },
+    }
+}
+
+
+def test_a_base_is_never_put_to_work_by_value() -> None:
+    """`base: yes` means it never runs, and a value is the door that skips checking.
+
+    It carries the figure, so the dynamic-bottom rule alone would let it through
+    — which is why this is a second rule and not a special case of that one.
+    """
+    def transport_for(member: AgentSpec) -> ReferenceTransport:
+        raise AssertionError("a base must never be built, let alone run")
+
+    bus = Bus()
+    spec = AgentSpec.from_document(A_BASE_BY_VALUE, "desk")
+    result = asyncio.run(
+        run(
+            spec,
+            ReferenceTransport(Script([
+                Turn("Handing over.", (ToolCall("night-shift", {"question": "ok?"}),)),
+                Turn("Done."),
+            ])),
+            "take a look",
+            ask_member=delegate_by_running(A_BASE_BY_VALUE, transport_for, bus=bus),
+            bus=bus,
+            run_inputs={"takes-this-one": "night-shift"},
+        )
+    )
+    # It was refused, and refused as that MEMBER'S failure — the same path an
+    # overspend takes — so the author's `if-someone-fails:` decides rather than
+    # the run crashing over a name it never wrote.
+    failed = [e for e in bus.seen("step.delegate.failed")]
+    assert failed, "a base handed work by value must be refused"
+    assert "base: yes" in failed[0].payload["reason"], failed[0].payload
+    assert "never runs" in failed[0].payload["reason"]
+    # And it was never BUILT: `transport_for` raises if it is ever reached, so
+    # reaching here at all is the proof that nothing ran.
+    assert result.halted == "final"

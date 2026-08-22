@@ -51,6 +51,7 @@ from .questions import AN_AGENT, ANYTHING, Gate, Question, Rejected, Wait
 #: `where`, `answer_to` and `ruling` are the old `_key`, `_answer_to` and
 #: `_cleared`, moved beside the vocabulary they now return.
 from .rulings import Ruling, answer_to, refused_in_words, ruling, where
+from .yes_no import said_yes
 #: What each park has to put in front of a person. One import and five call
 #: sites, because for a round only ONE of those five rendered its question at
 #: all and the other four handed somebody an answer contract and an empty
@@ -3125,6 +3126,28 @@ def delegate_by_running(
         # FAILURE — the same `OverBudget`-shaped path — so the author's
         # `if-someone-fails:` decides what happens next. Refusing at admission
         # would take the whole run down over a name the author never wrote.
+        # `base: yes` says it never runs, and a VALUE is the door that skips
+        # every check the tree could have made: the name arrives from a
+        # surrounding system this document cannot see. Five doors already hold
+        # that promise at check time — `team:`, a port's `answers:`, a stage's
+        # `may-use:`, `discover` and `card` — and this is the sixth, the only one
+        # the harness has to hold itself.
+        #
+        # A SECOND rule, not a special case of the one below it: a base may
+        # perfectly well carry `asks-itself-at-most:` — it is the pattern its
+        # descendants inherit — and satisfy the dynamic-bottom rule completely
+        # while still being a thing that must never run.
+        #
+        # Refused here rather than at admission for the reason everything else
+        # here is: this is where the member's own document is read, and a refusal
+        # here is that member's FAILURE, so `if-someone-fails:` decides.
+        entry = (document.get("agents") or {}).get(grant.member)
+        if isinstance(entry, Mapping) and said_yes(entry.get("base")):
+            raise RuntimeError(
+                f"'{grant.member}' says `base: yes`, so it never runs — it is something "
+                f"for other agents to be `based-on:`, not something work is handed to. "
+                f"Name an agent that answers for itself."
+            )
         if figure is None and grant.member in getattr(grant, "named_by_value", ()):
             raise RuntimeError(
                 f"'{grant.member}' was named for this request by value, and an "

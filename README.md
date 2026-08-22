@@ -70,13 +70,13 @@ build step that *executes author code*. PACT's tree is executable as-is.
 |---|---|
 | **Design** | Thesis, 28 binding decisions, FRD (120 requirements), implementation plan — complete |
 | **Research** | 14 source-grounded studies, ~15,750 lines, over 140 repos (~15 GB) + 57 papers |
-| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **3036 tests (1049 Rust + 1987 adapter), clippy clean, TypeScript type-checked** |
+| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **3040 tests (1052 Rust + 1988 adapter), clippy clean, TypeScript type-checked** |
 | **Adapters** | **All 7 named targets**, proven against one shared conformance suite |
 
 ### What works today
 
 ```bash
-./scripts/test-all.sh          # 3036 tests, Rust + 7 adapters, fully offline
+./scripts/test-all.sh          # 3040 tests, Rust + 7 adapters, fully offline
 ```
 
 **Framework portability is proven, not asserted.** One folder — loaded by the

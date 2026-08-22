@@ -96,6 +96,15 @@ fn holes_in(text: &str) -> Vec<String> {
             i += 1;
             continue;
         }
+        // `<<name>>` is a LITERAL angle bracket and never a hole. Prose is full
+        // of them the moment anybody writes an XML-ish prompt tag —
+        // `<thinking>`, `<answer>` — and in a pattern that made the whole
+        // document refuse, with a fix line that said to declare it, which would
+        // have substituted the tag away.
+        if bytes.get(i + 1) == Some(&b'<') {
+            i = skip_escaped(bytes, i);
+            continue;
+        }
         let start = i + 1;
         let mut j = start;
         while j < bytes.len() && (bytes[j].is_ascii_lowercase() || bytes[j].is_ascii_digit() || bytes[j] == b'-') {
@@ -109,6 +118,30 @@ fn holes_in(text: &str) -> Vec<String> {
         }
     }
     out
+}
+
+/// Step past a `<<...>>` escape, returning the index after it.
+fn skip_escaped(bytes: &[u8], at: usize) -> usize {
+    let mut j = at + 2;
+    while j + 1 < bytes.len() {
+        if bytes[j] == b'>' && bytes[j + 1] == b'>' {
+            return j + 2;
+        }
+        j += 1;
+    }
+    at + 2
+}
+
+/// Turn every `<<name>>` into `<name>`, once the holes are filled.
+///
+/// Last, so an escape can never become a hole: by the time this runs there is
+/// nothing left that reads `<...>` as anything.
+fn unescape(text: &str) -> String {
+    if !text.contains("<<") {
+        return text.to_owned();
+    }
+    text.replace("<<", "\u{1}").replace(">>", "\u{2}")
+        .replace('\u{1}', "<").replace('\u{2}', ">")
 }
 
 /// Every hole anywhere in a document, so a pattern can be held to its own
@@ -274,6 +307,25 @@ pub(crate) fn arguments(
         // The declared shape, held where the argument was written. Same
         // vocabulary a shared figure declares, for the same reason: a claim
         // nothing holds is decoration. \
+        // A word this format does not know turned the check OFF in silence —
+        // the same defect `values.rs` was fixed for, and worse here, because a
+        // pattern's declaration is inherited by every caller.
+        if let Some(written) = spec.node.get("shape").and_then(Node::as_str)
+            && crate::values::ty_of(written).is_none()
+        {
+            return Err(Box::new(Diagnostic::error(
+                "loader/not-a-shape-a-figure-can-have",
+                spec.node.get("shape").map_or_else(
+                    || spec.key_span.clone(),
+                    |n| n.span.clone(),
+                ),
+                format!(
+                    "'{base_name}' says '{want}' is `{written}`, and that is not a kind of \
+                     figure this format knows."
+                ),
+                format!("Use one of: {}.", crate::values::SHAPES.join(", ")),
+            )));
+        }
         if let Some(ty) = spec.node.get("shape").and_then(Node::as_str).and_then(crate::values::ty_of)
             && pact_schema::coerce::check(&given.node, &ty).is_none()
         {
@@ -322,7 +374,7 @@ pub(crate) fn fill(node: &mut Node, args: &BTreeMap<String, Node>) {
                     out = out.replace(&hole, &rendered);
                 }
             }
-            *text = out;
+            *text = unescape(&out);
         }
         Value::Map(m) => {
             for (_, entry) in m.iter_mut() {

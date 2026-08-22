@@ -407,3 +407,53 @@ fn a_figure_with_nothing_in_it_is_refused() {
     assert!(said.contains("cap"), "{said}");
     let _ = std::fs::remove_dir_all(&dst);
 }
+
+/// A parameter whose declared shape is not a shape is refused at the pattern.
+///
+/// The same defect `values.rs` was fixed for, one file over and unfixed: a
+/// misspelt `shape:` made `ty_of` answer `None` and the check was SKIPPED, so a
+/// typo turned off the only thing that line does — in silence, on the pattern
+/// that every caller inherits. Found by audit.
+#[test]
+fn a_parameter_whose_shape_is_not_a_shape_is_refused() {
+    let dst = broken(
+        "bad-param-shape",
+        "two-desks-one-pattern",
+        &[("agents/desk-pattern/agent.yaml", "    shape: money", "    shape: munny")],
+    );
+    let (code, out, err) = run(&["check", &dst]);
+    let said = format!("{out}{err}");
+    assert_eq!(code, Some(1), "{said}");
+    assert!(said.contains("loader/not-a-shape-a-figure-can-have"), "{said}");
+    assert!(said.contains("munny"), "the word they typed:\n{said}");
+    assert!(said.contains("money"), "and the ones that work:\n{said}");
+    let _ = std::fs::remove_dir_all(&dst);
+}
+
+/// A pattern may hold a literal angle bracket, and there is a way to write one.
+///
+/// `holes_in` reads `<name>` as a hole, and prose is full of them the moment
+/// anybody writes an XML-ish prompt tag — `<thinking>`, `<answer>`. In a pattern
+/// that made the whole document refuse, and the fix line said to declare it,
+/// which would have SUBSTITUTED the tag away. Found by audit.
+///
+/// `<<name>>` is the escape and it renders as `<name>`.
+#[test]
+fn a_pattern_may_write_a_literal_angle_bracket() {
+    let dst = broken(
+        "xml-tag",
+        "two-desks-one-pattern",
+        &[("agents/desk-pattern/agent.yaml", "Answer questions about <domain>, briefly", "Put your reasoning in <<thinking>> tags. Answer questions about <domain>, briefly")],
+    );
+    let (code, out, err) = run(&["check", &dst]);
+    let said = format!("{out}{err}");
+    assert_eq!(code, Some(0), "an angle bracket is not always a hole:\n{said}");
+
+    let (_, shown, _) = run(&["show", &dst]);
+    assert!(
+        shown.contains("<thinking>"),
+        "and it reaches the model as one bracket, not two:\n{shown}"
+    );
+    assert!(!shown.contains("<<thinking>>"), "{shown}");
+    let _ = std::fs::remove_dir_all(&dst);
+}

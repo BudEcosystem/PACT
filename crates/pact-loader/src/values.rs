@@ -468,7 +468,21 @@ fn substitute(
                 // handed to a pattern would never be filled in. Each argument is
                 // a scalar slot: `an-argument-is-a-figure-not-a-block` is what
                 // makes that true rather than assumed. \
-                if key == crate::templates::WITH {
+                // A PATTERN's arguments — and only in a kind that has no
+                // field of its own by that name. `with` is not a reserved word:
+                // `case.with:` and `metric.with:` are real fields typed
+                // `anything`, which is the specification saying *these keys are
+                // the author's, read them verbatim*. Keying on the word alone
+                // reached into both, and an eval case's own data came out
+                // rewritten into a figure with nothing said — the untyped-walk
+                // defect this pass was just fixed for, arriving again through
+                // the fix for something else.
+                if key == crate::templates::WITH
+                    && !group
+                        .fields
+                        .iter()
+                        .any(|f| f.name == *key || f.aliases.contains(key))
+                {
                     if let Some(args) = entry.node.as_map_mut() {
                         for (_, arg) in args.iter_mut() {
                             substitute(

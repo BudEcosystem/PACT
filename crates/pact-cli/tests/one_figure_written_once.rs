@@ -515,3 +515,40 @@ fn example_for(shape: &str) -> &'static str {
         _ => "some words",
     }
 }
+
+/// `with:` is a pattern's arguments in the kinds that have patterns, and an
+/// author's own key everywhere else.
+///
+/// The word is not reserved. `case.with:` and `metric.with:` are real fields
+/// typed `anything` — the format saying *these keys are the author's, read them
+/// verbatim* — and a pattern's `with:` is a loader key no group declares. When
+/// the substitution pass learned to fill figures inside a pattern's arguments it
+/// keyed on the WORD, so it reached into both, and an eval case's own data was
+/// rewritten into a figure with nothing said. Measured: `with: {attachment:
+/// {use: spend-cap}}` on a case came out as `{"attachment": "0.05 USD"}`.
+///
+/// That is the untyped-walk defect this pass had just been fixed for, arriving
+/// again through the fix. So the interception is gated on the SPECIFICATION: a
+/// group that declares a field called `with` has one, and its `with:` is data.
+///
+/// Mutation: drop the `!group.fields.iter().any(...)` guard and this goes red.
+#[test]
+fn a_kind_that_declares_with_keeps_its_own() {
+    let dst = broken(
+        "case-with",
+        "one-figure-in-three-places",
+        &[(
+            "workspace.yaml",
+            "allow-egress: []",
+            "allow-egress: []\nevals:\n  description: checks\n  population: authored-enumeration\n  cases:\n    one:\n      when: a customer asks\n      with:\n        attachment:\n          use: spend-cap\n      expect: an answer\n",
+        )],
+    );
+    let (code, shown, err) = run(&["show", &dst]);
+    assert_eq!(code, Some(0), "{shown}{err}");
+    let doc: serde_json::Value = serde_json::from_str(&shown).expect("JSON");
+    assert_eq!(
+        doc["evals"]["cases"]["one"]["with"]["attachment"]["use"], "spend-cap",
+        "an eval case's own data is read verbatim, however deep it goes:\n{shown}"
+    );
+    let _ = std::fs::remove_dir_all(&dst);
+}
