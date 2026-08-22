@@ -98,7 +98,46 @@ HIGH_RISK_PROSE = re.compile(
 #: true sentence about a comparison with no candidate in it. Naming the set is
 #: what lets `cycle` refuse before spending, and `_with` raise instead of
 #: silently agreeing.
-CAN_BE_APPLIED: tuple[str, ...] = ("instructions",)
+CAN_BE_APPLIED: tuple[str, ...] = (
+    "instructions",
+    # A written procedure's body and its four routing lines (P5). `_with`
+    # rewrites the spec that gets SCORED, so the condition for a field being
+    # applicable is that a run READS it — and every one of these reaches the
+    # model through `SkillSpec.in_words()`, which is spliced into the system
+    # message. A candidate carrying a different one is genuinely a different
+    # agent to grade, which is the whole test.
+    #
+    # They were granted and unreachable. `may-improve-on-its-own:` is `tier:
+    # core` and offers four words; three of them named these fields, and an
+    # author who wrote `[skill-notes]` granted something no cycle could put into
+    # effect. Every proposal came back with a sentence about a limitation of this
+    # process rather than about their document — a governance surface that loads
+    # and does nothing, in the one file whose subject is what may change with
+    # nobody watching.
+    "content",
+    "use-when",
+    "do-not-use-when",
+    "if-unsure",
+)
+
+#: Fields a cycle genuinely cannot apply, and why — one entry, one reason.
+#:
+#: The condition is not "this process happens not to rewrite it": it is that
+#: NOTHING IN A RUN READS IT, so a candidate carrying a different value is the
+#: incumbent wearing a different file and both scoring runs would grade the same
+#: agent. That is a fact about the field, and it is the sentence a reviewer needs
+#: — the older message named which fields this process rewrites, which tells them
+#: nothing about their own document.
+#:
+#: A word under `may-improve-on-its-own:` must name a field that is either
+#: applicable or excused here, and a test holds that: a third state cannot appear
+#: by omission.
+READ_BY_NO_RUN: dict[str, str] = {
+    "description": (
+        "one line for a colleague reading the file — it reaches the A2A card and "
+        "no model, so rewriting it would score the same agent twice"
+    ),
+}
 
 #: The three answers `learning.enabled:` has, in the schema's own spelling.
 #:
@@ -1110,6 +1149,19 @@ class Learner:
                     False, f"held for review: {cls.reason}", cls,
                     unmeasured=self._unmeasured(),
                 )
+            if proposal.field in READ_BY_NO_RUN:
+                # The reason that is TRUE about this field, rather than a
+                # sentence about which fields this process happens to rewrite —
+                # a reviewer reading the second one learns nothing about their
+                # own document.
+                return Outcome(
+                    False,
+                    f"a change to `{proposal.field}` cannot be put into effect here: "
+                    f"{READ_BY_NO_RUN[proposal.field]} — so no run reads it, and both "
+                    f"scoring runs would grade the same agent. A cycle rewrites "
+                    f"{', '.join(CAN_BE_APPLIED)}.",
+                    cls, unmeasured=self._unmeasured(),
+                )
             return Outcome(
                 False,
                 f"a cycle rewrites {', '.join(CAN_BE_APPLIED)} and nothing else, "
@@ -1364,15 +1416,64 @@ class Learner:
             self.refusals.add(proposal, why)
         return Outcome(False, why, cls, *rest, unmeasured=self._unmeasured())
 
+    #: A skill's fields, by the name an author writes, to the attribute that
+    #: holds it. One mapping, so the author's spelling and the dataclass cannot
+    #: come to mean different things.
+    _SKILL_FIELDS = {
+        "content": "content",
+        "use-when": "use_when",
+        "do-not-use-when": "do_not_use_when",
+        "if-unsure": "if_unsure",
+    }
+
     def _with(self, p: Proposal) -> AgentSpec:
+        """The candidate this proposal describes — the spec that gets scored.
+
+        An error rather than `return self.spec` on anything it cannot build,
+        because `return self.spec` is what the silent version did, and a
+        candidate that is secretly the incumbent scores exactly like one.
+        """
         from dataclasses import replace
 
         if p.field == "instructions":
             return replace(self.spec, instructions=p.after)
-        # Unreachable from `cycle`, which refuses an unapplicable field before
-        # any money is spent. An error rather than `return self.spec`, because
-        # `return self.spec` is what the silent version did — and a candidate
-        # that is secretly the incumbent scores exactly like one.
+
+        if p.field in self._SKILL_FIELDS:
+            attr = self._SKILL_FIELDS[p.field]
+            if not self.spec.skills:
+                raise ValueError(
+                    f"a change to `{p.field}` is a change to a written procedure, and "
+                    f"'{self.spec.name}' has no written procedure to change — a permission "
+                    f"is not a promise that the document has one."
+                )
+            # The procedure the edit is FOR: the one whose current text is what
+            # the proposal says it replaces. A cycle proposes against what it
+            # read, so a `before` matching nothing is a proposal about a document
+            # that has already moved — and applying it to whichever procedure
+            # happened to be first would silently rewrite the wrong one.
+            matched = [
+                i
+                for i, sk in enumerate(self.spec.skills)
+                if getattr(sk, attr, "") == p.before
+            ]
+            if not matched:
+                raise ValueError(
+                    f"no written procedure on '{self.spec.name}' has the `{p.field}` this "
+                    f"proposal replaces, so there is nothing here to change — the document "
+                    f"has moved since the proposal was made."
+                )
+            at = matched[0]
+            skills = list(self.spec.skills)
+            skills[at] = replace(skills[at], **{attr: p.after})
+            return replace(self.spec, skills=tuple(skills))
+
+        if p.field in READ_BY_NO_RUN:
+            raise ValueError(
+                f"a change to `{p.field}` cannot be put into effect here: "
+                f"{READ_BY_NO_RUN[p.field]} — so no run reads it, and both scoring "
+                f"runs would grade the same agent."
+            )
+
         raise ValueError(
             f"a cycle cannot apply a change to `{p.field}` — "
             f"it applies {', '.join(CAN_BE_APPLIED)}"
