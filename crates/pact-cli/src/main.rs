@@ -1617,6 +1617,15 @@ fn validate(
         // the agent, and a `team:` entry, a port's `answers:` or a stage's
         // `may-use:` naming it is a promise that something will.
         pact_loader::teams::no_base_on_a_team(root, &mut diags);
+        // And beside that: a name nothing can be handed to. The `agent` answer
+        // shape lets the surrounding system say WHICH agent takes a piece of
+        // work, and a name is only ever put to work when the agent it names
+        // wrote its own `asks-itself-at-most:` — the static circle rule's
+        // analogue, moved from the circle to the agent that can be named,
+        // because a name chosen at run time is on no written circle. What this
+        // can say before the run is the case that can never work: a tree that
+        // asks for a name and holds nobody who could be named.
+        pact_loader::handover::check(root, &schema, &mut diags);
         // And the sixth, which runs the other way round from every check above:
         // `names:` asks whether a name RESOLVES, and never whether anything names
         // a document. A fully-written approval policy that no agent points at

@@ -304,6 +304,19 @@ class Shape:
 #: Free text, for a wait that has no closed answer — a teammate's reply.
 ANYTHING = Shape("text")
 
+#: The name of one of this workspace's agents. Beside `ANYTHING`, and for the
+#: same reason it is here rather than at its reader: a `Shape` a caller builds
+#: for itself is the closed vocabulary copied out, and `_SPELLINGS` above is the
+#: one place that decides what `an agent` and `which agent` both mean.
+#:
+#: Its reader is `harness.run`'s admission pass (P4), which turns a supplied
+#: `run-inputs:` value of this shape into a delegate the model may hand work to.
+#: `read` is what says a value is a plain key and not a path, an address or a
+#: sentence — the same division `file` makes, one shape over: whether an agent
+#: by this name EXISTS stays the checker's question, asked where the document is
+#: in scope.
+AN_AGENT = Shape("agent")
+
 
 # ─────────────────────────────────────────────────────────────────── questions
 

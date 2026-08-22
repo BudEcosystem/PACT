@@ -44,7 +44,7 @@ from .interceptors import Chain
 from .ir import AgentSpec, SkillSpec
 from .limits import RAN_OUT, Action, Meter, Reached, step_ceiling
 from .loops import DONE, Does, Loop, LoopError, Phase
-from .questions import ANYTHING, Gate, Question, Wait
+from .questions import AN_AGENT, ANYTHING, Gate, Question, Rejected, Wait
 #: Three outcomes where this file used to read two. `_cleared` returned a bare
 #: bool, so "a person said no" and "nobody has answered" were the same value and
 #: every caller re-parked on both — see `rulings` for the measured shape of that.
@@ -558,6 +558,47 @@ async def run(
     )
     supplied: dict[str, Any] = dict(run_inputs or {})
     bus = bus or Bus()
+    #: Agents this request may put to work because a VALUE named one — the
+    #: dynamic half of `team:` (P4). `{name of the agent: why it is here}`.
+    #:
+    #: `agent` is the one answer shape whose value is a name from this same tree
+    #: rather than a datum, and until this line it was validated as a plain key
+    #: and then dereferenced by nothing: a document could declare
+    #: `second-look: agent`, a ticketing system could supply `night-shift`, and
+    #: the only agents a run could hand work to were still the static `team:`
+    #: keys. The shape existed and could not be put to work.
+    #:
+    #: The rule that makes admitting it safe is enforced at the delegation site,
+    #: in `delegate_by_running.ask`, and it is the static rule relocated: the
+    #: loader legalises a `team:` circle only when every member on it writes
+    #: `limits.asks-itself-at-most:`, and a dynamically named agent is on no
+    #: static circle the loader could have looked at, so the obligation moves
+    #: from the circle to the receivable agent. Admission is what carries the
+    #: fact that far; refusal is not made here, because here is not where a
+    #: member's own `limits:` is read and a refusal that never becomes a member
+    #: FAILURE would take the whole run down instead of reaching the author's
+    #: `if-someone-fails:`.
+    #:
+    #: A name the author already wrote under `team:` is left alone. The sentence
+    #: there is the author's own and it is what the model reads when choosing,
+    #: so replacing it with a generated one would make a documented teammate
+    #: describe itself worse whenever the surrounding system happened to name it.
+    named_by_value: dict[str, str] = {}
+    if ask_member is not None:
+        for declared in spec.agent_valued_inputs:
+            try:
+                chosen = AN_AGENT.read(supplied[declared])
+            except (KeyError, Rejected):
+                # Nothing supplied, or not a name. A declared input the
+                # surrounding system did not fill is already reported through
+                # `bind:`/`unenforced`, and a value that is not a plain key was
+                # never a name this workspace could hold — neither is a reason
+                # to refuse a run that may not delegate at all.
+                continue
+            if chosen not in spec.team:
+                named_by_value.setdefault(
+                    chosen, f"chosen for this request by {declared}"
+                )
     # `asks-itself-at-most:`'s meter. Counting is unconditional — one increment
     # per activation of this spec, the root's own being the first — and reading
     # it is not: only `delegate_by_running` consults it, and only for a member
@@ -572,9 +613,18 @@ async def run(
         # which this function never sees. The meter rides the grant to get
         # there; an asker handed a grant it never looks at behaves as before.
         inner_ask = ask_member
+        #: Frozen here rather than read live, so a grant carries what this run
+        #: admitted and not whatever the dict says by the time it is asked.
+        by_value = frozenset(named_by_value)
 
         async def sharing_the_meter(grant: Grant) -> str:
             grant.at_work = at_work
+            # HOW this member was reached, which is what decides whether it owes
+            # a figure of its own (P4). It rides the grant for the reason the
+            # meter does: `Asker` takes one argument, and the check belongs
+            # where the member's own `limits:` is read. An asker that never
+            # looks at it behaves exactly as before.
+            grant.named_by_value = by_value
             return await inner_ask(grant)
 
         ask_member = sharing_the_meter
@@ -630,7 +680,17 @@ async def run(
     # Over the whole team rather than over whoever the model asked in this step,
     # for the same reason: a member asked on step four must not be granted a
     # share sized as though the team were smaller.
-    team_pot = Pool(team_budget, teamwork.divides_the_budget, sorted(spec.team), teamwork.shares)
+    # Over everyone this request may ask, including whoever a value named: a
+    # member admitted by value spends the parent's money like any other, and
+    # sizing the shares as though the team were smaller is the same overstatement
+    # the per-step pot was. Empty when nothing was named by value, which is every
+    # document that declares no `agent`-shaped run-input.
+    team_pot = Pool(
+        team_budget,
+        teamwork.divides_the_budget,
+        sorted({*spec.team, *named_by_value}),
+        teamwork.shares,
+    )
     # `is None`, not `or`, matching `chain` and `teamwork` above. A `Loop` is
     # always truthy so nothing was losing its stages today — but this is the
     # pattern that made `chain or Chain()` and `teamwork or Teamwork()` discard
@@ -721,6 +781,11 @@ async def run(
     # the author wrote under `team:` is what the model reads when choosing, so
     # it is carried through rather than replaced with a generated one.
     delegates: dict[str, str] = dict(spec.team) if ask_member is not None else {}
+    # Plus whoever a value named (P4). `named_by_value` is already empty unless
+    # `ask_member` is not None, so this line adds nothing to a run that cannot
+    # delegate at all — a name admitted where nothing can run it would be a tool
+    # offered that answers to nobody.
+    delegates.update(named_by_value)
 
     # Why each name is gated. One map for every reason a run can wait, so the
     # branch below is written once instead of once per park kind.
@@ -790,6 +855,15 @@ async def run(
         # unreachable. The sentence is the author's own from `team:`.
         {"name": m, "description": f"ask {m} for help: {brief}".rstrip(": "), "parameters": {}}
         for m, brief in sorted(spec.team.items())
+    ] + [
+        # And whoever a value named (P4), after the author's own and in name
+        # order, so one document plus one set of run-inputs is one tool list on
+        # every transport. The sentence is generated because there is no
+        # authored one to carry — the author did not know who this would be —
+        # and it says where the name came from rather than what the agent does,
+        # which is the only thing this run actually knows.
+        {"name": m, "description": f"ask {m} for help: {brief}", "parameters": {}}
+        for m, brief in sorted(named_by_value.items())
     ]
     # A stage may only narrow what the agent already has. Checked once, before
     # the first model call, so a typo in a branch taken on the fortieth step
@@ -3000,6 +3074,34 @@ def delegate_by_running(
         # called outside `run`) has nothing to count against and spends nothing.
         figure = member.limits.asks_itself_at_most
         at_work: dict[str, int] | None = getattr(grant, "at_work", None)
+        # THE DYNAMIC-BOTTOM RULE (P4). An agent put to work BY VALUE — admitted
+        # because a `run-inputs:` value of shape `agent` named it, not because
+        # the author wrote it under `team:` — may only be reached if it writes
+        # its own `limits.asks-itself-at-most:` figure.
+        #
+        # This is the static rule relocated, not a new one. `pact-loader`'s
+        # `teams.rs` legalises a `team:` circle exactly when every member on it
+        # writes the figure, and that check is what makes recursion terminate.
+        # It can only be made over a graph that exists at check time; under
+        # dynamic dispatch the potential call graph is "any agent an
+        # `agent`-shaped value can name", which is every agent in the workspace
+        # and no smaller set. So the member-writes-its-own-figure obligation
+        # moves off the circle and onto the receivable agent, where it can be
+        # decided from that agent alone.
+        #
+        # Refused HERE and not at admission, because here is where the member's
+        # own `limits:` is read and where a refusal becomes that member's
+        # FAILURE — the same `OverBudget`-shaped path — so the author's
+        # `if-someone-fails:` decides what happens next. Refusing at admission
+        # would take the whole run down over a name the author never wrote.
+        if figure is None and grant.member in getattr(grant, "named_by_value", ()):
+            raise RuntimeError(
+                f"'{grant.member}' was named for this request by value, and an "
+                "agent put to work by name may only be reached if it writes its "
+                f"own bottom. Add `limits.asks-itself-at-most:` to "
+                f"'{grant.member}' — the figure says how many times one request "
+                "may put it to work."
+            )
         if (
             figure is not None
             and at_work is not None

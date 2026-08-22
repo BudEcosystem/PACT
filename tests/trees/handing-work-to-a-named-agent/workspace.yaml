@@ -1,0 +1,5 @@
+name: handing-work-to-a-named-agent
+workspace-id: 01JEQ8Z3M4N5P6Q7R8S9T0V4C3
+description: A dispatcher handed the name of the worker that should take this request.
+owner: platform
+allow-egress: []

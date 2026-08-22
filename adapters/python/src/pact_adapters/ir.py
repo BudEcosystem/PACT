@@ -21,7 +21,7 @@ from .limits import Limits, steps_at_most
 from .limits import seconds as _seconds
 from .slo import Slo
 from .loops import STANDARD, Loop
-from .questions import Gate, questions_for
+from .questions import Gate, Rejected, Shape, questions_for
 from .suspension import PauseRule
 from .watches import Watches
 from .yes_no import said_yes
@@ -450,6 +450,22 @@ class AgentSpec:
     #: author's `run-inputs:` keys. Carried so a `bind:` naming one that never
     #: arrives can be named on the result rather than filled with nothing.
     run_inputs: tuple[str, ...] = ()
+    #: Which of those keys the author declared of shape `agent` (P4) — the
+    #: subset whose VALUE is the name of one of this workspace's agents.
+    #:
+    #: A separate field rather than a richer `run_inputs`, because `run_inputs`
+    #: is what `bind:` checking reads and a `bind:` naming a key does not care
+    #: what shape it holds. What the shape decides is a different question with
+    #: a different reader: whether a value may be put to work as a DELEGATE
+    #: (`harness.run`'s admission pass). Two readers, two fields, and neither
+    #: has to know about the other.
+    #:
+    #: Decided by `questions.Shape.parse`, never by matching the spelling here:
+    #: `an agent`, `which agent` and `the name of an agent` all mean `agent` and
+    #: the closed vocabulary that says so lives in exactly one place. A second
+    #: private list of spellings is the defect `every_shape_the_spellings_accept_can_be_read`
+    #: was written against, one module over.
+    agent_valued_inputs: tuple[str, ...] = ()
     #: The agent's own key in `agents:` — the folder name, not the display name.
     #: Carried because a diagnostic about this agent has to name the file the
     #: author would open (`agents/refund-desk/limits.yaml`), and `name:` is
@@ -665,6 +681,7 @@ class AgentSpec:
             # which is the "did not choose" this field documents.
             model=_text(a.get("model", "")),
             run_inputs=tuple(sorted((a.get("run-inputs") or {}))),
+            agent_valued_inputs=_agent_valued(a.get("run-inputs")),
             # Declaration order, not sorted: the author's order IS the search
             # order, and `resolve()` returns the first that passes.
             variants=tuple(
@@ -675,6 +692,34 @@ class AgentSpec:
             workspace=str(root) if root is not None else "",
             key=agent_key,
         )
+
+
+def _agent_valued(declared: Any) -> tuple[str, ...]:
+    """The `run-inputs:` keys the author declared of shape `agent` (P4).
+
+    Sorted, like `run_inputs` itself: what a document says must not depend on
+    the order a loader happened to emit a map in, and this tuple decides which
+    delegation edges a run admits.
+
+    A spelling this vocabulary does not know is SKIPPED rather than raised on.
+    Deciding it here would move the diagnostic for a mistyped shape out of the
+    checker — where the document is in scope and the message can name the file —
+    and into spec-building, which every adapter does on the way to every run.
+    The unreadable line then fails where it is read, with the words the reader
+    already has, and the only thing lost here is a delegation nobody could have
+    intended.
+    """
+    if not isinstance(declared, Mapping):
+        return ()
+    named: list[str] = []
+    for key, written in sorted(declared.items()):
+        try:
+            shape = Shape.parse(written)
+        except Rejected:
+            continue
+        if shape.kind == "agent":
+            named.append(str(key))
+    return tuple(named)
 
 
 def _takes(tool: dict[str, Any]) -> dict[str, Any]:

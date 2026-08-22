@@ -1,0 +1,8 @@
+description: Does the work.
+instructions: Do what you are asked, briefly.
+# The bottom that makes this agent handable BY NAME. Without it the dispatcher
+# could be given this name and nothing would bound how often one request may put
+# it to work.
+limits:
+  asks-itself-at-most: 2
+  when-it-runs-out: stop-and-say-so

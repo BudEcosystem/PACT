@@ -1,0 +1,13 @@
+description: Passes a request to whichever worker the surrounding system named.
+instructions: >
+  Hand the work to the worker you were given, and report what came back.
+# The surrounding system says WHICH agent should do a piece of this work. What
+# is handed over is a name from this same tree, never a place to fetch anything
+# from.
+run-inputs:
+  takes-this-one: agent
+team:
+  worker: does the work when nobody was named for this request.
+limits:
+  when-it-runs-out: stop-and-say-so
+  steps-at-most: 4

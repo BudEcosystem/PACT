@@ -241,6 +241,19 @@ def test_every_spec_field_that_holds_authored_state_is_filled_from_the_document(
         # nothing carries `()`. Every run in this repository is in that state,
         # which is why the worked example leaves it empty and always will.
         "external_prose",
+        # Authored, and this example declares no `run-inputs:` line of shape
+        # `agent` — its one input is `customer-id: text`, a datum and not a name
+        # from this tree. It is a SUBSET of `run_inputs`, which is filled here,
+        # so an empty tuple is the correct reading of the example rather than a
+        # boundary that drops something: the desk knows who its team is at
+        # authoring time and nothing about it is chosen per request.
+        #
+        # What proves the shape reaches the spec is
+        # `test_work_handed_to_an_agent_by_name.py`, whose documents declare one
+        # and whose runs put the named agent to work — the same division
+        # `knowledge` makes above, where the mechanism is demonstrated whole in
+        # the example that exists for it rather than bolted onto this one.
+        "agent_valued_inputs",
     }
     empty: list[str] = []
     for f in dataclass_fields(spec):
