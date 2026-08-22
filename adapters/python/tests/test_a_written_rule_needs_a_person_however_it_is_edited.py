@@ -204,3 +204,68 @@ def test_the_floor_holds_even_where_nobody_wrote_the_word() -> None:
     before = _body()
     after = _with_a_sixth_rule("6. Settle at the desk where the customer is upset.")
     assert classify(Proposal("content", before, after), silent).risk is Risk.HIGH
+
+
+# ──────────────────────────────────────────── a code fence is not a document
+
+
+#: A policy that shows an example. Ordinary technical writing, and the shape that
+#: defeated the floor in both directions at once.
+WITH_A_CODE_SAMPLE = """# Refund policy
+
+## Rules
+
+1. Refunds are available for 30 days from the delivery date.
+
+Written out, a refund looks like this:
+
+```yaml
+# Rules
+refund:
+  - amount: 40.00
+  - reason: faulty
+```
+
+2. Damaged items are always refunded in full.
+"""
+
+
+def test_a_hash_inside_a_code_fence_does_not_end_the_rules() -> None:
+    """The dangerous half. A `#` line inside a fenced block was read as a
+    heading, so everything after the sample fell out of the normative region and
+    a rule added there got no floor at all."""
+    after = WITH_A_CODE_SAMPLE.replace(
+        "2. Damaged items are always refunded in full.",
+        "2. Damaged items are always refunded in full.\n3. Settle at the desk where the customer is upset.",
+    )
+    got = classify(Proposal("content", WITH_A_CODE_SAMPLE, after), GRANTS_THE_NOTES)
+    assert got.risk is Risk.HIGH, got
+
+
+def test_a_line_added_to_a_code_sample_is_not_a_written_rule() -> None:
+    """The other half, and the reason this is not solved by ignoring `#` lines.
+
+    A list item inside a fenced block is part of an example. Treating it as
+    policy makes an author need a person to fix a typo in a sample, which is the
+    over-restriction that costs a capability and buys nobody anything.
+    """
+    after = WITH_A_CODE_SAMPLE.replace(
+        "  - reason: faulty",
+        "  - reason: faulty\n  - postage: included",
+    )
+    got = classify(Proposal("content", WITH_A_CODE_SAMPLE, after), GRANTS_THE_NOTES)
+    assert got.risk is Risk.LOW, got
+
+
+def test_a_fenced_heading_does_not_start_a_rules_section_either() -> None:
+    """`# Rules` inside a fence is a comment in a sample, not a boundary."""
+    body = "# Notes\n\n```sh\n# Rules\necho hello\n```\n\n- a bullet under Notes\n"
+    after = body + "- another bullet under Notes\n"
+    assert classify(Proposal("content", body, after), GRANTS_THE_NOTES).risk is Risk.LOW
+
+
+def test_a_tilde_fence_counts_as_a_fence() -> None:
+    """Markdown spells a fence two ways and both are ordinary."""
+    body = "# Refund policy\n\n## Rules\n\n1. Refunds last 30 days.\n\n~~~\n# Rules\nnot really\n~~~\n"
+    after = body.replace("1. Refunds last 30 days.", "1. Refunds last 30 days.\n2. Postage is included.")
+    assert classify(Proposal("content", body, after), GRANTS_THE_NOTES).risk is Risk.HIGH

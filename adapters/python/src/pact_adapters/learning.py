@@ -188,6 +188,35 @@ _NORMATIVE_HEADING = re.compile(r"^\s{0,3}#{1,6}\s+(?:policy|rules|[\w'’\- ]*\
 POLICY_CLAUSES = "policy-clauses"
 
 
+#: A fenced code block, either spelling markdown offers.
+#:
+#: Fences matter because a `#` is a COMMENT in half the languages an author is
+#: likely to paste, and a hyphen starts a list in YAML. Without this, the same
+#: sample broke the floor in both directions at once: `# Rules` inside a fence
+#: read as a heading, so a real rule written after the sample fell outside the
+#: normative region and got no floor — and a line added to the sample itself read
+#: as a written rule, so fixing a typo in an example needed a person.
+_FENCE = re.compile(r"^\s{0,3}(?:```|~~~)")
+
+
+def _prose_lines(body: str) -> list[str]:
+    """`body` with every fenced code block taken out.
+
+    Everything below reads this rather than `splitlines()`, so a fence is invisible
+    to the heading walk and to the clause walk alike — which is the only way the
+    two stay consistent about where a sample begins and ends.
+    """
+    out: list[str] = []
+    fenced = False
+    for line in body.splitlines():
+        if _FENCE.match(line):
+            fenced = not fenced
+            continue
+        if not fenced:
+            out.append(line)
+    return out
+
+
 def _under_a_normative_heading(body: str) -> list[str]:
     """Every line of `body` that sits under one of the closed headings.
 
@@ -198,7 +227,7 @@ def _under_a_normative_heading(body: str) -> list[str]:
     """
     out: list[str] = []
     inside = False
-    for line in body.splitlines():
+    for line in _prose_lines(body):
         if line.lstrip().startswith("#"):
             inside = bool(_NORMATIVE_HEADING.match(line))
             continue
@@ -226,7 +255,7 @@ def _headings_that_make_rules(body: str) -> list[str]:
     """The closed-set heading lines themselves, as written."""
     return [
         line.strip()
-        for line in body.splitlines()
+        for line in _prose_lines(body)
         if line.lstrip().startswith("#") and _NORMATIVE_HEADING.match(line)
     ]
 
