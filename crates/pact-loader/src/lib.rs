@@ -256,6 +256,51 @@ struct Candidate {
 /// carries an EMPTY fingerprint rather than a guess — the walk already reports
 /// unreadable entries, and a made-up digest would be worse than none, because
 /// the whole value of the field is that it can be compared.
+/// The most of one payload file this reader will read to describe it.
+///
+/// Fingerprinting a payload was free when the walk only asked the filesystem for
+/// each entry's size: the cost was the NUMBER of files. Reading every byte made
+/// it the SIZE of them, and nothing bounded it — `MAX_LOAD_TEXT` is charged from
+/// `load_file`, and neither fingerprint call passes through there. A tree can
+/// state a size independently of what it occupies, so a 48 KiB directory could
+/// cost a reviewer minutes. Measured on `examples/answers-from-documents` with
+/// one sparse file planted in it, release build: 0.006 s before, 1.05 s at 512
+/// MB, 8.65 s at 4 GiB, the tree 48 KiB on disk throughout.
+///
+/// The same figure as `MAX_LOAD_TEXT`, and deliberately: a payload file is the
+/// one thing this loader reads that is not held in memory afterwards, so the
+/// ceiling is about the reader's TIME rather than their memory — but two limits
+/// where one will do is two numbers to explain, and this one is already the
+/// answer to "how much of somebody else's file will PACT read".
+const MAX_FINGERPRINT_BYTES: u64 = MAX_LOAD_TEXT as u64;
+
+/// Whether this file is small enough to describe by its contents.
+///
+/// Split out from [`fingerprint`] so the two call sites can say the same
+/// sentence about the file they skipped, from the size they already had in hand.
+fn too_big_to_fingerprint(size: u64) -> bool {
+    size > MAX_FINGERPRINT_BYTES
+}
+
+/// A file described by name and size, because reading it is not worth a
+/// reviewer's afternoon.
+fn too_big_to_describe(path: &Utf8Path, size: u64) -> Diagnostic {
+    Diagnostic::warning(
+        "loader/too-big-to-fingerprint",
+        Span::whole_file(path),
+        format!(
+            "'{path}' is {} MB, so it is carried by name and size with no \
+             fingerprint. Reading it to describe it would cost whoever loads this \
+             tree more than the {MAX_LOAD_TEXT_MB} MB this reader will spend on one \
+             file.",
+            size / (1024 * 1024)
+        ),
+        "Nothing is wrong with the tree; it just cannot be pinned by content. Split \
+         the file, or keep it somewhere a `url:` points at, if two copies of this \
+         workspace have to be provably the same.",
+    )
+}
+
 fn fingerprint(path: &Utf8Path) -> String {
     use sha2::{Digest, Sha256};
     let Ok(file) = std::fs::File::open(path) else { return String::new() };
@@ -434,8 +479,14 @@ impl Loader {
     ///
     /// Every kind goes through here — settings, prose and plain text alike —
     /// because all three are held in memory for the life of the load and the
-    /// budget is about memory, not about YAML. An attachment folder is the one
-    /// exception and needs no charge: it carries file *names*, never contents.
+    /// budget is about memory, not about YAML.
+    ///
+    /// An attachment folder does not pass through here, and it used to be
+    /// because it "carries file *names*, never contents" — true when that was
+    /// written and false from the day payload digests landed, which read every
+    /// byte of every payload file to describe it. It has its own ceiling now:
+    /// see [`MAX_FINGERPRINT_BYTES`], which bounds the reader's time the way this
+    /// budget bounds their memory.
     fn load_file(
         &self,
         path: &Utf8Path,
@@ -462,12 +513,20 @@ impl Loader {
         let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
 
         if kind == FileKind::Opaque {
+            // This arm returns BEFORE the `max_text_bytes` guard below, so it was
+            // the second way past every byte budget the loader has.
+            let digest = if too_big_to_fingerprint(size) {
+                diags.push(too_big_to_describe(path, size));
+                String::new()
+            } else {
+                fingerprint(path)
+            };
             return Some(Node::new(
                 Value::File(FileRef {
                     path: self.relative(path),
                     content_type: self.policy.content_type(path),
                     size_bytes: size,
-                    digest: fingerprint(path),
+                    digest,
                 }),
                 Span::whole_file(path),
             ));
@@ -817,6 +876,25 @@ impl Loader {
         )
     }
 
+    /// Say which `.pactignore` files were found and not read.
+    ///
+    /// [`Ignore::load`] refuses to open anything that is not a regular file, and
+    /// the reason it cannot say so itself is that it has no diagnostics to say it
+    /// into. Said HERE, in the same words the two walks already use for a file of
+    /// the wrong shape anywhere else, so an author who wrote one and wonders why
+    /// nothing is ignored is told rather than left to work it out.
+    ///
+    /// Reported once per walk that found it, which can mean twice for one file —
+    /// `Diagnostics` already folds identical entries, and the alternative was
+    /// threading a seen-set through two unrelated walks to prevent a duplicate
+    /// nobody would see.
+    fn say_which_ignore_files_were_skipped(&self, ignore: &Ignore, diags: &mut Diagnostics) {
+        for at in ignore.skipped() {
+            let link = std::fs::symlink_metadata(at).map(|m| m.file_type().is_symlink());
+            diags.push(not_a_regular_file(at, link.unwrap_or(false), false));
+        }
+    }
+
     fn walk_payload(
         &self,
         root: &Utf8Path,
@@ -869,6 +947,7 @@ impl Loader {
         // is what holds this; a fixture writing the line BESIDE the entry
         // passes under either implementation, which is why nothing noticed.
         let ignore = Ignore::inherited(&self.root, dir);
+        self.say_which_ignore_files_were_skipped(&ignore, diags);
 
         for entry in read.flatten() {
             let Ok(name) = entry.file_name().into_string() else {
@@ -1004,6 +1083,15 @@ impl Loader {
                 }
             };
 
+            // The size was already in hand from `metadata` on the line above,
+            // and went unused: a file that says it is 8 GiB was read to the end
+            // to be described.
+            let digest = if too_big_to_fingerprint(size_bytes) {
+                diags.push(too_big_to_describe(&path, size_bytes));
+                String::new()
+            } else {
+                fingerprint(&path)
+            };
             out.push(FileRef {
                 path: path
                     .strip_prefix(root)
@@ -1011,7 +1099,7 @@ impl Loader {
                     .unwrap_or_else(|_| name.clone()),
                 content_type: self.policy.content_type(&path),
                 size_bytes,
-                digest: fingerprint(&path),
+                digest,
             });
         }
     }
@@ -1042,6 +1130,7 @@ impl Loader {
         // the folder it sits in is not the file every author has already met.
         // See [`Ignore::inherited`] for the measurement.
         let ignore = Ignore::inherited(&self.root, dir);
+        self.say_which_ignore_files_were_skipped(&ignore, diags);
 
         // Is this the top of the tree being loaded? Only `README.md` and its
         // siblings care — see [`policy::Ignored::DocumentationInsideTheTree`].

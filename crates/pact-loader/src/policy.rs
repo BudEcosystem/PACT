@@ -831,15 +831,55 @@ pub struct Pattern {
 #[derive(Debug, Clone, Default)]
 pub struct Ignore {
     patterns: Vec<Pattern>,
+    /// The `.pactignore` files that were there and were not read, because they
+    /// were not regular files. See [`Ignore::load`].
+    skipped: Vec<Utf8PathBuf>,
 }
 
 impl Ignore {
     /// Read `.pactignore` from one directory alone. Absent file means no
     /// patterns.
+    ///
+    /// Only a REGULAR file is opened, and the check is `symlink_metadata` so the
+    /// link itself is what is asked about. Both halves were holes.
+    ///
+    /// `mkfifo .pactignore` made every verb that reads a tree — `check`, `show`,
+    /// `waits`, `discover`, `card` — block for ever with no output at all,
+    /// because `read_to_string` on a pipe with no writer never returns. That is
+    /// R5's promise broken from the other side: reading a stranger's tree does
+    /// not run their code, and it also has to END. The loader already knows this
+    /// hazard and raises `loader/not-a-regular-file` for a pipe, socket or device
+    /// the payload walk finds — but this file is opened at every directory from
+    /// the root down, before either walk can see it.
+    ///
+    /// And `.pactignore -> /etc/passwd` loaded cleanly, with that file's lines
+    /// becoming this tree's ignore patterns and its text quoted back in the
+    /// `loader/ignored-on-purpose` message. [`Ignore::inherited`] already says
+    /// nothing above the tree may reach into it; a shortcut walked round the
+    /// rule.
+    ///
+    /// A skipped file leaves no patterns, which is the same state as no file at
+    /// all: the entries it would have hidden are reported instead of silently
+    /// dropped, and being told about a file you meant to ignore is the harmless
+    /// direction. What it is NOT is silent — see [`Ignore::skipped`].
     pub fn load(dir: &Utf8Path) -> Self {
         let at = dir.join(".pactignore");
+        let Ok(meta) = std::fs::symlink_metadata(&at) else { return Self::default() };
+        if !meta.is_file() {
+            return Self { patterns: Vec::new(), skipped: vec![at] };
+        }
         let text = std::fs::read_to_string(&at).unwrap_or_default();
         Self::parse_from(&text, &at)
+    }
+
+    /// Every `.pactignore` that was found and not read, with where it was.
+    ///
+    /// Carried rather than reported here because this type has no diagnostics to
+    /// report into — it is read from two walks, both of which have one, and both
+    /// of which say the same sentence about a file of the wrong shape anywhere
+    /// else in the tree.
+    pub fn skipped(&self) -> &[Utf8PathBuf] {
+        &self.skipped
     }
 
     /// Read every `.pactignore` from `root` down to `dir` inclusive.
@@ -867,7 +907,9 @@ impl Ignore {
         let mut all = Self::load(&at);
         for part in rel.components() {
             at = at.join(part.as_str());
-            all.patterns.extend(Self::load(&at).patterns);
+            let here = Self::load(&at);
+            all.patterns.extend(here.patterns);
+            all.skipped.extend(here.skipped);
         }
         all
     }
@@ -887,6 +929,7 @@ impl Ignore {
                     from: from.to_path_buf(),
                 })
                 .collect(),
+            skipped: Vec::new(),
         }
     }
 
