@@ -1664,10 +1664,50 @@ async def run(
                     result.output = decision.stop
                     bus.emit("turn.run.cancelled", at=(i,), reason=decision.stop)
                     return result
+                # WHAT IS RECORDED IS NOT WHAT IS RUN, and this file already
+                # draws that line two hundred lines down about a tool's
+                # arguments: "Rewriting `call` decides what is WRITTEN DOWN,
+                # never what runs."
+                #
+                # Masking the snippet on the way IN changed the arithmetic. The
+                # card pattern deliberately over-matches, which is right for
+                # prose and destructive for code: `order_id = 9780306406157`
+                # became `order_id = [removed]` and the room raised NameError —
+                # and under the shipped redaction file the bank-account pattern
+                # contains `\b\d{8}\b`, so any eight-digit literal went the same
+                # way. Worse, it does not always fail loudly:
+                # `print(len("9780306406157"))` becomes `print(len("[removed]"))`
+                # and the model answers from `9`.
+                #
+                # So the transcript gets the masked words and the room gets the
+                # ones the model wrote — UNLESS the author granted `programs` the
+                # outside world, where a verbatim snippet is a real way out and
+                # the caution goes the other way round.
+                original = wrote
+                to_run = written["content"] if spec.programs_may_reach_outside else original
                 wrote = written["content"]
+                # Said out loud whichever way round it went. A reader of the
+                # trace is looking at something other than what ran, and a
+                # control quietly doing something else is the shape T7 forbids.
+                if wrote != original:
+                    result.unenforced = result.unenforced + (
+                        (
+                            f"stage {phase_name!r} writes code to be run, and a hiding "
+                            f"rule changed it before it ran — `allow-egress:` names "
+                            f"`programs`, so the room may reach outside and is given the "
+                            f"hidden form rather than what the model wrote. What it "
+                            f"worked out may not be what was asked for."
+                        )
+                        if to_run != original
+                        else (
+                            f"stage {phase_name!r} writes code to be run, and a hiding "
+                            f"rule changed it. The room ran what the model wrote; the "
+                            f"transcript shows the hidden form, so the two do not match."
+                        ),
+                    )
                 ran = _call_tool(
                     lambda a: run_program(RUN_CODE_IN_THE_ROOM, a),
-                    ToolCall(name=RUN_CODE_IN_THE_ROOM, args={"code": wrote}),
+                    ToolCall(name=RUN_CODE_IN_THE_ROOM, args={"code": to_run}),
                 )
                 meter.tool_calls += 1
                 # AND WHAT THE ROOM PRINTED IS A TOOL RESULT. It is metered as

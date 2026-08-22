@@ -242,3 +242,87 @@ def test_a_workspace_with_no_rules_is_unchanged_by_any_of_this() -> None:
     plain = _run(run_program=lambda name, args: "45.0")
     assert plain.steps[0].tool_results == ("45.0",)
     assert "40.00 + 5.00" in plain.steps[0].text
+
+
+# ─────────────────────────── what is recorded, and what is actually run
+
+
+def test_the_room_runs_what_the_model_wrote_not_what_the_transcript_shows() -> None:
+    """Masking decides what is WRITTEN DOWN, never what runs.
+
+    Routing the snippet through the chain closed a real leak — a card number
+    typed into a comment reached `history` unmasked — and opened a worse one by
+    handing the room the masked text. The card pattern is `(?:\\d[ -]*?){12,}\\d`
+    and deliberately over-matches, which is right for prose and destructive for
+    code: measured, `order_id = 9780306406157` became `order_id = [removed]` and
+    the room raised `NameError`. Under the SHIPPED redaction file it is worse
+    still, because the bank-account pattern contains `\\b\\d{8}\\b` — so any
+    eight-digit literal, an order id or a date-as-int, was destroyed.
+
+    And it does not always fail loudly: `print(len("9780306406157"))` becomes
+    `print(len("[removed]"))`, the step result is `9`, and the model answers from
+    it. A control quietly doing something other than what it says is the shape T7
+    forbids.
+
+    This file already draws the distinction two hundred lines away, about a tool's
+    arguments: *"Rewriting `call` decides what is WRITTEN DOWN, never what runs."*
+    """
+    got: list[str] = []
+    result = _run_guarded(
+        Script([Turn('order_id = 9780306406157\nprint(order_id)'), Turn("Done.")]),
+        run_program=lambda name, args: got.append(args["code"]) or "9780306406157",
+    )
+    assert got and got[0] == "order_id = 9780306406157\nprint(order_id)", got
+
+    # And nothing unmasked was recorded: the transcript shows the masked form,
+    # and the room's OUTPUT is masked too, so the model reads `[removed]`.
+    said = json.dumps(result.trace()) + " ".join(s.text for s in result.steps)
+    assert "9780306406157" not in said, said
+
+
+def test_a_snippet_the_rules_changed_is_said_out_loud() -> None:
+    """The transcript and the room saw different text, so somebody is told.
+
+    Whichever way round it is, a reader of the trace is looking at something
+    other than what ran, and silence about that is the thing this whole file
+    exists to prevent.
+    """
+    result = _run_guarded(
+        Script([Turn('order_id = 9780306406157\nprint(order_id)'), Turn("Done.")]),
+        run_program=lambda name, args: "9780306406157",
+    )
+    said = " ".join(result.unenforced)
+    assert "writes code to be run" in said, result.unenforced
+    assert "hiding rule changed it" in said, result.unenforced
+    assert "do not match" in said, result.unenforced
+
+
+def test_where_the_room_may_reach_outside_the_masked_snippet_is_what_runs() -> None:
+    """The one case where the caution goes the other way.
+
+    Handing the room the verbatim text is sound only while the room is inside the
+    boundary. `allow-egress: programs` says it is not — the author has granted a
+    carried body the outside world — and a verbatim snippet is then a real way
+    out. There the masked text is what runs, and the cost is said out loud rather
+    than paid in silence.
+    """
+    doc = _guarded()
+    doc["allow-egress"] = ["programs"]
+    got: list[str] = []
+    result = asyncio.run(
+        run(AgentSpec.from_document(doc, "desk"),
+            ReferenceTransport(Script([Turn('x = 9780306406157\nprint(x)'), Turn("Done.")])),
+            "how much do we refund?", {},
+            run_program=lambda name, args: got.append(args["code"]) or "0")
+    )
+    assert got and "9780306406157" not in got[0], got
+    said = " ".join(result.unenforced)
+    assert "allow-egress" in said or "outside" in said, result.unenforced
+
+
+def test_a_workspace_with_no_hiding_rules_hands_the_room_exactly_what_was_written() -> None:
+    """The control. Nothing to mask, nothing to say, nothing changed."""
+    got: list[str] = []
+    result = _run(run_program=lambda name, args: got.append(args["code"]) or "45.0")
+    assert got and got[0] == "total = 40.00 + 5.00\nprint(total)", got
+    assert not any("hiding rule changed it" in u for u in result.unenforced), result.unenforced

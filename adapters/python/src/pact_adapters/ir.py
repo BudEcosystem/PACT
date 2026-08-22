@@ -528,6 +528,16 @@ class AgentSpec:
     #: another agent's tool reaches is not something this run could have called,
     #: so reporting it here would be a sentence about somebody else's document.
     programs: tuple[ProgramSpec, ...] = ()
+    #: Whether this workspace's `allow-egress:` names `programs`, as a fact about
+    #: the WORKSPACE rather than about one carried body.
+    #:
+    #: The same word `ProgramSpec.may_reach_outside` carries, read once and put in
+    #: two places on purpose. A host starting one body holds that body's spec and
+    #: should not have to go and find the workspace; but a `does: run-code` stage
+    #: names no program and so has no body spec at all, and it needs the same
+    #: answer — whether the room it is about to use may reach outside decides
+    #: whether handing it the model's verbatim words is safe.
+    programs_may_reach_outside: bool = False
     #: The agent's own key in `agents:` — the folder name, not the display name.
     #: Carried because a diagnostic about this agent has to name the file the
     #: author would open (`agents/refund-desk/limits.yaml`), and `name:` is
@@ -744,6 +754,7 @@ class AgentSpec:
             # which is the "did not choose" this field documents.
             model=_text(a.get("model", "")),
             programs=_programs_reached_by(doc, a),
+            programs_may_reach_outside=_programs_may_reach_outside(doc),
             projections=_projections(doc, a),
             run_inputs=tuple(sorted((a.get("run-inputs") or {}))),
             agent_valued_inputs=_agent_valued(a.get("run-inputs")),
@@ -757,6 +768,17 @@ class AgentSpec:
             workspace=str(root) if root is not None else "",
             key=agent_key,
         )
+
+
+def _programs_may_reach_outside(doc: dict[str, Any]) -> bool:
+    """Does this workspace's `allow-egress:` name `programs`?
+
+    One reader, two carriers: `ProgramSpec.may_reach_outside` for a host holding
+    one body, and `AgentSpec.programs_may_reach_outside` for a `does: run-code`
+    stage, which names no body and still has to know whether the room it is about
+    to use may reach outside.
+    """
+    return "programs" in [str(w).strip() for w in _as_list(doc.get("allow-egress"))]
 
 
 def _programs_reached_by(doc: dict[str, Any], agent: dict[str, Any]) -> tuple[ProgramSpec, ...]:
@@ -796,7 +818,7 @@ def _programs_reached_by(doc: dict[str, Any], agent: dict[str, Any]) -> tuple[Pr
     # On the program rather than beside it, because a host that is starting one
     # body has the spec for that body in its hand and should not have to go and
     # find the workspace to learn whether the door may be open.
-    outward = "programs" in [str(w).strip() for w in _as_list(doc.get("allow-egress"))]
+    outward = _programs_may_reach_outside(doc)
     out = []
     for name in sorted(reached):
         block = declared[name]

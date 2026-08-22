@@ -275,6 +275,18 @@ def test_every_spec_field_that_holds_authored_state_is_filled_from_the_document(
         # mechanism is shown whole — including the half that is not about size:
         # a poisoned field the model never needed does not reach it.
         "projections",
+        # Authored, and `False` is the AUTHORED ANSWER rather than an absence.
+        # This example's `allow-egress:` does not name `programs`, which is the
+        # workspace saying a carried body may not reach outside — the default the
+        # schema describes as "a room with the door shut". A `False` a document
+        # really said is not a boundary dropping something, and the per-program
+        # copy of it is unreachable here because this example carries no programs
+        # at all (see `programs` above).
+        #
+        # What proves the word reaches the spec both ways is
+        # `test_a_program_a_run_cannot_start_is_said_out_loud.py`, which asserts
+        # `False` for a withholding workspace and `True` for a granting one.
+        "programs_may_reach_outside",
     }
     empty: list[str] = []
     for f in dataclass_fields(spec):
