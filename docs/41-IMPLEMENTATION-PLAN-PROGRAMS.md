@@ -31,7 +31,7 @@ through tools, memory, metrics, questions, interceptor sentences, routing
 | P6 `program` kind + sandbox + egress role | done | `f1fbdc8` |
 | P7 executor | done as a SEAM, not an engine — see below | `c18fa28` |
 | P8 capability wiring | **done** — all 8 waves | `26993a1`, `3985b5d`, `6a62b4e`, `30e4efc`, `6c8aa91`, this |
-| P9 self-authored lane | not started | — |
+| P9 self-authored lane | done, with one residual named below | this |
 
 **Three places this plan was wrong, and what was built instead.**
 
@@ -63,6 +63,13 @@ remembers.<name>` and `remember-as:` · 3 the `program:` metric scheme · 4
 `question.checked-by:` · 5 `action.projects-with:` · 6 program-holed interceptor
 sentences · 7 `decided-by:`/`may-go-to:` · 8 `does: run-code` + codeact. Four
 built, four to go.
+
+**P9's residual, named rather than hidden:** `authoring.review_needed` and
+`may_bind` hold AD-85's rules and are declared HOST_API — the approval surface is
+the host's (AD-89 leaves `pact approve` unbuilt), which is the §4 split every
+other governance line makes. What is genuinely not built is the ROUTE: `Learner`
+has no tool-proposal shape, so nothing in this port yet hands a self-authored
+tool to that review.
 
 **Known open, recorded rather than dropped:** a figure inside a sentence
 (interpolation — a new capability, not a defect); list-valued pattern arguments;

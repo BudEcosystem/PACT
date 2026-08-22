@@ -422,6 +422,12 @@ DOORS = (
 #: Modules reached only from a door or from another module, and deliberately not
 #: from `run`. A name here is a decision, and the reason is the row.
 LIBRARIES: dict[str, str] = {
+    "authoring": (
+        "AD-85's review of a tool an agent wrote for itself; reached by a HOST "
+        "putting an approval in front of a person, never from a run — the rules "
+        "live here, the surface does not (see HOST_API in "
+        "`test_nothing_public_is_named_by_nothing.py`)"
+    ),
     "evals": "grades a run; reached from `scoring`, never from `run`",
     "learning": "the improvement gate; reached from `scoring --propose`",
     "resolve": "binds a model; reached from `scoring` before a run starts",

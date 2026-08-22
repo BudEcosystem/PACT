@@ -44,6 +44,33 @@ SRC = Path(__file__).resolve().parents[1] / "src" / "pact_adapters"
 #: _gained_a_caller` deletes it again when one appears — a list of what must stay
 #: uncalled cannot notice a fix.
 HOST_API: dict[str, str] = {
+    # The two halves of AD-85's review, and the same shape `interceptors.guard`
+    # has one entry down: nothing in `src/` calls them because nothing in `src/`
+    # is a host, and both are things a host puts in front of a PERSON.
+    #
+    # `review_needed` decides who must sign and what the approval surface must
+    # say. AD-89 makes a human-authored commit the approval record and leaves
+    # `pact approve` unbuilt, so the surface itself is the host's — this port
+    # holds the RULES, which is the §4 declared-and-delegated split every other
+    # governance line in the format already makes.
+    #
+    # `may_bind` is the resolver's, for the same reason: §8.5 requires removal to
+    # be as expressible as addition, and the thing that must refuse a revoked
+    # digest is whatever writes the lockfile.
+    #
+    # The residual is written down in `docs/41` §0.1 rather than hidden here:
+    # `Learner` has no tool-proposal shape yet, so nothing in this port yet
+    # ROUTES a self-authored tool to this review.
+    "authoring.review_needed": (
+        "who must sign for a tool an agent wrote for itself, and the sentence the "
+        "approval surface must carry. The surface is the host's (AD-89), so "
+        "nothing in `src/` calls this — what `src/` holds is the rule"
+    ),
+    "authoring.may_bind": (
+        "whether a resolver may bind a self-authored tool at all. A revoked "
+        "digest is refused by whatever writes the lockfile, which is not this "
+        "port"
+    ),
     "interceptors.guard": (
         "the typed escape hatch §5.5 requires every mechanism to have. A host "
         "embedding the harness expresses a condition the sentence vocabulary "
