@@ -171,6 +171,9 @@ pub(crate) fn a_key_with_a_hole(node: &Node) -> Option<String> {
     match &node.value {
         Value::Map(m) => {
             for (key, entry) in m {
+                if key.starts_with("x-") {
+                    continue;
+                }
                 if !holes_in(key).is_empty() {
                     return Some(key.clone());
                 }
@@ -249,7 +252,18 @@ pub(crate) fn arguments(
     // and is checkable because the caller's own declarations are right here.
     let forwards = parameters(caller);
     for (given, entry) in supplied_map {
-        if as_text(&entry.node).is_none() {
+        // A LIST OF FIGURES is a value. The rule was never "scalars" — it is
+        // that an argument is a value and not a block of settings, so a caller
+        // cannot manufacture fields the classifier has not seen (LOAD-13). A
+        // list of scalars manufactures nothing, and without it `uses:`,
+        // `may-use:`, `when:` and `may:` could be parameterised one entry at a
+        // time and never as a whole, while a shared figure may already be one.
+        let is_a_figure = as_text(&entry.node).is_some()
+            || matches!(
+                &entry.node.value,
+                Value::List(items) if items.iter().all(|i| as_text(i).is_some())
+            );
+        if !is_a_figure {
             return Err(Box::new(Diagnostic::error(
                 "loader/an-argument-is-a-figure-not-a-block",
                 entry.node.span.clone(),
@@ -377,7 +391,11 @@ pub(crate) fn fill(node: &mut Node, args: &BTreeMap<String, Node>) {
             *text = unescape(&out);
         }
         Value::Map(m) => {
-            for (_, entry) in m.iter_mut() {
+            for (key, entry) in m.iter_mut() {
+                // Never filled, for the same reason it is never scanned.
+                if key.starts_with("x-") {
+                    continue;
+                }
                 fill(&mut entry.node, args);
             }
         }
@@ -416,7 +434,11 @@ pub(crate) fn holes_match_declarations(
     // The declarations themselves are not part of the body.
     if let Some(map) = pattern.as_map() {
         for (key, entry) in map {
-            if key == EXPECTS {
+            // The declarations are not part of the body, and an author's
+            // reserved space is not part of the template — this loop hands
+            // values to the scanner directly, so the skip `holes_of` makes for
+            // an `x-` key one level down has to be made here too.
+            if key == EXPECTS || key.starts_with("x-") {
                 continue;
             }
             holes_of(&entry.node, &mut found);

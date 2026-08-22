@@ -71,10 +71,13 @@ other governance line makes. What is genuinely not built is the ROUTE: `Learner`
 has no tool-proposal shape, so nothing in this port yet hands a self-authored
 tool to that review.
 
+**Audit findings, closed:** templates reading inside `x-` blocks (AD-14) and
+list-valued pattern arguments — both fixed with tests.
+
 **Known open, recorded rather than dropped:** a figure inside a sentence
-(interpolation — a new capability, not a defect); list-valued pattern arguments;
-templates reading inside `x-` blocks (AD-14); substitution provenance in the
-LoadReport (P2's own exit gate); P8 waves 2–8; P9.
+(interpolation — a new capability, not a defect, and the one item on this list
+nothing is broken without); substitution provenance in the LoadReport (P2's own
+exit gate).
 
 ## 1. The TDD protocol, calibrated to this repo
 

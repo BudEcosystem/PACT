@@ -457,3 +457,108 @@ fn a_pattern_may_write_a_literal_angle_bracket() {
     assert!(!shown.contains("<<thinking>>"), "{shown}");
     let _ = std::fs::remove_dir_all(&dst);
 }
+
+/// An `x-` block round-trips untouched through a pattern.
+///
+/// AD-14 makes `x-` the one extension point that survives: preserved in the
+/// document, never emitted into any substrate, and — the half this tests — not
+/// interpreted on the way through. Templates read every string in a document
+/// looking for holes, so an author's reserved space was being scanned and could
+/// be REWRITTEN: an `x-` block carrying `<ticket-id>` was refused as an
+/// undeclared hole, and one carrying a declared name was substituted away. Found
+/// by audit.
+///
+/// The whole point of the reserved space is that PACT does not know what is in
+/// it, so it may not decide that something in it was a hole.
+#[test]
+fn an_x_block_round_trips_untouched_through_a_pattern() {
+    let dst = broken(
+        "x-block",
+        "two-desks-one-pattern",
+        &[(
+            "agents/desk-pattern/agent.yaml",
+            "description: A desk that answers questions about <domain>.",
+            "description: A desk that answers questions about <domain>.\nx-routing: \"<domain> and <not-a-parameter>\"",
+        )],
+    );
+    let (code, out, err) = run(&["check", &dst, "--deny-warnings"]);
+    let said = format!("{out}{err}");
+    assert_eq!(code, Some(0), "an `x-` block is not a template:\n{said}");
+
+    let (_, shown, _) = run(&["show", &dst]);
+    let doc: serde_json::Value = serde_json::from_str(&shown).expect("JSON");
+    assert_eq!(
+        doc["agents"]["refunds"]["x-routing"], "<domain> and <not-a-parameter>",
+        "verbatim, both of them — a declared name is not filled and an undeclared \
+         one is not refused:\n{shown}"
+    );
+    let _ = std::fs::remove_dir_all(&dst);
+}
+
+/// A pattern may take a list, so a whole `may-use:` can be one argument.
+///
+/// Arguments were scalars only, which meant `uses:`, `may-use:`, `when:` and
+/// `may:` could be parameterised one entry at a time and never as a whole — while
+/// a shared FIGURE may already be a list. The rule that mattered was never
+/// "scalars"; it was that an argument is a VALUE and not a block of settings, so
+/// a caller cannot manufacture fields the classifier has not seen. A list of
+/// scalars is a value. Found by audit.
+#[test]
+fn an_argument_may_be_a_list_of_figures() {
+    let dst = broken(
+        "list-arg",
+        "two-desks-one-pattern",
+        &[
+            (
+                "agents/desk-pattern/agent.yaml",
+                "  daily-cap:\n    shape: money\n    help: the most one request may cost on this desk",
+                "  daily-cap:\n    shape: money\n    help: the most one request may cost on this desk\n  reaches:\n    help: what this desk may use",
+            ),
+            (
+                "agents/desk-pattern/agent.yaml",
+                "limits:",
+                "uses: <reaches>\nlimits:",
+            ),
+            (
+                "agents/refunds/agent.yaml",
+                "  daily-cap: 0.05 USD",
+                "  daily-cap: 0.05 USD\n  reaches: [refund-policy]",
+            ),
+            (
+                "agents/returns/agent.yaml",
+                "  daily-cap: 0.10 USD",
+                "  daily-cap: 0.10 USD\n  reaches: [refund-policy]",
+            ),
+        ],
+    );
+    // The skill both desks now reach.
+    let skill = std::path::Path::new(&dst).join("skills/refund-policy");
+    std::fs::create_dir_all(&skill).unwrap();
+    std::fs::write(
+        skill.join("SKILL.md"),
+        "---\nname: refund-policy\ndescription: How to decide a refund.\n---\n\n# Refunds\n\nWithin 30 days.\n",
+    )
+    .unwrap();
+
+    let (code, out, err) = run(&["check", &dst, "--deny-warnings"]);
+    assert_eq!(code, Some(0), "a list of figures is a value:\n{out}{err}");
+    let (_, shown, _) = run(&["show", &dst]);
+    let doc: serde_json::Value = serde_json::from_str(&shown).expect("JSON");
+    assert_eq!(doc["agents"]["refunds"]["uses"][0], "refund-policy", "{shown}");
+    let _ = std::fs::remove_dir_all(&dst);
+}
+
+/// A list holding a block is still refused — the rule is about STRUCTURE.
+#[test]
+fn a_list_of_blocks_is_still_not_a_figure() {
+    let dst = broken(
+        "list-of-blocks",
+        "two-desks-one-pattern",
+        &[("agents/refunds/agent.yaml", "  daily-cap: 0.05 USD", "  daily-cap:\n    - run-arbitrary: yes")],
+    );
+    let (code, out, err) = run(&["check", &dst]);
+    let said = format!("{out}{err}");
+    assert_eq!(code, Some(1), "{said}");
+    assert!(said.contains("loader/an-argument-is-a-figure-not-a-block"), "{said}");
+    let _ = std::fs::remove_dir_all(&dst);
+}
