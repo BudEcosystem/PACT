@@ -165,6 +165,123 @@ _ANCHOR = re.compile(r"\{#[\w-]+\}")
 #: `ESC-SHRINK` third trigger.
 SHRINK_LIMIT = 0.4
 
+#: The headings that make what sits under them a written RULE (§8.3a rule 1).
+#:
+#: `# Policy`, `## Policy`, `# Rules`, `## Rules` and `# <name> policy`, at any
+#: depth: an author who nests their rules one level further down has not stopped
+#: writing rules. Matched on the whole heading line, so `## Rules of thumb` is
+#: not one — the closed set is closed, and widening it by substring would make
+#: `## Notes` normative the day somebody wrote `## Notes on policy`.
+_NORMATIVE_HEADING = re.compile(r"^\s{0,3}#{1,6}\s+(?:policy|rules|[\w'’\- ]*\s+policy)\s*$", re.I)
+
+#: The permission §8.3a rule 2 says a written rule is edited under, and the word
+#: every refusal below names.
+#:
+#: NOT a field name, and deliberately not in `SAFE_TO_CHANGE`. `Permissions.of`
+#: tests `field in self.high` first, so mapping this word onto `content` would
+#: make `of('content')` return HIGH for the flagship — every body edit would need
+#: a person, `skill-notes` would become a grant no cycle could act on, and §8.3a
+#: rule 3 ("everything else in the body stays S-GEN under `skill-notes`") would
+#: be broken in the course of enforcing rule 2. It names a surface INSIDE a
+#: document, which is the whole point of §8.3a, so only the clause check consults
+#: it.
+POLICY_CLAUSES = "policy-clauses"
+
+
+def _under_a_normative_heading(body: str) -> list[str]:
+    """Every line of `body` that sits under one of the closed headings.
+
+    "Under" means the nearest heading ABOVE it is one of them, so `## Notes`
+    following `## Rules` ends the rules — which is how an author already reads
+    their own file, and is the boundary §8.3a rule 4 says they move by editing a
+    heading.
+    """
+    out: list[str] = []
+    inside = False
+    for line in body.splitlines():
+        if line.lstrip().startswith("#"):
+            inside = bool(_NORMATIVE_HEADING.match(line))
+            continue
+        if inside:
+            out.append(line)
+    return out
+
+
+def _written_rules(body: str) -> set[str]:
+    """The normative clauses in `body` — list items and anchored sections.
+
+    §8.3a rule 1's definition, with prose deliberately left out: a paragraph of
+    explanation under `## Rules` is explanation. What the model treats as
+    authority is the numbered or bulleted line, and the section other clauses
+    refer to by `{#anchor}`.
+    """
+    return {
+        line.strip()
+        for line in _under_a_normative_heading(body)
+        if line.strip() and (_LIST_ITEM.match(line) or _ANCHOR.search(line))
+    }
+
+
+def _headings_that_make_rules(body: str) -> list[str]:
+    """The closed-set heading lines themselves, as written."""
+    return [
+        line.strip()
+        for line in body.splitlines()
+        if line.lstrip().startswith("#") and _NORMATIVE_HEADING.match(line)
+    ]
+
+
+def a_written_rule_changed(before: str, after: str) -> "Classification | None":
+    """§8.3a rules 1 and 2: the CLASS-3 floor under a written rule.
+
+    An identical sentence in `policies/approvals.yaml` is `S-EXEC` and CLASS-4;
+    in a `SKILL.md` body it was CLASS-1, because the surface was attached to the
+    FIELD and that one field holds both explanation and authority.
+
+    Two of the three directions were already answered, and by accident. Removing
+    a clause is HIGH because ESC-SHRINK's list trigger fires on a removed list
+    item; editing one is HIGH because the old line is a removed list item.
+    Nothing watched the third, and ADDING a rule is the direction that matters
+    most: measured on the flagship's own policy, a sixth numbered clause under
+    `## Rules` classified LOW and applied itself with nobody reading it — while
+    `may-improve-on-its-own:`'s own `tier: core` help promises "written rules are
+    not here at all: changing one always needs a person".
+
+    The HEADING is a governance surface too, and rule 4 says so in as many words:
+    the author moves the boundary by editing one. A cycle that could rename
+    `## Rules` to `## Working guidance` would move every clause out of the zone
+    in one LOW edit and leave every later edit outside the closed set.
+
+    Unconditional, and never keyed to the author having written the word
+    `policy-clauses`: `needs-a-person-to-approve:` carries no `required:`, so a
+    workspace that grants `skill-notes` and omits it would otherwise own a body
+    with no floor. Rule 2 calls the permission CLASS-4 BY CONSTRUCTION, which is
+    a property of the clause and not of anybody's memory.
+    """
+    was, now = _written_rules(before), _written_rules(after)
+    added = sorted(now - was)
+    if added:
+        return Classification(
+            Risk.HIGH,
+            f"a written rule was added under a `Rules`/`Policy` heading, and a rule is "
+            f"changed under `{POLICY_CLAUSES}` rather than `skill-notes` — {added[0][:70]!r}",
+        )
+    gone = sorted(was - now)
+    if gone:
+        return Classification(
+            Risk.HIGH,
+            f"a written rule was taken out from under a `Rules`/`Policy` heading, and a "
+            f"rule is changed under `{POLICY_CLAUSES}` — {gone[0][:70]!r}",
+        )
+    if _headings_that_make_rules(before) != _headings_that_make_rules(after):
+        return Classification(
+            Risk.HIGH,
+            f"the heading that makes those lines rules changed, which moves every one of "
+            f"them in or out of the rules — that boundary is `{POLICY_CLAUSES}`, not "
+            f"`skill-notes`",
+        )
+    return None
+
 
 @dataclass
 class Proposal:
@@ -205,6 +322,14 @@ def classify(p: Proposal, permissions: "Permissions | None" = None) -> Classific
     for that", on the one mechanism D14 names by name.
     """
     rules = permissions or Permissions.default()
+    # THE FLOOR UNDER A WRITTEN RULE, asked before anything else (§8.3a rules
+    # 1-2). Before the author's own permissions, because it is a floor: a grant
+    # cannot lower it, which is what "CLASS-4 by construction" means. `content`
+    # alone, because it is the only field holding a document with headings in it.
+    if p.field == "content":
+        floor = a_written_rule_changed(p.before, p.after)
+        if floor is not None:
+            return floor
     verdict = rules.of(p.field)
     if verdict is not None:
         return verdict
