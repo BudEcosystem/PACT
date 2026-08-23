@@ -44,6 +44,22 @@ SRC = Path(__file__).resolve().parents[1] / "src" / "pact_adapters"
 #: _gained_a_caller` deletes it again when one appears — a list of what must stay
 #: uncalled cannot notice a fix.
 HOST_API: dict[str, str] = {
+    # The wall between this port and another one. Nothing in `src/` calls it
+    # because nothing in `src/` DRIVES a second implementation — that is what a
+    # conformance suite does, and what any host comparing two runtimes does.
+    #
+    # It is here rather than written out at each caller because it was written
+    # out at each caller: five copies of one line across five test files, and
+    # four of `ToolSpec`'s six fields fell off the wall between them. A model on
+    # the second port was told a tool exists and never what it takes, and a
+    # `bind:` line — whose whole promise is that the model cannot see or change
+    # the argument — arrived as nothing at all and was reported as nothing at
+    # all. Same standing as `SUPPLIED_BY_THE_HOST` one level out: a boundary
+    # stated once, so the next field to cross it does so by existing.
+    "ports.tool_payload": (
+        "what a tool looks like to another port; called by whoever drives one, "
+        "never from a run"
+    ),
     # The two halves of AD-85's review, and the same shape `interceptors.guard`
     # has one entry down: nothing in `src/` calls them because nothing in `src/`
     # is a host, and both are things a host puts in front of a PERSON.

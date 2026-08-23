@@ -78,6 +78,7 @@ from pact_adapters.harness import run  # noqa: E402
 from pact_adapters.ir import AgentSpec  # noqa: E402
 from pact_adapters.script import Script, Turn  # noqa: E402
 from pact_adapters.transports.mock import ReferenceTransport  # noqa: E402
+from pact_adapters.ports import tool_payload  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[3]
 EXAMPLE = REPO / "examples" / "answers-from-documents"
@@ -163,7 +164,7 @@ def there(spec: AgentSpec) -> dict:
     payload = json.dumps({
         "name": spec.name,
         "instructions": spec.instructions,
-        "tools": [{"name": t.name, "description": t.description} for t in spec.tools],
+        "tools": [tool_payload(t) for t in spec.tools],
         "maxSteps": spec.max_steps,
         "knowledge": [
             {

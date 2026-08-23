@@ -101,7 +101,32 @@ export type KnowledgeSpec = {
 export type AgentSpec = {
   name: string;
   instructions: string;
-  tools: { name: string; description: string }[];
+  // A tool as this port is handed it. It carried a NAME and a SENTENCE for a
+  // round, and `ToolSpec` on the reference side has six fields — so four were
+  // dropped at the wall, and dropping is worse than refusing: this port could
+  // then neither honour the line nor report it. `notDoneHere` caught that at the
+  // agent level, where `interceptors:`, `policy:` and `team:` are named, and four
+  // fields one level down went straight past it.
+  //
+  // `parameters` is the one that cost a capability rather than a report: every
+  // tool was offered to the model with `parameters: {}`, so it was told a tool
+  // exists and never what it takes — word for word the defect the reference
+  // port's `_takes` records and fixed on its own side.
+  tools: {
+    name: string;
+    description: string;
+    // What the tool takes, as the model is shown it. A BOUND argument is
+    // deliberately absent: `bind:`'s promise is that the model cannot see, name
+    // or change it.
+    parameters?: Record<string, unknown>;
+    // The author's `bind:` lines, per action. REPORTED, not honoured — this port
+    // has nothing to fill them from.
+    bind?: Record<string, Record<string, string>>;
+    // The author's `remember-as:` lines, per action. Reported: no store here.
+    "remember-as"?: Record<string, string>;
+    // Where the call would go. Reported: no client here.
+    reaches?: { kind: string; where: string; method: string };
+  }[];
   // Written procedures the agent may consult. A stage of a loop may narrow to
   // one, and until this field existed `may-use: [refund-policy]` — a skill the
   // agent's own `uses:` line lists — aborted the run here with *"which this
@@ -346,6 +371,35 @@ export function notDoneHere(spec: AgentSpec): string[] {
         `model the transport was constructed with.`,
     );
   }
+  // AND THE THREE LINES ON A TOOL THIS PORT CANNOT CARRY OUT. They reached it as
+  // nothing at all for a round: `ToolSpec` has six fields and the wall sent two,
+  // so `bind:`, `remember-as:` and `connect:`/`url:` were neither honoured nor
+  // named. Being a smaller port is allowed; being smaller in silence is the T7
+  // breach this whole list exists to prevent.
+  for (const t of spec.tools) {
+    for (const [action, wanted] of Object.entries(t.bind ?? {})) {
+      const where = action ? `${t.name}/${action}` : t.name;
+      out.push(
+        `bind: ${where} fills ${Object.keys(wanted).sort().map((a) => `\`${a}\``).join(", ")} ` +
+          `from the surrounding system, and nothing on this runtime supplies one — so ` +
+          `the call is made without it, and what it identifies is whatever the model ` +
+          `chose. The reference port fills it and reports when it cannot.`,
+      );
+    }
+    for (const [action, where] of Object.entries(t["remember-as"] ?? {})) {
+      const at = action ? `${t.name}/${action}` : t.name;
+      out.push(
+        `remember-as: ${at} keeps what it answered as \`${where}\`, and this runtime ` +
+          `has nowhere to keep it — so the next turn does not know it.`,
+      );
+    }
+    if (t.reaches && t.reaches.kind === "connect") {
+      out.push(
+        `connect: ${t.name} reaches \`${t.reaches.where}\`, and this runtime has no ` +
+          `client for it — the tool answers from whatever the caller passed in.`,
+      );
+    }
+  }
   if ((spec.watches ?? []).length > 0) {
     out.push(
       `watch: ${(spec.watches ?? []).join(", ")} — read and not written here, so ` +
@@ -484,7 +538,10 @@ export async function run(
     ...spec.tools.map((t) => ({
       name: t.name,
       description: t.description,
-      parameters: {},
+      // The author's own `takes:`, now that the wall carries it. It was `{}` for
+      // every tool in every workspace, so a model on this runtime was told a
+      // tool exists and never what to put in it.
+      parameters: t.parameters ?? {},
     })),
     // Every teammate is offered, whether or not this port can run them — word
     // for word what `harness.py` does, and it was missing here. Measured on the

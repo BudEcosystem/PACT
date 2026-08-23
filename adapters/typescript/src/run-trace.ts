@@ -62,6 +62,13 @@ class Watching implements Transport {
   name: string;
   told: string[] = [];
   offered: string[][] = [];
+  // WHAT the model was shown about each of them, not only that it was shown one.
+  // `offered` records names, and a name says nothing about whether the model
+  // could fill the call: this port handed every tool `parameters: {}` for a
+  // round, so the two ports agreed on the names and disagreed on everything the
+  // model actually needed. A conformance trace that cannot see that difference
+  // cannot be the evidence for the portability claim.
+  offeredShapes: Array<Record<string, unknown>>[] = [];
 
   private inner: Transport;
   // Forwarded when the inner transport has one. It was not, so the seventh
@@ -104,6 +111,7 @@ class Watching implements Transport {
   ): Promise<[string, ToolCall[]]> {
     this.told.push(system);
     this.offered.push(toolDefs.map((t) => String(t.name)));
+    this.offeredShapes.push(toolDefs.map((t) => ({ ...t })));
     return this.inner.modelCall(system, history, toolDefs);
   }
 }
@@ -219,6 +227,7 @@ process.stdout.write(
     phases: result.phases,
     told: transport.told,
     offered: transport.offered,
+    "offered-shapes": transport.offeredShapes,
     lattice: transport.lattice(),
   }),
 );

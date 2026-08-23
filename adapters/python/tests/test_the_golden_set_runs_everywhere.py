@@ -58,6 +58,7 @@ from pact_adapters.transports.openai_agents_transport import (  # noqa: E402
     OpenAIAgentsTransport,
 )
 from pact_adapters.transports.pydantic_ai_transport import PydanticAITransport  # noqa: E402
+from pact_adapters.ports import tool_payload  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[3]
 EXAMPLES = REPO / "examples"
@@ -178,7 +179,7 @@ def _there(spec: AgentSpec) -> dict[str, Any] | None:
     payload = json.dumps({
         "name": spec.name,
         "instructions": spec.instructions,
-        "tools": [{"name": t.name, "description": t.description} for t in spec.tools],
+        "tools": [tool_payload(t) for t in spec.tools],
         "maxSteps": spec.max_steps,
         "skills": [
             {

@@ -36,6 +36,7 @@ from pact_adapters.transports.langgraph_transport import LangGraphTransport  # n
 from pact_adapters.transports.mock import ReferenceTransport  # noqa: E402
 from pact_adapters.transports.openai_agents_transport import OpenAIAgentsTransport  # noqa: E402
 from pact_adapters.transports.pydantic_ai_transport import PydanticAITransport  # noqa: E402
+from pact_adapters.ports import tool_payload  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[3]
 EXAMPLE = REPO / "examples" / "refund-desk"
@@ -93,7 +94,7 @@ def _payload_for(spec: AgentSpec) -> str:
     return json.dumps({
         "name": spec.name,
         "instructions": spec.instructions,
-        "tools": [{"name": t.name, "description": t.description} for t in spec.tools],
+        "tools": [tool_payload(t) for t in spec.tools],
         "maxSteps": spec.max_steps,
         # The DOCUMENTS, not the names. Sending names meant no skill reached
         # any model in either port.
@@ -373,7 +374,7 @@ def test_the_typescript_port_says_what_it_does_not_do(spec: AgentSpec) -> None:
     payload_spec = json.dumps({
         "name": spec.name,
         "instructions": spec.instructions,
-        "tools": [{"name": t.name, "description": t.description} for t in spec.tools],
+        "tools": [tool_payload(t) for t in spec.tools],
         "maxSteps": spec.max_steps,
         "interceptors": ["redact-card-numbers"],
         "contextPolicy": "long-threads",

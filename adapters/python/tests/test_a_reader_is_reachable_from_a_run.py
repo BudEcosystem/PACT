@@ -428,6 +428,14 @@ LIBRARIES: dict[str, str] = {
         "live here, the surface does not (see HOST_API in "
         "`test_nothing_public_is_named_by_nothing.py`)"
     ),
+    "ports": (
+        "what crosses the wall to another implementation; reached by whoever "
+        "DRIVES a second port — the conformance suite here, and any host doing "
+        "the same — never from a run. It is the boundary contract, the same "
+        "standing as `SUPPLIED_BY_THE_HOST` one level out: the payload was five "
+        "hand-written copies of one line, and four of `ToolSpec`'s six fields "
+        "fell off the wall between them"
+    ),
     "evals": "grades a run; reached from `scoring`, never from `run`",
     "learning": "the improvement gate; reached from `scoring --propose`",
     "resolve": "binds a model; reached from `scoring` before a run starts",
