@@ -441,3 +441,38 @@ fn every_door_into_a_carried_program_is_priced_as_an_expert_one() {
         }
     }
 }
+
+/// A program a suite grades with is a program something names.
+///
+/// `metric.uri:` is written as who provides the score, a colon, then what it
+/// measures — and `program:<name>` is the third provider, added in P8 so an
+/// author can define a bar only they can define. The reachability register walks
+/// whole string values and their `/`-separated parts, so `program:house-style`
+/// registered the whole address and never the name inside it: the program was
+/// reported as one *"that nothing here names, so it never takes effect"*, about
+/// a line that grades every case in the suite.
+///
+/// The same shape as the rewriting sentence one door over, and the same repair
+/// in spirit: an address with structure is decomposed, rather than every string
+/// being split on every space.
+#[test]
+fn a_program_a_suite_grades_with_is_not_reported_as_unreached() {
+    let dst = broken("metric-uri", &[]);
+    // The interceptor is what named `house-style` in this fixture; take it away,
+    // so the eval's address is the only thing that names the program.
+    std::fs::remove_dir_all(std::path::Path::new(&dst).join("interceptors")).unwrap();
+    let agent = std::path::Path::new(&dst).join("agents/desk/agent.yaml");
+    let text = std::fs::read_to_string(&agent).unwrap();
+    std::fs::write(&agent, text.replace("interceptors:\n  - in-house-style\n", "")).unwrap();
+
+    std::fs::create_dir_all(std::path::Path::new(&dst).join("evals")).unwrap();
+    std::fs::write(
+        std::path::Path::new(&dst).join("evals/suite.yaml"),
+        "description: Checks the desk answers.\npopulation: authored-enumeration\nmust-pass: 70%\nmetrics:\n  - uri: program:house-style\n    threshold: 0.8\ncases:\n  inside-the-window:\n    when: my lamp broke, bought last week\n    expect:\n      verdict: inside\n",
+    )
+    .unwrap();
+
+    let (code, said) = run(&["check", &dst, "--deny-warnings"]);
+    assert_eq!(code, Some(0), "the suite grades with it, so something names it:\n{said}");
+    let _ = std::fs::remove_dir_all(&dst);
+}

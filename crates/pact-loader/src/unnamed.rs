@@ -240,6 +240,20 @@ fn collect<'a>(node: &'a Node, out: &mut BTreeSet<&'a str>) {
             for part in s.trim().split('/') {
                 out.insert(part.trim());
             }
+            // And an address written as who provides it, a colon, then what it
+            // is: `program:house-style`, `deepeval:faithfulness`,
+            // `pact:loop/standard`. A suite grading every case with
+            // `uri: program:house-style` was told that program "never takes
+            // effect", because the whole address was registered and the name
+            // inside it never was.
+            //
+            // The same bounded decomposition the `/` split is, and for the same
+            // reason: these are syntactic forms with a part that IS a name, not
+            // an excuse to split every string on every space — which would let
+            // any word of any `description:` silence this check.
+            for part in s.trim().split(':') {
+                out.insert(part.trim());
+            }
         }
         pact_doc::Value::List(items) => {
             for item in items {
