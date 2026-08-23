@@ -4080,7 +4080,7 @@ groups:
         surface: S-EXEC
         tier: core
         help: >
-          what it does, in plain sentences. Six sentences exist and they are
+          what it does, in plain sentences. Eight sentences exist and they are
           the only ones, because a sentence nobody can turn into behaviour is a
           rule that loads and does nothing:
           `anything that looks like a <thing>`, which hides it and leaves
@@ -4104,10 +4104,15 @@ groups:
           `"diagnos"` catches `diagnosis` and `diagnosed` because it is a
           prefix. For meaning, write a `judged:` rule in `evals/` with a
           `graded-by:` model to read it.
-          The first five are the same sentences `hide:` in `redaction.yaml`
+          `replace the answer with what <a program> returns` and
+          `replace what the model is told with what <a program> returns`, which
+          hand the words to a carried program and say back what it returns —
+          the two that need `change-the-answer` and `change-the-request`, and
+          the reason those two words are on `may:` again.
+          The first six are the same sentences `hide:` in `redaction.yaml`
           takes — one set of words for one act, so learning to write either one
           teaches you the other. That file may only hide, so it takes the first
-          three; this one may do all six if it says so under `may:`.
+          three; this one may do all eight if it says so under `may:`.
           The things that can be recognised are: card number, bank account,
           email address, phone number. Anything else is refused by name, with
           these forms listed — never accepted and quietly ignored.

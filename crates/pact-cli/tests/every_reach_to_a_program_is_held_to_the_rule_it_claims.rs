@@ -368,27 +368,37 @@ fn a_stage_that_writes_code_loads_where_a_room_is_declared() {
     let _ = std::fs::remove_dir_all(&dst);
 }
 
-/// The one thing that makes the `no-code` badge mean anything about programs.
+/// WRITING a program is priced as expert work, and that is what the badge rests on.
 ///
 /// `workspace.programs`' own comment states the D14 bargain: "no core capability
 /// may REQUIRE a program, a workspace that carries one simply does not earn the
 /// `no-code` badge, and deleting `programs/` must leave a working agent."
 ///
 /// The badge is not a computed artifact and does not need to be. What makes the
-/// sentence true is the TIER: every door into a carried program is `tier:
-/// expert`, so the author D13 describes — who builds everything in YAML and
-/// Markdown — never meets one, and every capability a program reaches has a
-/// plain-words way to do the same thing written beside it. That is checkable,
-/// and it was checked by nothing: `governance_is_complete` asks that every field
-/// HAS a tier and never which tier this one has.
+/// sentence true is the TIER on the act of writing one: the collection, the room
+/// it runs in, and every field a program itself is made of. An author who never
+/// leaves `tier: core` never writes one, so the no-code ceiling holds by
+/// construction rather than by anybody remembering.
 ///
-/// `description` is the exception and is core in every group in the
-/// specification — it is the line you write first whatever you are writing, and
-/// a group nobody core-tier reaches cannot be entered through it.
+/// **This is deliberately NOT a claim about every line that can NAME a program.**
+/// `agent.uses:` is `tier: core` and must be: it names tools first, and a
+/// program is one of four things it can hold. `action.program:` is core for the
+/// same reason `action.description:` is — you are already writing an action.
+/// Pricing those as expert would put a tier on the ordinary act of using a
+/// capability rather than on acquiring one, and every capability a program
+/// reaches has a plain-words alternative written beside it in its own help.
+///
+/// It was checked by nothing: `governance_is_complete` asks that every field HAS
+/// a tier and never which tier these have, so the whole bargain rested on nobody
+/// editing a word.
+///
+/// `description` is the exception inside the group and is core in every group in
+/// the specification — the line you write first whatever you are writing, and
+/// not a way in.
 ///
 /// Mutation: change `workspace.programs`' tier to `core`. Red, naming the field.
 #[test]
-fn every_door_into_a_carried_program_is_priced_as_an_expert_one() {
+fn writing_a_carried_program_is_priced_as_expert_work() {
     let text =
         std::fs::read_to_string(format!("{}/../../spec/schema.yaml", env!("CARGO_MANIFEST_DIR")))
             .expect("the specification is there");
@@ -417,8 +427,9 @@ fn every_door_into_a_carried_program_is_priced_as_an_expert_one() {
         assert_eq!(
             tier(group, field),
             "expert",
-            "`{group}.{field}` is a door into a carried program, and a core-tier door \
-             is one the author D13 describes is expected to walk through"
+            "`{group}.{field}` is part of acquiring a carried program, and pricing it \
+             `core` puts it in front of the author D13 describes, who builds \
+             everything in YAML and Markdown"
         );
     }
 

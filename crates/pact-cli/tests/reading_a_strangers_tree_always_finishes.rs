@@ -168,6 +168,33 @@ fn a_pactignore_that_points_outside_the_tree_is_not_read() {
     let _ = std::fs::remove_dir_all(&dst);
 }
 
+/// A shortcut to a real file INSIDE the tree is followed, because it reaches
+/// nothing the tree does not already hold.
+///
+/// The rule `Ignore::inherited` states is that nothing ABOVE the tree may reach
+/// into it, and the repair that stopped `.pactignore -> /etc/passwd` overshot:
+/// it refused every link, so a workspace whose `.pactignore` is a shortcut to a
+/// shared file one folder along inside the same tree silently stopped ignoring
+/// anything. And the sentence it printed — "a shortcut to something that is not
+/// a file" — was untrue of a link pointing straight at a file.
+#[test]
+fn a_pactignore_that_points_at_a_real_file_in_the_tree_is_read() {
+    let dst = seed("link-inside");
+    std::fs::write(dst.join("shared-ignore.txt"), "check-window.wasm\n").unwrap();
+    std::os::unix::fs::symlink("shared-ignore.txt", dst.join(".pactignore")).unwrap();
+    let (code, said) = within(20, &["check", &dst.to_string_lossy()]);
+    assert!(code.is_some(), "{said}");
+    assert!(
+        !said.contains("not-a-regular-file"),
+        "a link to a file in this tree points at a file:\n{said}"
+    );
+    assert!(
+        said.contains("ignored-on-purpose"),
+        "and the lines in it are this tree's ignore rules:\n{said}"
+    );
+    let _ = std::fs::remove_dir_all(&dst);
+}
+
 /// A payload file too big to describe is described anyway — by name and size.
 #[test]
 fn a_payload_file_with_no_ceiling_does_not_become_the_readers_problem() {

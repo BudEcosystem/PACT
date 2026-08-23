@@ -863,9 +863,37 @@ impl Ignore {
     /// dropped, and being told about a file you meant to ignore is the harmless
     /// direction. What it is NOT is silent — see [`Ignore::skipped`].
     pub fn load(dir: &Utf8Path) -> Self {
+        Self::load_within(dir, None)
+    }
+
+    /// The same, told where the tree it is loading begins.
+    ///
+    /// `root` is what makes a shortcut answerable. A link is followed when it
+    /// lands on a regular file INSIDE the tree — a `.pactignore` that is a
+    /// shortcut to a shared list one folder along is an ordinary thing to write,
+    /// and refusing every link stopped such a workspace ignoring anything while
+    /// telling it, untruthfully, that the link pointed at "something that is not
+    /// a file". A link that leaves the tree is refused, which is the rule
+    /// [`Ignore::inherited`] already states: nothing above the tree may reach
+    /// into it.
+    pub fn load_within(dir: &Utf8Path, root: Option<&Utf8Path>) -> Self {
         let at = dir.join(".pactignore");
         let Ok(meta) = std::fs::symlink_metadata(&at) else { return Self::default() };
-        if !meta.is_file() {
+        if meta.file_type().is_symlink() {
+            let inside = std::fs::canonicalize(&at).ok().and_then(|target| {
+                let target = Utf8PathBuf::from_path_buf(target).ok()?;
+                let base = root.and_then(|r| {
+                    std::fs::canonicalize(r)
+                        .ok()
+                        .and_then(|c| Utf8PathBuf::from_path_buf(c).ok())
+                })?;
+                let ok = target.starts_with(&base) && target.is_file();
+                Some(ok)
+            });
+            if inside != Some(true) {
+                return Self { patterns: Vec::new(), skipped: vec![at] };
+            }
+        } else if !meta.is_file() {
             return Self { patterns: Vec::new(), skipped: vec![at] };
         }
         let text = std::fs::read_to_string(&at).unwrap_or_default();
@@ -901,13 +929,13 @@ impl Ignore {
     /// loaded may reach into it.
     pub fn inherited(root: &Utf8Path, dir: &Utf8Path) -> Self {
         let Ok(rel) = dir.strip_prefix(root) else {
-            return Self::load(dir);
+            return Self::load_within(dir, None);
         };
         let mut at = root.to_path_buf();
-        let mut all = Self::load(&at);
+        let mut all = Self::load_within(&at, Some(root));
         for part in rel.components() {
             at = at.join(part.as_str());
-            let here = Self::load(&at);
+            let here = Self::load_within(&at, Some(root));
             all.patterns.extend(here.patterns);
             all.skipped.extend(here.skipped);
         }

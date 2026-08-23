@@ -48,6 +48,21 @@ export const DOES: readonly Does[] = [
   "think", "use-tools", "check-its-work", "ask-someone", "answer",
 ];
 
+/** Stage kinds the SPECIFICATION has and this port cannot carry out.
+ *
+ *  `run-code` is in `phase.does`'s closed list and always has been on this side
+ *  of the wall: a stage where the model writes the working and a locked room
+ *  runs it. This port has no room and no runner, so it cannot.
+ *
+ *  Written down because of what the alternative said. Falling through to the
+ *  unknown-kind refusal told the author `run-code` "is not something a stage can
+ *  do" — a false statement about the specification, from the port that is
+ *  supposed to be able to say exactly what it is smaller by. Refusing to start
+ *  is right, and it matches the reference port, which halts the run rather than
+ *  quietly turning the stage into a `think`; what has to be true is the reason.
+ */
+const KNOWN_ELSEWHERE: readonly string[] = ["run-code"];
+
 /** The finish line. Reserved: a stage may not be called this. */
 export const DONE = "done";
 
@@ -432,6 +447,14 @@ function readPhase(loopName: string, key: string, raw: unknown): Phase {
     );
   }
   const doesRaw = String(raw["does"] || "").trim();
+  if (KNOWN_ELSEWHERE.includes(doesRaw)) {
+    throw new LoopError(
+      `stage ${q(key)} of loop ${q(loopName)} says it does ${q(doesRaw)}, ` +
+        `which this runtime cannot do. The reference port runs it; this one has ` +
+        `no locked room to run a carried program in. ` +
+        `Fix: run this agent on the reference port, or take that stage out.`,
+    );
+  }
   if (!(DOES as readonly string[]).includes(doesRaw)) {
     throw new LoopError(
       `stage ${q(key)} of loop ${q(loopName)} says it does ${q(doesRaw)}, ` +

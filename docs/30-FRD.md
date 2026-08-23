@@ -167,7 +167,7 @@ recorded in the fidelity report. **MAY** — optional.
 | **FR-6.1.2** | ≥8 patterns MUST be expressible: supervisor, hierarchical, pipeline, map-reduce, swarm/handoff, debate, blackboard, market/auction. | AC-5.1 | ☐ |
 | **FR-6.1.3** | Shared state ("blackboard") MUST be declarable as a resource. | AC-5.1 | ☐ |
 | **FR-6.1.4** | The agent loop MUST be authored data over `perceive/plan/act/observe/reflect/halt`. | G-3 | ☐ |
-| **FR-6.1.5** | ≥6 loop patterns MUST be expressible: ReAct, Plan-Execute, Reflexion, Tree-of-Thought, self-consistency, CodeAct. | AC-5.2 | ☐ |
+| **FR-6.1.5** | ≥6 loop patterns MUST be expressible: ReAct, Plan-Execute, Reflexion, Tree-of-Thought, self-consistency, CodeAct. | AC-5.2 | ◐ — CodeAct ships as `does: run-code` (P8); ReAct and Plan-Execute ship; Reflexion ships in part; Tree-of-Thought and self-consistency do not. See `docs/70` §5.2, which holds the honest count. |
 | **FR-6.1.6** | Interceptors that can mutate state MUST exist, typed and declared, separate from observe-only hooks. | `eve-teardown.md` §10.10 | ☐ |
 | **FR-6.1.7** | Any agent MUST be usable as a node in any topology, and any topology MUST be exposable as an agent. | G-4 | ☐ |
 | **FR-6.2.1** | Learning MUST emit reviewable source — diffable spec files, never opaque state. | **T6** | ☐ |
