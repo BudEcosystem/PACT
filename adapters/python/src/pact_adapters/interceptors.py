@@ -1152,6 +1152,9 @@ def _compile_rules(
     # same test with different endings, and a second list beside this one would
     # be a second place for "no more than one refund" to be counted differently.
     guards: list[Callable[[dict[str, Any]], Decision | None]] = []
+    #: The guards whose condition is the WORDS rather than a count, run after any
+    #: rewriting so they see what will really be said. See `_mentions` below.
+    reads_the_words: list[Callable[[dict[str, Any]], Decision | None]] = []
     #: `(program, power)` per rewriting sentence, applied after the hiders and
     #: before the guards — a rewriter should see what the redactions left, and a
     #: guard should read what will actually be said.
@@ -1285,7 +1288,18 @@ def _compile_rules(
                     f'quotes, separated by commas — `if the answer mentions '
                     f'"diagnosis", "dosage", stop and say "..."`.'
                 )
-            guards.append(_mentions(words, m.group("why")))
+            # ON THE WORD-READING LIST, not the general guard list. It is the
+            # one sentence whose condition reads what the agent SAID, so it has
+            # to see what will actually be said — including anything a rewriting
+            # rule beside it introduced. Measured before this split: a rewriter
+            # whose program returned "this is a diagnosis" walked straight past
+            # `if the answer mentions "diagnos", stop and say "..."` in the same
+            # document, because the guard had already run on the words before.
+            #
+            # The counting guards stay where they are, and must: they are about
+            # how many times a TOOL was called, re-running one would count the
+            # same call twice, and a rewrite does not change a call count.
+            reads_the_words.append(_mentions(words, m.group("why")))
             continue
 
         if m := _CALL_LIMIT.match(text):
@@ -1413,6 +1427,14 @@ def _compile_rules(
                     # rewriter introduced.
                     payload = out
                     rewritten = by
+        # NOW the guards whose condition is the words. After any rewriting,
+        # because that is what makes them true of what will be said, and before
+        # the hiders, because a rule that stops on a word must see the word
+        # rather than `[removed]`.
+        for check in reads_the_words:
+            decided = check(payload)
+            if decided is not None:
+                return decided
         if not patterns:
             return Decision(changed=payload, by=rewritten) if rewritten else Decision()
         # Which field to mask comes from the payload in hand, not from how the

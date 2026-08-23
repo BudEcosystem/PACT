@@ -342,3 +342,49 @@ def test_the_floor_does_not_run_twice_when_nothing_rewrote() -> None:
     chain = Chain.from_document(FLOOR_AND_A_REWRITE, "desk", run_program=lambda n, a: a["content"])
     seen, _ = chain.run("turn.message.after", {"content": "card 4111111111111111 here"})
     assert seen["content"].count("[removed]") == 1, seen
+
+
+def test_a_rewriter_cannot_slip_past_the_stop_rule_beside_it() -> None:
+    """A rule that stops on a word must see the words that will be said.
+
+    `if the answer mentions "<word>", stop and say "<why>"` is the one sentence
+    in the vocabulary whose condition reads what the agent SAID. It ran with the
+    other guards, before any rewriting — so a rewriting rule in the same document
+    could introduce the very word it forbids and walk straight past it. Measured:
+    a program returning "this is a diagnosis" beside
+    `if the answer mentions "diagnos", stop and say "not here"` produced no stop
+    at all.
+
+    The counting guards stay where they were and must: they are about how many
+    times a TOOL was called, re-running one would count the same call twice, and
+    a rewrite does not change a call count.
+    """
+    doc = {
+        "programs": REWRITES["programs"],
+        "interceptors": {
+            "both": {
+                "description": "House style, and nothing clinical.",
+                "when": "turn.message.after",
+                "may": ["change-the-answer", "stop-the-run"],
+                "rules": [
+                    'if the answer mentions "diagnos", stop and say "not here"',
+                    "replace the answer with what house-style returns",
+                ],
+            }
+        },
+        "agents": {
+            "desk": {
+                "description": "Answers customers.",
+                "instructions": "Answer the question.",
+                "interceptors": ["both"],
+            }
+        },
+    }
+    chain = Chain.from_document(doc, "desk", run_program=lambda n, a: "this is a diagnosis")
+    _, decision = chain.run("turn.message.after", {"content": "hello"})
+    assert decision.stop == "not here", decision
+
+    # And the control: the same rule still stops on what the model itself said.
+    plain = Chain.from_document(doc, "desk", run_program=lambda n, a: a["content"])
+    _, on_its_own = plain.run("turn.message.after", {"content": "a diagnosis, probably"})
+    assert on_its_own.stop == "not here", on_its_own
