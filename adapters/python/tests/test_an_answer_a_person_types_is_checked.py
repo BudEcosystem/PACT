@@ -147,3 +147,60 @@ def test_a_question_with_no_check_is_untouched() -> None:
         raise AssertionError("nothing to run")
 
     assert q.validate({"approved": "yes"}, run_program=never).values["approved"] is True
+
+
+# ────────────────────────────── the same check, through the door a run uses
+
+
+def test_a_checked_answer_is_checked_on_a_real_run() -> None:
+    """Every test above calls `Question.validate` directly and hands it a runner.
+
+    That is the right way to test a validator and the wrong way to believe a
+    claim about a RUN. `rulings.answer_to` — the one caller in this port — never
+    passed one, so a question carrying `checked-by:` rejected EVERY answer with
+    *"nothing here can run a carried program"*: a sentence that is simply untrue
+    on a run whose host supplied one.
+
+    A check the author wrote that refuses every answer is worse than no check at
+    all — the person standing there is told their correct answer is wrong, and
+    the reason names a limitation that does not apply.
+    """
+    from pact_adapters import rulings
+
+    q = _question()
+    got = rulings.answer_to(
+        q, "how-much-to-refund", {"how-much-to-refund": "40.00 USD"},
+        run_program=lambda name, args: "ok",
+    )
+    assert got is not None and got.values["amount"] is not None, got
+
+
+def test_a_checked_answer_the_program_refuses_is_still_refused() -> None:
+    """The other half: a runner that says no is honoured, not swallowed."""
+    from pact_adapters import rulings
+    from pact_adapters.questions import Rejected
+
+    q = _question()
+    try:
+        rulings.answer_to(
+            q, "how-much-to-refund", {"how-much-to-refund": "4000.00 USD"},
+            run_program=lambda name, args: "that is over the ceiling",
+        )
+    except Rejected as e:
+        assert "ceiling" in str(e), str(e)
+    else:
+        raise AssertionError("a program that refuses an answer must refuse it")
+
+
+def test_a_run_with_no_runner_still_says_so_honestly() -> None:
+    """And where there really is nothing to run it, the old sentence is right."""
+    from pact_adapters import rulings
+    from pact_adapters.questions import Rejected
+
+    q = _question()
+    try:
+        rulings.answer_to(q, "how-much-to-refund", {"how-much-to-refund": "40.00 USD"})
+    except Rejected as e:
+        assert "nothing here can run a carried program" in str(e), str(e)
+    else:
+        raise AssertionError("with no runner the honest answer is the refusal")

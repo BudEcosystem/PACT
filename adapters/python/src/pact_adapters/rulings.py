@@ -39,7 +39,7 @@ resume exactly-once.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from .questions import APPROVED, Answer, Question, Rejected, quoted
 from .suspension import GO_AHEAD, WAITING_FOR_ANOTHER_AGENT, clears
@@ -72,11 +72,22 @@ def where(about: str, field: str, how_many: int) -> str:
 
 
 def answer_to(
-    question: "Question | None", about: str, given: Mapping[str, Any]
+    question: "Question | None",
+    about: str,
+    given: Mapping[str, Any],
+    run_program: "Callable[[str, dict[str, Any]], str] | None" = None,
 ) -> "Answer | None":
     """Read one person's answer to `question` out of a run's flat answers.
 
     `None` means they were never asked, or have not answered yet.
+
+    `run_program` is the host's, and it is here because `checked-by:` is: a
+    question may name a carried program that reads the answer before the run goes
+    on with it. This was the only caller of `Question.validate` and it never
+    passed one, so every question carrying that line rejected EVERY answer with
+    "nothing here can run a carried program" — a sentence that is untrue on a run
+    whose host supplied one, told to a person standing there with a correct
+    answer.
     """
     if question is None:
         return None
@@ -88,11 +99,15 @@ def answer_to(
     }
     if not raw:
         return None
-    return question.validate(raw)
+    return question.validate(raw, run_program=run_program)
 
 
 def ruling(
-    reason: str, about: str, question: "Question | None", given: Mapping[str, Any]
+    reason: str,
+    about: str,
+    question: "Question | None",
+    given: Mapping[str, Any],
+    run_program: "Callable[[str, dict[str, Any]], str] | None" = None,
 ) -> Ruling:
     """What the answers this run has been given say about one wait.
 
@@ -136,7 +151,7 @@ def ruling(
             return Ruling.NOT_YET
 
     try:
-        answered = answer_to(question, about, given)
+        answered = answer_to(question, about, given, run_program=run_program)
     except Rejected:
         # An answer that does not fit is not an answer. The run stays parked and
         # the person is told what to type, rather than the value being dropped —
@@ -151,7 +166,10 @@ def ruling(
 
 
 def refused_in_words(
-    about: str, question: "Question | None", given: Mapping[str, Any]
+    about: str,
+    question: "Question | None",
+    given: Mapping[str, Any],
+    run_program: "Callable[[str, dict[str, Any]], str] | None" = None,
 ) -> str:
     """What the record says happened to a call a person refused.
 
@@ -186,7 +204,7 @@ def refused_in_words(
     asked_of = question.asked_of if question is not None else ()
     who = f"the person answering for {', '.join(asked_of)}" if asked_of else "a person"
     try:
-        answered = answer_to(question, about, given)
+        answered = answer_to(question, about, given, run_program=run_program)
     except Rejected:  # pragma: no cover - only reached if the caller mis-orders
         answered = None
     because = answered.because if answered is not None else ""

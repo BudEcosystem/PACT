@@ -1434,7 +1434,10 @@ async def run(
                 if name not in delegates:
                     continue
                 if (
-                    ruling(NEEDS_APPROVAL, name, asking.for_call(name, {}), given)
+                    ruling(
+                        NEEDS_APPROVAL, name, asking.for_call(name, {}), given,
+                        run_program=run_program,
+                    )
                     is Ruling.CLEARED
                 ):
                     already.setdefault(
@@ -1463,13 +1466,15 @@ async def run(
                 if ruling(
                     CONTEXT_TOO_LONG, "conversation",
                     asking.for_call("conversation", {}), given,
+                    run_program=run_program,
                 ) is Ruling.CLEARED:
                     # Permission for THIS step only. A later step that overflows
                     # again is a different `at`, so a different correlation key,
                     # so a second decision — the same rule the budget wait uses.
                     carried_on_at.add(start)
                 elif said or answer_to(
-                    asking.for_call("conversation", {}), "conversation", given
+                    asking.for_call("conversation", {}), "conversation", given,
+                    run_program=run_program,
                 ):
                     result.halted = "context-too-long"
                     result.output = result.steps[-1].text if result.steps else ""
@@ -1985,6 +1990,7 @@ async def run(
                 w.asked_as or slot,
                 _asked_at(asking, w.reason, c.name, c.args),
                 given,
+                run_program=run_program,
             )
             for slot, c in zip(slots, calls)
             for w in step_gated.get(slot, ())
@@ -2029,6 +2035,7 @@ async def run(
                 wait.asked_as or at,
                 _asked_at(asking, wait.reason, refused_call.name, refused_call.args),
                 given,
+                run_program=run_program,
             )
             if len({where_at for where_at, _, _ in turned_down}) < len(group):
                 said_no += (
@@ -2391,7 +2398,8 @@ async def run(
             )
             said = (
                 answer_to(
-                    asking.for_call(call.name, call.args, about_call), slot, given
+                    asking.for_call(call.name, call.args, about_call), slot, given,
+                    run_program=run_program,
                 )
                 if slot in step_gated
                 else None
