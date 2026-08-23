@@ -2367,7 +2367,28 @@ async def run(
                 ran.append(call)
                 continue
             if call.name in already:
-                outputs.append(already[call.name])
+                # A call carried out BEFORE the run parked, replayed from where
+                # it was put aside. Two things lived below this `continue` and
+                # neither happened to it: what the author said to keep was never
+                # kept, so a gated batch lost the fact; and the interceptor chain
+                # never saw the result, so a redaction rule did not apply to a
+                # value that goes into `history` and is read back to the model
+                # exactly like any other.
+                #
+                # The same shape as the code stage one file over: a result that
+                # reaches the model by a path no rule watches. Parking is not a
+                # reason for the rules to stop.
+                seen, decision = chain.run(
+                    "step.tool.completed",
+                    {"name": call.name, "content": already[call.name]},
+                )
+                if decision.stop is not None:
+                    result.halted = "stopped-by-rule"
+                    result.output = decision.stop
+                    bus.emit("turn.run.cancelled", at=(i,), reason=decision.stop)
+                    return result
+                _keep_what_it_answered(spec, call, seen["content"])
+                outputs.append(seen["content"])
                 ran.append(call)
                 continue
             # Before the call, not after it. `tool-calls-at-most: 40` that lets

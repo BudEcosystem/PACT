@@ -195,3 +195,77 @@ def test_the_seed_is_declared_host_supplied() -> None:
 
     assert "remembered" in SUPPLIED_BY_THE_HOST
     assert "remembered" not in DERIVED_FROM_THE_DOCUMENT
+
+
+# ─────────────────── the same tool call, on the way back from a park
+
+
+def test_a_result_put_aside_before_a_park_still_meets_the_rules_and_the_memory() -> None:
+    """Parking is not a reason for the rules to stop.
+
+    A batch where one call is gated carries out the ungated calls first and puts
+    their answers aside under `already`; the resumed run replays them from there.
+    Two things sat below that replay and neither happened: `remember-as:` never
+    wrote, so a gated batch lost the fact the author declared, and the
+    interceptor chain never saw the result — so a redaction rule did not apply to
+    a value that goes into `history` and is read back to the model exactly like
+    any other.
+
+    The same shape as the code stage one file over: a result reaching the model
+    by a path no rule watches.
+    """
+    from pact_adapters.harness import ToolCall as TC
+    from pact_adapters.suspension import Resumption, Suspension
+
+    doc = _tree()
+    doc["redaction"] = {
+        "description": "Never let a card number out.",
+        "hide": ["anything that looks like a card number"],
+    }
+    # A second tool on the same desk, gated, so the first call is carried out and
+    # put aside while the run parks on the second.
+    doc["tools"]["escalate"] = {
+        "description": "Sends it upstairs.",
+        "url": "https://desk.example.com",
+        "method": "post",
+        "actions": {"send": {"description": "Sends it.", "takes": {"why": "text"}, "spends-money": "yes"}},
+    }
+    doc["agents"]["desk"]["uses"] = ["orders", "escalate"]
+
+    spec = AgentSpec.from_document(doc, "desk")
+    script = Script([
+        Turn(
+            "Looking it up and escalating.",
+            (
+                TC("orders", {"action": "look-up", "order-number": "O-1"}),
+                TC("escalate", {"action": "send", "why": "unhappy"}),
+            ),
+        ),
+        Turn("Done."),
+    ])
+    tools = {
+        "orders": lambda a: "order O-1: paid with 4111111111111111",
+        "escalate": lambda a: "sent",
+    }
+
+    first = asyncio.run(
+        run(spec, ReferenceTransport(script), "where is my order?", tools,
+            remembered={"verified-account": "ACC-77"},
+            needs_approval=frozenset({"escalate"}))
+    )
+    assert first.halted == "suspended", first.halted
+
+    parked = Suspension.from_json(first.suspension.to_json())
+    resumed_spec = AgentSpec.from_document(doc, "desk")
+    done = asyncio.run(
+        run(resumed_spec, ReferenceTransport(script), "where is my order?", tools,
+            remembered={"verified-account": "ACC-77"},
+            needs_approval=frozenset({"escalate"}),
+            resume=parked,
+            answer=Resumption(parked.correlation_key, {"escalate": "yes"}))
+    )
+
+    kept = resumed_spec.facts.held.get("last-order-seen", "")
+    assert kept, f"the replayed answer is still remembered: {resumed_spec.facts.held}"
+    assert "4111111111111111" not in kept, kept
+    assert "4111111111111111" not in json.dumps(done.trace()), done.trace()
