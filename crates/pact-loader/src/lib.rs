@@ -141,6 +141,7 @@ pub mod handover;
 pub mod money;
 pub mod policy;
 pub mod ports;
+pub mod clauses;
 pub mod programs;
 pub mod reach;
 pub mod reachability;

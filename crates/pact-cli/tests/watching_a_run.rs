@@ -193,11 +193,23 @@ fn the_observe_half_is_checked_by_the_same_tool_and_the_same_rule_as_the_change_
     // whichever half of the lattice it was typed into. Two rules for one mistake
     // is how the two halves come to disagree about what an address is.
     let rule_of = |text: &str| -> String {
+        // The rule of the first PROBLEM. It used to be the first `rule:` line of
+        // any kind, which was the same thing until a NOTE could come first —
+        // §8.3a rule 4 says, of a skill, how many written rules it holds, and
+        // `skills/` sorts before `watch/`. A fact the author asked to be told is
+        // not the mistake under test.
+        let mut a_note = false;
         text.lines()
-            .find(|l| l.trim_start().starts_with("rule: "))
+            .find_map(|l| {
+                let t = l.trim();
+                if t.starts_with("note: ") {
+                    a_note = true;
+                } else if t.starts_with("error: ") || t.starts_with("warning: ") {
+                    a_note = false;
+                }
+                (!a_note).then(|| t.starts_with("rule: ").then(|| t.to_string())).flatten()
+            })
             .unwrap_or_else(|| panic!("no rule named in:\n{text}"))
-            .trim()
-            .to_string()
     };
 
     let watched = broken("same-rule-w", "watch/tool-calls.yaml", "step.tool.completed", "turn.answer.after");

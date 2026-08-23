@@ -67,15 +67,35 @@ fn check(root: &std::path::Path) -> String {
     String::from_utf8_lossy(&o.stdout).into_owned()
 }
 
-/// The rule name of each problem the author was shown, in the order shown.
+/// The rule name of each PROBLEM the author was shown, in the order shown.
 ///
 /// Counted off the rendered output rather than off a `Diagnostics` value: one
 /// rendered block is one thing the reader has to deal with, and that is the
 /// quantity this file is about.
+///
+/// Notes are not counted, and the distinction is this file's own: its sentence
+/// is "one misspelt line must be one PROBLEM, not two". A note says something
+/// true about a document that is not wrong with it — §8.3a rule 4's *"this skill
+/// holds five written rules under `## Rules`"* is the first of them — and
+/// counting one as a problem would make this file fail for a line that tells the
+/// author something they asked to be told.
 fn problems(text: &str) -> Vec<String> {
-    text.lines()
-        .filter_map(|l| l.trim().strip_prefix("rule: ").map(str::to_string))
-        .collect()
+    let mut out = Vec::new();
+    let mut a_note = false;
+    for line in text.lines() {
+        let t = line.trim();
+        if t.starts_with("note: ") {
+            a_note = true;
+        } else if t.starts_with("error: ") || t.starts_with("warning: ") {
+            a_note = false;
+        }
+        if let Some(rule) = t.strip_prefix("rule: ")
+            && !a_note
+        {
+            out.push(rule.to_string());
+        }
+    }
+    out
 }
 
 #[test]

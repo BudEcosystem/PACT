@@ -101,7 +101,17 @@ fn shares_that_add_up_to_less_than_the_pot_stay_legal() {
     let text = String::from_utf8_lossy(&out.stdout);
 
     assert!(out.status.success(), "90% of a pot is a reserve, not a mistake:\n{text}");
-    assert!(!text.contains("rule: loader/"), "and nothing may be said about it: {text}");
+    // Nothing may be said ABOUT THE SHARES, which is what this test is about. It
+    // used to assert that no `loader/` rule fired at all, which was the same
+    // thing for as long as the shares were the only thing this tree could draw a
+    // line about — and stopped being so when §8.3a rule 4 began saying, of a
+    // skill, how many written rules it holds. A note about a document the author
+    // asked to be told about is not a complaint about their percentages.
+    assert!(
+        !text.contains("loader/shares") && !text.to_lowercase().contains("share of"),
+        "and nothing may be said about it: {text}"
+    );
+    assert!(!text.contains("warning:") && !text.contains("error:"), "{text}");
     let _ = std::fs::remove_dir_all(&root);
 }
 

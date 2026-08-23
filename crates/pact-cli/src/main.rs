@@ -1643,6 +1643,11 @@ fn validate(
         // workspace could carry a program in one language and a locked room that
         // cannot run it, and the first call was the only way to find out.
         pact_loader::programs::check(root, &schema, &mut diags);
+        // And §8.3a rule 4, which is not a check at all: where the written rules
+        // in each skill begin. The floor under them is held on the executing
+        // side; this is the half that lets an author SEE the boundary, so moving
+        // it is a decision rather than a discovery.
+        pact_loader::clauses::say_where_the_rules_are(root, &mut diags);
         // And the sixth, which runs the other way round from every check above:
         // `names:` asks whether a name RESOLVES, and never whether anything names
         // a document. A fully-written approval policy that no agent points at
