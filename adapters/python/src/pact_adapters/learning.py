@@ -287,6 +287,18 @@ def a_written_rule_changed(before: str, after: str) -> "Classification | None":
     with no floor. Rule 2 calls the permission CLASS-4 BY CONSTRUCTION, which is
     a property of the clause and not of anybody's memory.
     """
+    # THE HEADING FIRST, because it explains everything below it. Renaming one
+    # takes every clause under it out of the zone, so the clause-set difference
+    # fires as well — and telling an author who reworded a title that five
+    # written rules were removed sends them looking for a deletion they did not
+    # make. The reason a person reads has to name the edit they actually did.
+    if _headings_that_make_rules(before) != _headings_that_make_rules(after):
+        return Classification(
+            Risk.HIGH,
+            f"the heading that makes those lines rules changed, which moves every one of "
+            f"them in or out of the rules — that boundary is `{POLICY_CLAUSES}`, not "
+            f"`skill-notes`",
+        )
     was, now = _written_rules(before), _written_rules(after)
     added = sorted(now - was)
     if added:
@@ -301,13 +313,6 @@ def a_written_rule_changed(before: str, after: str) -> "Classification | None":
             Risk.HIGH,
             f"a written rule was taken out from under a `Rules`/`Policy` heading, and a "
             f"rule is changed under `{POLICY_CLAUSES}` — {gone[0][:70]!r}",
-        )
-    if _headings_that_make_rules(before) != _headings_that_make_rules(after):
-        return Classification(
-            Risk.HIGH,
-            f"the heading that makes those lines rules changed, which moves every one of "
-            f"them in or out of the rules — that boundary is `{POLICY_CLAUSES}`, not "
-            f"`skill-notes`",
         )
     return None
 

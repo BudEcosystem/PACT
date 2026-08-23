@@ -147,7 +147,13 @@ def test_renaming_the_heading_that_makes_them_rules_needs_a_person() -> None:
     assert after != before, "the fixture has the heading"
     got = classify(Proposal("content", before, after), GRANTS_THE_NOTES)
     assert got.risk is Risk.HIGH, got
-    assert "policy-clauses" in got.reason or "heading" in got.reason, got.reason
+    # And it says the HEADING moved, not that rules were deleted. Renaming takes
+    # every clause out of the zone, so the clause-set difference fires too — and
+    # telling an author who reworded a title that five written rules were removed
+    # sends them looking for a deletion they did not make. The reason a person
+    # reads has to name the edit they actually did.
+    assert "heading" in got.reason, got.reason
+    assert "taken out" not in got.reason, got.reason
 
 
 def test_deleting_a_written_rule_still_needs_a_person() -> None:
