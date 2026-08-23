@@ -664,12 +664,38 @@ class Chain:
         trail would show a change to something that never happened.
         """
         current = dict(payload)
+        rewrote = False
         for i in self.at(address):
             decision = i.apply(current)
             if decision.stop is not None or decision.redirect is not None:
                 return current, decision
             if decision.changed is not None:
                 current = decision.changed
+            if decision.by in (Power.CHANGE_ANSWER, Power.CHANGE_REQUEST):
+                rewrote = True
+        # THE FLOOR IS WHAT THE WORDS MEET LAST, when something rewrote them.
+        #
+        # Putting rewriting before hiding inside one document's body fixed one
+        # shape and left the commoner one: the hiding is `redaction.yaml` and the
+        # rewrite is an interceptor, so they are separate rules in this list. The
+        # floor runs FIRST and has to — `_hiding_runs_first` refuses any other
+        # order, because a guard that reads a value must never see an unmasked
+        # one — and a rewriter after it introduced a card number that nothing
+        # masked. Measured, on two files an author would ordinarily write: the
+        # whole number came out.
+        #
+        # So the floor is applied once more, and only when the words really
+        # changed under it: a chain that hides and does nothing else is
+        # byte-identical to what it was. `redaction.yaml`'s promise is "what must
+        # never leave this workspace", and a floor that the last rule can step
+        # over is not one.
+        if rewrote:
+            for i in self.at(address):
+                if i.name != REDACTION:
+                    continue
+                again = i.apply(current)
+                if again.changed is not None:
+                    current = again.changed
         return current, Decision()
 
     @staticmethod

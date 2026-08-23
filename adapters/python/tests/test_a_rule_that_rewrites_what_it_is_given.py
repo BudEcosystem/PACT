@@ -280,3 +280,65 @@ def test_a_workspace_with_no_rewriting_rule_gains_nothing() -> None:
     _, result = _through_run(plain, "hello", run_program=lambda n, a: "SHOUTED")
     assert result.output == "hello"
     assert not result.unenforced, result.unenforced
+
+
+# ─────────────────────── the floor is a floor, across documents
+
+
+#: A rewriting rule in `interceptors/`, and the hiding in `redaction.yaml` — two
+#: files, which is the ordinary way a workspace is written: the desk's own style
+#: rule beside the workspace-wide thing that must never leave.
+FLOOR_AND_A_REWRITE = {
+    "programs": REWRITES["programs"],
+    "redaction": {
+        "description": "Never let a card number out.",
+        "hide": ["anything that looks like a card number"],
+    },
+    "interceptors": {
+        "in-house-style": {
+            "description": "Says everything the way this desk says it.",
+            "when": "turn.message.after",
+            "may": ["change-the-answer"],
+            "rules": ["replace the answer with what house-style returns"],
+        }
+    },
+    "agents": {
+        "desk": {
+            "description": "Answers customers.",
+            "instructions": "Answer the question.",
+            "interceptors": ["in-house-style"],
+        }
+    },
+}
+
+
+def test_the_workspace_floor_masks_what_a_rewriter_introduced() -> None:
+    """The attack §8.5 says a rewrite cannot mount, through the other door.
+
+    The first repair put rewriting before hiding inside ONE document's body. It
+    did nothing about the commoner shape: the hiding is `redaction.yaml`, the
+    rewrite is an interceptor, and they are separate rules in the chain. The
+    workspace floor runs first — it has to, so a guard that READS a value never
+    sees an unmasked one — and a rewriter after it introduced a card number that
+    nothing masked. Measured: the whole number came out.
+
+    `redaction.yaml`'s promise is "what must never leave this workspace", and a
+    floor is only a floor if it is what the words meet last.
+    """
+    chain = Chain.from_document(
+        FLOOR_AND_A_REWRITE, "desk",
+        run_program=lambda n, a: "your card 4111111111111111 was refunded",
+    )
+    seen, _ = chain.run("turn.message.after", {"content": "done"})
+    assert "4111111111111111" not in seen["content"], seen
+
+
+def test_the_floor_does_not_run_twice_when_nothing_rewrote() -> None:
+    """It is applied again only when the words changed under it.
+
+    A chain that hides and does nothing else must be byte-identical to what it
+    was, or every workspace pays for a case it does not have.
+    """
+    chain = Chain.from_document(FLOOR_AND_A_REWRITE, "desk", run_program=lambda n, a: a["content"])
+    seen, _ = chain.run("turn.message.after", {"content": "card 4111111111111111 here"})
+    assert seen["content"].count("[removed]") == 1, seen
