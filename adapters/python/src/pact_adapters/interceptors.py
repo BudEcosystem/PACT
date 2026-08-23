@@ -272,6 +272,27 @@ class Refused(RuntimeError):
     """An interceptor tried to do something it did not declare."""
 
 
+@dataclass
+class Runner:
+    """The host's program runner, in a box a chain can be handed one of later.
+
+    A `Chain` is built by `AgentSpec.from_document`, which is handed a loaded
+    document and nothing else (invariant P-1) — no runner exists at that moment,
+    because running a carried body is the host's and the host arrives at `run()`.
+    The runner used to be closed over at build time, so through the shipped entry
+    point a rewriting rule never rewrote anything: measured, `run(...,
+    run_program=shout)` returned the words unchanged and `RunResult.unenforced`
+    was empty, while the chain object nobody could see held the sentence saying
+    why.
+
+    A box rather than a rebuilt chain, because rebuilding would need the document
+    the spec no longer carries, and because every rule in one chain shares one
+    runner by construction this way.
+    """
+
+    call: "Callable[[str, dict[str, Any]], str] | None" = None
+
+
 class InterceptorError(ValueError):
     """An authoring mistake in an interceptor document.
 
@@ -436,6 +457,7 @@ class Interceptor:
         source: "Path | None" = None,
         programs: "Mapping[str, Any] | None" = None,
         run_program: "Callable[[str, dict[str, Any]], str] | None" = None,
+        runner: "Runner | None" = None,
         unenforced: "list[str] | None" = None,
     ) -> "Interceptor":
         """Build one from the document shape — `when`, `may`, `rules`.
@@ -479,7 +501,7 @@ class Interceptor:
         body, goes_to = _compile_rules(
             source, name, rules, when, may,
             programs=programs,
-            run_program=run_program,
+            runner=runner if runner is not None else Runner(run_program),
             unenforced=unenforced,
         )
 
@@ -568,6 +590,24 @@ class Chain:
     #: had run — the "loads and does nothing" failure this whole vocabulary
     #: exists to refuse, one level up.
     unenforced: list[str] = field(default_factory=list)
+    #: The host's program runner, shared by every rule in this chain.
+    #:
+    #: Set at build time when a caller has one, and set again by
+    #: [`Chain.use_runner`] at the start of a run — which is the only moment a
+    #: host's runner exists, and the moment the chain was never handed one.
+    runner: Runner = field(default_factory=Runner)
+
+    def use_runner(self, run_program: "Callable[[str, dict[str, Any]], str] | None") -> None:
+        """Hand this chain the host's program runner, at the start of a run.
+
+        `AgentSpec.from_document` builds the chain from a loaded document and has
+        no runner to give it; `run()` had one and never passed it on. So a
+        rewriting rule — the whole of what §8.5 gave back to authors — never
+        rewrote anything through the shipped entry point, and the sentence the
+        chain recorded about it reached nobody.
+        """
+        if run_program is not None:
+            self.runner.call = run_program
 
     def add(self, i: Interceptor) -> None:
         """Put it where it RUNS, not where it arrived.
@@ -657,6 +697,9 @@ class Chain:
         agent = agents.get(agent_key) or {}
         declared = doc.get("interceptors") or {}
         chain = Chain()
+        # ONE box, shared by every rule this chain builds, so `use_runner` at the
+        # start of a run reaches all of them.
+        chain.runner = Runner(run_program)
         # THE LINE THAT READS `redaction.yaml`. Without it that file was in the
         # schema, `required:`, resolved by the loader, printed by `pact show` and
         # read by nothing in either language — so the worked example's own
@@ -699,7 +742,7 @@ class Chain:
                     Interceptor.from_document(
                         name, declared[name], source,
                         programs=doc.get("programs"),
-                        run_program=run_program,
+                        runner=chain.runner,
                         unenforced=chain.unenforced,
                     )
                 )
@@ -717,7 +760,7 @@ class Chain:
                 Interceptor.from_document(
                     name, entry, source,
                     programs=doc.get("programs"),
-                    run_program=run_program,
+                    runner=chain.runner,
                     unenforced=chain.unenforced,
                 )
             )
@@ -1052,7 +1095,7 @@ def _compile_rules(
     where: str = "",
     fixed_powers: bool = False,
     programs: "Mapping[str, Any] | None" = None,
-    run_program: "Callable[[str, dict[str, Any]], str] | None" = None,
+    runner: "Runner | None" = None,
     unenforced: "list[str] | None" = None,
 ) -> tuple[Body, frozenset[str]]:
     """Turn an interceptor's sentences into one body, and name where it may go.
@@ -1300,6 +1343,9 @@ def _compile_rules(
         # which is the "loads and does nothing" failure the whole vocabulary
         # exists to refuse.
         if rewriters and "content" in payload:
+            # Read at CALL time, not closed over at build time: the chain is
+            # built from the document and the runner arrives with the run.
+            run_program = runner.call if runner is not None else None
             if run_program is None:
                 for named, _ in rewriters:
                     said = (

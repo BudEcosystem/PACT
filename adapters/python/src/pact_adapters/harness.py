@@ -171,7 +171,17 @@ class RunResult:
     #: naming the file, the line, what was not applied and a line to type. A
     #: different fact from `unmetered` and so a different field: `unmetered` is
     #: a ceiling nobody could measure, this is a rule nobody could evaluate.
-    unenforced: tuple[str, ...] = ()
+    _unenforced: tuple[str, ...] = ()
+    #: What the interceptor CHAIN could not do, held as the chain's own live list
+    #: rather than copied.
+    #:
+    #: A rewriting rule with nothing to run its program leaves the words as they
+    #: were and records why — and the chain records it WHILE the run is going, at
+    #: whichever moment that rule fires. Copying the list at any one point would
+    #: catch whatever had happened by then and miss the rest, and this run has a
+    #: dozen ways to end. So the list itself is carried and read at the end,
+    #: which is the only reading that is right at every exit.
+    chain_notes: list[str] = field(default_factory=list)
     #: Watches the author wrote that this run could not write down, because
     #: nothing said where the workspace is. Same door as `unmetered` and for the
     #: same reason: an author who wrote a watch and got neither a record nor a
@@ -216,6 +226,30 @@ class RunResult:
     #: message array and leaves "did it summarise, and does it actually fit now"
     #: unanswerable to its own caller.
     tidyings: list["Tidied"] = field(default_factory=list)
+
+    @property
+    def unenforced(self) -> tuple[str, ...]:
+        """Rules the author wrote that this run could not carry out.
+
+        Read rather than stored, so what the CHAIN could not do arrives with
+        everything else. The chain records its own sentences while the run is
+        going — a rewriting rule with nothing to run its program leaves the words
+        as they were and says why — and the only reader was the `Chain` object,
+        which a host never holds. So the run was silent about the one thing §8.5
+        gave back to authors, on every run where it did not happen.
+
+        Deduplicated, because one chain is shared across the steps of a run and a
+        rule that could not fire on three of them is one thing to fix.
+        """
+        out = list(self._unenforced)
+        for said in self.chain_notes:
+            if said not in out:
+                out.append(said)
+        return tuple(out)
+
+    @unenforced.setter
+    def unenforced(self, value: "Sequence[str]") -> None:
+        self._unenforced = tuple(value)
 
     @property
     def spent(self) -> float:
@@ -702,6 +736,14 @@ async def run(
     # documents in the worked example loaded, validated and did nothing, and
     # the card numbers they say they stop reached the model.
     chain = spec.chain if chain is None else chain
+    # AND THE RUNNER THE CHAIN COULD NOT HAVE BEEN BUILT WITH. `AgentSpec.
+    # from_document` is handed a loaded document and nothing else (P-1), so it
+    # has no host to ask for one; `run()` has one and never passed it on. Through
+    # the shipped entry point a rewriting rule therefore never rewrote anything —
+    # measured, `run(..., run_program=shout)` returned the words unchanged — and
+    # the sentence the chain recorded about it reached nobody, because only the
+    # chain object held it and a host does not hold the chain.
+    chain.use_runner(run_program)
     now = time.time() if now is None else now
     clock = clock or time.monotonic
     # The author's own join policy, unless a caller supplied one. `is None`, not
@@ -942,6 +984,9 @@ async def run(
     )
 
     result = RunResult(output="")
+    # The chain's own live list, so what a rule could not do is reported by the
+    # RUN and not only by an object the host never sees.
+    result.chain_notes = chain.unenforced
     # The author's own `watch/` documents, attached to the bus this run emits
     # on. The OBSERVE half of the event lattice, and deliberately a kind of its
     # own rather than an interceptor with an empty `may:` — Eve's 28 lifecycle

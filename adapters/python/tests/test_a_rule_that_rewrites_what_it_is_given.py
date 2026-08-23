@@ -218,3 +218,65 @@ def test_a_rewriter_that_introduces_a_card_number_is_still_masked() -> None:
     )
     seen, _ = chain.run("turn.message.after", {"content": "done"})
     assert "4111111111111111" not in seen["content"], seen
+
+
+# ────────────────────────────── the same rule, through the door a host uses
+
+
+def _through_run(doc: dict, said: str, **kw):
+    """The shipped entry point, not the `Chain` API.
+
+    Every test above builds a `Chain` by hand and hands it a runner. That is the
+    right way to test a chain and the wrong way to believe a claim about a RUN:
+    `AgentSpec.from_document` builds the chain with no runner, and `run()` passed
+    its runner to loops, projections and code stages and never to the chain. So a
+    rewriting rule never rewrote anything on a real run, and the honest sentence
+    the chain recorded about it never reached `RunResult.unenforced` either.
+    """
+    import asyncio
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+    from pact_adapters.harness import run
+    from pact_adapters.ir import AgentSpec
+    from pact_adapters.script import Script, Turn
+    from pact_adapters.transports.mock import ReferenceTransport
+
+    spec = AgentSpec.from_document(doc, "desk")
+    return spec, asyncio.run(
+        run(spec, ReferenceTransport(Script([Turn(said)])), "can I have a refund?", {}, **kw)
+    )
+
+
+def test_a_rewriting_rule_rewrites_on_a_real_run() -> None:
+    """The claim §8.5's withdrawal rests on, through the door a host really uses."""
+    _, result = _through_run(
+        REWRITES, "we will refund that", run_program=lambda n, a: a["content"].upper()
+    )
+    assert result.output == "WE WILL REFUND THAT", result.output
+
+
+def test_a_run_with_nothing_to_run_the_rewriter_says_so() -> None:
+    """And where there is no runner, the run says what it could not do.
+
+    The chain recorded the sentence all along and nothing collected it, so the
+    only way to see it was to hold the `Chain` object — which a host does not.
+    """
+    _, result = _through_run(REWRITES, "we will refund that")
+    assert result.output == "we will refund that"
+    said = " ".join(result.unenforced)
+    assert "house-style" in said, result.unenforced
+    assert "left exactly as they were" in said, result.unenforced
+
+
+def test_a_workspace_with_no_rewriting_rule_gains_nothing() -> None:
+    """Additive inertness for the wiring itself."""
+    plain = {
+        "agents": {
+            "desk": {"description": "Answers customers.", "instructions": "Answer the question."}
+        }
+    }
+    _, result = _through_run(plain, "hello", run_program=lambda n, a: "SHOUTED")
+    assert result.output == "hello"
+    assert not result.unenforced, result.unenforced

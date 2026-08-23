@@ -111,7 +111,16 @@ def test_every_channel_the_documents_name_is_a_channel_the_run_carries() -> None
     a report nobody knows to read, which is the same defect the fifth channel
     itself was.
     """
-    declared = [f.name for f in dataclasses.fields(RunResult)]
+    # Fields AND properties. A channel is something a reader of a `RunResult`
+    # can ask for, and `unenforced` became a property when it started reading the
+    # interceptor chain's own live list alongside what the run recorded — the
+    # chain writes its sentences while the run is going, and this run has a dozen
+    # ways to end, so any single copying point would catch some and miss others.
+    # Asking only for fields would have called that channel missing while it was
+    # working better than before.
+    declared = [f.name for f in dataclasses.fields(RunResult)] + [
+        name for name in dir(RunResult) if isinstance(getattr(RunResult, name, None), property)
+    ]
 
     missing = [c for c in CHANNELS if c not in declared]
     assert not missing, (
