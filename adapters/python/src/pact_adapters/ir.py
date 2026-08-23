@@ -770,6 +770,33 @@ class AgentSpec:
         )
 
 
+def _questions_this_agent_puts(doc: dict[str, Any], agent: dict[str, Any]) -> set[str]:
+    """Every question name this agent can reach, by any line that names one.
+
+    Crude on purpose and in one direction only: a name that turns out not to be
+    a question is dropped by the caller, and a question missed here costs a
+    sentence on `unenforced` rather than a wrong one. Enumerating the six fields
+    that can name a question would be a list to keep in step with the schema.
+    """
+    out: set[str] = set()
+
+    def walk(node: Any) -> None:
+        if isinstance(node, str):
+            out.add(node.strip())
+        elif isinstance(node, Mapping):
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, (list, tuple)):
+            for v in node:
+                walk(v)
+
+    walk(agent)
+    for named in _as_list(agent.get("uses")):
+        walk((doc.get("tools") or {}).get(named))
+    walk((doc.get("policies") or {}).get(str(agent.get("policy") or "")))
+    return out
+
+
 def _programs_may_reach_outside(doc: dict[str, Any]) -> bool:
     """Does this workspace's `allow-egress:` name `programs`?
 
@@ -801,6 +828,35 @@ def _programs_reached_by(doc: dict[str, Any], agent: dict[str, Any]) -> tuple[Pr
     for used in sorted(_as_list(agent.get("uses"))):
         if used in declared:
             reached.setdefault(used, []).append("uses")
+    # WHERE THE RUN GOES NEXT. `decided-by:` names a program with no tool
+    # anywhere near it, so this walk never saw one: a host with no runner was
+    # never told it could not route the loop, and the `allow-egress:` answer P8
+    # made real never reached the room that would run it.
+    shape = doc.get("loops") or {}
+    named_loop = str(agent.get("loop") or "")
+    chosen = shape.get(named_loop) if isinstance(shape, Mapping) else None
+    if isinstance(chosen, Mapping):
+        steps = chosen.get("steps") or {}
+        if isinstance(steps, Mapping):
+            for stage_name, stage in sorted(steps.items()):
+                if not isinstance(stage, Mapping):
+                    continue
+                then = stage.get("then") or {}
+                router = then.get("decided-by") if isinstance(then, Mapping) else None
+                if isinstance(router, str) and router in declared:
+                    reached.setdefault(router, []).append(f"{named_loop}/{stage_name}")
+    # AND THE ANSWER A PERSON TYPES. `checked-by:` is the same shape one door
+    # over: a question this agent puts, and a program that reads the answer
+    # before the run goes on with it.
+    questions = doc.get("questions") or {}
+    if isinstance(questions, Mapping):
+        for asked in sorted(_questions_this_agent_puts(doc, agent)):
+            q = questions.get(asked)
+            if not isinstance(q, Mapping):
+                continue
+            checker = q.get("checked-by")
+            if isinstance(checker, str) and checker in declared:
+                reached.setdefault(checker, []).append(f"{asked} (checked-by)")
     for used in sorted(_as_list(agent.get("uses"))):
         tool = tools.get(used) if isinstance(tools, Mapping) else None
         if not isinstance(tool, Mapping):

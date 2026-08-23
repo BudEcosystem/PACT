@@ -884,12 +884,28 @@ impl Loader {
     /// the wrong shape anywhere else, so an author who wrote one and wonders why
     /// nothing is ignored is told rather than left to work it out.
     ///
-    /// Reported once per walk that found it, which can mean twice for one file —
-    /// `Diagnostics` already folds identical entries, and the alternative was
-    /// threading a seen-set through two unrelated walks to prevent a duplicate
-    /// nobody would see.
+    /// Once per file, however many walks find it.
+    ///
+    /// The ignore list is INHERITED, so every directory from the root down asks
+    /// for the same `.pactignore` and a skipped one is found again at each level,
+    /// by both walks. The first version of this said `Diagnostics` folds
+    /// identical entries; it does not. Measured on a six-directory tree: NINE
+    /// copies of one sentence about one file — one thing to fix, rendered as a
+    /// wall, on a diagnostic whose whole job is to be noticed.
+    ///
+    /// Deduplicated against what has already been said rather than by threading a
+    /// seen-set through two unrelated walks: the list is short, the comparison is
+    /// the file's own span, and a check that reads the report it is writing
+    /// cannot fall out of step with it.
     fn say_which_ignore_files_were_skipped(&self, ignore: &Ignore, diags: &mut Diagnostics) {
         for at in ignore.skipped() {
+            if diags
+                .items()
+                .iter()
+                .any(|d| d.rule == "loader/not-a-regular-file" && d.span.file == *at)
+            {
+                continue;
+            }
             let link = std::fs::symlink_metadata(at).map(|m| m.file_type().is_symlink());
             diags.push(not_a_regular_file(at, link.unwrap_or(false), false));
         }

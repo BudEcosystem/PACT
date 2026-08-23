@@ -275,3 +275,96 @@ def test_a_workspace_with_no_runner_is_not_told_twice() -> None:
     """
     result = _run(_with_egress([]), "desk")
     assert not any("allow-egress" in u for u in result.unenforced), result.unenforced
+
+
+# ───────────────────────── the doors a run really starts a program through
+
+
+#: A desk whose loop is routed by a carried program, and whose question is
+#: checked by one. Neither has a tool anywhere near it.
+NO_TOOL_IN_SIGHT = {
+    "programs": {
+        "pick-next": {
+            "description": "Says which stage to go to next.",
+            "engine": "wasm",
+            "determinism": "pure",
+            "takes": {"said": "text"},
+            "answers-with": {"next": "text"},
+            "fuel": {"instructions-at-most": "10m", "when-it-runs-out": "stop-and-say-so"},
+        },
+        "within-the-ceiling": {
+            "description": "Says whether an amount is one this desk may give.",
+            "engine": "wasm",
+            "determinism": "pure",
+            "takes": {"amount": "money"},
+            "answers-with": {"verdict": "text"},
+            "fuel": {"instructions-at-most": "10m", "when-it-runs-out": "stop-and-say-so"},
+        },
+    },
+    "questions": {
+        "how-much": {
+            "description": "Asks a person how much to give back.",
+            "says": "How much should we refund?",
+            "answer": {"amount": "money"},
+            "asked-of": ["the refunds team"],
+            "if-nobody-answers": "stop-and-say-so",
+            "checked-by": "within-the-ceiling",
+        }
+    },
+    "loops": {
+        "works-it-out": {
+            "description": "Answer, and let a program say where to go next.",
+            "starts-at": "reply",
+            "steps": {
+                "reply": {
+                    "does": "answer",
+                    "then": {
+                        "answered": "done",
+                        "decided-by": "pick-next",
+                        "may-go-to": ["done"],
+                    },
+                }
+            },
+        }
+    },
+    "agents": {
+        "desk": {
+            "description": "Answers customers.",
+            "instructions": "Answer the question.",
+            "loop": "works-it-out",
+            "limits": {"asks": "how-much", "when-it-runs-out": "stop-and-say-so"},
+        }
+    },
+}
+
+
+def test_a_program_that_routes_the_loop_is_one_the_run_knows_about() -> None:
+    """`ProgramSpec` is the only thing a host is ever handed about a program.
+
+    It was built from two doors — a tool's action, and `uses:` — so a program
+    reached by `decided-by:` or `checked-by:` produced no spec at all. A host
+    with no runner was never told it could not route the loop, and the
+    `allow-egress:` answer that P8 made real never reached the room that would
+    run it.
+    """
+    spec = AgentSpec.from_document(NO_TOOL_IN_SIGHT, "desk")
+    named = {p.name for p in spec.programs}
+    assert "pick-next" in named, named
+    assert "within-the-ceiling" in named, named
+
+
+def test_a_run_with_no_runner_names_them_before_it_starts() -> None:
+    """And says which door each was reached through, so the author knows where
+    to look."""
+    result = _run(NO_TOOL_IN_SIGHT, "desk")
+    said = " ".join(result.unenforced)
+    assert "pick-next" in said, result.unenforced
+    assert "within-the-ceiling" in said, result.unenforced
+
+
+def test_the_grant_reaches_a_program_reached_without_a_tool() -> None:
+    """The whole of what `allow-egress: programs` delivers is this field."""
+    doc = dict(NO_TOOL_IN_SIGHT)
+    doc["allow-egress"] = ["programs"]
+    spec = AgentSpec.from_document(doc, "desk")
+    assert all(p.may_reach_outside for p in spec.programs), spec.programs

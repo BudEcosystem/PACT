@@ -124,15 +124,26 @@ fn a_pipe_named_pactignore_does_not_stop_the_reader_for_ever() {
     let _ = std::fs::remove_dir_all(&dst);
 }
 
-/// And it says what it did rather than pretending the file was empty.
+/// And it says what it did rather than pretending the file was empty — once.
+///
+/// The ignore list is INHERITED, so every directory from the root down asks for
+/// the same file and the same skipped one is found again each time. The comment
+/// that shipped with this said `Diagnostics` folds identical entries; it does
+/// not. Measured on a six-directory tree: NINE copies of one sentence about one
+/// file, which is one thing to fix rendered as a wall.
 #[test]
-fn a_pactignore_that_is_not_a_file_is_said_out_loud() {
+fn a_pactignore_that_is_not_a_file_is_said_out_loud_once() {
     let dst = seed("fifo-said");
     mkfifo(&dst.join(".pactignore"));
     let (_, said) = within(20, &["check", &dst.to_string_lossy()]);
     assert!(
         said.contains("not-a-regular-file") || said.contains("pactignore"),
         "an author has to be told which file was skipped and why:\n{said}"
+    );
+    assert_eq!(
+        said.matches("loader/not-a-regular-file").count(),
+        1,
+        "one file, one mistake, one sentence:\n{said}"
     );
     let _ = std::fs::remove_dir_all(&dst);
 }
