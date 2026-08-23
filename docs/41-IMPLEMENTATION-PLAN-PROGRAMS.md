@@ -120,8 +120,10 @@ case must be re-checked against the case it was fixing before.
 **P8's waves, individually:** 1 `uses:` takes a pure program · 2 `bind:
 remembers.<name>` and `remember-as:` · 3 the `program:` metric scheme · 4
 `question.checked-by:` · 5 `action.projects-with:` · 6 program-holed interceptor
-sentences · 7 `decided-by:`/`may-go-to:` · 8 `does: run-code` + codeact. Four
-built, four to go.
+sentences · 7 `decided-by:`/`may-go-to:` · 8 `does: run-code` + codeact. All
+eight built — the line here said "four built, four to go" for the whole of the
+time the other four were landing, which is the drift §0.1's table exists to stop
+and did not, because two places said it and only one was kept.
 
 **P9's residual, named rather than hidden:** `authoring.review_needed` and
 `may_bind` hold AD-85's rules and are declared HOST_API — the approval surface is

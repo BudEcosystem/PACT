@@ -1374,8 +1374,11 @@ def _compile_rules(
             decided = check(payload)
             if decided is not None:
                 return decided
-        # A rewriting sentence, applied after the hiders below have had their say
-        # about the value and before anything reads what will be said.
+        # A rewriting sentence, applied BEFORE the hiders below — the comment
+        # here said "after" for as long as it was true and stayed after it was
+        # not. The order is rewrite then hide, on purpose: the hiders have to see
+        # the words that will actually be said, including any a rewriter
+        # introduced.
         #
         # A rewriter with nothing to run it leaves the words EXACTLY as they were
         # and says so, rather than half-applying: a rule that silently passed the

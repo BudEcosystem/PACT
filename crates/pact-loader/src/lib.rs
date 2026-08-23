@@ -206,6 +206,9 @@ pub struct Loader {
     /// through five call sites that have nothing to do with counting.
     loaded_settings: std::cell::Cell<usize>,
     loaded_text: std::cell::Cell<usize>,
+    /// Payload bytes read to fingerprint them, across the whole load. See
+    /// [`charged`].
+    fingerprinted: std::cell::Cell<u64>,
     stopped: std::cell::Cell<bool>,
 }
 
@@ -282,22 +285,42 @@ fn too_big_to_fingerprint(size: u64) -> bool {
     size > MAX_FINGERPRINT_BYTES
 }
 
+/// Whether everything read so far, plus this, is more than the ceiling.
+///
+/// The per-file test above was the whole of it for a round, and the budget it
+/// says it mirrors is a RUNNING TOTAL: `loaded_text` accumulates across the load
+/// and `MAX_LOAD_TEXT` is compared against the sum. So a thousand files of 64 MB
+/// each was 64 GB of reading with nothing to stop it — the same hole the per-file
+/// ceiling was written to close, one level up from where it was closed.
+fn charged(spent: &std::cell::Cell<u64>, size: u64) -> bool {
+    let after = spent.get().saturating_add(size);
+    spent.set(after);
+    after > MAX_FINGERPRINT_BYTES
+}
+
 /// A file described by name and size, because reading it is not worth a
 /// reviewer's afternoon.
-fn too_big_to_describe(path: &Utf8Path, size: u64) -> Diagnostic {
+fn too_big_to_describe(path: &Utf8Path, size: u64, alone: bool) -> Diagnostic {
+    let why = if alone {
+        format!(
+            "it is {} MB on its own, which is more than the {MAX_LOAD_TEXT_MB} MB this \
+             reader will spend on one file",
+            size / (1024 * 1024)
+        )
+    } else {
+        format!(
+            "everything read to describe this tree already adds up to the \
+             {MAX_LOAD_TEXT_MB} MB this reader will spend on one"
+        )
+    };
     Diagnostic::warning(
         "loader/too-big-to-fingerprint",
         Span::whole_file(path),
-        format!(
-            "'{path}' is {} MB, so it is carried by name and size with no \
-             fingerprint. Reading it to describe it would cost whoever loads this \
-             tree more than the {MAX_LOAD_TEXT_MB} MB this reader will spend on one \
-             file.",
-            size / (1024 * 1024)
-        ),
+        format!("'{path}' is carried by name and size with no fingerprint, because {why}."),
         "Nothing is wrong with the tree; it just cannot be pinned by content. Split \
          the file, or keep it somewhere a `url:` points at, if two copies of this \
-         workspace have to be provably the same.",
+         workspace have to be provably the same."
+            .to_string(),
     )
 }
 
@@ -328,6 +351,7 @@ impl Loader {
             policy,
             loaded_settings: std::cell::Cell::new(0),
             loaded_text: std::cell::Cell::new(0),
+            fingerprinted: std::cell::Cell::new(0),
             stopped: std::cell::Cell::new(false),
         }
     }
@@ -515,8 +539,10 @@ impl Loader {
         if kind == FileKind::Opaque {
             // This arm returns BEFORE the `max_text_bytes` guard below, so it was
             // the second way past every byte budget the loader has.
-            let digest = if too_big_to_fingerprint(size) {
-                diags.push(too_big_to_describe(path, size));
+            let digest = if too_big_to_fingerprint(size)
+                || charged(&self.fingerprinted, size)
+            {
+                diags.push(too_big_to_describe(path, size, too_big_to_fingerprint(size)));
                 String::new()
             } else {
                 fingerprint(path)
@@ -1102,8 +1128,12 @@ impl Loader {
             // The size was already in hand from `metadata` on the line above,
             // and went unused: a file that says it is 8 GiB was read to the end
             // to be described.
-            let digest = if too_big_to_fingerprint(size_bytes) {
-                diags.push(too_big_to_describe(&path, size_bytes));
+            let digest = if too_big_to_fingerprint(size_bytes)
+                || charged(&self.fingerprinted, size_bytes)
+            {
+                diags.push(too_big_to_describe(
+                    &path, size_bytes, too_big_to_fingerprint(size_bytes),
+                ));
                 String::new()
             } else {
                 fingerprint(&path)

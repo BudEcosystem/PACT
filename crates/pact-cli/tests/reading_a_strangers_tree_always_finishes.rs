@@ -233,6 +233,42 @@ fn a_payload_file_with_no_ceiling_does_not_become_the_readers_problem() {
     let _ = std::fs::remove_dir_all(&dst);
 }
 
+/// Many files that each fit, and together do not.
+///
+/// The ceiling was per FILE, and the budget it says it mirrors is a running
+/// total — `loaded_text` accumulates across the whole load and `MAX_LOAD_TEXT`
+/// is compared against the sum. So a thousand files of 64 MB each was 64 GB of
+/// reading with nothing to stop it: the exact hole the per-file ceiling was
+/// written to close, one level up from where it was closed.
+#[test]
+fn payload_files_that_add_up_to_more_than_the_ceiling_stop_being_read() {
+    let dst = seed("many");
+    let body = dst.join("programs/check-window/body");
+    for n in 0..5 {
+        let f = std::fs::File::create(body.join(format!("part-{n}.wasm"))).unwrap();
+        // Stated, not occupied — 24 MiB each, so the third crosses a 64 MiB
+        // total while no single one comes near it.
+        f.set_len(24 * 1024 * 1024).unwrap();
+    }
+    let at = dst.to_string_lossy().into_owned();
+    let (code, said) = within(120, &["check", &at]);
+    assert!(code.is_some(), "{said}");
+    assert!(
+        said.contains("loader/too-big-to-fingerprint"),
+        "a tree that adds up to more than the ceiling is told so:\n{said}"
+    );
+
+    let (_, shown) = within(120, &["show", &at]);
+    let carried = shown.matches("\"$file\": \"part-").count();
+    let digests = shown.matches("\"digest\"").count();
+    assert_eq!(carried, 5, "every file is still carried by name:\n{shown}");
+    assert!(
+        digests < 5,
+        "the ones past the ceiling carry no fingerprint — {digests} digests for {carried} parts"
+    );
+    let _ = std::fs::remove_dir_all(&dst);
+}
+
 /// The positive control: an ordinary body is still fingerprinted.
 #[test]
 fn an_ordinary_payload_file_still_carries_its_fingerprint() {
