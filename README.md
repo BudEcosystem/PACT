@@ -250,6 +250,98 @@ Every diagnostic carries **where, what, why, and how** — a fix is required by
 the constructor's signature, so an unactionable error cannot be built. The
 intended reader cannot write code, so a message they cannot act on is a defect.
 
+Not everything a check has to say is a complaint. A **note** says something true
+about a document that is not wrong with it, and `--deny-warnings` stays green
+for one — a fact printed as a problem teaches an author to stop reading the
+output, which is the one thing this format cannot afford:
+
+```
+note: 'refund-policy' holds 5 written rules under `## Rules` — lines a person
+  has to approve before they change, whoever or whatever proposes it.
+  fix: Nothing to do. Move a rule out from under `## Rules`, or reword that
+  heading, and it stops being one — which is how you move this boundary.
+```
+
+---
+
+## The object model, and exact logic
+
+Two things an author reaches for once a workspace stops being one desk: *"these
+five desks are the same shape"* and *"this bit must be exactly right, not
+approximately right."* Both are authored in YAML, and both resolve to nothing —
+which is the point.
+
+**One shape, several desks.** `expects:` declares the holes; `with:` fills them;
+`based-on:` inherits by shallow merge; `base: yes` marks a shape nothing runs.
+Together they are inheritance, encapsulation and polymorphism, written the way
+the rest of the format is written.
+
+```yaml
+# agents/desk-pattern/agent.yaml — a pattern, not a desk
+expects:
+  domain:    { shape: text,  help: what this desk answers questions about }
+  daily-cap: { shape: money, help: the most one request may cost }
+description: A desk that answers questions about <domain>.
+limits:
+  cost-per-request-under: <daily-cap>
+
+# agents/refunds/agent.yaml — one of the desks
+based-on: desk-pattern
+with:  { domain: refunds, daily-cap: 0.05 USD }
+```
+
+**The pattern is resolved and removed.** A tree written this way and one written
+out longhand are not similar — they are the same document, down to the digest.
+Both shipped fixtures prove it, and you can run this yourself:
+
+```bash
+pact discover tests/trees/two-desks-one-pattern  # sha256:554f1ac71be9a23f…
+pact discover tests/trees/two-desks-longhand     # sha256:554f1ac71be9a23f…
+```
+
+`values:` does the same for a single figure — a spend cap written once and used
+in three files digests identically to the same cap typed three times
+(`one-figure-in-three-places` against `one-figure-longhand`). Nothing below the
+loader ever learns these features exist, which is what keeps every downstream
+claim — portability, digests, conformance — true of trees that use them.
+
+Because both are erased, `pact waits` records **where each one landed**, since
+by then the reference is gone and nothing else could say.
+
+**Exact logic, when getting it right matters more than reading it.** A carried
+program is a file in the folder with a declared engine, a determinism promise
+and a fuel ceiling. It runs in a locked room the host supplies, and a person
+consents before it runs at all:
+
+```bash
+pact waits tests/trees/a-desk-with-a-program
+# waits: [('may-we-run', 'needs-permission')]
+```
+
+Seven lines reach one: a tool's `program:`, an agent's `uses:`, an action's
+`projects-with:`, a question's `checked-by:`, a stage's `decided-by:`, an eval's
+`uri: program:<name>`, and a rewriting interceptor sentence. Each is held to the
+rules its own line claims — a router and a rewriter must be `pure`, because
+where a run goes and what it says have to be the same twice; a checker and a
+grader are deliberately not, because looking something up is what they are for.
+
+A stage may also write its own code and have the room run it (`does: run-code`,
+the sixth of FR-6.1.5's loop patterns). The snippet lands in the transcript
+verbatim, holds no structural authority, and is refused at check time in a
+workspace that declares no room. What the model wrote is what the room runs;
+what the transcript shows is what the hiding rules left, and the run says so
+when those differ.
+
+**All of it is `tier: expert`.** No core capability requires a program, deleting
+`programs/` leaves a working agent, and a workspace that carries one simply does
+not earn the `no-code` badge — held by a test over the specification's own tiers
+rather than by anybody remembering.
+
+**And memory is a variable the format can name.** `bind: remembers.<name>` reads
+what the conversation established into an argument the model never sees;
+`remember-as:` writes a tool's answer back. `never-from: tool output` is what
+stops one filling the other.
+
 ---
 
 ## Documents
@@ -260,6 +352,8 @@ intended reader cannot write code, so a message they cannot act on is a defect.
 | [`docs/01-DECISIONS.md`](docs/01-DECISIONS.md) | 28 binding decisions — **read this before proposing anything** |
 | [`docs/30-FRD.md`](docs/30-FRD.md) | 120 functional requirements, each traced to its justification |
 | [`docs/40-IMPLEMENTATION-PLAN.md`](docs/40-IMPLEMENTATION-PLAN.md) | Milestones M0–M8, gates, risks, and what would falsify the approach |
+| [`docs/50-NOT-COPIED.md`](docs/50-NOT-COPIED.md) | The refusal ledger — what was deliberately not copied from prior art, and what would bring each back |
+| [`docs/70-PRODUCTION-GAP-REGISTER.md`](docs/70-PRODUCTION-GAP-REGISTER.md) | Every gap between what is claimed and what is built, with its measurement |
 | [`research/notes/README.md`](research/notes/README.md) | Index of the research, with the 12 findings that changed the design |
 | [`.claude/workflows/pact-architecture.js`](.claude/workflows/pact-architecture.js) | The research → critique → reflect workflow that produced it |
 
@@ -268,18 +362,25 @@ intended reader cannot write code, so a message they cannot act on is a defect.
 ## Layout
 
 ```
-crates/          Rust core
-adapters/python/ the harness + Pydantic AI and LangGraph transports
-  pact-diag/     diagnostics — a fix is mandatory by construction
-  pact-doc/      span-preserving YAML / JSON / Markdown
-  pact-loader/   the Expansion Rule (tree → document)
-  pact-schema/   validation; the schema is data, not code
-  pact-cli/      `pact check`, `pact show`, `pact waits`, `pact discover`, `pact card`
-                 — never executes author code
-spec/schema.yaml the specification, written in PACT
-examples/        the worked no-code multi-agent example
-research/        14 studies + the 140-repo corpus (gitignored)
-docs/            thesis, decisions, FRD, plan
+crates/            Rust core
+  pact-diag/       diagnostics — a fix is mandatory by construction
+  pact-doc/        span-preserving YAML / JSON / Markdown
+  pact-loader/     the Expansion Rule (tree → document), and every check a
+                   document needs that a schema cannot make
+  pact-schema/     validation; the schema is data, not code
+  pact-cli/        `pact check`, `pact show`, `pact waits`, `pact discover`,
+                   `pact card` — never executes author code
+adapters/python/   the reference harness, six framework transports, the
+                   resolver, evals, learning and the port boundary
+adapters/typescript/ the second, independent port — Node, and smaller on
+                   purpose; it says which parts it is smaller by
+spec/schema.yaml   the specification, written in PACT
+spec/loops/        the six loop shapes, authored the way anybody's are
+examples/          the worked no-code multi-agent example, and eight
+                   orchestration patterns
+tests/trees/       small fixtures, each the smallest tree that shows one thing
+research/          14 studies + the 140-repo corpus (gitignored)
+docs/              thesis, decisions, FRD, plan, refusal ledger, gap register
 ```
 
 ---
@@ -307,7 +408,16 @@ harness-vs-native.
 
 **Learning emits source.** Every self-improvement is a signed, reviewable,
 revertible diff to a spec file. An agent that grows is still an agent you can
-read, fork, and port.
+read, fork, and port. A written rule under a `## Rules` heading in a skill needs
+a person however the edit is made — added, removed, reworded, or moved by
+renaming the heading over it — and `pact check` shows the author where that
+boundary falls rather than leaving them to trip over it.
+
+**Convenience erases itself.** Patterns, inherited shapes and shared figures all
+resolve and disappear before anything downstream reads the tree, so a workspace
+that uses them digests identically to one written out longhand. Every claim this
+project makes about portability, digests and conformance therefore covers trees
+that use them, without one line of special-casing anywhere below the loader.
 
 ---
 
