@@ -108,7 +108,11 @@ _RECORD_CANNOT_TAKE: dict[str, str] = {
     "context-policy": "no field for how a long conversation is kept",
     "evals": "no field for how you would know it works",
     "learning": "no field for whether it may improve itself",
-    "remembers": "no field for what survives a summary",
+    "remembers": (
+        "no field for what an agent remembers between turns — nor for the flag "
+        "saying which of it a summary must put back, nor for `bind: remembers.<n>` "
+        "and `remember-as:`, which read and write it"
+    ),
     "answers-with": "no field for the shape of the answer",
     "answers-with-mode": "no field for how that shape is put to the model",
     "run-inputs": "no field for what the surrounding system supplies",

@@ -1206,14 +1206,29 @@ async def run(
     # "`allow-egress: []` is a sentence a person approved, and a check that passes
     # under it turns that approval into decoration". One sentence, not one per
     # program, because there is one door and one host.
-    withheld = [p for p in spec.programs if not p.may_reach_outside]
-    if run_program is not None and withheld:
+    #
+    # Said BOTH ways round, which is the repair to the first version of this. It
+    # spoke only when the grant was withheld, so the safer arrangement was the
+    # noisy one and granting a carried body the outside world said nothing at
+    # all — the signal inverted, on the one line of this that a reviewer most
+    # wants to see.
+    if run_program is not None and spec.programs:
+        named = ", ".join("`" + p.name + "`" for p in spec.programs)
+        many = len(spec.programs) != 1
         result.unenforced = result.unenforced + (
-            f"`allow-egress:` does not name `programs`, so "
-            f"{', '.join('`' + p.name + '`' for p in withheld)} "
-            f"{'runs' if len(withheld) == 1 else 'run'} with the door shut — and PACT "
-            f"cannot check that it is: it never opens a carried body and never watches "
-            f"the room. Whatever supplied the runner holds that door.",
+            (
+                f"`allow-egress:` names `programs`, so {named} "
+                f"{'are' if many else 'is'} allowed to reach outside this box. What "
+                f"{'they' if many else 'it'} can actually reach is the room's, and "
+                f"PACT never opens a carried body or watches the room."
+            )
+            if spec.programs_may_reach_outside
+            else (
+                f"`allow-egress:` does not name `programs`, so {named} "
+                f"{'run' if many else 'runs'} with the door shut — and PACT cannot "
+                f"check that it is: it never opens a carried body and never watches "
+                f"the room. Whatever supplied the runner holds that door."
+            ),
         )
     if spec.context_policy is not None and tidy is None:
         result.unmetered = result.unmetered + ("context-policy",)

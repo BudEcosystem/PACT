@@ -255,15 +255,30 @@ def test_a_workspace_that_withheld_the_grant_is_told_pact_cannot_hold_the_door()
     assert "check-window" in said or "carried program" in said, result.unenforced
 
 
-def test_a_workspace_that_granted_it_is_not_told_anything() -> None:
-    """The other half. A report that fires either way is a report about nothing."""
+def test_a_workspace_that_granted_it_is_told_that_it_did() -> None:
+    """The other half, and it used to be silence.
+
+    This test asserted that granting `programs` said nothing, on the argument
+    that a report firing either way is a report about nothing. That argument was
+    wrong here, and the shape of the wrongness is the tell: it made the SAFER
+    arrangement the noisy one, and gave the reviewer nothing at all on the one
+    line they most want to see — that a carried body has been allowed out of the
+    box. A grant is not the absence of a refusal.
+
+    So there is a line either way, and each says the thing that is true of that
+    arrangement: what PACT cannot check when the door is shut, and what has been
+    allowed when it is open.
+    """
     result = _run(
         _with_egress(["programs"]),
         "desk",
         {"refund-window": lambda a: "inside"},
         run_program=lambda name, args: "inside",
     )
-    assert not any("allow-egress" in u for u in result.unenforced), result.unenforced
+    said = " ".join(result.unenforced)
+    assert "allow-egress" in said, result.unenforced
+    assert "reach outside" in said, result.unenforced
+    assert "does not name" not in said, "that is the other arrangement's sentence"
 
 
 def test_a_workspace_with_no_runner_is_not_told_twice() -> None:
