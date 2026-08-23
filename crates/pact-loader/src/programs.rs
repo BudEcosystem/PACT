@@ -267,6 +267,15 @@ const PROGRAMS: &str = "programs";
 struct Reach {
     /// The program's name, as the author wrote it.
     name: String,
+    /// Every collection the field could have been naming, in the order the
+    /// specification lists them.
+    ///
+    /// `uses:` names four — tools, skills, knowledge, programs — and resolution
+    /// takes the first that has the key. Without this, a workspace with a tool
+    /// and a program of the same name had `uses: tidy` counted as a program
+    /// reach when it is a tool: the sort of quiet mis-reading that only shows up
+    /// as a warning that did not appear.
+    collections: Vec<String>,
     /// Kept for the refusal a future reach-level check would print. Nothing
     /// reads it since the workspace-wide engine rule was withdrawn above.
     #[allow(dead_code)]
@@ -302,16 +311,40 @@ pub fn a_room_is_needed_with_no_tool_to_name_it(root: &Node, schema: &Schema) ->
     let Some(programs) = root.get("programs").and_then(Node::as_map) else { return false };
     let mut found = Vec::new();
     reaches(root, "workspace", schema, "", 0, &mut found);
-    if found
-        .iter()
-        .any(|r| !r.how.ends_with("in `program:`") && programs.get(r.name.as_str()).is_some())
-    {
+    if found.iter().any(|r| {
+        !r.how.ends_with("in `program:`")
+            && programs.get(r.name.as_str()).is_some()
+            && names_a_program(root, r)
+    }) {
         return true;
     }
     schema
         .names_in_sentences(root)
         .iter()
         .any(|n| n.collection == PROGRAMS && programs.get(n.name.as_str()).is_some())
+}
+
+/// Does this reach really name a PROGRAM, and not something listed before it?
+///
+/// A field naming several collections resolves against the first that has the
+/// key, so `uses: tidy` in a workspace holding both `tools: {tidy}` and
+/// `programs: {tidy}` is the tool. Reading it as a program was harmless in itself
+/// and wrong in a way nothing would show: a room excused from
+/// `nothing-points-at-it` because of a reach that is not one.
+fn names_a_program(root: &Node, reach: &Reach) -> bool {
+    for collection in &reach.collections {
+        if collection == PROGRAMS {
+            return true;
+        }
+        if root
+            .get(collection)
+            .and_then(Node::as_map)
+            .is_some_and(|m| m.get(reach.name.as_str()).is_some())
+        {
+            return false;
+        }
+    }
+    true
 }
 
 /// Every place this document names a carried program, found from the schema.
@@ -346,6 +379,7 @@ fn reaches(
                 let Some(name) = item.as_str() else { continue };
                 out.push(Reach {
                     name: name.trim().to_string(),
+                    collections: field.names.clone(),
                     at: item.span.clone(),
                     how: format!("'{trail}' names it in `{}:`", field.name),
                 });
