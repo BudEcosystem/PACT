@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import re
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -189,3 +190,57 @@ def test_ossa_is_refused_rather_than_invented() -> None:
         "the refusal has to be stated where somebody looking for the exporter "
         "will read it"
     )
+
+
+# ─────────────────────────── a carried program is not a written procedure
+
+
+def test_a_carried_program_is_not_exported_as_a_skill() -> None:
+    """`uses:` names four collections and the record has a field for one of them.
+
+    A registry's `skills:` list means *written procedures this agent consults* —
+    a person can open one and read it. A carried program is the opposite thing:
+    a compiled body with an engine, a determinism promise and a fuel ceiling,
+    which nothing opens and no one reads. Measured on the shipped fixture, the
+    record said:
+
+        "skills": ["check-window"]
+
+    of a WebAssembly body. A consumer indexing that record would believe this
+    agent holds a written procedure by that name, and nothing anywhere said
+    otherwise — the loss ledger, whose whole job is to name what a record cannot
+    hold, had no row for `programs:` at all.
+
+    So it comes out of `skills:` and goes into the ledger, which is the honest
+    place for a thing the target format has no field for.
+    """
+    REPO = Path(__file__).resolve().parents[3]
+    out = subprocess.run(
+        [sys.executable, "-m", "pact_adapters.exporting",
+         str(REPO / "tests/trees/a-desk-that-uses-a-program"), "desk"],
+        capture_output=True, text=True, cwd=str(REPO / "adapters/python"),
+        env={**os.environ, "PYTHONPATH": str(REPO / "adapters/python/src")},
+    )
+    assert out.returncode == 0, out.stderr[-400:]
+    record = json.loads(out.stdout[: out.stdout.index("\n\n")]) if "\n\n" in out.stdout else None
+    if record is None:
+        record = json.loads(out.stdout[: out.stdout.rindex("}") + 1])
+    assert "check-window" not in record.get("skills", []), (
+        f"a WebAssembly body is not a written procedure: {record.get('skills')}"
+    )
+    assert "programs" in out.stdout, (
+        "and the ledger has to say the record cannot hold one:\n" + out.stdout[-600:]
+    )
+
+
+def test_a_workspace_with_no_programs_still_exports_its_skills() -> None:
+    """The control. Taking programs out of `skills:` must not take skills out."""
+    REPO = Path(__file__).resolve().parents[3]
+    out = subprocess.run(
+        [sys.executable, "-m", "pact_adapters.exporting",
+         str(REPO / "examples/refund-desk"), "refund-desk"],
+        capture_output=True, text=True, cwd=str(REPO / "adapters/python"),
+        env={**os.environ, "PYTHONPATH": str(REPO / "adapters/python/src")},
+    )
+    assert out.returncode == 0, out.stderr[-400:]
+    assert "refund-policy" in out.stdout, "the flagship's written procedure still exports"

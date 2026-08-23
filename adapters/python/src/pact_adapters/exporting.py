@@ -165,7 +165,19 @@ def to_bud_agent_record(
     block = dict((document.get("agents") or {}).get(agent) or {})
     report = ExportReport(kind="a Bud AgentRecord", seen=tuple(sorted(block)))
 
-    uses = [str(u) for u in (block.get("uses") or [])]
+    named = [str(u) for u in (block.get("uses") or [])]
+    # `uses:` names four collections and the record has a field for one of them.
+    # A registry's `skills:` means WRITTEN PROCEDURES this agent consults — a
+    # person opens one and reads it. A carried program is the opposite: a
+    # compiled body with an engine, a determinism promise and a fuel ceiling,
+    # which nothing opens and no one reads. Measured on the shipped fixture, the
+    # record said `"skills": ["check-window"]` of a WebAssembly body, and a
+    # consumer indexing that would believe this agent holds a procedure by that
+    # name. It goes in the ledger instead, which is where a thing the target
+    # format has no field for belongs.
+    carried = set(document.get("programs") or {})
+    uses = [u for u in named if u not in carried]
+    reached = [u for u in named if u in carried]
     team = list((block.get("team") or {}))
     record: dict[str, Any] = {
         "apiVersion": "pact.dev/v1",
@@ -194,6 +206,13 @@ def to_bud_agent_record(
         },
     }
 
+    if reached:
+        report.not_carried["programs"] = (
+            "no field for a carried program — a compiled body with an engine, a "
+            "determinism promise and a fuel ceiling is not a written procedure, and "
+            f"putting {', '.join(sorted(reached))} in `skills:` would tell an index "
+            "this agent holds something a person can read"
+        )
     for present, where in (
         ("name", "`name`"), ("description", "`description`"),
         ("uses", "`skills`"), ("team", "`capabilities`, as `handoff:<name>`"),
