@@ -97,3 +97,60 @@ def test_a_path_is_normalised_but_never_rewritten_into_something_else() -> None:
     assert shape_for("file").read("evals/attachments/receipt.png") == (
         "evals/attachments/receipt.png"
     )
+
+
+# ───────────────────────── the line a person is told to type must be typeable
+
+
+def test_no_shape_tells_a_person_to_type_a_name_from_another_workspace() -> None:
+    """`Shape.example()` is not decoration — it is the line a person is told to
+    type, word for word:
+
+        'who-takes-it' has not been answered: 'who' is missing.
+        Add `who: refund-desk`.
+
+    Measured on a hospital workspace holding `triage` and `x-ray` and no refund
+    desk of any kind. The `agent` shape's example was the literal string
+    `refund-desk` — the flagship example's own agent — so every workspace on
+    earth was told to type a name out of somebody else's tree.
+
+    That is R56's defect exactly: *"the diagnostic hardcoded `allow-egress: []`,
+    so a workspace saying `[judge]` was told its own file said something it does
+    not, and an author who opens the file and sees otherwise stops believing the
+    checker."* Here it is one layer worse, because the reader is not the author —
+    it is a clinician with a patient waiting, being told to type a word that
+    resolves to nothing.
+
+    Every other row in that table is safe in a different way. `25.00 USD`, `3`
+    and `yes` are literals anybody can type anywhere; `a sentence`, `a picture`
+    and `a recording` read as descriptions of a kind. Only `agent` claimed to be
+    a value and named one that a given workspace almost certainly has not got.
+    """
+    from pact_adapters.questions import _EXAMPLE
+
+    workspaces = (REPO / "examples", REPO / "tests/trees")
+    named = {
+        p.parent.name
+        for root in workspaces
+        for p in root.rglob("agents/*/agent.yaml")
+    }
+    assert named, "the fixture workspaces should hold some agents"
+
+    offenders = sorted(k for k, v in _EXAMPLE.items() if v in named)
+    assert not offenders, (
+        f"the example for {offenders} is the name of a real agent in a shipped "
+        f"tree, and it is printed to a person answering in THEIR workspace.\n"
+        f"  fix: make it read as the kind of thing wanted, the way `a sentence` "
+        f"and `a recording` do — a placeholder that cannot be mistaken for a "
+        f"name is better than one that names somebody else's agent."
+    )
+
+
+def test_every_shape_still_offers_something_to_type() -> None:
+    """The control. Removing a misleading example must not leave an empty one:
+    a fix line with nothing after the colon teaches less than a wrong one."""
+    from pact_adapters.questions import _EXAMPLE, Shape
+
+    for kind in _EXAMPLE:
+        got = Shape(kind=kind).example()
+        assert got and got.strip(), f"{kind} offers nothing to type"

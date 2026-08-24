@@ -170,7 +170,20 @@ _EXAMPLE: Mapping[str, str] = {
     "images": "a picture",
     "audio": "a recording",
     "file": "a file",
-    "agent": "refund-desk",
+    # A KIND, not a name, and it is the only row here that has to be.
+    #
+    # `25.00 USD`, `3` and `yes` are literals anybody can type in any workspace;
+    # `a sentence`, `a picture` and `a recording` read as descriptions of a kind.
+    # This row said `refund-desk` — the flagship example's own agent — and
+    # `Shape.example()` is the line a person is told to type, word for word. So a
+    # hospital workspace holding `triage` and `x-ray` told a clinician with a
+    # patient waiting to `Add \`who: refund-desk\``, which resolves to nothing.
+    #
+    # That is R56 one layer worse: there the AUTHOR was told their file said
+    # something it does not; here the reader is not the author and cannot go and
+    # look. An answer shape whose values are names from THIS tree cannot have a
+    # correct literal here, so it does not pretend to.
+    "agent": "the name of an agent in this workspace",
 }
 
 
