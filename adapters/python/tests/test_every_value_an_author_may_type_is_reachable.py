@@ -66,7 +66,21 @@ SOMEBODY_ELSE_ACTS_ON_THE_WORD: dict[str, str] = {
     "port.if-still-running": "the scheduler decides what to do with an overlapping run",
     "learning.review": "the host schedules the review cycle",
     "learning.needs-a-person-to-approve": "the host routes each kind of change to a person",
-    "learning.keep-only-if": "the host decides whether a proposed change is kept",
+    # HALF DELEGATED, and the row said "the host decides" of a field this port
+    # branches on: `may_apply_without_a_person` reads
+    # `keep-only-if: a-person-approves-it` and refuses to apply anything without
+    # one (learning.py). What is the host's is the OTHER value —
+    # `scores-higher-on-evals` names a bar that only a run with a live model can
+    # clear, so nothing here can decide it either way.
+    #
+    # The distinction matters because a wrong excuse blinds the guard: registered
+    # as wholly delegated, a THIRD choice added to this field would be exempted
+    # in silence, while the code really does branch on the word.
+    "learning.keep-only-if": (
+        "`a-person-approves-it` is read here and refuses every automatic apply; "
+        "`scores-higher-on-evals` is the host's, since only a run against a live "
+        "model can clear that bar"
+    ),
     # A7 — PACT does not retrieve, embed, index or chunk.
     "knowledge.split-by": "the retrieval runtime breaks a document up",
     "knowledge.looked-up-by": "the retrieval runtime finds the passages",
