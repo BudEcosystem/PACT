@@ -124,3 +124,67 @@ fn a_card_for_a_base_is_refused() {
         "the fix must not offer the base back: {fix}"
     );
 }
+
+/// A card does not publish an address nobody can reach.
+///
+/// `agent_card` takes a `base_url` — it was always meant to be supplied — and
+/// the CLI passed the literal `"https://agents.local"`, with no way to give it
+/// anything else. Every card this repository has ever printed therefore carried
+///
+/// ```text
+/// "url": "https://agents.local/pact/refund-desk"
+/// ```
+///
+/// which resolves to nothing, anywhere, for anybody. And the card is the one
+/// artefact here that is *meant* to leave the machine: an A2A consumer reads
+/// that field to decide where to send work.
+///
+/// The same system already answers this question, and answers it the other way.
+/// `exporting.py` leaves `invocation.url` EMPTY on purpose and says why: *"where
+/// this deployment answers. A PACT tree is not deployed anywhere — that is what
+/// makes the same tree runnable in two places."* Two halves of one system, two
+/// answers, and the one that travels was the invented one.
+///
+/// `agent_card`'s own comment already knows the shape of the mistake — it
+/// refuses to print a card for a `base: yes` agent because that would be *"a lie
+/// with a URL on it"*. A URL that goes nowhere is the same lie with the subject
+/// changed.
+///
+/// So the operator supplies the host, and where they have not, the card
+/// publishes a RELATIVE reference: the path under it is PACT's to know, since it
+/// derives from the agent's own name, and the host is not. That resolves against
+/// whatever really serves the agent, and invents nothing.
+#[test]
+fn a_card_does_not_invent_a_host_nobody_can_reach() {
+    let (code, out, err) = run(&["card", "refunds", &tree()]);
+    assert_eq!(code, Some(0), "{out}{err}");
+    let card: serde_json::Value = serde_json::from_str(&out).expect("a card is JSON");
+    let url = card["url"].as_str().unwrap_or_default();
+    assert!(
+        !url.contains("agents.local"),
+        "the card publishes an address nobody can reach: {url:?}"
+    );
+    // A RELATIVE reference, which is the most informative true answer. The path
+    // under the host is PACT's to know — it derives from the agent's own name —
+    // and the host is not. Emitting the path without a host says exactly that,
+    // and resolves correctly against whatever really serves the agent; emitting
+    // nothing at all would throw away a fact this side does know.
+    assert_eq!(
+        url, "/pact/refunds",
+        "with no address given, the card publishes the path and no host: {url:?}"
+    );
+}
+
+/// And when the operator says where their agents answer, that is what it prints.
+#[test]
+fn a_card_publishes_the_address_the_operator_gave_it() {
+    let (code, out, err) =
+        run(&["card", "refunds", &tree(), "--base-url", "https://desks.acme.example"]);
+    assert_eq!(code, Some(0), "{out}{err}");
+    let card: serde_json::Value = serde_json::from_str(&out).expect("a card is JSON");
+    assert_eq!(
+        card["url"].as_str(),
+        Some("https://desks.acme.example/pact/refunds"),
+        "the address the operator gave, with the agent's own path under it"
+    );
+}

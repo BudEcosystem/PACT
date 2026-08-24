@@ -39,6 +39,10 @@ OPTIONS:
     --deny-warnings       Fail the run on a warning as well as on a problem. For
                           a pipeline, where a run with warnings and a run
                           without them are the same green tick.
+    --base-url <url>      For `pact card`: where your agents actually answer.
+                          Without it the card carries the path and no host — a
+                          tree is not deployed anywhere, and an address PACT
+                          invented would be one nobody can reach.
     --unsafe-spec         Validate against $PACT_SPEC instead of the specification
                           compiled into this binary. Development builds only, and
                           the source is named on every run that uses it.
@@ -52,7 +56,7 @@ OPTIONS:
 /// `every_option_the_usage_advertises_is_one_the_parser_accepts` reads both back
 /// out of the real binary and compares them, which is what keeps [`USAGE`]
 /// honest about this list rather than merely adjacent to it.
-const OPTIONS: &[&str] = &["--quiet", "--unsafe-spec", "--deny-warnings"];
+const OPTIONS: &[&str] = &["--quiet", "--unsafe-spec", "--deny-warnings", "--base-url"];
 
 /// What a diagnostic points at when the mistake is in the command rather than in
 /// a file.
@@ -289,7 +293,41 @@ fn run() -> Result<i32> {
     // `loader/never-offered` used to offer a fix that was itself refused when
     // typed, and this would have made that a wall.
     let deny_warnings = args.iter().any(|a| a == "--deny-warnings");
-    let positional: Vec<&String> = args.iter().filter(|a| !looks_like_an_option(a)).collect();
+    // Where this operator's agents really answer, for `pact card`.
+    //
+    // `agent_card` always took a base and the CLI always passed the literal
+    // `https://agents.local`, so every card ever printed carried an address
+    // nobody could reach — on the one artefact here that is MEANT to leave the
+    // machine, and that an A2A consumer reads to decide where to send work.
+    //
+    // The same system already answers this the other way: `exporting.py` leaves
+    // `invocation.url` empty on purpose, because "a PACT tree is not deployed
+    // anywhere — that is what makes the same tree runnable in two places". Where
+    // nobody has said, the card says nothing rather than inventing a host.
+    let base_url = args
+        .iter()
+        .position(|a| a == "--base-url")
+        .and_then(|i| args.get(i + 1))
+        .map(String::as_str)
+        .unwrap_or("");
+    // The value after `--base-url` is that flag's, not a path. Without this the
+    // address would be read as the workspace to load, and `pact card x . --base-url
+    // https://…` would look for a tree called `https://…`.
+    let mut positional: Vec<&String> = Vec::new();
+    let mut skip_next = false;
+    for a in args.iter() {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
+        if a == "--base-url" {
+            skip_next = true;
+            continue;
+        }
+        if !looks_like_an_option(a) {
+            positional.push(a);
+        }
+    }
 
     // Typing just `pact` is the first thing a new author does, and it used to
     // mean `check .`. From a repository root holding other checkouts that walk
@@ -317,7 +355,7 @@ fn run() -> Result<i32> {
                 .get(2)
                 .map(|s| Utf8PathBuf::from(s.as_str()))
                 .unwrap_or_else(|| Utf8PathBuf::from("."));
-            card_cmd(agent, &root, unsafe_spec)
+            card_cmd(agent, &root, unsafe_spec, base_url)
         }
         other => {
             // Four command-line refusals used to reach the reader as a bare
@@ -2451,7 +2489,7 @@ fn discover_cmd(path: &Utf8PathBuf, unsafe_spec: bool) -> Result<i32> {
     Ok(0)
 }
 
-fn card_cmd(agent: &str, root: &Utf8PathBuf, unsafe_spec: bool) -> Result<i32> {
+fn card_cmd(agent: &str, root: &Utf8PathBuf, unsafe_spec: bool, base_url: &str) -> Result<i32> {
     if agent.is_empty() {
         eprint!(
             "{}",
@@ -2490,7 +2528,7 @@ fn card_cmd(agent: &str, root: &Utf8PathBuf, unsafe_spec: bool) -> Result<i32> {
         root: root.clone(),
         document,
     };
-    match discover::agent_card(&found, agent, "https://agents.local") {
+    match discover::agent_card(&found, agent, base_url) {
         Some(card) => {
             out!("{}", serde_json::to_string_pretty(&card)?);
             Ok(0)
