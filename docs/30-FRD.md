@@ -29,7 +29,7 @@ recorded in the fidelity report. **MAY** — optional.
 | **FR-1.1.8** | Non-text payloads MUST become references carrying path, media type and size. Bytes MUST NOT be inlined. | D16 | ▣ |
 | **FR-1.1.9** | An unrecognised file inside a typed directory MUST be reported, never silently skipped. `.pactignore` MUST provide the explicit opt-out. | `eve-teardown.md` §10.6 | ◐ (`.pactignore` done; typed-directory reporting pending schema) |
 | **FR-1.1.10** | Symlinks MUST NOT be followed by default; cycles MUST be detected and reported. | supply-chain, D17 | ▣ |
-| **FR-1.1.11** | `explode` (document → tree) MUST be the inverse of the loader: `explode(collapse(X)) ≡ X`. | AC-1.2 | ☐ |
+| **FR-1.1.11** | `explode` (document → tree) MUST be the inverse of the loader: `explode(collapse(X)) ≡ X`. | AC-1.2 | ▣ — `exploding.py`, verified against the REAL loader rather than a re-implementation of it; 13 tests. One residual, recorded in `docs/70`: the round trip is exact up to trailing whitespace on prose, because a clipped block scalar keeps a newline the file form is trimmed of |
 
 ### 1.2 Progressive disclosure
 
