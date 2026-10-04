@@ -79,6 +79,7 @@ pydantic_ai = pytest.importorskip("pydantic_ai")
 
 from pydantic_ai import messages as sdk_messages  # noqa: E402
 from pydantic_ai.messages import (  # noqa: E402
+    ImageUrl,
     ModelRequest,
     ModelResponse,
     RetryPromptPart,
@@ -1027,7 +1028,11 @@ def test_the_marks_slot_is_told_apart_from_metadata_somebody_else_wrote() -> Non
     "part,names",
     [
         (
-            UserPromptPart(content=["what is wrong with this?", {"image": "torn.png"}]),
+            # A real image, since 2.54 refuses a non-`UserContent` item at
+            # construction (messages.py `UserPromptPart.__post_init__`).
+            UserPromptPart(
+                content=["what is wrong with this?", ImageUrl(url="https://example.com/torn.png")]
+            ),
             "UserPromptPart",
         ),
         (

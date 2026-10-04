@@ -34,6 +34,8 @@ still stops the call.
 
 from __future__ import annotations
 
+import contextlib
+
 import json
 import subprocess
 import sys
@@ -1298,7 +1300,24 @@ def test_the_skills_the_author_wrote_reach_the_model(document: dict) -> None:
     other = AgentSpec.from_document(document, "policy-checker", str(EXAMPLE))
     if not other.skills:
         pytest.skip("this agent names no skills")
+    from pydantic_ai.messages import ModelResponse, TextPart
+    from pydantic_ai.models.function import FunctionModel
+
     agent = build_agent(other, call_tool=lambda n, a: "ok")
-    said = "\n\n".join(i for i in agent._instructions if isinstance(i, str))
+    # What the model is SENT, read through a model that keeps it — not off the
+    # agent's private attributes, whose shape moved between 2.21 and 2.54.
+    sent: list[str] = []
+
+    def keep(messages, info):  # type: ignore[no-untyped-def]
+        sent.append(messages[-1].instructions or "")
+        return ModelResponse(parts=[TextPart("ok")])
+
+    from pydantic_ai.exceptions import UnexpectedModelBehavior
+
+    # The agent answers with a shape `ok` does not fit; what was SENT is the
+    # question here, so the run ending in a refused answer is beside the point.
+    with contextlib.suppress(UnexpectedModelBehavior):
+        agent.run_sync("hello", model=FunctionModel(keep))
+    said = "\n\n".join(sent)
     for skill in other.skills:
         assert skill.name in said, f"the skill {skill.name} never reached the model"

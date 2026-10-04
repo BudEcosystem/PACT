@@ -15,7 +15,7 @@ license = "Apache-2.0"
 # core module with the extras made unimportable, so a heavy import that creeps
 # into one fails the suite rather than somebody's install.
 dependencies = [
-    "pydantic-ai-slim>=2.18.0",
+    "pydantic-ai-slim>=2.54,<3",
     # Talk to a locally-served model, and to a locally-served grader.
     # `ollama_transport.py` and `judge.py` both `import httpx` directly, and
     # `scripts/pact-eval` PROBES for it — that probe is what decides whether a

@@ -448,13 +448,16 @@ def _read_capabilities(
 #:
 #: **Why it is here at all.** `docs/30-FRD.md` FR-4.1.14 does not merely prefer
 #: the `2026-07-28` MCP shape, it REQUIRES it, and names `2025-11-25` as the
-#: corpus shape not to target. Everything reachable from `pydantic_ai.mcp` is
-#: the second one: the `mcp` extra of `pydantic-ai-slim` pins
-#: `fastmcp-slim[client]>=3.3.0,<4`, that client is built on MCP SDK v1, and
-#: `mcp.types.LATEST_PROTOCOL_VERSION` in the installed SDK is literally
-#: `"2025-11-25"`. `MCPToolset.__aenter__` opens a session, awaits
-#: `client.initialize_result` and reference-counts re-entries — the handshake era
-#: verbatim. All four facts were read off the installed packages, not supposed.
+#: corpus shape not to target. RE-READ ON THE MOVE TO 2.54, when the pin this
+#: paragraph quoted moved: the `mcp` extra of `pydantic-ai-slim` 2.54 pins
+#: `fastmcp-slim[client]>=3.3.0,<5` (its pyproject.toml), which admits BOTH eras.
+#: FastMCP 4 is built on MCP SDK v2, whose `mcp.types.LATEST_PROTOCOL_VERSION` is
+#: `"2026-07-28"`, and `MCPToolset.__aenter__` opens a modern session with no
+#: `initialize` handshake when `client.initialize_result` is `None` (mcp.py:1177).
+#: FastMCP 3 is MCP SDK v1 (`"2025-11-25"`), and the same `__aenter__` awaits
+#: `client.initialize_result` — the handshake era verbatim. So which shape a run
+#: speaks is decided by which FastMCP the HOST installed, and the sentence now
+#: says that instead of naming one shape for every install.
 #:
 #: **Why it is tolerable rather than a defect.** Pydantic AI owns the connection
 #: on this path. The handshake happens in the author's process, on the author's
@@ -488,20 +491,25 @@ def _read_capabilities(
 #: at twice — and now with the two calls that close the gap, because a limit a
 #: reader cannot act on is one they read past.
 _MCP_SHAPE: str = (
-    "the MCP wire shape, which is one PACT's own FRD forbids. FR-4.1.14 requires "
+    "the MCP wire shape, which is decided by the FastMCP the host installs, and "
+    "one of the two it may be is one PACT's own FRD forbids. FR-4.1.14 requires "
     "the `2026-07-28` shape — stateless, no `initialize` handshake, no sessions, "
-    "an MRTR `input_required` retry in place of server-initiated requests — and "
-    "this path cannot reach it. `pydantic-ai-slim[mcp]` pins "
-    "`fastmcp-slim[client]>=3.3.0,<4`: FastMCP 3, over MCP SDK v1, whose "
-    "`mcp.types.LATEST_PROTOCOL_VERSION` is `2025-11-25` (the corpus shape "
-    "FR-4.1.14 names as the wrong one) and whose `MCPToolset.__aenter__` opens a "
-    "session and awaits `client.initialize_result`. So MCP reached through "
-    "`pydantic_ai.mcp` speaks the handshake era. TOLERABLE ON THIS PATH ONLY, "
+    "an MRTR `input_required` retry in place of server-initiated requests. "
+    "`pydantic-ai-slim[mcp]` 2.54 pins `fastmcp-slim[client]>=3.3.0,<5`, which "
+    "admits both eras: FastMCP 4, over MCP SDK v2 (whose "
+    "`mcp.types.LATEST_PROTOCOL_VERSION` is `2026-07-28`), opens a modern session "
+    "with no `initialize` handshake against a server that speaks it, and meets "
+    "FR-4.1.14; FastMCP 3, over MCP SDK v1 (`2025-11-25`, the corpus shape "
+    "FR-4.1.14 names as the wrong one), opens a session and awaits "
+    "`client.initialize_result`, and does not. "
+    "TOLERABLE ON THIS PATH ONLY, "
     "because Pydantic AI owns the connection: the handshake is theirs, in their "
     "process, on their pin, and PACT's harness makes no MCP call and ships no "
-    "client. It is not a precedent — a PACT-owned MCP client built to this shape "
-    "would break FR-4.1.14 outright. "
-    "AD-71 is NOT HELD here either, and since M5 W3 that is a statement about "
+    "client. It is not a precedent — a PACT-owned MCP client built to the "
+    "handshake shape would break FR-4.1.14 outright; install "
+    "`fastmcp-slim[client]>=4` beside the exported agent so the modern shape is "
+    "the one it can open. "
+"AD-71 is NOT HELD here either, and since M5 W3 that is a statement about "
     "THIS PATH rather than about PACT. The snapshot AD-71 asks for now exists: "
     "`resources/<server>.yaml` carries `tool-snapshot-digest`, "
     "`tool-snapshot-taken-at` and `tool-snapshot-max-age`, `mcp_bridge.digest_of` "
@@ -953,7 +961,7 @@ def _what_it_carries(agent: Any) -> tuple[str, ...]:
     carries("model", getattr(agent, "model", None))
     carries("name", getattr(agent, "name", None))
     carries("description", getattr(agent, "description", None))
-    carries("instructions", list(getattr(agent, "_instructions", ()) or ()))
+    carries("instructions", _authored_instructions(agent))
     carries("system_prompts", tuple(getattr(agent, "_system_prompts", ()) or ()))
     carries("model_settings", getattr(agent, "model_settings", None))
     # `str` is `Agent`'s default output type and means the author declared no
@@ -1134,6 +1142,27 @@ def _model_id(model: Any) -> str:
     return named
 
 
+def _authored_instructions(agent: Any) -> list[Any]:
+    """`Agent(instructions=...)` entries as the author passed them.
+
+    There is no public read of an agent's own instructions, so this reads
+    `Agent._instructions`, the one private attribute it has to (2.54:
+    agent/__init__.py:757). Since 2.54 each entry is a `SourcedInstruction`
+    holding the author's value under `.instruction` (_instructions.py:46); 2.21
+    held the values bare. Both shapes read the same, and a static
+    `InstructionPart` reads as its text, so the same agent imports the same way
+    on either pin.
+    """
+    out: list[Any] = []
+    for entry in getattr(agent, "_instructions", ()) or ():
+        value = getattr(entry, "instruction", entry)
+        text = getattr(value, "content", None)
+        if not isinstance(value, str) and isinstance(text, str) and not getattr(value, "dynamic", True):
+            value = text
+        out.append(value)
+    return out
+
+
 def _static_instructions(agent: Any) -> tuple[str, int]:
     """The instruction text that exists WITHOUT a run, and how much does not.
 
@@ -1144,7 +1173,7 @@ def _static_instructions(agent: Any) -> tuple[str, int]:
     """
     said: list[str] = []
     dynamic = 0
-    for entry in getattr(agent, "_instructions", ()) or ():
+    for entry in _authored_instructions(agent):
         if isinstance(entry, str):
             said.append(entry.strip())
         else:

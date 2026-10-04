@@ -5,13 +5,14 @@ shape — stateless, no `initialize` handshake, no sessions, an MRTR
 `input_required` retry in place of server-initiated requests — and it names
 `2025-11-25` as the corpus shape not to target.
 
-Everything reachable through `pydantic_ai.mcp` is the second one. `pydantic-ai-slim`
-pins `fastmcp-slim[client]>=3.3.0,<4` on its `mcp` extra; that client is MCP SDK
-v1, whose `LATEST_PROTOCOL_VERSION` is the literal string `2025-11-25`; and
-`MCPToolset.__aenter__` opens a session and awaits `client.initialize_result`.
-So a PACT agent exported to Pydantic AI and pointed at its `resource-kind:
-mcp-server` entries talks over the protocol shape PACT's own requirements rule
-out.
+Until 2.54, everything reachable through `pydantic_ai.mcp` was the second one.
+`pydantic-ai-slim` 2.54 pins `fastmcp-slim[client]>=3.3.0,<5` on its `mcp` extra,
+which admits both eras: FastMCP 4 (MCP SDK v2, `LATEST_PROTOCOL_VERSION`
+`2026-07-28`) opens a modern session with no `initialize` handshake, and FastMCP
+3 (MCP SDK v1, `2025-11-25`) opens a session and awaits
+`client.initialize_result`. So a PACT agent exported to Pydantic AI talks over
+whichever shape the host's install speaks, and one of the two is the shape PACT's
+own requirements rule out.
 
 **That is tolerable on this path and it is not tolerable in silence.** Pydantic
 AI owns the connection here — the handshake is in their process, on their pin,
@@ -143,7 +144,11 @@ def test_the_export_names_the_pin_that_makes_it_unmeetable(said: str) -> None:
     MCP client to the `2026-07-28` shape and pointing Pydantic AI at it.
     """
     assert "fastmcp-slim" in said, said
-    assert "<4" in said, "the ceiling itself is the fact — without it there is no cause"
+    assert "<5" in said, "the ceiling itself is the fact — without it there is no cause"
+    assert "FastMCP 4" in said and "FastMCP 3" in said, (
+        "2.54's pin admits both eras, so which shape a run speaks is the host's "
+        "install — a sentence naming one shape for every install would be false"
+    )
 
 
 def test_the_export_records_ad_71_and_calls_the_mitigation_partial(said: str) -> None:
@@ -376,11 +381,13 @@ def test_the_pin_the_report_names_is_the_pin_that_is_installed(said: str) -> Non
 
     declared = [r for r in (requires("pydantic-ai-slim") or []) if "fastmcp" in r]
     assert declared, "pydantic-ai-slim no longer declares fastmcp at all"
-    assert any("<4" in r for r in declared), (
+    assert any(">=3.3.0,<5" in r.replace(" ", "") or "<5,>=3.3.0" in r.replace(" ", "")
+               for r in declared if "extra == 'mcp'" in r or 'extra == "mcp"' in r), (
         f"the pin moved: {declared}. The honesty line in `pydantic_ai_interop."
-        "_MCP_SHAPE` names `fastmcp-slim[client]>=3.3.0,<4` and must be rewritten "
-        "against what is actually pinned — including deleting it, if the new "
-        "floor speaks the `2026-07-28` shape FR-4.1.14 requires"
+        "_MCP_SHAPE` names `fastmcp-slim[client]>=3.3.0,<5` and must be rewritten "
+        "against what is actually pinned — including deleting its FastMCP 3 half, "
+        "if the new floor is 4 and so always speaks the `2026-07-28` shape "
+        "FR-4.1.14 requires"
     )
     assert "fastmcp-slim" in said
 
