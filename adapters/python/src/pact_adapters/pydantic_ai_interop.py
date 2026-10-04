@@ -54,6 +54,7 @@ from .importing import ImportReport
 from .ir import AgentSpec as PactAgentSpec
 from .loader import FIX as LOADER_FIX
 from .loader import pact_binary
+from .pydantic_ai_registry import registry
 from .questions import Shape
 from .transports.pydantic_ai_transport import _SETTINGS, _translated
 from .yes_no import said_yes
@@ -207,6 +208,13 @@ def return_schema_for(tool: Any, action: str) -> "dict[str, Any] | None":
 # ─────────────────────────────────────── Pydantic AI  →  PACT
 
 
+#: What PACT can say of each capability, and the sentence for one it cannot —
+#: one table (`pydantic_ai_registry.yaml`, 02P §4) that both importers and the
+#: exporter read, so a capability cannot read as one thing through the spec door
+#: and another through the live one.
+_REGISTRY = registry()
+
+
 #: What each `AgentSpec` key becomes, in PACT's own words.
 _SPEC_MAPS: dict[str, str] = {
     "model": "agent `model:`",
@@ -268,22 +276,6 @@ _SETTINGS_NOT_PORTABLE: dict[str, str] = {
     ),
     "extra_headers": "raw HTTP headers for one provider. Not a fact about the agent",
     "extra_body": "raw request-body fields for one provider. Not a fact about the agent",
-}
-
-#: The capabilities that have a PACT spelling, and what it is.
-#:
-#: Deliberately short. Most capabilities are Pydantic AI's own extension
-#: mechanism — middleware around `_agent_graph` — and PACT's answer to that is
-#: `interceptors:`, which is a different shape (authored sentences, resolved at
-#: load) rather than a Python object. Claiming a mapping there would be the
-#: opaque wrapping "translate or nothing" forbids.
-_CAPABILITY_MAPS: dict[str, str] = {
-    "Thinking": "`settings.thinking:`",
-    "WebSearch": "`uses:` — write `tools/web-search.yaml` to say what it may reach",
-    "WebFetch": "`uses:` — write `tools/web-fetch.yaml` to say what it may reach",
-    "ImageGeneration": "`uses:` — write `tools/image-generation.yaml`",
-    "XSearch": "`uses:` — write `tools/x-search.yaml`",
-    "MCP": "`uses:` — write one `tools/<name>.yaml` per MCP tool you rely on",
 }
 
 #: `Thinking(effort=...)` and PACT's `thinking:`. Pydantic AI's `ThinkingLevel`
@@ -431,11 +423,11 @@ def _read_capabilities(
                 )
                 continue
             settings["thinking"] = said
-            report.mapped[where] = _CAPABILITY_MAPS["Thinking"]
-        elif name in _CAPABILITY_MAPS:
-            tool = _TOOL_NAMES[name]
-            uses.append(tool)
-            report.mapped[where] = _CAPABILITY_MAPS[name]
+            report.mapped[where] = _REGISTRY.capability("Thinking").pact
+        elif _REGISTRY.crosses(name):
+            row = _REGISTRY.capability(name)
+            uses.append(row.tool)
+            report.mapped[where] = row.pact
             if name == "MCP":
                 # The capability crosses; the PROTOCOL it will be spoken over
                 # does not, and PACT has no field to record which shape it was.
@@ -443,46 +435,15 @@ def _read_capabilities(
                 # imported agent is the person who will run it.
                 report.not_portable[f"{where}.wire-shape"] = _MCP_SHAPE
         else:
-            report.not_portable[where] = _middleware_reason(name)
+            report.not_portable[where] = _REGISTRY.why_not_portable(name)
     return uses
-
-
-def _middleware_reason(name: str) -> str:
-    """Why a capability with no PACT spelling has none.
-
-    One sentence, said from one place, because both readers reach it and a
-    capability that read as *not portable* through the spec door and *not
-    understood* through the live one would be telling an author two different
-    things about the same object. They are different buckets with different
-    meanings — one says PACT deliberately has no home, the other says this
-    importer did not recognise it — and middleware is the first.
-    """
-    return (
-        f"`{name}` is Pydantic AI middleware — it wraps `_agent_graph`'s own "
-        "request, tool and run handlers. PACT's answer to that is "
-        "`interceptors:`, which is an authored sentence resolved at load rather "
-        "than a Python object, so there is nothing to translate it into that "
-        "would still be portable"
-    )
-
-
-#: What each provider-adaptive capability is CALLED once it is a PACT tool. Named
-#: rather than lower-cased from the class, because `XSearch` would become
-#: `xsearch` and `x-search` is the name the author will write in `uses:`.
-_TOOL_NAMES: dict[str, str] = {
-    "WebSearch": "web-search",
-    "WebFetch": "web-fetch",
-    "ImageGeneration": "image-generation",
-    "XSearch": "x-search",
-    "MCP": "mcp",
-}
 
 
 #: The MCP wire shape this path speaks, and the two identifiers a reader has to
 #: be handed before they ship anything over it.
 #:
 #: Written ONCE and reached by all three doors — both importers and the exporter
-#: — for `_middleware_reason`'s reason: a caveat that read one way through the
+#: — for the registry's reason: a caveat that read one way through the
 #: spec door and another through the live one is a caveat nobody believes.
 #:
 #: **Why it is here at all.** `docs/30-FRD.md` FR-4.1.14 does not merely prefer
@@ -1057,17 +1018,18 @@ def _live_capabilities(
                 )
                 continue
             settings["thinking"] = said
-            report.mapped[where] = _CAPABILITY_MAPS["Thinking"]
-        elif name in _CAPABILITY_MAPS:
-            named.append(_TOOL_NAMES[name])
-            report.mapped[where] = _CAPABILITY_MAPS[name]
+            report.mapped[where] = _REGISTRY.capability("Thinking").pact
+        elif _REGISTRY.crosses(name):
+            row = _REGISTRY.capability(name)
+            named.append(row.tool)
+            report.mapped[where] = row.pact
             if name == "MCP":
                 # The live twin of the same sentence, from the same constant, so
                 # the two doors cannot tell an author two different things about
                 # the one protocol.
                 report.not_portable[f"{where}.wire-shape"] = _MCP_SHAPE
         else:
-            report.not_portable[where] = _middleware_reason(name)
+            report.not_portable[where] = _REGISTRY.why_not_portable(name)
     # The outer key only counts as accounted-for when at least one capability
     # was: otherwise `capabilities` falls through to `_AGENT_NOT_PORTABLE` and is
     # named there, which is the honest answer for an agent whose only

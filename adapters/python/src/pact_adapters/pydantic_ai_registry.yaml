@@ -1,0 +1,336 @@
+# PACT and Pydantic AI, one table (02P §4).
+#
+# Every agent, tool and action field `spec/schema.yaml` declares, with the
+# Pydantic AI construct it becomes; and every capability Pydantic AI ships, with
+# what PACT can say of it. Read by `pydantic_ai_registry.py` and nothing else:
+# the importers and the exporter in `pydantic_ai_interop.py` ask it, and
+# `pact-mapping` writes it out as a page (`docs/impl/MAPPING.md` in Bud Flow).
+#
+# Three outcomes, no fourth (02P §1):
+#   carried  a Pydantic AI construct means the same thing; the value crosses as
+#            written.
+#   mapped   built from Pydantic AI's public pieces by the adapter: several
+#            constructs, or a translation.
+#   loss     Pydantic AI has nothing that means it. PACT holds it at check time,
+#            or the host holds it at run time, and every report names it.
+#
+# `rows:` points at the 02P §2 rows that own the full wording. Nothing here
+# restates them. Two tests hold this file whole: every field the schema
+# declares has a row, and every capability class the installed Pydantic AI
+# exports has an entry, so moving the pin is a test run, not a memory exercise.
+
+pydantic-ai: "2.54"
+
+fields:
+  # ── agent ──────────────────────────────────────────────────────────────────
+  agent.name:
+    construct: "Agent(name=...)"
+    outcome: carried
+    rows: [A2]
+  agent.description:
+    construct: "Agent(description=...)"
+    outcome: carried
+    rows: [A2]
+    how: "{{run-inputs.x}} and {{remembers.x}} holes are filled from the run's deps before the run starts (A1)"
+  agent.base:
+    construct: "nothing: a base agent never runs, so nothing is built"
+    outcome: mapped
+    rows: [A1]
+  agent.instructions:
+    construct: "Agent(instructions=...), a function of RunContext when the text has holes"
+    outcome: carried
+    rows: [A3, A4]
+    how: "holes are filled by pact_adapters.holes.fill from deps; an unfilled hole is an error, never braces"
+  agent.team:
+    construct: "one function tool per member, each calling the member's Agent.run(..., usage=ctx.usage)"
+    outcome: mapped
+    rows: [K1]
+  agent.teamwork:
+    construct: "inside the member tools: how answers are waited for and how the budget is shared"
+    outcome: mapped
+    rows: [K1, K3]
+  agent.uses:
+    construct: "toolsets: MCPToolset or FunctionToolset per tool; skills as instruction sections; knowledge as one retrieval tool"
+    outcome: mapped
+    rows: [T1, T11, X5, N4]
+  agent.accepts:
+    construct: "the user prompt: str, plus ImageUrl / AudioUrl / DocumentUrl parts"
+    outcome: mapped
+    rows: [F1]
+  agent.answers-with:
+    construct: "output_type=StructuredDict(<schema>), or str when nothing is declared"
+    outcome: carried
+    rows: [O1, O2]
+  agent.answers-with-mode:
+    construct: "output_type wrapped in PromptedOutput / NativeOutput / ToolOutput, or str for `text`"
+    outcome: carried
+    rows: [O4]
+  agent.run-inputs:
+    construct: "deps (the run's inputs); deps_schema in an AgentSpec file"
+    outcome: mapped
+    rows: [A6]
+  agent.needs:
+    construct: "nothing: held at check time against models/catalog.yaml"
+    outcome: loss
+    rows: [M1]
+  agent.limits:
+    construct: "UsageLimits from usage_limits_for(); money and time ceilings and when-it-runs-out are PACT's"
+    outcome: mapped
+    rows: [C8, C9, C10]
+  agent.settings:
+    construct: "ModelSettings (the key table is pydantic_ai_transport._SETTINGS)"
+    outcome: carried
+    rows: [A8]
+  agent.policy:
+    construct: "toolset.approval_required(<predicate from questions.Gate>); output types include DeferredToolRequests"
+    outcome: mapped
+    rows: [T4, H1, H3]
+  agent.evals:
+    construct: "nothing on Agent: pydantic_evals.Dataset is a separate document"
+    outcome: loss
+    rows: [E1]
+  agent.model:
+    construct: "a Model resolved by the host; a list is FallbackModel(*models)"
+    outcome: carried
+    rows: [M1, M3]
+  agent.model-for-checking:
+    construct: "a second Model, used by the checking stages of a loop"
+    outcome: mapped
+    rows: [H9]
+  agent.loop:
+    construct: "pact:loop/standard is Agent's own tool loop; any other shape is built with pydantic-graph"
+    outcome: mapped
+    rows: [A20, K5]
+  agent.variants:
+    construct: "nothing: PACT tries each variant in order, each a separate Agent"
+    outcome: loss
+    rows: [M5]
+  agent.context-policy:
+    construct: "ProcessHistory(<processor over context_policy.Tidier>)"
+    outcome: mapped
+    rows: [C3, C5]
+  agent.remembers:
+    construct: "remember / forget function tools over the host's store; {{remembers.x}} holes in the words"
+    outcome: mapped
+    rows: [N3, X6]
+  agent.interceptors:
+    construct: "an AbstractCapability whose before_model_request / before_tool_execute hooks run interceptors.Chain"
+    outcome: mapped
+    rows: [X2, X7]
+
+  # ── tool ───────────────────────────────────────────────────────────────────
+  tool.available-when:
+    construct: "toolset.prepared(<static filter>)"
+    outcome: mapped
+    rows: [T8, T13]
+  tool.description:
+    construct: "ToolDefinition.description"
+    outcome: carried
+    rows: [T1]
+  tool.connect:
+    construct: "MCPToolset over the named mcp-server resource, with mcp_bridge consent and drift checks"
+    outcome: carried
+    rows: [P1]
+  tool.url:
+    construct: "a function tool whose body is the host's HTTP call"
+    outcome: mapped
+    rows: [P7]
+  tool.method:
+    construct: "the verb that function tool's HTTP call uses"
+    outcome: mapped
+    rows: [P7]
+  tool.says:
+    construct: "a function tool whose body is one model call with the tool's wording"
+    outcome: mapped
+    rows: [K1, N6]
+  tool.actions:
+    construct: "toolset.filtered(<declared action names>): anything else the server offers is never shown"
+    outcome: carried
+    rows: [T12]
+
+  # ── action ─────────────────────────────────────────────────────────────────
+  action.description:
+    construct: "ToolDefinition.description"
+    outcome: carried
+    rows: [T1]
+  action.takes:
+    construct: "ToolDefinition.parameters_json_schema (Tool.from_schema)"
+    outcome: carried
+    rows: [T1]
+  action.answers-with:
+    construct: "ToolDefinition.return_schema from return_schema_for(); shown with IncludeToolReturnSchemas"
+    outcome: carried
+    rows: [T2]
+    how: "Pydantic AI shows a return_schema and never validates a result against it; the host checks the result"
+  action.program:
+    construct: "a function tool that runs the carried program on the host's runner"
+    outcome: mapped
+    rows: [X4]
+  action.reads-only:
+    construct: "ToolDefinition.sequential=False for a read; a write runs alone"
+    outcome: mapped
+    rows: [A13, T7]
+  action.needs-a-person:
+    construct: "requires_approval=True, parked as DeferredToolRequests.approvals"
+    outcome: carried
+    rows: [T4, H1]
+  action.spends-money:
+    construct: "nothing: PACT requires a same-request-key beside it at check time"
+    outcome: loss
+    rows: [T4]
+  action.same-request-key:
+    construct: "nothing: the host journal fills the named argument with the call's effect key"
+    outcome: loss
+    rows: [D2]
+  action.same-request-key-across:
+    construct: "nothing: how far the host's effect key reaches"
+    outcome: loss
+    rows: [D2]
+  action.bind:
+    construct: "arguments filled from deps inside the tool body, absent from parameters_json_schema"
+    outcome: mapped
+    rows: [A6]
+  action.projects-with:
+    construct: "ToolReturn(return_value=<full>, content=<what the model reads>)"
+    outcome: mapped
+    rows: [T3]
+  action.remember-as:
+    construct: "the tool's result written to the host's store under the remembers name"
+    outcome: mapped
+    rows: [N3]
+  action.inspects:
+    construct: "the arguments the approval predicate is given"
+    outcome: mapped
+    rows: [T4]
+
+# Every class `pydantic_ai.capabilities` exports, plus the durable-execution
+# capabilities, by the name a spec file and `get_serialization_name()` use.
+# `pact:` is PACT's spelling of one that crosses; `tool:` the name it takes on
+# `uses:`; `why:` the named loss. One without a `why:` is middleware, and is
+# told the one sentence `middleware:` below says.
+middleware: >-
+  `{name}` is Pydantic AI middleware — it wraps `_agent_graph`'s own
+  request, tool and run handlers. PACT's answer to that is `interceptors:`,
+  which is an authored sentence resolved at load rather than a Python object,
+  so there is nothing to translate it into that would still be portable
+
+capabilities:
+  Thinking:
+    outcome: carried
+    rows: [A8]
+    pact: "`settings.thinking:`"
+  WebSearch:
+    outcome: mapped
+    rows: [N1]
+    pact: "`uses:` — write `tools/web-search.yaml` to say what it may reach"
+    tool: web-search
+  WebFetch:
+    outcome: mapped
+    rows: [N1]
+    pact: "`uses:` — write `tools/web-fetch.yaml` to say what it may reach"
+    tool: web-fetch
+  ImageGeneration:
+    outcome: mapped
+    rows: [N1]
+    pact: "`uses:` — write `tools/image-generation.yaml`"
+    tool: image-generation
+  XSearch:
+    outcome: mapped
+    rows: [N1]
+    pact: "`uses:` — write `tools/x-search.yaml`"
+    tool: x-search
+  MCP:
+    outcome: mapped
+    rows: [P1]
+    pact: "`uses:` — write one `tools/<name>.yaml` per MCP tool you rely on"
+    tool: mcp
+  NativeTool:
+    outcome: loss
+    rows: [N7]
+  NativeOrLocalTool:
+    outcome: loss
+    rows: [N1]
+  ToolSearch:
+    outcome: loss
+    rows: [T9]
+  PrefixTools:
+    outcome: loss
+    rows: [T12]
+  SetToolMetadata:
+    outcome: loss
+    rows: [T7]
+  IncludeToolReturnSchemas:
+    outcome: loss
+    rows: [T2]
+  ReinjectSystemPrompt:
+    outcome: loss
+    rows: [C6]
+  Instrumentation:
+    outcome: loss
+    rows: [I1]
+  RaiseContentFilterError:
+    outcome: loss
+    rows: [X11]
+  LocalWorkspace:
+    outcome: loss
+    rows: [X8]
+  Hooks:
+    outcome: loss
+    rows: [X2]
+  PrepareTools:
+    outcome: loss
+    rows: [T8]
+  PrepareOutputTools:
+    outcome: loss
+    rows: [T8]
+  ProcessHistory:
+    outcome: loss
+    rows: [C3]
+  ProcessEventStream:
+    outcome: loss
+    rows: [S3]
+  HandleDeferredToolCalls:
+    outcome: loss
+    rows: [H6]
+  SelectModel:
+    outcome: loss
+    rows: [M5]
+  ResolveModelId:
+    outcome: loss
+    rows: [M5]
+  Toolset:
+    outcome: loss
+    rows: [T11, T12]
+  UseThreadExecutor:
+    outcome: loss
+    rows: [X11]
+  AbstractCapability:
+    outcome: loss
+    rows: [X1]
+  Capability:
+    outcome: loss
+    rows: [X1]
+  CombinedCapability:
+    outcome: loss
+    rows: [X1]
+  WrapperCapability:
+    outcome: loss
+    rows: [X1]
+  DynamicCapability:
+    outcome: loss
+    rows: [X1]
+  TemporalDurability:
+    outcome: loss
+    rows: [D1]
+    why: &the-engine-is-the-hosts >-
+      which durable engine runs the agent is the host's choice; PACT's
+      `workspace.durability:` says whether a run must survive a restart, and
+      the host picks the engine that keeps that promise
+  DBOSDurability:
+    outcome: loss
+    rows: [D1]
+    why: *the-engine-is-the-hosts
+  PrefectDurability:
+    outcome: loss
+    rows: [D1]
+    why: *the-engine-is-the-hosts

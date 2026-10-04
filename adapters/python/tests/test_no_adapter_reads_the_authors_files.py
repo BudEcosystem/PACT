@@ -74,6 +74,9 @@ COMMANDS: dict[str, str] = {
     "diagnostics": "reads a source line to show it under a caret. Rendering an "
                    "error about a file is not reading the specification from it",
     "transports": "the package of framework bindings; each talks to a model",
+    "pydantic_ai_registry": "reads its own table, shipped inside this package "
+                            "beside it, and `pact-mapping` writes the page a "
+                            "person named — neither is an author file",
 }
 
 #: What counts as touching a disk.
