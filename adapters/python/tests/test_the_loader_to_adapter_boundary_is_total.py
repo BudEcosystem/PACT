@@ -287,6 +287,14 @@ def test_every_spec_field_that_holds_authored_state_is_filled_from_the_document(
         # `test_a_program_a_run_cannot_start_is_said_out_loud.py`, which asserts
         # `False` for a withholding workspace and `True` for a granting one.
         "programs_may_reach_outside",
+        # Authored (02P A1), and this example writes no `{{run-inputs.<n>}}` in
+        # its words — deliberately. A hole is filled strictly, so every run of
+        # the worked example in this suite would have to supply its value, and
+        # most of them exercise something else entirely. What proves holes reach
+        # the spec, are refused by the loader when they name nothing, and are
+        # filled by the harness before the model reads them is
+        # `test_a_hole_in_the_words_is_filled_when_a_run_starts.py`.
+        "holes",
     }
     empty: list[str] = []
     for f in dataclass_fields(spec):

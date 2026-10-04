@@ -14,6 +14,7 @@ from typing import Any
 
 from .at_most_once import RequestKeys
 from .facts import Facts
+from .holes import Hole, holes_in
 from .context_policy import ContextPolicy, Summariser, Tidier
 from .delegation import Teamwork
 from .interceptors import Chain
@@ -502,6 +503,17 @@ class AgentSpec:
     #: author's `run-inputs:` keys. Carried so a `bind:` naming one that never
     #: arrives can be named on the result rather than filled with nothing.
     run_inputs: tuple[str, ...] = ()
+    #: The run-time holes in `instructions:` and `description:` (02P A1) —
+    #: `{{run-inputs.<n>}}` and `{{remembers.<n>}}` — each once, in the order
+    #: they first appear (instructions first). `pact check` has already refused
+    #: any that names something this agent does not declare, so every entry is
+    #: one of `run_inputs` or one of `facts.declared`.
+    #:
+    #: The text itself is carried unfilled in `instructions`/`description`: the
+    #: values are only known when a run starts, and `holes.fill` is how a host
+    #: puts them in — strictly, so an unfilled hole is an error and never
+    #: literal braces in front of a model.
+    holes: tuple[Hole, ...] = ()
     #: Which of those keys the author declared of shape `agent` (P4) — the
     #: subset whose VALUE is the name of one of this workspace's agents.
     #:
@@ -712,10 +724,13 @@ class AgentSpec:
             if n in set(_as_list(a.get("uses"))) and isinstance(k, Mapping)
         )
         written = a.get("limits") or {}
+        description = _text(a.get("description", ""))
+        instructions = _text(a.get("instructions", ""))
         return AgentSpec(
             name=_text(a.get("name", agent_key)),
-            description=_text(a.get("description", "")),
-            instructions=_text(a.get("instructions", "")),
+            description=description,
+            instructions=instructions,
+            holes=tuple(dict.fromkeys(holes_in(instructions) + holes_in(description))),
             tools=tools,
             skills=skills,
             knowledge=knowledge,

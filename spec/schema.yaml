@@ -441,7 +441,10 @@ groups:
         required: yes
         surface: S-GEN
         tier: core
-        help: one line a colleague would understand
+        help: >
+          one line a colleague would understand. It may carry the same
+          `{{run-inputs.<name>}}` and `{{remembers.<name>}}` holes as
+          `instructions:`.
       base:
         # C8 §6.6 measured the hole — `pact discover` listed a do-nothing
         # parent as `"runnable": true` — and deferred the fix as "a new field
@@ -504,6 +507,12 @@ groups:
           `agents/<name>/instructions.md` beside it — the two mean exactly the
           same thing, so write it in whichever file you already have open.
           Once it runs past a paragraph, the separate file is the usual place.
+          Write `{{run-inputs.<name>}}` or `{{remembers.<name>}}` where a value
+          belongs that is only known when a run starts — a brand voice, a
+          customer's name. The surrounding system fills it in before the model
+          reads the words, and the model never fills it. The name has to be one
+          of this agent's own `run-inputs:` or `remembers:`, and a hole naming
+          anything else is refused here.
       team:
         type: map of text
         key-names: agents

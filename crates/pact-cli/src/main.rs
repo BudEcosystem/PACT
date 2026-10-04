@@ -1656,6 +1656,10 @@ fn validate(
         // `OK — … loaded cleanly (468 settings).` and a 300 USD refund went
         // through with nobody asked and nothing reported.
         pact_loader::approvals::check(root, &mut diags);
+        // A1: a `{{run-inputs.<n>}}` or `{{remembers.<n>}}` hole in an agent's
+        // `instructions:` or `description:` that names nothing would reach the
+        // model as literal braces. The schema cannot see inside the text.
+        pact_loader::holes::check(root, &mut diags);
         // And the fifth: a `team:` that comes back to where it started.
         // `key-names: agents` holds each name against the agents that exist and
         // cannot see the shape of the graph, so `team: {helper: I ask myself.}`

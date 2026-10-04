@@ -70,7 +70,8 @@ def test_no_module_builds_its_own_path_to_the_loader() -> None:
         if path.name == "loader.py":
             continue
         for node in ast.walk(ast.parse(path.read_text())):
-            if isinstance(node, ast.Constant) and node.value in ("target/debug/pact", "target/release/pact"):
+            built = ("target/debug/pact", "target/release/pact")
+            if isinstance(node, ast.Constant) and node.value in built:
                 offenders.append(path.name)
             if (
                 isinstance(node, ast.Call)
