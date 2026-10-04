@@ -805,7 +805,16 @@ def from_pydantic_ai_agent(
         # A `Model` object, not a string, once `defer_model_check` is off — and
         # its `model_name`/`system` are what a catalogue row is keyed on. A
         # `str()` of the object would carry a repr into `model:`.
-        named = _model_id(model)
+        from pydantic_ai.models.fallback import FallbackModel
+
+        # 02P A2: a `FallbackModel` is PACT's `model: [a, b]`, in its order
+        # (`FallbackModel.models` is public, pydantic_ai/models/fallback.py:96).
+        chain = (
+            [_model_id(m) for m in model.models]
+            if isinstance(model, FallbackModel)
+            else [_model_id(model)]
+        )
+        named = chain[0] if len(chain) == 1 else (chain if all(chain) else "")
         if named:
             out["model"] = named
             report.mapped["model"] = _AGENT_MAPS["model"]
@@ -1510,7 +1519,20 @@ def to_pydantic_ai_spec(
     report = ExportReport(kind="a Pydantic AI agent spec", seen=tuple(sorted(block)))
     spec: dict[str, Any] = {}
 
-    if model := str(block.get("model") or "").strip():
+    written = block.get("model")
+    chain = [str(m).strip() for m in (written if isinstance(written, list) else [written]) if m]
+    if len(chain) > 1:
+        # 02P A2. `AgentSpec.model` is `str | None` (pydantic_ai/agent/spec.py:38),
+        # so a spec file holds one model and the fallbacks cannot ride in it.
+        # `build_agent(..., model=FallbackModel(...))` is where they go.
+        report.not_carried["model.fallbacks"] = (
+            f"`model:` lists {len(chain)} models and a Pydantic AI spec file holds "
+            f"one, so only `{chain[0]}` is carried and the fallbacks "
+            + ", ".join(f"`{m}`" for m in chain[1:])
+            + " are not tried when it fails. fix: build the agent with "
+            "`model=FallbackModel(...)` over the same models, in this order"
+        )
+    if model := (chain[0] if chain else ""):
         # Translated through the catalogue, not copied. A PACT `model:` is a
         # catalogue ROW and a Pydantic AI `model:` is `provider:name`, so copying
         # produced a spec whose every run died on `UserError: Unknown model:
@@ -1935,6 +1957,11 @@ def build_agent(
     # than passing a name `infer_model` will reject: `Agent(None)` is legal and
     # defers the choice to `run(model=...)`, which is a caller who still has
     # options, where a bad id is a `UserError` at construction.
+    # A fallback list (`spec.models`, 02P A2) binds its FIRST model here and
+    # nothing more: `FallbackModel.__init__` calls `infer_model` on every entry
+    # at construction (pydantic_ai/models/fallback.py:131), which is exactly the
+    # credentials check `defer_model_check=True` below exists to put off. A host
+    # that wants the chain passes `model=FallbackModel(...)` itself.
     bound: Any = model
     if bound is None and spec.model:
         said, _ = pydantic_ai_model_id(spec.model, spec.workspace)

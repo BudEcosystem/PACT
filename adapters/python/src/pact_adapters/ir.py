@@ -483,6 +483,14 @@ class AgentSpec:
     #: value: it means "the author did not choose", which is a different fact
     #: from "the author chose the default".
     model: str = ""
+    #: Every model the author pinned, in the order they are tried (02P A2):
+    #: `model: [a, b]` is a fallback chain — `b` is used when a call to `a`
+    #: fails (a provider error or a timeout), never because an answer was wrong.
+    #: `model:` written as one id is a one-entry tuple, and `model` above is
+    #: always `models[0]` (or `""`), so every reader that wants "the model this
+    #: run starts on" keeps reading `model`. `pact check` has held every entry
+    #: to `allow-egress:` and to the catalogue already.
+    models: tuple[str, ...] = ()
     #: Where this workspace lives on disk, when the adapter was handed a tree as
     #: well as a document. Carried for exactly one thing: a workspace may add
     #: models the distribution has never heard of, in its own
@@ -724,6 +732,7 @@ class AgentSpec:
             if n in set(_as_list(a.get("uses"))) and isinstance(k, Mapping)
         )
         written = a.get("limits") or {}
+        models = tuple(m.strip() for m in _as_list(a.get("model")) if m.strip())
         description = _text(a.get("description", ""))
         instructions = _text(a.get("instructions", ""))
         return AgentSpec(
@@ -765,9 +774,10 @@ class AgentSpec:
             facts=Facts.from_document(doc, agent_key),
             # `model:` is in the schema and the loader emits it; until this line
             # existed the adapter boundary dropped it, so no host could pass the
-            # author's pin on even if it wanted to. `_text` gives "" for absent,
-            # which is the "did not choose" this field documents.
-            model=_text(a.get("model", "")),
+            # author's pin on even if it wanted to. Nothing pinned is "" and (),
+            # which is the "did not choose" these fields document.
+            model=models[0] if models else "",
+            models=models,
             programs=_programs_reached_by(doc, a),
             programs_may_reach_outside=_programs_may_reach_outside(doc),
             projections=_projections(doc, a),

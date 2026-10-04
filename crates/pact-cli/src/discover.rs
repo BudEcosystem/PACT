@@ -153,7 +153,18 @@ pub fn inventory(found: &Found) -> J {
         // can refuse cleanly instead of failing mid-run.
         o.insert("capabilities".into(), capabilities(a));
         o.insert("uses".into(), uses(a));
-        o.insert("model".into(), text(a, "model").unwrap_or(J::Null));
+        // `model:` may be one id or an ordered fallback list (02P A2). `model`
+        // stays the one a run starts on, so a reader indexing a single id is
+        // not handed an array; `models` is the whole chain, in order.
+        let models = model_ids(a);
+        o.insert(
+            "model".into(),
+            models.first().map_or(J::Null, |m| J::String(m.clone())),
+        );
+        o.insert(
+            "models".into(),
+            J::Array(models.into_iter().map(J::String).collect()),
+        );
         // `limits:` and `slo:` are two different questions and this line answered
         // both with the first one's data: the key said `slo` and the value was the
         // whole `limits` block, so a runtime indexing this to learn an agent's
@@ -420,6 +431,18 @@ pub fn agent_card(found: &Found, agent_key: &str, base_url: &str) -> Option<J> {
     meta.insert("capabilities".into(), capabilities(a));
     card.insert("metadata".into(), J::Object(meta));
     Some(J::Object(card))
+}
+
+/// The agent's `model:` as ids, in order: one id, a fallback list, or nothing.
+fn model_ids(a: &Node) -> Vec<String> {
+    match a.get("model").map(|m| &m.value) {
+        Some(Value::List(items)) => items
+            .iter()
+            .filter_map(|n| n.as_str().map(str::to_string))
+            .collect(),
+        Some(Value::Str(s)) => vec![s.clone()],
+        _ => Vec::new(),
+    }
 }
 
 fn text(n: &Node, key: &str) -> Option<J> {

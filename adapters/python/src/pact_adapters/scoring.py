@@ -1149,6 +1149,21 @@ def _bind(
             f"would produce a number about a different agent.{advice}"
         ), None
 
+    # 02P A2: every fallback in a pinned `model:` list is held to `needs:` as
+    # the first one is. The suite scores the first; a fallback that cannot meet
+    # the contract would answer some live calls as a different agent.
+    if not asked:
+        for fallback in spec.models[1:]:
+            row = catalogue.get(fallback)
+            meets, lacks = row.satisfies(needs) if row is not None else (False, "")
+            if not meets:
+                return None, (
+                    f"`{fallback}`, a fallback in `model:` for {key}, "
+                    + (lacks if row is not None else "is not a model this machine has a row for")
+                    + f", and {written} says every model it may run on has to meet "
+                    "it. fix: take it out of the list, or relax that line."
+                ), None
+
     refused = _egress_refusal(document, key, serving_at, needs)
     if refused is not None:
         return None, "", refused

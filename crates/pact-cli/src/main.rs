@@ -1176,32 +1176,40 @@ fn judge_is_not_the_model_under_test(root: &pact_doc::Node, diags: &mut Diagnost
         .collect();
 
     for (name, entry) in agents {
-        let Some(pinned) = entry.node.get("model") else {
+        let Some(written) = entry.node.get("model") else {
             continue;
         };
-        let Some(id) = pinned.as_str().map(str::trim).filter(|s| !s.is_empty()) else {
-            continue;
+        // One id, or an ordered fallback list (02P A2): any model the agent may
+        // end up running on is one whose answers the grader would be marking.
+        let pinned_ids: Vec<&pact_doc::Node> = match written.as_list() {
+            Some(items) => items.iter().collect(),
+            None => vec![written],
         };
-        if !same_as_grader.contains(id) {
-            continue;
+        for pinned in pinned_ids {
+            let Some(id) = pinned.as_str().map(str::trim).filter(|s| !s.is_empty()) else {
+                continue;
+            };
+            if !same_as_grader.contains(id) {
+                continue;
+            }
+            // Underlined at the AGENT's `model:` rather than at `graded-by:`. One
+            // suite grades every agent, so the line to change is usually the one
+            // that differs — and the message names both, so a reader who wants to
+            // change the other one knows where it is.
+            diags.push(pact_diag::Diagnostic::warning(
+                "loader/judge-is-the-model-under-test",
+                pinned.span.clone(),
+                format!(
+                    "`{name}` runs on `{id}` and `graded-by: {grader}` in this workspace's \
+                     checks is the same model, so it grades its own answers — a model \
+                     grading its own work marks its own homework."
+                ),
+                format!(
+                    "Point `graded-by:` at a different row in `models/catalog.yaml`; or, \
+                     if `{name}` is the one to move, write a different `model:` for it."
+                ),
+            ));
         }
-        // Underlined at the AGENT's `model:` rather than at `graded-by:`. One
-        // suite grades every agent, so the line to change is usually the one
-        // that differs — and the message names both, so a reader who wants to
-        // change the other one knows where it is.
-        diags.push(pact_diag::Diagnostic::warning(
-            "loader/judge-is-the-model-under-test",
-            pinned.span.clone(),
-            format!(
-                "`{name}` runs on `{id}` and `graded-by: {grader}` in this workspace's \
-                 checks is the same model, so it grades its own answers — a model \
-                 grading its own work marks its own homework."
-            ),
-            format!(
-                "Point `graded-by:` at a different row in `models/catalog.yaml`; or, \
-                 if `{name}` is the one to move, write a different `model:` for it."
-            ),
-        ));
     }
 }
 

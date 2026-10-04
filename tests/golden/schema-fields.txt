@@ -2,7 +2,10 @@ action.bind	map of text | S-EXEC | core | optional
 action.description	text | S-ROUTE | core | optional
 action.inspects	list of text | S-EXEC | core | optional
 action.needs-a-person	yes-no | S-EXEC | core | optional
+action.program	text | S-EXEC | expert | optional
+action.projects-with	text | S-CTRL | expert | optional
 action.reads-only	yes-no | S-EXEC | core | optional
+action.remember-as	text | S-EXEC | expert | optional
 action.same-request-key	text | S-EXEC | core | optional
 action.same-request-key-across	one-of | S-EXEC | expert | optional
 action.spends-money	yes-no | S-EXEC | core | optional
@@ -18,7 +21,7 @@ agent.instructions	text | S-GEN | core | required
 agent.interceptors	list of text | S-EXEC | expert | optional
 agent.limits	group:limits | S-GOV | core | optional
 agent.loop	text | S-CTRL | expert | optional
-agent.model	text | S-CAP | core | optional
+agent.model	list of text | S-CAP | core | optional
 agent.model-for-checking	text | S-CAP | expert | optional
 agent.name	text | S-GEN | core | optional
 agent.needs	group:needs | S-CAP | core | optional
@@ -143,6 +146,8 @@ needs.reasoning	one-of | S-CAP | core | optional
 needs.scores	map of threshold | S-CAP | expert | optional
 needs.tool-calling	one-of | S-CAP | core | optional
 outcome.answered	text | S-CTRL | expert | optional
+outcome.decided-by	text | S-CTRL | expert | optional
+outcome.may-go-to	list of text | S-CTRL | expert | optional
 outcome.too-many-times	text | S-CTRL | expert | optional
 outcome.used-a-tool	text | S-CTRL | expert | optional
 policy.applies-to	one-of | S-EXEC | core | optional
@@ -157,6 +162,17 @@ port.same-conversation-when	list of text | S-TOPO | core | optional
 port.says	text | S-GEN | core | optional
 port.through	text | S-CAP | core | optional
 port.who-can-reach-it	list of text | S-EXEC | core | optional
+program-fuel.instructions-at-most	size | S-GOV | expert | optional
+program-fuel.memory-at-most	size | S-GOV | expert | optional
+program-fuel.runs-for-at-most	duration | S-GOV | expert | optional
+program-fuel.when-it-runs-out	one-of | S-GOV | expert | optional
+program.answers-with	map of answer-shape | S-CAP | expert | optional
+program.body	anything | S-EXEC | expert | optional
+program.description	text | S-GEN | core | required
+program.determinism	one-of | S-CTRL | expert | required
+program.engine	one-of | S-CAP | expert | required
+program.fuel	group:program-fuel | S-GOV | expert | required
+program.takes	map of answer-shape | S-CAP | expert | optional
 provenance.as-of	text | S-GOV | expert | optional
 provenance.contamination	text | S-GOV | expert | optional
 provenance.date	text | S-GOV | expert | optional
@@ -169,6 +185,7 @@ question-rule.when	list of group:when-this | S-EXEC | core | required
 question.answer	map of answer-shape | S-EXEC | core | required
 question.answer-within	duration | S-GOV | core | optional
 question.asked-of	list of text | S-EXEC | core | required
+question.checked-by	text | S-EXEC | expert | optional
 question.description	text | S-GEN | core | required
 question.escalates-to	list of text | S-EXEC | core | optional
 question.if-nobody-answers	one-of | S-EXEC | core | required
@@ -177,10 +194,12 @@ question.shows	list of text | S-EXEC | core | optional
 redaction.description	text | S-GEN | core | optional
 redaction.hide	list of text | S-EXEC | core | required
 resource.asks-to-connect	text | S-EXEC | core | optional
+resource.asks-to-run	text | S-EXEC | expert | optional
 resource.auth	group:credential-reference | S-CAP | core | optional
 resource.available-when	one-of | S-ROUTE | expert | optional
 resource.description	text | S-GEN | core | optional
 resource.endpoint	text | S-CAP | core | optional
+resource.engines	list of one-of | S-CAP | expert | optional
 resource.resource-kind	one-of | S-CAP | core | required
 resource.tool-snapshot-digest	text | S-GOV | expert | optional
 resource.tool-snapshot-max-age	duration | S-GOV | expert | optional
@@ -276,6 +295,7 @@ workspace.pact-version	text | S-GOV | expert | optional
 workspace.policies	map of group:policy | S-EXEC | core | optional
 workspace.ports	map of group:port | S-TOPO | core | optional
 workspace.profile	text | S-GOV | core | optional
+workspace.programs	map of group:program | S-EXEC | expert | optional
 workspace.questions	map of group:question | S-EXEC | core | optional
 workspace.redaction	group:redaction | S-EXEC | core | optional
 workspace.resources	map of group:resource | S-CAP | core | optional

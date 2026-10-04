@@ -664,7 +664,15 @@ groups:
           both mean the same thing. A name that is not there is refused, and the
           message names the ones that are.
       model:
-        type: text
+        # 02P A2: an ordered list is a fallback chain. `list of text` still
+        # takes a single id (a lone value where a list is expected is accepted),
+        # so every `model: <id>` written before this line means what it meant.
+        # The egress rule reads every item of a `list of text` model binding
+        # (`egress.rs::ids`), so each fallback is held to `allow-egress:` with
+        # no change there — a fallback to an off-box model is refused at check
+        # time in a sovereign workspace, which is why the list lives in the
+        # document and not only in the gateway.
+        type: list of text
         # Resolved against the models PACT ships knowledge of, plus any this
         # workspace added in `models/catalog.yaml`. Until it was,
         # `model: qwen2.5-7b-instrukt` loaded clean and failed later, at run
@@ -678,7 +686,12 @@ groups:
           pin one exact model, if you must. Leave this out and PACT picks. A
           model that only runs somewhere else is refused here when
           `allow-egress:` in workspace.yaml does not list `llm` — the check says
-          which locally-served one to write instead.
+          which locally-served one to write instead. Write a list —
+          `[qwen2.5-14b-instruct, qwen2.5-7b-instruct]` — to name fallbacks:
+          they are tried in order when a call fails (the provider errors or
+          times out), never because an answer was wrong (that is
+          `checked-by:`). Every model in the list is held to `allow-egress:`
+          and to `needs:` exactly as a single one is.
       model-for-checking:
         # G14. Eve resolves the model at three scopes with precedence
         # step > turn > session > fallback (`guides/dynamic-capabilities.md`),

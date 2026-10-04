@@ -233,6 +233,8 @@ def test_every_spec_field_that_holds_authored_state_is_filled_from_the_document(
         # Authored and deliberately absent: the example pins no `model:`, which is
         # how it binds a locally-served row rather than naming one. `_bind` decides.
         "model",
+        # The same line as a tuple (02P A2), so empty for the same reason.
+        "models",
         # NOT authored at all, and no document can fill it: this is what an MCP
         # server said about its own tools, which arrives over a live connection
         # on the host's machine AFTER `pact check` has finished. That is the

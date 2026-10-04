@@ -77,7 +77,10 @@ fn a_field_that_resolves_a_name_refuses_a_folder_of_prose() {
     );
 
     // Four of them an agent can carry, driven end to end through the binary.
-    for field in ["loop", "policy", "context-policy", "model"] {
+    // `model:` was the fourth until it became `list of text` (02P A2); a block
+    // there is still refused, as a list written as a map, and
+    // `a_model_list_is_a_fallback_chain.rs` holds its names.
+    for field in ["loop", "policy", "context-policy", "model-for-checking"] {
         let root = tree(field, &format!("{field}: {{banana: purple}}"));
         let text = check(&root);
         assert!(
