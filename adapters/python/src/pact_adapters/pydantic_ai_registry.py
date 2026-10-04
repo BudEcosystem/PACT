@@ -2,10 +2,13 @@
 
 `pydantic_ai_registry.yaml` beside this file says, once, what every PACT agent,
 tool and action field becomes in Pydantic AI, and what PACT can say of every
-capability Pydantic AI ships. It replaces three tables `pydantic_ai_interop.py`
-kept by hand (`_CAPABILITY_MAPS`, `_TOOL_NAMES` and `_middleware_reason`'s
-sentence), so the spec importer, the live importer and the exporter read one
-answer, and a host compiling PACT to Pydantic AI reads the same one.
+capability Pydantic AI ships, and of every other name on Pydantic AI's side
+(an `AgentSpec` key, a live `Agent` attribute, a `ModelSettings` key). It
+replaces the tables `pydantic_ai_interop.py` kept by hand (`_CAPABILITY_MAPS`,
+`_TOOL_NAMES`, `_middleware_reason`'s sentence, and the field tables of both
+importers and the exporter), so the spec importer, the live importer and the
+exporter read one answer, and a host compiling PACT to Pydantic AI reads the
+same one.
 
 This module imports no agent framework: the table is data, read with `yaml`, so
 anything that only needs to know the mapping can know it without Pydantic AI
@@ -42,6 +45,9 @@ class FieldRow:
     outcome: str
     rows: tuple[str, ...]
     how: str = ""
+    #: Why an `AgentSpec` FILE has no field for it, when it has none. Empty for
+    #: a field the exporter writes into the file (or one never exported).
+    spec_file: str = ""
 
 
 @dataclass(frozen=True)
@@ -59,12 +65,38 @@ class CapabilityRow:
     why: str = ""
 
 
+#: The doors a Pydantic AI name comes through: an `AgentSpec` file's key, a live
+#: `Agent`'s attribute, or a `ModelSettings` key.
+DOORS = ("spec", "agent", "settings")
+
+
+@dataclass(frozen=True)
+class NameRow:
+    """One Pydantic AI name that is not a capability, and what PACT says of it."""
+
+    name: str  # `spec.end_strategy`
+    outcome: str
+    rows: tuple[str, ...]
+    #: PACT's spelling, for one that crosses.
+    pact: str = ""
+    #: The named loss.
+    why: str = ""
+    #: What an export leaves to Pydantic AI's own default, and why.
+    left: str = ""
+
+
 @dataclass(frozen=True)
 class Registry:
     pydantic_ai: str
     fields: Mapping[str, FieldRow]
     capabilities: Mapping[str, CapabilityRow]
     middleware: str
+    names: Mapping[str, NameRow]
+
+    def through(self, door: str) -> dict[str, NameRow]:
+        """The names one door carries, keyed by the bare name, in file order."""
+        prefix = f"{door}."
+        return {k[len(prefix):]: row for k, row in self.names.items() if k.startswith(prefix)}
 
     def capability(self, name: str) -> CapabilityRow | None:
         return self.capabilities.get(name)
@@ -106,6 +138,22 @@ def _outcome(entry: Mapping[str, Any], where: str) -> str:
     return str(said)
 
 
+def _crossing(entry: Any, where: str) -> tuple[str, tuple[str, ...], str, str]:
+    """`outcome`, `rows`, `pact` and `why` of an entry that crosses or is lost.
+
+    One that crosses says its PACT spelling; a loss has none and may say why.
+    """
+    if not isinstance(entry, Mapping):
+        raise RegistryError(f"{where}: an entry is a mapping")
+    outcome, rows = _outcome(entry, where), _rows(entry, where)
+    pact, why = str(entry.get("pact") or ""), str(entry.get("why") or "")
+    if outcome != "loss" and not pact:
+        raise RegistryError(f"{where}: a name that crosses says its PACT spelling in `pact:`")
+    if outcome == "loss" and (pact or entry.get("tool")):
+        raise RegistryError(f"{where}: a loss has no PACT spelling")
+    return outcome, rows, pact, why
+
+
 def parse(document: Mapping[str, Any]) -> Registry:
     """A registry from its YAML document, refusing anything malformed."""
     fields: dict[str, FieldRow] = {}
@@ -119,25 +167,25 @@ def parse(document: Mapping[str, Any]) -> Registry:
             outcome=_outcome(entry, where),
             rows=_rows(entry, where),
             how=str(entry.get("how") or ""),
+            spec_file=str(entry.get("spec-file") or ""),
         )
     capabilities: dict[str, CapabilityRow] = {}
     for name, entry in (document.get("capabilities") or {}).items():
-        where = f"capabilities.{name}"
-        if not isinstance(entry, Mapping):
-            raise RegistryError(f"{where}: an entry is a mapping")
-        row = CapabilityRow(
-            name=str(name),
-            outcome=_outcome(entry, where),
-            rows=_rows(entry, where),
-            pact=str(entry.get("pact") or ""),
-            tool=str(entry.get("tool") or ""),
-            why=str(entry.get("why") or ""),
+        outcome, rows, pact, why = _crossing(entry, f"capabilities.{name}")
+        capabilities[str(name)] = CapabilityRow(
+            name=str(name), outcome=outcome, rows=rows, pact=pact,
+            tool=str(entry.get("tool") or ""), why=why,
         )
-        if row.outcome != "loss" and not row.pact:
-            raise RegistryError(f"{where}: a capability that crosses says its PACT spelling in `pact:`")
-        if row.outcome == "loss" and (row.pact or row.tool):
-            raise RegistryError(f"{where}: a loss has no PACT spelling")
-        capabilities[row.name] = row
+    names: dict[str, NameRow] = {}
+    for name, entry in (document.get("names") or {}).items():
+        where = f"names.{name}"
+        if str(name).split(".", 1)[0] not in DOORS:
+            raise RegistryError(f"{where}: a name starts with one of {', '.join(DOORS)}")
+        outcome, rows, pact, why = _crossing(entry, where)
+        names[str(name)] = NameRow(
+            name=str(name), outcome=outcome, rows=rows, pact=pact, why=why,
+            left=str(entry.get("left") or ""),
+        )
     middleware = str(document.get("middleware") or "")
     if "{name}" not in middleware:
         raise RegistryError("`middleware:` is one sentence with a `{name}` in it")
@@ -146,6 +194,7 @@ def parse(document: Mapping[str, Any]) -> Registry:
         fields=fields,
         capabilities=capabilities,
         middleware=" ".join(middleware.split()),
+        names=names,
     )
 
 
@@ -195,9 +244,10 @@ def markdown(reg: Registry | None = None) -> str:
         for key, row in sorted(reg.fields.items()):
             if key.split(".", 1)[0] != kind:
                 continue
+            note = row.how + (f" *Not in an `AgentSpec` file:* {row.spec_file}." if row.spec_file else "")
             out.append(
                 f"| `{key.split('.', 1)[1]}:` | {_cell(row.construct)} | {row.outcome} | "
-                f"{', '.join(row.rows)} | {_cell(row.how)} |"
+                f"{', '.join(row.rows)} | {_cell(note.strip())} |"
             )
     out += ["", "## `settings:` keys", "", "| PACT | `ModelSettings` |", "|---|---|"]
     out += [f"| `{pact}` | `{ours}` |" for pact, ours in _settings_rows()]
@@ -206,6 +256,12 @@ def markdown(reg: Registry | None = None) -> str:
         said = row.pact or row.why or "middleware (below)"
         out.append(f"| `{name}` | {row.outcome} | {', '.join(row.rows)} | {_cell(said)} |")
     out += ["", "**Middleware.** " + reg.middleware.format(name="<name>") + "."]
+    out += ["", "## Other Pydantic AI names", "",
+            "`spec.` is an `AgentSpec` file key, `agent.` a live `Agent` attribute, "
+            "`settings.` a `ModelSettings` key outside the table above.", "",
+            "| Pydantic AI | Outcome | Rows | PACT |", "|---|---|---|---|"]
+    for name, row in reg.names.items():
+        out.append(f"| `{name}` | {row.outcome} | {', '.join(row.rows)} | {_cell(row.pact or row.why)} |")
     return "\n".join(out) + "\n"
 
 

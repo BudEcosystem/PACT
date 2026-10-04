@@ -1,9 +1,10 @@
 """02P §4: one registry from PACT field to Pydantic AI construct.
 
-`pydantic_ai_registry.yaml` replaced three tables `pydantic_ai_interop.py` kept
+`pydantic_ai_registry.yaml` replaced the tables `pydantic_ai_interop.py` kept
 by hand. These hold it whole in both directions: every agent, tool and action
-field the schema declares has a row, and every capability class the installed
-Pydantic AI exports has an entry, so moving the pin is a test run.
+field the schema declares has a row, and every capability class, `AgentSpec`
+field and `ModelSettings` key the installed Pydantic AI has an entry, so moving
+the pin is a test run.
 """
 
 from __future__ import annotations
@@ -66,6 +67,51 @@ def test_the_hand_kept_tables_are_gone() -> None:
         assert not hasattr(pydantic_ai_interop, name), f"{name} is a second copy of the registry"
 
 
+def test_the_importers_and_the_exporter_read_their_words_from_the_registry() -> None:
+    reg, m = registry(), pydantic_ai_interop
+    spec, agent = reg.through("spec"), reg.through("agent")
+    assert {k: r.pact for k, r in spec.items() if r.pact} == m._SPEC_MAPS
+    assert {k: r.why for k, r in spec.items() if r.why} == m._SPEC_NOT_PORTABLE
+    assert {k: r.left for k, r in spec.items() if r.left} == m._SPEC_SUPPLIES
+    assert {k: r.pact for k, r in agent.items() if r.pact} == m._AGENT_MAPS
+    assert {k: r.why for k, r in agent.items() if r.why} == m._AGENT_NOT_PORTABLE
+    assert {k: r.why for k, r in reg.through("settings").items()} == m._SETTINGS_NOT_PORTABLE
+    assert {
+        k.split(".", 1)[1]: r.spec_file for k, r in reg.fields.items() if r.spec_file
+    } == m._SPEC_CANNOT_TAKE
+    # The live importer's losses are the spec file's, word for word (one anchor
+    # each in the YAML), plus what only an object has.
+    for key in ("end_strategy", "retries", "tool_timeout", "metadata", "instrument"):
+        assert agent[key].why == spec[key].why
+
+
+def test_every_name_an_agent_spec_file_can_hold_has_an_entry() -> None:
+    spec_mod = pytest.importorskip("pydantic_ai.agent.spec")
+    declared = set(spec_mod.AgentSpec.model_fields)
+    missing = sorted(declared - set(registry().through("spec")))
+    assert not missing, (
+        f"`AgentSpec` declares {missing} and {PATH.name} says nothing of them.\n"
+        "  fix: add each under `names:` as `spec.<key>` with `pact:` or `why:`."
+    )
+
+
+def test_every_model_setting_is_either_a_settings_key_or_a_named_loss() -> None:
+    settings = pytest.importorskip("pydantic_ai.settings")
+    from pact_adapters.transports.pydantic_ai_transport import _SETTINGS
+
+    accounted = set(_SETTINGS.values()) | set(registry().through("settings"))
+    missing = sorted(set(settings.ModelSettings.__annotations__) - accounted)
+    assert not missing, (
+        f"`ModelSettings` has {missing}, which neither `settings:` nor {PATH.name} names.\n"
+        "  fix: add a `settings:` key, or a `settings.<key>` entry under `names:` saying why not."
+    )
+
+
+def test_spec_file_reasons_are_on_agent_fields_only() -> None:
+    for key, row in registry().fields.items():
+        assert not row.spec_file or key.startswith("agent."), key
+
+
 @pytest.mark.parametrize("name", ["WebSearch", "WebFetch", "ImageGeneration", "XSearch", "MCP"])
 def test_a_tool_capability_imports_as_the_registry_says(name: str) -> None:
     row = registry().capability(name)
@@ -106,6 +152,9 @@ def test_a_loss_with_its_own_reason_says_it() -> None:
         ({"fields": {"agent.x": {"construct": "c", "outcome": "carried"}}}, "02P rows"),
         ({"capabilities": {"X": {"outcome": "mapped", "rows": ["X1"]}}}, "PACT spelling"),
         ({"capabilities": {"X": {"outcome": "loss", "rows": ["X1"], "pact": "`uses:`"}}}, "no PACT"),
+        ({"names": {"model.x": {"outcome": "loss", "rows": ["A1"]}}}, "starts with one of"),
+        ({"names": {"spec.x": {"outcome": "carried", "rows": ["A1"]}}}, "PACT spelling"),
+        ({"names": {"spec.x": {"outcome": "loss", "rows": ["A1"], "pact": "`x:`"}}}, "no PACT"),
     ],
 )
 def test_a_malformed_registry_is_refused(document: dict, complaint: str) -> None:
@@ -119,6 +168,8 @@ def test_the_page_names_every_row(tmp_path: Path) -> None:
     for key in reg.fields:
         assert f"`{key.split('.', 1)[1]}:`" in page, key
     for name in reg.capabilities:
+        assert f"`{name}`" in page, name
+    for name in reg.names:
         assert f"`{name}`" in page, name
     assert "`max-tokens` | `max_tokens`" in page
     target = tmp_path / "MAPPING.md"

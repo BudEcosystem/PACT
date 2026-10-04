@@ -45,18 +45,29 @@ fields:
     construct: "one function tool per member, each calling the member's Agent.run(..., usage=ctx.usage)"
     outcome: mapped
     rows: [K1]
+    spec-file: >-
+      no field for who helps. Pydantic AI does delegation by calling one `Agent` from
+      inside another's tool function, which is Python, not spec
   agent.teamwork:
     construct: "inside the member tools: how answers are waited for and how the budget is shared"
     outcome: mapped
     rows: [K1, K3]
+    spec-file: >-
+      no field for how a team's answers are waited for or how a budget is shared
   agent.uses:
     construct: "toolsets: MCPToolset or FunctionToolset per tool; skills as instruction sections; knowledge as one retrieval tool"
     outcome: mapped
     rows: [T1, T11, X5, N4]
+    spec-file: >-
+      an `AgentSpec` has no `tools:` field — its only tool-bearing field is
+      `capabilities:`, which names Pydantic AI's own provider-adaptive tools and not an
+      author's. The names are carried in the companion report and `build_agent()` binds
+      them; a spec file alone cannot
   agent.accepts:
     construct: "the user prompt: str, plus ImageUrl / AudioUrl / DocumentUrl parts"
     outcome: mapped
     rows: [F1]
+    spec-file: "no field for the shapes it takes in"
   agent.answers-with:
     construct: "output_type=StructuredDict(<schema>), or str when nothing is declared"
     outcome: carried
@@ -65,6 +76,14 @@ fields:
     construct: "output_type wrapped in PromptedOutput / NativeOutput / ToolOutput, or str for `text`"
     outcome: carried
     rows: [O4]
+    spec-file: >-
+      no field in the SPEC for how the shape is put to the model — `output_schema`
+      builds a `StructuredDict`, whose mode is `auto`, decided per model from
+      `ModelProfile.default_structured_output_mode`, so an author who wrote
+      `native-json-schema` gets whatever their model prefers instead. `build_agent()`
+      DOES honour it: the four words map exactly onto `str`, `PromptedOutput`,
+      `NativeOutput` and `ToolOutput`. This is the clearest single reason the export has
+      two halves
   agent.run-inputs:
     construct: "deps (the run's inputs); deps_schema in an AgentSpec file"
     outcome: mapped
@@ -73,10 +92,16 @@ fields:
     construct: "nothing: held at check time against models/catalog.yaml"
     outcome: loss
     rows: [M1]
+    spec-file: "no field for what the model behind it has to be capable of"
   agent.limits:
     construct: "UsageLimits from usage_limits_for(); money and time ceilings and when-it-runs-out are PACT's"
     outcome: mapped
     rows: [C8, C9, C10]
+    spec-file: >-
+      no field for ceilings. `UsageLimits` is an argument to `run()`, not part of an
+      agent — so a spec file cannot stop a run, and until something passes
+      `usage_limits=` the ceilings the author wrote are not enforced.
+      `usage_limits_for()` builds the ones that translate
   agent.settings:
     construct: "ModelSettings (the key table is pydantic_ai_transport._SETTINGS)"
     outcome: carried
@@ -85,10 +110,18 @@ fields:
     construct: "toolset.approval_required(<predicate from questions.Gate>); output types include DeferredToolRequests"
     outcome: mapped
     rows: [T4, H1, H3]
+    spec-file: >-
+      no field for what needs a person. `requires_approval=True` is a per-tool Python
+      argument, so an approval rule survives only through `build_agent()`, which sets it
+      on the tools the policy names. A spec file alone carries no policy, and an index
+      built from these could not tell a governed agent from an ungoverned one
   agent.evals:
     construct: "nothing on Agent: pydantic_evals.Dataset is a separate document"
     outcome: loss
     rows: [E1]
+    spec-file: >-
+      no field for how you would know it works — that is `pydantic_evals`, a separate
+      document
   agent.model:
     construct: "a Model resolved by the host; a list is FallbackModel(*models)"
     outcome: carried
@@ -97,26 +130,40 @@ fields:
     construct: "a second Model, used by the checking stages of a loop"
     outcome: mapped
     rows: [H9]
+    spec-file: "no field for a second model on the checking stages"
   agent.loop:
     construct: "pact:loop/standard is Agent's own tool loop; any other shape is built with pydantic-graph"
     outcome: mapped
     rows: [A20, K5]
+    spec-file: >-
+      no field for the shape of the thinking. Pydantic AI's loop is `_agent_graph`'s and
+      has no stage vocabulary — `may-use:`, `does: ask-someone` and the rest have
+      nothing to become
   agent.variants:
     construct: "nothing: PACT tries each variant in order, each a separate Agent"
     outcome: loss
     rows: [M5]
+    spec-file: "no field for model-portability strategies"
   agent.context-policy:
     construct: "ProcessHistory(<processor over context_policy.Tidier>)"
     outcome: mapped
     rows: [C3, C5]
+    spec-file: >-
+      no field for how a long conversation is kept. Pydantic AI compacts with a history
+      processor wrapped in `ProcessHistory`, which takes a callable and is therefore
+      marked spec-unusable by its own docs
   agent.remembers:
     construct: "remember / forget function tools over the host's store; {{remembers.x}} holes in the words"
     outcome: mapped
     rows: [N3, X6]
+    spec-file: "no field for what survives a summary"
   agent.interceptors:
     construct: "an AbstractCapability whose before_model_request / before_tool_execute hooks run interceptors.Chain"
     outcome: mapped
     rows: [X2, X7]
+    spec-file: >-
+      no field for rules that hide, stop or redirect. Pydantic AI's nearest shape is a
+      capability, which is a Python object and not a sentence
 
   # ── tool ───────────────────────────────────────────────────────────────────
   tool.available-when:
@@ -334,3 +381,183 @@ capabilities:
     outcome: loss
     rows: [D1]
     why: *the-engine-is-the-hosts
+
+# Pydantic AI's own names that are not capabilities, and what PACT says of
+# each, read by the two importers and the exporter. `spec.<key>` is a key of an
+# `AgentSpec` file, `agent.<attr>` the attribute of a live `Agent` a report names,
+# `settings.<key>` a `ModelSettings` key outside the twelve
+# `pydantic_ai_transport._SETTINGS` maps (that table is the authority on those).
+# `pact:` is PACT's spelling of one that crosses; `why:` the named loss; `left:`
+# what an export leaves to Pydantic AI's own default, and why.
+names:
+  spec.model:
+    outcome: carried
+    rows: [M1, M3]
+    pact: "agent `model:`"
+  spec.name:
+    outcome: carried
+    rows: [A2]
+    pact: "agent `name:`"
+  spec.description:
+    outcome: carried
+    rows: [A2]
+    pact: "agent `description:`"
+  spec.instructions:
+    outcome: mapped
+    rows: [A3, A4]
+    pact: "agent `instructions:`"
+  spec.model_settings:
+    outcome: carried
+    rows: [A8]
+    pact: "`settings:`"
+  spec.output_schema:
+    outcome: carried
+    rows: [O2]
+    pact: "`answers-with:`"
+  spec.deps_schema:
+    outcome: mapped
+    rows: [A6]
+    pact: "`run-inputs:`"
+  spec.capabilities:
+    outcome: mapped
+    rows: [A11, N1]
+    pact: "`settings.thinking:` and `uses:`, per capability"
+  spec.end_strategy:
+    outcome: loss
+    rows: [A16]
+    why: &end_strategy >-
+      `early`/`graceful`/`exhaustive` — what Pydantic AI does with tool calls the model
+      requested alongside a final result. That is a property of `_agent_graph`'s loop,
+      and PACT owns loop semantics itself (`loop:`), so copying the word across would
+      claim a stage vocabulary PACT never ran
+    left: >-
+      what to do with tool calls the model requested alongside a final result. PACT owns
+      loop semantics and has no word for this, so Pydantic AI's own default (`graceful`)
+      stands
+  spec.retries:
+    outcome: loss
+    rows: [A14]
+    why: &retries >-
+      how many times Pydantic AI re-asks the model after a tool or output validation
+      failure. PACT has no retry budget: a failure is a `limits:` question
+      (`when-it-runs-out:`), decided per ceiling and not per category
+    left: "how often to re-ask after a tool or output failure — a Pydantic AI budget"
+  spec.tool_timeout:
+    outcome: loss
+    rows: [A15]
+    why: &tool_timeout >-
+      how long one tool call may take before Pydantic AI returns a retry prompt. PACT
+      bounds the RUN (`runs-for-at-most:`), not the call, and a per-call ceiling written
+      as a run ceiling would stop the wrong thing
+    left: "how long one tool call may take — a Pydantic AI ceiling, not a PACT one"
+  spec.metadata:
+    outcome: loss
+    rows: [A17]
+    why: &metadata >-
+      whatever the caller tags each run with, for their traces. A fact about one
+      deployment's observability, not about the agent
+    left: "whatever the deployment tags its runs with"
+  spec.instrument:
+    outcome: loss
+    rows: [A23]
+    why: &instrument "whether Logfire is on. A deployment choice, like `metadata`"
+    left: "whether Logfire is on, which is the deployment's choice"
+  spec.json_schema_path:
+    outcome: loss
+    rows: [A23]
+    why: >-
+      `$schema` — which JSON Schema file an editor should autocomplete this spec
+      against. A fact about the file, not about the agent
+  agent.model:
+    outcome: carried
+    rows: [M1, M3]
+    pact: "agent `model:`"
+  agent.name:
+    outcome: carried
+    rows: [A2]
+    pact: "agent `name:`"
+  agent.description:
+    outcome: carried
+    rows: [A2]
+    pact: "agent `description:`"
+  agent.instructions:
+    outcome: mapped
+    rows: [A3, A4]
+    pact: "agent `instructions:`"
+  agent.system_prompts:
+    outcome: mapped
+    rows: [A3]
+    pact: "agent `instructions:`, appended"
+  agent.model_settings:
+    outcome: carried
+    rows: [A8]
+    pact: "`settings:`"
+  agent.output_type:
+    outcome: carried
+    rows: [O2]
+    pact: "`answers-with:`"
+  agent.toolsets:
+    outcome: mapped
+    rows: [T1, T11]
+    pact: "`uses:`, and one `tools/<name>.yaml` per tool"
+  agent.end_strategy:
+    outcome: loss
+    rows: [A16]
+    why: *end_strategy
+  agent.retries:
+    outcome: loss
+    rows: [A14]
+    why: *retries
+  agent.tool_timeout:
+    outcome: loss
+    rows: [A15]
+    why: *tool_timeout
+  agent.metadata:
+    outcome: loss
+    rows: [A17]
+    why: *metadata
+  agent.instrument:
+    outcome: loss
+    rows: [A23]
+    why: *instrument
+  agent.deps_type:
+    outcome: loss
+    rows: [A6]
+    why: >-
+      the Python type dependencies are injected as. PACT's `run-inputs:` names what the
+      surrounding system supplies and the shape of each; it does not name a class,
+      because a class is not portable to another language
+  agent.output_validators:
+    outcome: loss
+    rows: [O7]
+    why: >-
+      `@agent.output_validator` functions — Python that inspects an output and may raise
+      `ModelRetry`. PACT's equivalent is an eval or a judged rule, which is an authored
+      sentence rather than a callable
+  agent.capabilities:
+    outcome: loss
+    rows: [A11, N1]
+    why: >-
+      Pydantic AI middleware around `_agent_graph`. See `interceptors:` — the shapes do
+      not correspond, so nothing is claimed
+  settings.timeout:
+    outcome: loss
+    rows: [A10]
+    why: >-
+      the HTTP timeout for one request. A transport-level knob the surrounding system
+      owns; PACT's `finishes-within:` is a promise about the RUN
+  settings.logit_bias:
+    outcome: loss
+    rows: [A10]
+    why: >-
+      per-token probability nudges, keyed by the tokeniser's own token ids. Those ids
+      differ per model, so the setting is not portable by construction — the same block
+      means something else on the next model
+  settings.extra_headers:
+    outcome: loss
+    rows: [A10]
+    why: "raw HTTP headers for one provider. Not a fact about the agent"
+  settings.extra_body:
+    outcome: loss
+    rows: [A10]
+    why: "raw request-body fields for one provider. Not a fact about the agent"

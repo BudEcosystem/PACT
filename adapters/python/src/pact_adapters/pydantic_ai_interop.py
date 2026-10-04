@@ -215,67 +215,23 @@ def return_schema_for(tool: Any, action: str) -> "dict[str, Any] | None":
 _REGISTRY = registry()
 
 
-#: What each `AgentSpec` key becomes, in PACT's own words.
-_SPEC_MAPS: dict[str, str] = {
-    "model": "agent `model:`",
-    "name": "agent `name:`",
-    "description": "agent `description:`",
-    "instructions": "agent `instructions:`",
-    "model_settings": "`settings:`",
-    "output_schema": "`answers-with:`",
-    "deps_schema": "`run-inputs:`",
-    "capabilities": "`settings.thinking:` and `uses:`, per capability",
-}
-
-#: `AgentSpec` keys that are facts about Pydantic AI's own loop or tooling, which
-#: PACT deliberately does not own. Written out one at a time rather than
-#: defaulted to "unsupported", for the reason `exporting._RECORD_CANNOT_TAKE`
-#: gives: WHICH KIND of thing it is decides whether losing it matters.
+#: What each `AgentSpec` key becomes in PACT's words (`_SPEC_MAPS`), and the
+#: keys that are facts about Pydantic AI's own loop or tooling, which PACT
+#: deliberately does not own (`_SPEC_NOT_PORTABLE`) — each written out in the
+#: registry rather than defaulted to "unsupported", for the reason
+#: `exporting._RECORD_CANNOT_TAKE` gives: WHICH KIND of thing it is decides
+#: whether losing it matters. Views over `_REGISTRY`, not copies.
+_SPEC_MAPS: dict[str, str] = {k: r.pact for k, r in _REGISTRY.through("spec").items() if r.pact}
 _SPEC_NOT_PORTABLE: dict[str, str] = {
-    "end_strategy": (
-        "`early`/`graceful`/`exhaustive` — what Pydantic AI does with tool calls "
-        "the model requested alongside a final result. That is a property of "
-        "`_agent_graph`'s loop, and PACT owns loop semantics itself (`loop:`), so "
-        "copying the word across would claim a stage vocabulary PACT never ran"
-    ),
-    "retries": (
-        "how many times Pydantic AI re-asks the model after a tool or output "
-        "validation failure. PACT has no retry budget: a failure is a `limits:` "
-        "question (`when-it-runs-out:`), decided per ceiling and not per category"
-    ),
-    "tool_timeout": (
-        "how long one tool call may take before Pydantic AI returns a retry "
-        "prompt. PACT bounds the RUN (`runs-for-at-most:`), not the call, and a "
-        "per-call ceiling written as a run ceiling would stop the wrong thing"
-    ),
-    "metadata": (
-        "whatever the caller tags each run with, for their traces. A fact about "
-        "one deployment's observability, not about the agent"
-    ),
-    "instrument": "whether Logfire is on. A deployment choice, like `metadata`",
-    "json_schema_path": (
-        "`$schema` — which JSON Schema file an editor should autocomplete this "
-        "spec against. A fact about the file, not about the agent"
-    ),
+    k: r.why for k, r in _REGISTRY.through("spec").items() if r.why
 }
 
 #: The `ModelSettings` keys `pydantic_ai_transport._SETTINGS` does NOT name, and
 #: why PACT has no home for each. The transport's table is the authority on the
-#: twelve that DO map; this is its complement, and it is derived from
-#: `ModelSettings.__annotations__` at import time so a thirteenth key added by an
-#: SDK upgrade lands in the report rather than in silence.
+#: twelve that DO map; a key in neither (a thirteenth added by an SDK upgrade)
+#: lands in the report as unmapped rather than in silence.
 _SETTINGS_NOT_PORTABLE: dict[str, str] = {
-    "timeout": (
-        "the HTTP timeout for one request. A transport-level knob the surrounding "
-        "system owns; PACT's `finishes-within:` is a promise about the RUN"
-    ),
-    "logit_bias": (
-        "per-token probability nudges, keyed by the tokeniser's own token ids. "
-        "Those ids differ per model, so the setting is not portable by "
-        "construction — the same block means something else on the next model"
-    ),
-    "extra_headers": "raw HTTP headers for one provider. Not a fact about the agent",
-    "extra_body": "raw request-body fields for one provider. Not a fact about the agent",
+    k: r.why for k, r in _REGISTRY.through("settings").items() if r.why
 }
 
 #: `Thinking(effort=...)` and PACT's `thinking:`. Pydantic AI's `ThinkingLevel`
@@ -742,17 +698,7 @@ def _still_to_write(
 #: What each attribute of a live `Agent` becomes. Keyed by the name this importer
 #: REPORTS, which is the public attribute where there is one — a reader of the
 #: report should be able to find the thing named on the object they passed in.
-_AGENT_MAPS: dict[str, str] = {
-    "model": "agent `model:`",
-    "name": "agent `name:`",
-    "description": "agent `description:`",
-    "instructions": "agent `instructions:`",
-    "system_prompts": "agent `instructions:`, appended",
-    "model_settings": "`settings:`",
-    "output_type": "`answers-with:`",
-    "toolsets": "`uses:`, and one `tools/<name>.yaml` per tool",
-}
-
+_AGENT_MAPS: dict[str, str] = {k: r.pact for k, r in _REGISTRY.through("agent").items() if r.pact}
 
 def from_pydantic_ai_agent(
     agent: Any, *, connect: str = ""
@@ -1103,27 +1049,12 @@ def _authored_capabilities(agent: Any) -> list[Any]:
     return [c for c in (getattr(root, "capabilities", ()) or ()) if not injected(c)]
 
 
-#: What a live `Agent` carries that PACT does not. The spec-file reasons hold
-#: word for word, plus the two an object has and a file cannot.
-_AGENT_NOT_PORTABLE: dict[str, str] = dict(
-    _SPEC_NOT_PORTABLE,
-    deps_type=(
-        "the Python type dependencies are injected as. PACT's `run-inputs:` names "
-        "what the surrounding system supplies and the shape of each; it does not "
-        "name a class, because a class is not portable to another language"
-    ),
-    output_validators=(
-        "`@agent.output_validator` functions — Python that inspects an output and "
-        "may raise `ModelRetry`. PACT's equivalent is an eval or a judged rule, "
-        "which is an authored sentence rather than a callable"
-    ),
-    capabilities=(
-        "Pydantic AI middleware around `_agent_graph`. See `interceptors:` — the "
-        "shapes do not correspond, so nothing is claimed"
-    ),
-)
-_AGENT_NOT_PORTABLE.pop("json_schema_path", None)
-
+#: What a live `Agent` carries that PACT does not: the spec-file reasons word for
+#: word (one YAML anchor each in the registry), plus what an object has and a
+#: file cannot.
+_AGENT_NOT_PORTABLE: dict[str, str] = {
+    k: r.why for k, r in _REGISTRY.through("agent").items() if r.why
+}
 
 def _model_id(model: Any) -> str:
     """The catalogue-shaped id of a bound model — `provider:name`.
@@ -1381,91 +1312,17 @@ def resource_file_for(
 # ─────────────────────────────────────── PACT  →  Pydantic AI
 
 
-#: Why each PACT agent field has nowhere to go in an `AgentSpec`. Written out one
-#: at a time for `exporting._RECORD_CANNOT_TAKE`'s reason: which KIND of thing is
-#: lost decides whether losing it matters, and half of these are the difference
+#: Why each PACT agent field has nowhere to go in an `AgentSpec` file (the
+#: registry's `spec-file:`), and the `AgentSpec` fields PACT deliberately does not
+#: decide, left unset and named (its `left:`). Which KIND of thing is lost
+#: decides whether losing it matters, and half of these are the difference
 #: between a governed agent and an ungoverned one.
 _SPEC_CANNOT_TAKE: dict[str, str] = {
-    "uses": (
-        "an `AgentSpec` has no `tools:` field — its only tool-bearing field is "
-        "`capabilities:`, which names Pydantic AI's own provider-adaptive tools "
-        "and not an author's. The names are carried in the companion report and "
-        "`build_agent()` binds them; a spec file alone cannot"
-    ),
-    "team": (
-        "no field for who helps. Pydantic AI does delegation by calling one "
-        "`Agent` from inside another's tool function, which is Python, not spec"
-    ),
-    "teamwork": "no field for how a team's answers are waited for or how a budget is shared",
-    "limits": (
-        "no field for ceilings. `UsageLimits` is an argument to `run()`, not part "
-        "of an agent — so a spec file cannot stop a run, and until something "
-        "passes `usage_limits=` the ceilings the author wrote are not enforced. "
-        "`usage_limits_for()` builds the ones that translate"
-    ),
-    "loop": (
-        "no field for the shape of the thinking. Pydantic AI's loop is "
-        "`_agent_graph`'s and has no stage vocabulary — `may-use:`, "
-        "`does: ask-someone` and the rest have nothing to become"
-    ),
-    "policy": (
-        "no field for what needs a person. `requires_approval=True` is a "
-        "per-tool Python argument, so an approval rule survives only through "
-        "`build_agent()`, which sets it on the tools the policy names. A spec "
-        "file alone carries no policy, and an index built from these could not "
-        "tell a governed agent from an ungoverned one"
-    ),
-    "interceptors": (
-        "no field for rules that hide, stop or redirect. Pydantic AI's nearest "
-        "shape is a capability, which is a Python object and not a sentence"
-    ),
-    "context-policy": (
-        "no field for how a long conversation is kept. Pydantic AI compacts with "
-        "a history processor wrapped in `ProcessHistory`, which takes a callable "
-        "and is therefore marked spec-unusable by its own docs"
-    ),
-    "evals": "no field for how you would know it works — that is `pydantic_evals`, a separate document",
-    "learning": "no field for whether it may improve itself",
-    "remembers": "no field for what survives a summary",
-    "answers-with-mode": (
-        "no field in the SPEC for how the shape is put to the model — "
-        "`output_schema` builds a `StructuredDict`, whose mode is `auto`, "
-        "decided per model from `ModelProfile.default_structured_output_mode`, "
-        "so an author who wrote `native-json-schema` gets whatever their model "
-        "prefers instead. `build_agent()` DOES honour it: the four words map "
-        "exactly onto `str`, `PromptedOutput`, `NativeOutput` and `ToolOutput`. "
-        "This is the clearest single reason the export has two halves"
-    ),
-    "accepts": "no field for the shapes it takes in",
-    "needs": "no field for what the model behind it has to be capable of",
-    "variants": "no field for model-portability strategies",
-    "model-for-checking": "no field for a second model on the checking stages",
-    "pauses": (
-        "no field for what happens while a run is stopped. Pydantic AI parks on "
-        "`DeferredToolRequests` and resumes from `deferred_tool_results=`, which "
-        "is the same shape — but it is a calling convention, not configuration"
-    ),
-    "run-inputs": "",   # carried, as `deps_schema`
-    "name": "",
-    "description": "",
-    "instructions": "",
-    "model": "",
-    "settings": "",
-    "answers-with": "",
+    key.split(".", 1)[1]: row.spec_file
+    for key, row in _REGISTRY.fields.items()
+    if key.startswith("agent.") and row.spec_file
 }
-
-#: `AgentSpec` fields PACT deliberately does not decide, left unset and named.
-_SPEC_SUPPLIES: dict[str, str] = {
-    "end_strategy": (
-        "what to do with tool calls the model requested alongside a final "
-        "result. PACT owns loop semantics and has no word for this, so Pydantic "
-        "AI's own default (`graceful`) stands"
-    ),
-    "retries": "how often to re-ask after a tool or output failure — a Pydantic AI budget",
-    "tool_timeout": "how long one tool call may take — a Pydantic AI ceiling, not a PACT one",
-    "metadata": "whatever the deployment tags its runs with",
-    "instrument": "whether Logfire is on, which is the deployment's choice",
-}
+_SPEC_SUPPLIES: dict[str, str] = {k: r.left for k, r in _REGISTRY.through("spec").items() if r.left}
 
 #: The report key the MCP shape is named under. Not an agent field — `seen` is
 #: the agent block and this is a fact about what the tools on `uses:` REACH — so
