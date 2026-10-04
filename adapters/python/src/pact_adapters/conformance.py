@@ -21,6 +21,7 @@ is a tolerance that grows to fit the result.
 from __future__ import annotations
 
 import asyncio
+import importlib
 import json
 import subprocess
 import sys
@@ -33,12 +34,7 @@ from .loader import FIX as LOADER_FIX
 from .loader import pact_binary
 from .providers import coverage as metric_coverage
 from .script import Script, Turn
-from .transports.anthropic_transport import AnthropicTransport
-from .transports.autogen_transport import AutoGenTransport
-from .transports.langchain_transport import LangChainTransport
-from .transports.langgraph_transport import LangGraphTransport
 from .transports.mock import ReferenceTransport
-from .transports.openai_agents_transport import OpenAIAgentsTransport
 from .transports.pydantic_ai_transport import PydanticAITransport
 
 #: The declared ε, and it is **zero**.
@@ -59,14 +55,45 @@ EPSILON: float = 0.0
 #: each other would agree perfectly while all seven were wrong together.
 REFERENCE = "reference"
 
+class _OnUse:
+    """A transport class whose framework is imported the first time it is used.
+
+    The five other frameworks are optional extras (`pip install
+    'pact-adapters[all]'`), so importing this module must not need them; the
+    report, which compares all seven, is what does — and it names the missing
+    extra at the moment it reaches for one. Calling it builds the transport, and
+    any other attribute is the real class's, so a reader of `TARGETS` that
+    inspects a target (`model_call`, `lattice`) inspects the real one.
+    """
+
+    def __init__(self, module: str, name: str) -> None:
+        self.module, self.__name__ = module, name
+
+    def resolve(self) -> type:
+        try:
+            found = importlib.import_module(f"{__package__}.transports.{self.module}")
+        except ImportError as e:
+            raise ImportError(
+                f"the {self.__name__} target needs a framework that is not installed "
+                f"({e.name}).\n  fix: pip install 'pact-adapters[all]'"
+            ) from e
+        return getattr(found, self.__name__)
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        return self.resolve()(*args, **kwargs)
+
+    def __getattr__(self, attr: str) -> Any:
+        return getattr(self.resolve(), attr)
+
+
 TARGETS: dict[str, Any] = {
     REFERENCE: ReferenceTransport,
     "pydantic-ai": PydanticAITransport,
-    "langgraph": LangGraphTransport,
-    "langchain": LangChainTransport,
-    "autogen": AutoGenTransport,
-    "openai-agents": OpenAIAgentsTransport,
-    "anthropic": AnthropicTransport,
+    "langgraph": _OnUse("langgraph_transport", "LangGraphTransport"),
+    "langchain": _OnUse("langchain_transport", "LangChainTransport"),
+    "autogen": _OnUse("autogen_transport", "AutoGenTransport"),
+    "openai-agents": _OnUse("openai_agents_transport", "OpenAIAgentsTransport"),
+    "anthropic": _OnUse("anthropic_transport", "AnthropicTransport"),
 }
 
 #: What is asked, and what the scripted model says back. One turn: see

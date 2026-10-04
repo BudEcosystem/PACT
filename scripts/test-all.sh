@@ -79,4 +79,4 @@ if ! command -v node >/dev/null 2>&1; then
   echo "  fix: install Node (>= 22, for --experimental-strip-types)" >&2
   exit 1
 fi
-cd adapters/python && uv run pytest tests/ -q
+cd adapters/python && uv run --extra all --extra test pytest tests/ -q

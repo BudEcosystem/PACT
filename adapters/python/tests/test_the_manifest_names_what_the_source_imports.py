@@ -80,16 +80,19 @@ def _imported() -> dict[str, set[str]]:
 
 
 def _declared() -> set[str]:
-    """Every distribution named in `[project] dependencies`."""
-    import re
+    """Every distribution the manifest names: the core and every extra.
 
-    text = MANIFEST.read_text()
-    block = text.split("dependencies = [", 1)[1].split("]", 1)[0]
-    return {
-        re.split(r"[<>=!~\[]", line.strip().strip('",'), 1)[0].strip().lower()
-        for line in block.splitlines()
-        if line.strip().startswith('"')
-    }
+    An import in a transport is declared when the transport's extra names it
+    (`test_the_core_needs_no_extra.py` holds that the CORE needs none of them).
+    """
+    import re
+    import tomllib
+
+    project = tomllib.loads(MANIFEST.read_text())["project"]
+    lines = list(project["dependencies"])
+    for extra in project.get("optional-dependencies", {}).values():
+        lines += extra
+    return {re.split(r"[<>=!~\[ ;]", line.strip(), maxsplit=1)[0].lower() for line in lines}
 
 
 def test_the_manifest_parses_into_something() -> None:

@@ -1573,35 +1573,65 @@ name = "pact-adapters"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "httpx" },
+    { name = "pydantic-ai-slim" },
+    { name = "pyyaml" },
+]
+
+[package.optional-dependencies]
+all = [
     { name = "anthropic" },
     { name = "autogen-agentchat" },
     { name = "autogen-core" },
     { name = "deepeval" },
-    { name = "httpx" },
     { name = "langchain-core" },
     { name = "langgraph" },
     { name = "openai" },
     { name = "openai-agents" },
-    { name = "pydantic-ai-slim" },
+]
+anthropic = [
+    { name = "anthropic" },
+]
+autogen = [
+    { name = "autogen-agentchat" },
+    { name = "autogen-core" },
+]
+deepeval = [
+    { name = "deepeval" },
+]
+langchain = [
+    { name = "langchain-core" },
+]
+langgraph = [
+    { name = "langchain-core" },
+    { name = "langgraph" },
+]
+openai-agents = [
+    { name = "openai" },
+    { name = "openai-agents" },
+]
+test = [
     { name = "pytest" },
-    { name = "pyyaml" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "anthropic", specifier = ">=0.120.0" },
-    { name = "autogen-agentchat", specifier = ">=0.7.5" },
-    { name = "autogen-core", specifier = ">=0.7.5" },
-    { name = "deepeval", specifier = ">=4.1.3" },
+    { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.120.0" },
+    { name = "autogen-agentchat", marker = "extra == 'autogen'", specifier = ">=0.7.5" },
+    { name = "autogen-core", marker = "extra == 'autogen'", specifier = ">=0.7.5" },
+    { name = "deepeval", marker = "extra == 'deepeval'", specifier = ">=4.1.3" },
     { name = "httpx", specifier = ">=0.28" },
-    { name = "langchain-core", specifier = ">=1.5.1" },
-    { name = "langgraph", specifier = ">=1.2.9" },
-    { name = "openai", specifier = ">=2.16.0" },
-    { name = "openai-agents", specifier = ">=0.18.3" },
+    { name = "langchain-core", marker = "extra == 'langchain'", specifier = ">=1.5.1" },
+    { name = "langchain-core", marker = "extra == 'langgraph'", specifier = ">=1.5.1" },
+    { name = "langgraph", marker = "extra == 'langgraph'", specifier = ">=1.2.9" },
+    { name = "openai", marker = "extra == 'openai-agents'", specifier = ">=2.16.0" },
+    { name = "openai-agents", marker = "extra == 'openai-agents'", specifier = ">=0.18.3" },
+    { name = "pact-adapters", extras = ["anthropic", "autogen", "langgraph", "langchain", "openai-agents", "deepeval"], marker = "extra == 'all'" },
     { name = "pydantic-ai-slim", specifier = ">=2.18.0" },
-    { name = "pytest", specifier = ">=9.1.1" },
+    { name = "pytest", marker = "extra == 'test'", specifier = ">=9.1.1" },
     { name = "pyyaml", specifier = ">=6.0" },
 ]
+provides-extras = ["anthropic", "autogen", "langgraph", "langchain", "openai-agents", "deepeval", "all", "test"]
 
 [[package]]
 name = "pillow"

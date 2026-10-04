@@ -173,7 +173,11 @@ def test_the_adapter_is_a_package_that_can_be_installed() -> None:
     assert isinstance(spec["project"]["dependencies"], list), (
         "`dependencies` is not a list — a table above it has swallowed it"
     )
-    assert len(spec["project"]["dependencies"]) > 5
+    # The core is three packages and every framework is an extra
+    # (`test_the_core_needs_no_extra.py` holds which), so the manifest says
+    # something only when both halves are there.
+    extras = spec["project"].get("optional-dependencies", {})
+    assert len(spec["project"]["dependencies"]) >= 3 and "all" in extras, extras
 
 
 def test_the_rust_crates_carry_what_publishing_needs() -> None:
