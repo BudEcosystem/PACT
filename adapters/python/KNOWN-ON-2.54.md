@@ -1,9 +1,11 @@
 # Known on Pydantic AI 2.54
 
 `pydantic-ai-slim` moved from 2.21.0 to 2.54.0 (`pydantic-graph` with it).
-`uv run --extra all --extra test pytest tests/ -q`: 2140 passed, 8 skipped
-(the opt-in live and absent-runtime skips that existed on 2.21). **No test
-fails on 2.54.**
+`uv run --extra all --extra test pytest tests/ -q`: 2140 passed, 8 skipped at
+the move (the opt-in live and absent-runtime skips that existed on 2.21); 2150
+passed, 9 skipped at the end of the Phase 1 work (the ninth is the opt-in live
+test, `PACT_LIVE_BASE_URL`/`PACT_LIVE_MODEL`, which passes against gpt-oss-20b).
+**No test fails on 2.54.**
 
 What the move broke, and how each was fixed:
 
