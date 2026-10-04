@@ -40,6 +40,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .loader import FIX as LOADER_FIX
+from .loader import pact_binary
+
 #: The stages, in the order AC-7.3 names them.
 STAGES = ("validate", "resolve", "build", "eval", "report")
 
@@ -97,11 +100,6 @@ class Pipeline:
         return "\n".join(out) + "\n"
 
 
-def _pact_binary() -> "Path | None":
-    here = Path(__file__).resolve().parents[4] / "target" / "debug" / "pact"
-    return here if here.exists() else None
-
-
 def run_pipeline(path: "str | Path", *, serving_at: str = "") -> Pipeline:
     """Every stage over one workspace, offline."""
     from .scoring import DEFAULT_SERVING_AT, score
@@ -110,12 +108,12 @@ def run_pipeline(path: "str | Path", *, serving_at: str = "") -> Pipeline:
     out = Pipeline(workspace=str(root))
     serving_at = serving_at or DEFAULT_SERVING_AT
 
-    pact = _pact_binary()
+    pact = pact_binary()
     if pact is None:
         for name in STAGES:
             out.stages.append(Stage(
                 name, NOT_ATTEMPTED,
-                "the loader is not built — `cargo build -p pact-cli`",
+                f"the loader was not found — {LOADER_FIX}",
             ))
         return out
 

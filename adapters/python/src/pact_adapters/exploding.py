@@ -32,6 +32,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
+from .loader import FIX as LOADER_FIX
+from .loader import pact_binary
+
 #: The portable key alphabet, verbatim from AC-1.2′.
 PORTABLE = re.compile(r"^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$")
 
@@ -282,11 +285,11 @@ def main(argv: "list[str] | None" = None) -> int:
     if source.suffix == ".json":
         document = json.loads(source.read_text())
     else:
-        binary = Path(__file__).resolve().parents[4] / "target" / "debug" / "pact"
-        if not binary.exists():
+        binary = pact_binary()
+        if binary is None:
             sys.stderr.write(
-                "error: the loader is not built, and a workspace is read through "
-                "it.\n  fix: cargo build -p pact-cli, or pass a .json document.\n"
+                "error: the loader was not found, and a workspace is read through "
+                f"it.\n  fix: {LOADER_FIX}, or pass a .json document.\n"
             )
             return 3
         shown = subprocess.run(

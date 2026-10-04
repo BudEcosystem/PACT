@@ -83,6 +83,9 @@ AUTHOR_SETS_IT: dict[str, str] = {
 
 #: Decides reporting or measurement. No agent can do more or less because of it.
 NOT_ABOUT_CAPABILITY: dict[str, str] = {
+    "loader.REPO": "the checkout this package sits in, searched for a built "
+                   "`pact` binary after PACT_BIN and the PATH. Where the loader "
+                   "is, not what an agent may do",
     "conformance.EPSILON": "the tolerance a conformance comparison allows — a "
                            "fact about the report, and it is zero",
     "questions.SHOW_LIMIT": "how much of a value is shown to the person being "
@@ -92,7 +95,6 @@ NOT_ABOUT_CAPABILITY: dict[str, str] = {
     "judge.GRADE_TIMEOUT_S": "how long to wait for a grader before giving up",
     "interceptors.NEEDLE": "how much context a redaction diagnostic quotes",
     "resolve.BUILTIN_CATALOGUE": "the path to the shipped price list, not a value",
-    "scoring.REPO": "where this checkout is, computed from `__file__`",
     "loops.LIBRARY": "the shipped loop shapes; the numbers in it are each shape's "
                      "own `at-most:`, which an author forks by copying the file",
 }

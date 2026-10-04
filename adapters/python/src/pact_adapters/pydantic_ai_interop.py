@@ -52,6 +52,8 @@ from typing import Any, Mapping
 from .exporting import ExportReport
 from .importing import ImportReport
 from .ir import AgentSpec as PactAgentSpec
+from .loader import FIX as LOADER_FIX
+from .loader import pact_binary
 from .questions import Shape
 from .transports.pydantic_ai_transport import _SETTINGS, _translated
 from .yes_no import said_yes
@@ -2121,7 +2123,6 @@ To go the other way, `pact-import --as pydantic-ai-spec FILE`.
 def main(argv: "list[str] | None" = None) -> int:
     import subprocess
     import sys
-    from pathlib import Path
 
     import json
     import yaml
@@ -2131,11 +2132,11 @@ def main(argv: "list[str] | None" = None) -> int:
         sys.stdout.write(USAGE)
         return 0 if args and args[0] in ("-h", "--help") else 1
 
-    binary = Path(__file__).resolve().parents[4] / "target" / "debug" / "pact"
-    if not binary.exists():
+    binary = pact_binary()
+    if binary is None:
         sys.stderr.write(
-            "error: the loader is not built, and a workspace is read through "
-            "it.\n  fix: cargo build -p pact-cli\n"
+            "error: the loader was not found, and a workspace is read through "
+            f"it.\n  fix: {LOADER_FIX}\n"
         )
         return 3
     shown = subprocess.run([str(binary), "show", args[0]], capture_output=True, text=True)

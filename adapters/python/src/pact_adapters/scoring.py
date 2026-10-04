@@ -38,7 +38,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -72,6 +71,8 @@ from .evals import (
 from .evals import _calls
 from .harness import RunResult, delegate_by_running, run
 from .ir import AgentSpec
+from .loader import FIX as LOADER_FIX
+from .loader import pact_binary
 # The grader the author's `graded-by:` line names, and the one question about
 # which weights are on this disk today. Both imported rather than written again
 # here: `served_here` is already the only thing in this package that asks a
@@ -87,10 +88,6 @@ from .learning import CAN_BE_APPLIED, Learner, Outcome, Proposal
 from .resolve import ModelEntry, load_catalogue, needs_of, price_of, resolve
 from .slo import against_the_catalogue
 from .yes_no import said_yes
-
-#: Where the repository root is from here, so a checkout that has built the CLI
-#: is found without anybody exporting anything.
-REPO = Path(__file__).resolve().parents[4]
 
 #: What a mistake in the command itself points at. The renderer wants a file and
 #: a line, and a command line has exactly one of each — the same answer
@@ -862,7 +859,7 @@ def _load_document(root: Path) -> tuple[dict[str, Any], "Problem | None"]:
     document only — a second reader of the tree is a second Expansion Rule, and
     the two would disagree the first time somebody wrote a setting as a folder.
     """
-    binary = _pact_binary()
+    binary = pact_binary()
     if binary is None:
         return {}, Problem(
             severity="error", rule="scoring/no-loader", file=COMMAND_LINE, line=1,
@@ -870,7 +867,7 @@ def _load_document(root: Path) -> tuple[dict[str, Any], "Problem | None"]:
                 "the `pact` command is not on this machine, and it is what reads "
                 "your folder"
             ),
-            fix="run `cargo build -p pact-cli` in the PACT checkout, then try again",
+            fix=f"{LOADER_FIX}, then try again",
         )
     if not root.exists():
         return {}, Problem(
@@ -900,15 +897,6 @@ def _load_document(root: Path) -> tuple[dict[str, Any], "Problem | None"]:
             fix=f"run `pact check {root}` and fix what it names",
         )
     return document if isinstance(document, dict) else {}, None
-
-
-def _pact_binary() -> "Path | None":
-    """Where `pact` is: a built checkout first, then whatever is on PATH."""
-    for candidate in (REPO / "target/debug/pact", REPO / "target/release/pact"):
-        if candidate.exists():
-            return candidate
-    found = shutil.which("pact")
-    return Path(found) if found else None
 
 
 def _which_agent(

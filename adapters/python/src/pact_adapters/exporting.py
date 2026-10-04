@@ -35,6 +35,8 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from .importing import ImportReport  # noqa: F401  (kept adjacent on purpose)
+from .loader import FIX as LOADER_FIX
+from .loader import pact_binary
 
 
 @dataclass
@@ -251,18 +253,17 @@ def main(argv: "list[str] | None" = None) -> int:
     import json
     import subprocess
     import sys
-    from pathlib import Path
 
     args = list(sys.argv[1:] if argv is None else argv)
     if len(args) != 2 or args[0] in ("-h", "--help"):
         sys.stdout.write(USAGE)
         return 0 if args and args[0] in ("-h", "--help") else 1
 
-    binary = Path(__file__).resolve().parents[4] / "target" / "debug" / "pact"
-    if not binary.exists():
+    binary = pact_binary()
+    if binary is None:
         sys.stderr.write(
-            "error: the loader is not built, and a workspace is read through "
-            "it.\n  fix: cargo build -p pact-cli\n"
+            "error: the loader was not found, and a workspace is read through "
+            f"it.\n  fix: {LOADER_FIX}\n"
         )
         return 3
     shown = subprocess.run(

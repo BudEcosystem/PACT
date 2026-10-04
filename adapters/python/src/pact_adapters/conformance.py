@@ -29,6 +29,8 @@ from typing import Any
 
 from .harness import run
 from .ir import AgentSpec
+from .loader import FIX as LOADER_FIX
+from .loader import pact_binary
 from .providers import coverage as metric_coverage
 from .script import Script, Turn
 from .transports.anthropic_transport import AnthropicTransport
@@ -219,11 +221,11 @@ def main(argv: "list[str] | None" = None) -> int:
         )
         return 0
     where = Path(args[0]).resolve()
-    pact_bin = Path(__file__).resolve().parents[4] / "target" / "debug" / "pact"
-    if not pact_bin.exists():
+    pact_bin = pact_binary()
+    if pact_bin is None:
         sys.stderr.write(
-            "error: the loader is not built, and this report is about what it "
-            "produces.\n  fix: cargo build -p pact-cli\n"
+            "error: the loader was not found, and this report is about what it "
+            f"produces.\n  fix: {LOADER_FIX}\n"
         )
         return 3
     roots = sorted(p.parent for p in where.rglob("workspace.yaml"))

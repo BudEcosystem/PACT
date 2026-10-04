@@ -57,8 +57,6 @@ THE_RUN_PATH = (
 COMMANDS: dict[str, str] = {
     "scoring": "the eval command. Reads the tree because a person pointed it at "
                "one, and hands the DOCUMENT to the harness",
-    "pipeline": "validate → resolve → build → eval → report, over a tree a "
-                "person named",
     "conformance": "the Conformance Report, over every workspace under a path",
     "exploding": "writes a tree from a document — the inverse of loading, and "
                  "the only module here whose job is to CREATE author files",
@@ -67,15 +65,6 @@ COMMANDS: dict[str, str] = {
     # `to_bud_agent_record` — still touch nothing; it is the door that reads a
     # file, because a door is a thing a person points at something.
     "importing": "reads the artifact named on the command line",
-    "exporting": "reads a workspace through `pact show` to export one agent of it",
-    # The same door as `exporting`, for the one target with a declarative format
-    # of its own. Its LIBRARY half touches nothing — `from_pydantic_ai_spec`
-    # takes a mapping, `from_pydantic_ai_agent` takes an object somebody else
-    # built, and `build_agent` takes an `ir.AgentSpec`, which is the loaded
-    # document and nothing more (P-1). It is `main` that reads a file, because a
-    # door is a thing a person points at something.
-    "pydantic_ai_interop": "reads a workspace through `pact show` to write one "
-                           "agent of it as a Pydantic AI spec",
     "learning": "keeps the spend and refusal ledgers in `.pact/`, which is the "
                 "DERIVED area (D2) and never the author's files",
     "watches": "writes a `watch:` record to `.pact/`, same area, same reason",
