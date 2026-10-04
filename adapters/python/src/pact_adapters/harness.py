@@ -1291,6 +1291,10 @@ async def run(
     # `bind:` was checked by `pact check` and executed by nothing at all, and
     # unlike `context-policy` and `summarised-by` it was not even reported.
     result.unenforced = result.unenforced + _unfilled_binds(spec, supplied)
+    # 02P A4. An action's `answers-with:` is checked by `pact check` and carried
+    # by `ir.ToolSpec`, and a tool here answers in TEXT, so nothing on this
+    # runtime holds a result to it. Said, for `bind:`'s reason one line up.
+    result.unenforced = result.unenforced + _unchecked_answers(spec)
     # A7. PACT does not retrieve, so a set of documents this run never consulted
     # is the ordinary state on a machine with no index — and it must not be the
     # SILENT state, because the agent then answers from what the model already
@@ -3121,6 +3125,23 @@ def _unfilled_binds(spec: AgentSpec, supplied: Mapping[str, Any]) -> tuple[str, 
                     f"made without it."
                 )
     return tuple(out)
+
+
+def _unchecked_answers(spec: AgentSpec) -> tuple[str, ...]:
+    """Every action whose `answers-with:` this runtime cannot hold a result to.
+
+    A tool here returns a string, so a declared return type is a promise this
+    loop has nothing to check against. A host whose tools return typed values
+    checks them with `pydantic_ai_interop.return_schema_for`.
+    """
+    return tuple(
+        f"answers-with: {tool.name}/{action} says what it hands back "
+        f"({', '.join(sorted(shape))}), and this runtime hands a tool's result to "
+        "the model as text, unchecked — run it on a host whose tools return "
+        "typed results to hold it."
+        for tool in spec.tools
+        for action, shape in sorted(tool.answers_with.items())
+    )
 
 
 def _call_tool(fn, call: "ToolCall") -> str:

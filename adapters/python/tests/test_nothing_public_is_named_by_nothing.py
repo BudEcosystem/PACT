@@ -44,6 +44,16 @@ SRC = Path(__file__).resolve().parents[1] / "src" / "pact_adapters"
 #: _gained_a_caller` deletes it again when one appears — a list of what must stay
 #: uncalled cannot notice a fix.
 HOST_API: dict[str, str] = {
+    # 02P A4. A return type is per ACTION, and the only things in this port that
+    # build Pydantic AI tools (`build_agent`, the transport) offer one tool per
+    # PACT tool, with the action as an argument — so there is no tool definition
+    # here an action's schema could sit on. A host that offers each action as its
+    # own tool (an MCP server's tools, filtered to the declared actions) is the
+    # caller, and it is outside `src/` by construction.
+    "pydantic_ai_interop.return_schema_for": (
+        "what one action hands back, as a `ToolDefinition.return_schema`, for a "
+        "host that offers each action as its own tool; nothing in `src/` does"
+    ),
     # The wall between this port and another one. Nothing in `src/` calls it
     # because nothing in `src/` DRIVES a second implementation — that is what a
     # conformance suite does, and what any host comparing two runtimes does.

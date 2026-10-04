@@ -197,6 +197,14 @@ class ToolSpec:
     #: tool may, while no run ever wrote anything at all. A guard biting on a
     #: write that never happens is a guarantee about nothing.
     remembers: dict[str, str] = field(default_factory=dict)
+    #: Per action, what it hands back (02P A4) — the author's own
+    #: `answers-with:` lines, `{field: shape}`, keyed the way `binds` is. The
+    #: same vocabulary as `AgentSpec.answers_with`, already held to it by
+    #: `pact check`, so `questions.Shape.parse` reads every value and
+    #: `pydantic_ai_interop.shape_as_json_schema` turns each into the fragment a
+    #: `ToolDefinition.return_schema` is built from. An action that declares
+    #: nothing is absent, never `{}`.
+    answers_with: dict[str, dict[str, str]] = field(default_factory=dict)
     #: WHERE this tool reaches — the one of `connect:`, `url:` and `says:` the
     #: author wrote, with the server a `connect:` names already resolved.
     #:
@@ -687,6 +695,7 @@ class AgentSpec:
                 parameters=_takes(t),
                 binds=_binds(t),
                 remembers=_remembers(t),
+                answers_with=_action_answers(t),
                 # The whole `resources:` map is handed over, not the workspace:
                 # the resolution happens HERE, once, so that what crosses the
                 # boundary is a server an adapter can reach rather than a name it
@@ -1075,6 +1084,19 @@ def _remembers(tool: dict[str, Any]) -> dict[str, str]:
         named = action.get("remember-as")
         if isinstance(named, str) and named.strip():
             out[str(name)] = named.strip()
+    return out
+
+
+def _action_answers(tool: dict[str, Any]) -> dict[str, dict[str, str]]:
+    """One tool's `answers-with:` lines, per action (02P A4)."""
+    out: dict[str, dict[str, str]] = {}
+    actions = tool.get("actions") or {}
+    if not isinstance(actions, dict):
+        return out
+    for name, action in sorted(actions.items()):
+        answers = action.get("answers-with") if isinstance(action, dict) else None
+        if isinstance(answers, dict) and answers:
+            out[str(name)] = {str(k): str(v) for k, v in answers.items()}
     return out
 
 

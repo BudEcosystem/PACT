@@ -56,7 +56,7 @@ echo "── Adapters (7 targets: Pydantic AI, LangGraph, LangChain, AutoGen, Op
 # the thing invariant P-1 is about. The `cargo run` above builds it; this is the
 # assertion that it did.
 if [ ! -x target/debug/pact ]; then
-  echo "error: target/debug/pact is missing, and 64 test files read the worked" >&2
+  echo "error: target/debug/pact is missing, and 65 test files read the worked" >&2
   echo "  example through it. Running the suite now would skip them silently." >&2
   echo "  fix: cargo build -p pact-cli" >&2
   exit 1

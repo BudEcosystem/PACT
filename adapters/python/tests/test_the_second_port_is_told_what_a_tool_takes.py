@@ -102,6 +102,7 @@ def _a_tool_with_everything() -> ToolSpec:
         parameters={"order-number": "text"},
         binds={"look-up": {"account": "run-inputs.customer-id"}},
         remembers={"look-up": "last-order-seen"},
+        answers_with={"look-up": {"status": "one of open, shipped"}},
         reaches=Reach(kind="url", value="https://orders.example.com", method="get"),
     )
 
@@ -232,3 +233,28 @@ def test_a_tool_with_none_of_this_is_reported_about_none_of_it() -> None:
     said = " ".join(got.get("unenforced") or [])
     assert "bind" not in said, said
     assert "remember-as" not in said, said
+
+
+def test_both_ports_say_the_same_thing_about_an_unchecked_return_type() -> None:
+    """02P A4. Neither port's tools return typed values, so both name every
+    action's `answers-with:` as unchecked — in the same words, because a reader
+    comparing two runs should not find two opinions about one line."""
+    import asyncio
+
+    from pact_adapters.harness import run
+    from pact_adapters.script import Script, Turn
+    from pact_adapters.transports.mock import ReferenceTransport
+
+    doc = json.loads(json.dumps(BINDS_AND_REMEMBERS))
+    doc["tools"]["orders"]["actions"]["look-up"]["answers-with"] = {
+        "status": "one of open, shipped"
+    }
+    spec = AgentSpec.from_document(doc, "desk")
+    second = [s for s in _through_the_second_port(spec).get("unenforced") or []
+              if s.startswith("answers-with:")]
+    reference = asyncio.run(run(
+        spec, ReferenceTransport(Script([Turn("done")])), "go", {},
+        run_inputs={"customer-id": "c-1"},
+    ))
+    first = [s for s in reference.unenforced if s.startswith("answers-with:")]
+    assert first and first == second, (first, second)

@@ -126,6 +126,9 @@ export type AgentSpec = {
     "remember-as"?: Record<string, string>;
     // Where the call would go. Reported: no client here.
     reaches?: { kind: string; where: string; method: string };
+    // What each action hands back (02P A4), per action. Reported: a tool here
+    // answers in text, so nothing holds a result to it.
+    "answers-with"?: Record<string, Record<string, string>>;
   }[];
   // Written procedures the agent may consult. A stage of a loop may narrow to
   // one, and until this field existed `may-use: [refund-policy]` — a skill the
@@ -391,6 +394,14 @@ export function notDoneHere(spec: AgentSpec): string[] {
       out.push(
         `remember-as: ${at} keeps what it answered as \`${where}\`, and this runtime ` +
           `has nowhere to keep it — so the next turn does not know it.`,
+      );
+    }
+    for (const [action, shape] of Object.entries(t["answers-with"] ?? {}).sort()) {
+      out.push(
+        `answers-with: ${t.name}/${action} says what it hands back ` +
+          `(${Object.keys(shape).sort().join(", ")}), and this runtime hands a tool's ` +
+          `result to the model as text, unchecked — run it on a host whose tools ` +
+          `return typed results to hold it.`,
       );
     }
     if (t.reaches && t.reaches.kind === "connect") {

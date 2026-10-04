@@ -2265,6 +2265,24 @@ groups:
           what this action needs to be given, one line per argument — for
           example `order-number: text` or `amount: money`. This is what the
           model is shown, so the words here are the words it will use.
+      answers-with:
+        # 02P A4. The other half of `takes:`, in the same vocabulary as an
+        # agent's and a program's `answers-with:`, so an author who has written
+        # one has written all three. It is what a typed function the model's
+        # code calls needs for a return type, what Pydantic AI carries as
+        # `ToolDefinition.return_schema`, and what a `bind: steps.<n>.<field>`
+        # can be checked against. Each line is held to the shape vocabulary at
+        # check time by the type alone (`answer-shape`).
+        type: map of answer-shape
+        shapes: *the-answer-shapes
+        surface: S-CAP
+        tier: expert
+        help: >
+          what this action hands back, one line per thing — for example
+          `latest: number` or `status: one of ok, degraded`. The same shapes an
+          agent's `answers-with:` takes. A host whose tools return typed
+          results holds each one to it; a runtime whose tools answer in text
+          says, on the run's report, that it checked nothing.
       program:
         # WHAT RUNS, when this action's tool reaches a sandbox. It is on the
         # ACTION and not on the tool because a tool reaches one place and may

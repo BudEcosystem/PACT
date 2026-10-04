@@ -61,6 +61,7 @@ from .yes_no import said_yes
 __all__ = [
     "shape_as_json_schema",
     "shape_from_json_schema",
+    "return_schema_for",
     "from_pydantic_ai_spec",
     "from_pydantic_ai_agent",
     "to_pydantic_ai_spec",
@@ -181,6 +182,26 @@ def _answers_with_schema(answers: Mapping[str, str]) -> "dict[str, Any] | None":
         "required": sorted(properties),
         "additionalProperties": False,
     }
+
+
+def return_schema_for(tool: Any, action: str) -> "dict[str, Any] | None":
+    """What one action hands back (02P A4), as a `ToolDefinition.return_schema`.
+
+    `tool` is an `ir.ToolSpec`; `action` is one of its `actions:` names, which
+    for an MCP tool is the server's own tool name. `None` when the action
+    declares no `answers-with:` — an absent return type, never an empty object,
+    because `{}` would claim the action hands back nothing at all.
+
+    The same builder as an agent's `output_schema`, so an action's result and an
+    agent's answer that are written alike are checked alike. A host sets it on
+    the tool's definition (`include_return_schema=True`, tools.py:735, or the
+    `IncludeToolReturnSchemas` capability) to show it to the model, and checks
+    the call's result against it itself: Pydantic AI only shows or clears a
+    `return_schema` (models/__init__.py:2181) and never validates a result
+    against it. An MCP server's own `outputSchema` arrives in the same field
+    (mcp.py:1322), so the two can be compared before a run.
+    """
+    return _answers_with_schema(getattr(tool, "answers_with", {}).get(action) or {})
 
 
 # ─────────────────────────────────────── Pydantic AI  →  PACT
