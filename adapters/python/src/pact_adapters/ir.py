@@ -18,7 +18,7 @@ from .holes import Hole, holes_in
 from .context_policy import ContextPolicy, Summariser, Tidier
 from .delegation import Teamwork
 from .interceptors import Chain
-from .limits import Limits, steps_at_most
+from .limits import Limits, steps_at_most, whole
 from .limits import seconds as _seconds
 from .slo import Slo
 from .loops import STANDARD, Loop
@@ -386,6 +386,12 @@ class AgentSpec:
     #: TypeScript port and all seven transports already speak; two copies of one
     #: ceiling is the `same-setting-twice` mistake the validator exists to catch.
     max_steps: int = DEFAULT_STEPS
+    #: Whether the AUTHOR wrote `steps-at-most`. When they did not, `max_steps`
+    #: is this port's own loop bound (`DEFAULT_STEPS`), which is PACT's harness
+    #: speaking and not the document — so a host whose loop is not PACT's
+    #: (`pydantic_ai_interop.usage_limits_for`) carries a step ceiling only when
+    #: this is true. A flag rather than a second copy of the number.
+    steps_written: bool = False
     #: Every other way this run is allowed to end, and what to do at each.
     limits: Limits = Limits()
     #: The latency promises, and what `feel:` supplies for the ones nobody wrote.
@@ -754,6 +760,7 @@ class AgentSpec:
             knowledge=knowledge,
             team={k: _text(v) for k, v in sorted((a.get("team") or {}).items())},
             max_steps=steps_at_most(written, DEFAULT_STEPS),
+            steps_written=whole(written.get("steps-at-most")) is not None,
             limits=Limits.from_mapping(written),
             slo=Slo.from_mapping(written),
             settings={

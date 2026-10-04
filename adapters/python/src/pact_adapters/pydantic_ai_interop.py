@@ -1859,7 +1859,9 @@ def usage_limits_for(spec: PactAgentSpec) -> Any:
 
     Three of PACT's ceilings have an exact counterpart and are carried:
     `steps-at-most` is `request_limit`, `tool-calls-at-most` is
-    `tool_calls_limit`, `tokens-at-most` is `total_tokens_limit`.
+    `tool_calls_limit`, `tokens-at-most` is `total_tokens_limit`. One the
+    author did not write is `None` — no ceiling — including `request_limit`,
+    whose own default (50) would otherwise stop a run nobody limited.
 
     Two do NOT translate and are deliberately left out rather than approximated:
 
@@ -1881,7 +1883,12 @@ def usage_limits_for(spec: PactAgentSpec) -> Any:
 
     limits = spec.limits
     return UsageLimits(
-        request_limit=spec.max_steps,
+        # Only a ceiling the AUTHOR wrote. `max_steps` falls back to this port's
+        # own loop bound when `steps-at-most` is absent, and that bound is PACT's
+        # harness, not the document; and `None` is passed rather than left out,
+        # because `UsageLimits` otherwise caps at `request_limit=50`
+        # (pydantic_ai/usage.py:482) — a ceiling nobody wrote either.
+        request_limit=spec.max_steps if spec.steps_written else None,
         tool_calls_limit=limits.tool_calls_at_most,
         total_tokens_limit=limits.tokens_at_most,
     )
