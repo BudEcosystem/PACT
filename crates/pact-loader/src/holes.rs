@@ -186,13 +186,22 @@ fn declaration(namespace: &str, name: &str) -> String {
     }
 }
 
-/// The holes an agent could write instead, named in full.
+/// The holes an agent could write instead, named in full. A bare name the agent
+/// already declares has its answer: the hole that names it, and nothing to add.
 fn offer(
     agent: &str,
     inputs: &BTreeSet<String>,
     remembered: &BTreeSet<String>,
     written: &str,
 ) -> String {
+    let meant: Vec<String> = [(RUN_INPUTS, inputs), (REMEMBERS, remembered)]
+        .iter()
+        .filter(|(_, known)| known.contains(written))
+        .map(|(namespace, _)| format!("`{{{{{namespace}.{written}}}}}`"))
+        .collect();
+    if !meant.is_empty() {
+        return meant.join(" or ");
+    }
     let both: Vec<String> = inputs
         .iter()
         .map(|n| format!("`{{{{{RUN_INPUTS}.{n}}}}}`"))
@@ -302,7 +311,31 @@ agents:
         let d = check_text(&TREE.replace("{{ run-inputs.brand }}", "{{brand}}"));
         let e = d.items().first().expect("caught");
         assert_eq!(e.rule, "loader/not-a-hole");
-        assert!(e.fix.contains("{{run-inputs.brand}}"), "{}", e.fix);
+        assert_eq!(e.fix, "Write `{{run-inputs.brand}}`.");
+    }
+
+    #[test]
+    fn a_bare_name_nothing_declares_is_offered_the_holes_and_a_declaration() {
+        let d = check_text(&TREE.replace("{{ run-inputs.brand }}", "{{brnd}}"));
+        let e = d.items().first().expect("caught");
+        assert_eq!(e.rule, "loader/not-a-hole");
+        assert!(
+            e.fix.contains("one of: `{{run-inputs.brand}}`"),
+            "{}",
+            e.fix
+        );
+        assert!(
+            e.fix.contains("add `brnd: text` under `run-inputs:`"),
+            "{}",
+            e.fix
+        );
+    }
+
+    #[test]
+    fn a_bare_name_that_is_a_remembered_fact_is_told_that_hole() {
+        let d = check_text(&TREE.replace("{{ run-inputs.brand }}", "{{tone}}"));
+        let e = d.items().first().expect("caught");
+        assert_eq!(e.fix, "Write `{{remembers.tone}}`.");
     }
 
     #[test]
