@@ -32,7 +32,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from pact_adapters.holes import fill  # noqa: E402
 from pact_adapters.ir import AgentSpec  # noqa: E402
-from pact_adapters.pydantic_ai_interop import return_schema_for, usage_limits_for  # noqa: E402
+from pact_adapters.pydantic_ai_interop import (  # noqa: E402
+    return_schema_for,
+    usage_limits_for,
+)
 
 BASE_URL = os.environ.get("PACT_LIVE_BASE_URL", "")
 MODEL = os.environ.get("PACT_LIVE_MODEL", "")

@@ -35,7 +35,6 @@ still stops the call.
 from __future__ import annotations
 
 import contextlib
-
 import json
 import subprocess
 import sys
