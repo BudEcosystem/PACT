@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Any
 
@@ -223,7 +223,13 @@ _CEILING_FIELDS: tuple[tuple[str, str | None, str], ...] = (
 #:
 #: a report sending an author to a line that appears nowhere in their document.
 #: `from_mapping` sets one of these two and nothing else ever should.
-_WALL_CLOCK_FIELDS: tuple[str, ...] = ("runs-for-at-most", "finishes-within")
+#:
+#: `feel` is the third, and it is a line the author wrote: `feel: interactive`
+#: supplies `finishes-within:` when nobody wrote one (`slo.FEELS`), and a
+#: `finishes-within:` is a stop. Reported as `feel`, because that is the line
+#: in the file; quoting `finishes-within` would send the author to a line that
+#: is not there.
+_WALL_CLOCK_FIELDS: tuple[str, ...] = ("runs-for-at-most", "finishes-within", "feel")
 
 
 @dataclass(frozen=True)
@@ -522,6 +528,20 @@ class Limits:
         wall, wall_field = seconds(m.get("runs-for-at-most")), "runs-for-at-most"
         if wall is None:
             wall, wall_field = seconds(m.get("finishes-within")), "finishes-within"
+        # `feel:` supplies `finishes-within:` when neither line is written —
+        # its help says so, and `finishes-within:`'s says that is a stop — but
+        # only where the author has said what happens at the stop. The schema
+        # makes every written ceiling carry `when-it-runs-out:` so that this
+        # module never picks the action; `feel:` carries no such requirement,
+        # so a `feel:` with no `when-it-runs-out:` beside it stays a latency
+        # band (`Slo`) and stops nothing, rather than stopping on an action
+        # nobody chose.
+        if wall is None and m.get("when-it-runs-out") is not None:
+            from .slo import FEELS  # `slo` reads its figures through this module
+
+            band = FEELS.get(str(m.get("feel") or "").strip())
+            if band is not None:
+                wall, wall_field = band[1], "feel"
         # Both halves of the cap, off one read. Two reads would be two chances
         # for the amount and the currency to come from different lines.
         cap = money(m.get("cost-per-request-under"))
@@ -590,6 +610,39 @@ class Limits:
             if at >= c.limit:
                 return Reached(c, at, self.when_it_runs_out)
         return None
+
+    def kept_going(
+        self, meter: Meter, now: float, steps_at_most: int | None = None
+    ) -> "tuple[Limits, int | None]":
+        """The ceilings after a person said to keep going: a fresh budget of the
+        same size as the one written, from where the run is now.
+
+        The harness has granted exactly this for the step ceiling since
+        `ask-a-person` existed (`limit = start + spec.max_steps`), and only for
+        that one: every other ceiling kept its figure while the meter kept its
+        reading, so a run that reached `tool-calls-at-most` and was told to
+        keep going reached it again at once, at the same place, and asked the
+        same question under the same key. Every row is granted the same way
+        here, so one answer buys one more of everything the author budgeted and
+        a second continuation is a second decision.
+
+        Called on the limits AS WRITTEN, never on the ones a previous answer
+        produced: "the same size" is the author's figure, and growing it from a
+        figure already grown would double the budget at every answer.
+
+        Returns the new limits and the new step ceiling (`None` when no step
+        ceiling is in force), because the step ceiling lives on
+        `AgentSpec.max_steps` rather than here (see the module docstring).
+        """
+        grant: dict[str, Any] = {}
+        for attr, _line, reads in _CEILING_FIELDS:
+            figure = getattr(self, attr)
+            if figure is None:
+                continue
+            more = meter.reading(reads, now) + figure
+            grant[attr] = int(math.ceil(more)) if isinstance(figure, int) else more
+        steps = None if steps_at_most is None else meter.steps + steps_at_most
+        return replace(self, **grant), steps
 
     def unmeterable(
         self, counts_tokens: bool, prices_money: "bool | None" = None
