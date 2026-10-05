@@ -1431,3 +1431,75 @@ def _as_list(v: Any) -> list[str]:
     if isinstance(v, list):
         return [x for x in v if isinstance(x, str)]
     return []
+
+
+# ──────────────────────────────────────────────────────────────── ports
+
+
+@dataclass(frozen=True)
+class PortSpec:
+    """One `ports/<name>.yaml`: how the outside world reaches an agent.
+
+    PACT declares a port and the runtime connects it (D24); for a round no
+    runtime could read one, because nothing in this package did. Built here so
+    every runtime reads the same port the same way: `kind:` is derived from
+    `every:` exactly as the loader derives it (`crates/pact-loader/src/ports.rs`
+    `kind_of` — a port carrying `every:` IS a timer), and `every:` is read once,
+    by `schedules.Schedule`, into the form a clock keeps.
+    """
+
+    name: str
+    description: str = ""
+    #: `conversation`, `schedule`, `inbound-call` or `event`; `schedule` when
+    #: only `every:` says so.
+    kind: str = ""
+    #: The author's words (`Friday at 4pm`); `schedule` is them read.
+    every: str = ""
+    says: str = ""
+    #: `skip`, `queue` or `cancel-previous`, as written; `""` when unwritten.
+    if_still_running: str = ""
+    through: str = ""
+    #: The agent that handles what arrives.
+    answers: str = ""
+    same_conversation_when: tuple[str, ...] = ()
+    #: Who may start work here. Empty means nobody (the schema's own words).
+    who_can_reach_it: tuple[str, ...] = ()
+    #: What the port keeps between messages: a `remembers:` block, read by the
+    #: same reader as an agent's (`Facts.of`).
+    remembers: Facts = field(default_factory=Facts)
+
+    @property
+    def schedule(self) -> "Any":
+        """`every:` as a `schedules.Schedule`, or None on a port that is not a timer.
+        Raises `schedules.Unreadable` with the forms that work."""
+        from .schedules import Schedule
+
+        return Schedule.parse(self.every) if self.every else None
+
+    @staticmethod
+    def read(doc: Mapping[str, Any], name: str) -> "PortSpec":
+        """Port `name` of a shown document. (Not `from_document`: this module's
+        `AgentSpec.from_document` is the one a call graph resolves by that name.)"""
+        ports = doc.get("ports") or {}
+        if name not in ports:
+            raise KeyError(f"no port {name!r}; the ports are: {', '.join(sorted(ports)) or 'none'}")
+        raw = ports[name] or {}
+        every = str(raw.get("every") or "").strip()
+        return PortSpec(
+            name=name,
+            description=str(raw.get("description") or "").strip(),
+            kind=str(raw.get("kind") or ("schedule" if every else "")).strip(),
+            every=every,
+            says=str(raw.get("says") or "").strip(),
+            if_still_running=str(raw.get("if-still-running") or "").strip(),
+            through=str(raw.get("through") or "").strip(),
+            answers=str(raw.get("answers") or "").strip(),
+            same_conversation_when=tuple(_as_list(raw.get("same-conversation-when"))),
+            who_can_reach_it=tuple(_as_list(raw.get("who-can-reach-it"))),
+            remembers=Facts.of(raw.get("remembers")),
+        )
+
+
+def ports_of(doc: Mapping[str, Any]) -> tuple[PortSpec, ...]:
+    """Every port the workspace declares, by name."""
+    return tuple(PortSpec.read(doc, n) for n in sorted(doc.get("ports") or {}))

@@ -124,7 +124,14 @@ class Facts:
         write. One store, and the flag decides only what a shortening re-states.
         """
         agents = doc.get("agents") or {}
-        block = ((agents.get(agent_key) or {}).get("remembers")) or {}
+        return Facts.of((agents.get(agent_key) or {}).get("remembers"))
+
+    @staticmethod
+    def of(block: Any) -> "Facts":
+        """One `remembers:` block, wherever it is written — an agent's, or a
+        port's (`port.remembers:` is the same `map of group:state`, so it is
+        read by the same reader and held to the same terms)."""
+        block = block if isinstance(block, Mapping) else {}
         out: dict[str, Fact] = {}
         for name, raw in block.items():
             if not isinstance(raw, Mapping):

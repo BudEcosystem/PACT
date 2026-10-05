@@ -44,6 +44,21 @@ SRC = Path(__file__).resolve().parents[1] / "src" / "pact_adapters"
 #: _gained_a_caller` deletes it again when one appears — a list of what must stay
 #: uncalled cannot notice a fix.
 HOST_API: dict[str, str] = {
+    # D24: PACT declares a port and the runtime connects it. The reference
+    # harness serves no port, so nothing in `src/` lists them; a runtime that
+    # does (budflow-core's `budflow serve`) reads every port through this one.
+    "ir.ports_of": (
+        "every port the workspace declares, for a runtime that serves them; the "
+        "harness serves none"
+    ),
+    # `learning.models:` names the model that writes proposals (`reflector`).
+    # PACT's own `pact-improve` asks the model it scores with, so nothing in
+    # `src/` looks a role up; a runtime that binds the author's reflector
+    # (budflow-core's `budflow learn`) reads it here.
+    "learning.model_for": (
+        "the `learning.models:` row for a role, for a runtime that binds the "
+        "author's reflector; `pact-improve` proposes with the model it scores on"
+    ),
     # 02P §8.1, 02W §2.16: governed run-time composition. The reference harness
     # has no tool that brings an agent in while a run works, so nothing in
     # `src/` starts one; a runtime that offers `may-start:` (budflow-core) asks
