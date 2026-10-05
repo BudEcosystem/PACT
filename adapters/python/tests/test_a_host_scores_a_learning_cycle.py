@@ -117,3 +117,15 @@ def test_the_record_is_read_from_where_it_is_written_when_the_derived_area_moves
     assert (MonthlySpend.at(tree).money, MonthlySpend.at(tree).runs) == (1.5, 3)
     assert Refusals.at(tree).why(Proposal("instructions", BAD, GOOD)) is not None
     assert not (tree / ".pact").exists()
+
+
+def test_held_for_a_person_is_its_own_answer_not_a_refusal() -> None:
+    from pact_adapters.learning import Permissions
+
+    widening = Proposal("uses", "- zendesk", "- zendesk\n- payments")
+    held = learner().cycle(widening, score=scorer([]))
+    assert held.held and not held.applied
+    proposes = learner(permissions=Permissions(enabled="propose-only"))
+    assert proposes.cycle(Proposal("instructions", BAD, GOOD), score=scorer([])).held
+    worse = learner().cycle(Proposal("instructions", BAD, BAD + " Be brief."), score=scorer([]))
+    assert not worse.held and not worse.applied and "did not improve" in worse.reason

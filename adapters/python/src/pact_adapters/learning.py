@@ -1123,6 +1123,11 @@ class Outcome:
     #: reviewer reading a cycle could not tell an enforced spend cap on
     #: self-improvement from an assumed one.
     unmeasured: tuple[str, ...] = ()
+    #: Whether the answer is "a person decides" rather than "no": the change is
+    #: held for review (its blast radius, or `enabled:` / `keep-only-if:` say a
+    #: person applies it). A host that asks the person reads this, never the
+    #: reason's wording.
+    held: bool = False
 
     @property
     def ungraded(self) -> list[str]:
@@ -1462,7 +1467,7 @@ class Learner:
             if cls.needs_a_person:
                 return Outcome(
                     False, f"held for review: {cls.reason}", cls,
-                    unmeasured=self._unmeasured(),
+                    unmeasured=self._unmeasured(), held=True,
                 )
             if proposal.field in READ_BY_NO_RUN:
                 # The reason that is TRUE about this field, rather than a
@@ -1658,7 +1663,7 @@ class Learner:
             return Outcome(
                 False, f"held for review: {cls.reason}", cls,
                 before_v.score, after_v.score, drift, before_v, after_v,
-                unmeasured=self._unmeasured(),
+                unmeasured=self._unmeasured(), held=True,
             )
 
         # And the author's own answer to "may anything take effect without a
@@ -1678,7 +1683,7 @@ class Learner:
                 # is also the one the worked example takes on every cycle
                 # (`enabled: propose-only`), so the ceiling a reviewer most wants
                 # told about was silent on the answer they actually get.
-                unmeasured=self._unmeasured(),
+                unmeasured=self._unmeasured(), held=True,
             )
 
         if drift > self.drift_limit:
