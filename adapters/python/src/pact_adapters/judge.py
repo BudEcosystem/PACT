@@ -132,19 +132,39 @@ class Judge:
         self.model = model
         self._ask = ask
 
-    def grade(self, sentence: str, answer: str, because: str = "") -> Ruling:
+    def grade(
+        self,
+        sentence: str,
+        answer: str,
+        because: str = "",
+        *,
+        passages: "tuple[str, ...] | list[str]" = (),
+        right_because: str = "",
+    ) -> Ruling:
         """Does `answer` satisfy `sentence`?
 
         `because` is the author's own `because:` line and is shown to the judge.
         It is the difference between grading the words of a rule and grading what
         the rule is for, and it costs nothing — the author already wrote it for
         whoever reads the failure.
+
+        `passages` are the case's `from-these-passages:` and `right_because` its
+        `because:` — why the expected answer is the right one, which the schema
+        names as "what a grader reads". Both are shown only when written, so a
+        suite that wrote neither asks exactly what it asked before.
         """
         if not sentence.strip():
             return Ruling(decided=False, reason="there was no rule to grade")
         asked = f"RULE: {sentence.strip()}\n"
         if because.strip():
             asked += f"WHY THE RULE EXISTS: {because.strip()}\n"
+        if right_because.strip():
+            asked += f"WHY THE EXPECTED ANSWER IS RIGHT: {right_because.strip()}\n"
+        written = [p.strip() for p in passages if str(p).strip()]
+        if written:
+            asked += "THE PASSAGES THE ANSWER SHOULD COME FROM:\n" + "\n".join(
+                f"- {p}" for p in written
+            ) + "\n"
         asked += f"\nANSWER:\n{answer}"
         said = str(self._ask(RUBRIC, asked) or "")
         return read_grade(said)

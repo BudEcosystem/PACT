@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Mapping
 
 from .diagnostics import locate
 from .interceptors import said_any
@@ -590,6 +590,7 @@ def check(
     rules: list[Rule],
     judge: "Judge | None" = None,
     metrics: "list[MetricSpec] | None" = None,
+    run_program: "Callable[[str, dict[str, Any]], str] | None" = None,
 ) -> CaseOutcome:
     """Grade one case. Deterministic first, always, and a judge only if needed.
 
@@ -614,6 +615,17 @@ def check(
     judgeless `judged:` rule leaves by — `CaseOutcome.unenforced`, with something
     to type — and never as a zero, because scoring a measurement nobody took as a
     failure blames the agent for a package that is not installed.
+
+    `run_program` is how a `program:` metric's carried grader is run, supplied
+    by the host the way `judge` is — `(program name, inputs) -> what it said`.
+    `providers.evaluate_metric` has taken it since `program:` shipped and this,
+    its one caller, never passed it, so every `program:` score went to
+    `unenforced` saying nothing ran it on a host that runs programs.
+
+    A `judged:` rule is shown the case's own `from-these-passages:` and
+    `because:` — the schema calls the second "what a grader reads", and a rule
+    such as *"only says what the passages support"* cannot be decided by a
+    reader who was never shown them.
     """
     text = result.output.lower()
 
@@ -640,21 +652,21 @@ def check(
     for spec in scores:
         if not spec.deterministic:
             continue
-        missed = _scores_below(spec, case, result, unenforced)
+        missed = _scores_below(spec, case, result, unenforced, run_program=run_program)
         if missed:
             return CaseOutcome(case.key, False, missed, tuple(unenforced))
 
     for rule in written:
         if rule.kind != JUDGED:
             continue
-        broken = _breaks(rule, result, text, judge, unenforced)
+        broken = _breaks(rule, result, text, judge, unenforced, case)
         if broken:
             return CaseOutcome(case.key, False, broken, tuple(unenforced))
 
     for spec in scores:
         if spec.deterministic:
             continue
-        missed = _scores_below(spec, case, result, unenforced, judge)
+        missed = _scores_below(spec, case, result, unenforced, judge, run_program)
         if missed:
             return CaseOutcome(case.key, False, missed, tuple(unenforced))
 
@@ -692,6 +704,7 @@ def _scores_below(
     result: RunResult,
     unenforced: "list[str] | None",
     judge: "Judge | None" = None,
+    run_program: "Callable[[str, dict[str, Any]], str] | None" = None,
 ) -> str:
     """Why this answer misses `spec`'s bar, or `""` if it does not.
 
@@ -713,6 +726,7 @@ def _scores_below(
         # should be given the sources the author meant.
         retrieval_context=list(case.from_these_passages)
         or list(getattr(result, "retrieved", ()) or ()),
+        run_program=run_program,
     )
     if taken.unenforced:
         _note(unenforced, taken.unenforced)
@@ -747,6 +761,7 @@ def _breaks(
     text: str,
     judge: "Judge | None" = None,
     unenforced: "list[str] | None" = None,
+    case: "Case | None" = None,
 ) -> str:
     """Why this answer breaks `rule`, or `""` if it does not.
 
@@ -806,7 +821,13 @@ def _breaks(
                 f"is served.",
             )
             return ""
-        ruling = judge.grade(rule.sentence, result.output, rule.because)
+        ruling = judge.grade(
+            rule.sentence,
+            result.output,
+            rule.because,
+            passages=case.from_these_passages if case is not None else (),
+            right_because=case.because if case is not None else "",
+        )
         if not ruling.decided:
             # A grader that answered neither PASS nor FAIL has decided nothing,
             # and guessing either way would make the oracle itself the source of
