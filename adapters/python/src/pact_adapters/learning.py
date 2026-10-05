@@ -678,6 +678,17 @@ def _share(v: Any, default: float) -> float:
 UNDER = Path(".pact") / "learning"
 
 
+def _area(root: "str | Path") -> Path:
+    """Where this workspace's learning record is kept: `.pact/learning/` beside it, or under
+    `$PACT_DERIVED_DIR` when that is set. One answer for reading and writing — the three
+    readers below used to look beside the workspace while `_append` wrote under the override,
+    so with the override set a cycle never saw what the last one had spent or refused."""
+    from .watches import DERIVED_DIR
+
+    override = os.environ.get(DERIVED_DIR, "").strip()
+    return (Path(override) if override else Path(root)) / UNDER
+
+
 def _append(root: Path, name: str, row: dict) -> None:
     """One line onto a ledger, or nothing if this workspace cannot be written to.
 
@@ -691,10 +702,7 @@ def _append(root: Path, name: str, row: dict) -> None:
     tree. Shared with `watches.derived_area` so the two halves of `.pact/` cannot
     end up in different places.
     """
-    from .watches import DERIVED_DIR
-
-    override = os.environ.get(DERIVED_DIR, "").strip()
-    area = (Path(override) if override else Path(root)) / UNDER
+    area = _area(root)
     try:
         area.mkdir(parents=True, exist_ok=True)
         with (area / name).open("a", encoding="utf-8") as f:
@@ -769,7 +777,7 @@ class Refusals:
         self.seen = {}
         if self.root is None:
             return
-        path = self.root / UNDER / REFUSALS
+        path = _area(self.root) / REFUSALS
         if not path.exists():
             return
         for line in path.read_text(encoding="utf-8").splitlines():
@@ -892,7 +900,7 @@ class MonthlySpend:
         self.money, self.runs = 0.0, 0
         if self.root is None:
             return
-        path = self.root / UNDER / LEDGER
+        path = _area(self.root) / LEDGER
         if not path.exists():
             return
         this = self.key()
@@ -986,7 +994,7 @@ class Baselines:
         """The baseline last kept for `agent`, or `None` when none was."""
         if self.root is None:
             return None
-        path = self.root / UNDER / BASELINES
+        path = _area(self.root) / BASELINES
         if not path.exists():
             return None
         found: Baseline | None = None

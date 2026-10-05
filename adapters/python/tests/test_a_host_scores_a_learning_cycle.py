@@ -99,3 +99,21 @@ def test_the_learning_models_are_read_in_the_order_written() -> None:
         ("execution", "llm", ""), ("reflection", "reflector", "qwen2.5-14b")]
     assert model_for(doc, "reflector").model == "qwen2.5-14b"
     assert model_for(doc, "judge") is None and learning_models({}) == ()
+
+
+def test_the_record_is_read_from_where_it_is_written_when_the_derived_area_moves(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`$PACT_DERIVED_DIR` moved the writes and not the reads, so a cycle on a read-only tree
+    never saw its own baseline, spend or refusals."""
+    from pact_adapters.learning import MonthlySpend, Refusals
+
+    monkeypatch.setenv("PACT_DERIVED_DIR", str(tmp_path / "elsewhere"))
+    tree = tmp_path / "tree"
+    Baselines.at(tree).keep("desk", "Kept wording.")
+    MonthlySpend.at(tree).add(1.5, 3)
+    Refusals.at(tree).add(Proposal("instructions", BAD, GOOD), "it did not help")
+    assert Baselines.at(tree).of("desk").instructions == "Kept wording."
+    assert (MonthlySpend.at(tree).money, MonthlySpend.at(tree).runs) == (1.5, 3)
+    assert Refusals.at(tree).why(Proposal("instructions", BAD, GOOD)) is not None
+    assert not (tree / ".pact").exists()
