@@ -53,7 +53,7 @@ import re
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Awaitable, Callable, Iterable, Sequence
 
 #: `Problem` is imported rather than defined here so that the module that finds
 #: a mistake and the module that renders it are the same for every kind. It is
@@ -201,6 +201,59 @@ Measure = Callable[[Sequence[Message]], int]
 #: checkpoint text, returns the new checkpoint. Supplied by the runtime, so this
 #: module never opens a socket.
 Summariser = Callable[[Sequence[Message], str], str]
+
+#: The same, for a runtime whose model calls are coroutines (`Tidier.apply_async`).
+#: A runtime on an event loop must never block it on a summarising call, and the
+#: sync `Summariser` can only be finished on a loop by blocking a thread.
+AsyncSummariser = Callable[[Sequence[Message], str], Awaitable[str]]
+
+#: What the summarising model is told to do. One wording for every runtime, so a
+#: summary means the same thing whichever host wrote it. (It lived in
+#: `transports/_summarise.py`, where only PACT's own transports could read it.)
+SUMMARISE = (
+    "Summarise the conversation below. Keep decisions, figures and anything a "
+    "person approved. Be brief."
+)
+
+
+def readable(message: Message) -> str:
+    """One message as the summarising model should read it.
+
+    Pictures and voice messages become a placeholder rather than nothing. The
+    summariser is a text model and cannot be shown them, but a checkpoint that
+    does not even SAY a photo arrived is Eve's "keep text, discard the rest" —
+    the behaviour `PartKind`'s own docstring criticises it for — reappearing one
+    level down, on a policy whose author wrote no `drop-parts: pictures` step.
+    """
+    said: list[str] = []
+    for part in message.parts:
+        if part.text.strip():
+            said.append(part.text.strip())
+        elif part.kind is PartKind.IMAGE:
+            said.append("[a picture that was sent in]")
+        elif part.kind is PartKind.AUDIO:
+            said.append("[a voice message that was sent in]")
+    body = "\n".join(said).strip()
+    return f"{message.role}: {body}" if body else ""
+
+
+def summary_request(messages: Sequence[Message], previous: str) -> str:
+    """The text a summarising model is shown: the messages being folded, after
+    the summary it wrote last time — the checkpoint rule, a summary is extended
+    and never summarised again. One rendering, so every runtime asks the same."""
+    folding = "\n".join(line for m in messages if (line := readable(m)))
+    return f"Summary so far:\n{previous}\n\n{folding}" if previous else folding
+
+
+class _NeedsSummary(Exception):
+    """Raised by `apply_async`'s stand-in summariser: the ladder reached a fold
+    whose summary has not been written yet. Never leaves this module."""
+
+    def __init__(self, key: tuple[str, ...], folding: Sequence[Message], previous: str) -> None:
+        super().__init__("a summary is needed")
+        self.key = key
+        self.folding = list(folding)
+        self.previous = previous
 
 
 # ──────────────────────────────────────────────────────────────── diagnostics
@@ -844,6 +897,37 @@ class Tidier:
             f"shortening: {', '.join(result.facts_kept)}"
         )
         return result
+
+    async def apply_async(
+        self, messages: Sequence[Message], summarise: AsyncSummariser
+    ) -> Tidied:
+        """`apply`, with a summariser that is awaited rather than called.
+
+        The ladder stays the one in `apply` — synchronous, cumulative, pure — so
+        there is no second copy of it to drift. It is run with a stand-in
+        summariser that knows the summaries written so far; the first fold it
+        has no summary for stops the pass, the summary is awaited here, and the
+        ladder runs again from the top. Every pass sees the same messages and so
+        reaches the same fold, which then has its summary. A pass is pure, so
+        running it again costs arithmetic and never a second model call: each
+        fold is summarised once.
+        """
+        written: dict[tuple[str, ...], str] = {}
+
+        def known(folding: Sequence[Message], previous: str) -> str:
+            key = (previous, *(summary_request([m], "") for m in folding))
+            if key not in written:
+                raise _NeedsSummary(key, folding, previous)
+            return written[key]
+
+        stand_in = Tidier(
+            self.policy, self.budget, summarise=known, measure=self.measure, facts=self.facts
+        )
+        while True:
+            try:
+                return stand_in.apply(messages)
+            except _NeedsSummary as need:
+                written[need.key] = await summarise(need.folding, need.previous)
 
     def _give_up(self, result: Tidied) -> Tidied:
         """Everything ran and it still does not fit.

@@ -393,3 +393,22 @@ def test_a_workspace_that_has_been_watched_still_passes_pact_check(
         [str(PACT_BIN), "check", str(workspace)], capture_output=True, text=True
     )
     assert out.returncode == 0, out.stdout + out.stderr
+
+
+def test_a_runtime_with_no_bus_writes_the_line_a_subscribed_watch_writes(tmp_path: Path) -> None:
+    """`write_down` is the whole write on its own: a runtime that keeps its own
+    journal (and must write a line once however often a run resumes) appends
+    exactly what `Watches.subscribe` would, and is told when it could not."""
+    from pact_adapters.events import Event
+    from pact_adapters.watches import Watch, write_down
+
+    watch = Watch(name="tool-calls", when="step.tool.completed", writes_to="tool-calls.jsonl")
+    record = watch.line(Event(Address.parse("step.tool.completed"), {"name": "payments", "args": 1}, (3,)))
+    assert write_down(tmp_path, watch, record) is True
+    lines = (tmp_path / "tool-calls.jsonl").read_text().splitlines()
+    assert [json.loads(x) for x in lines] == [
+        {"happened": "step.tool.completed", "at": [3], "name": "payments"}
+    ]
+    blocked = tmp_path / "a-file"
+    blocked.write_text("")
+    assert write_down(blocked, watch, record) is False

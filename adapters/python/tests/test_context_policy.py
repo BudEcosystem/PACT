@@ -1722,13 +1722,13 @@ def test_the_summariser_is_told_a_picture_existed_rather_than_shown_nothing() ->
     """What the folding model reads. It cannot see an image, so the checkpoint
     must at least SAY one arrived — a summary that silently omits the photo the
     whole ticket is about is worse than one that names it."""
-    from pact_adapters.harness import _readable
+    from pact_adapters.context_policy import readable
 
-    said = _readable(
+    said = readable(
         Message("user", (Part(PartKind.TEXT, "here is the damage"), Part(PartKind.IMAGE, "")))
     )
     assert "a picture" in said, said
-    assert _readable(Message("user", (Part(PartKind.AUDIO, ""),))).count("voice message") == 1
+    assert readable(Message("user", (Part(PartKind.AUDIO, ""),))).count("voice message") == 1
 
 
 def test_what_the_summarising_model_costs_is_counted_or_named_never_neither() -> None:

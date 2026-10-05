@@ -39,19 +39,11 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Coroutine, TypeVar
 
-T = TypeVar("T")
+#: What the summarising model is told to do: `context_policy.SUMMARISE`, the one
+#: wording every runtime uses (a host outside this package reads it there).
+from ..context_policy import SUMMARISE
 
-#: What the summarising model is told to do. Wording lifted from
-#: `ollama_transport.py`, which is the one transport here that puts it on a wire
-#: to real weights, so all of them ask for the same thing rather than each
-#: inventing a prompt. The scripted seams ignore it — they answer from history —
-#: but a transport pointed at a live provider would not, and a summarising call
-#: that carries no instruction is a continuation of the conversation rather than
-#: a summary of it.
-SUMMARISE = (
-    "Summarise the conversation below. Keep decisions, figures and anything a "
-    "person approved. Be brief."
-)
+T = TypeVar("T")
 
 
 def summarise_with(transport: Any, text: str) -> str:

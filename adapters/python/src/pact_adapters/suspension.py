@@ -406,6 +406,17 @@ def connections_needing_permission(
     return waits
 
 
+def question_for(doc: Mapping[str, Any], agent_key: str, reason: str) -> str | None:
+    """The question this agent puts when it stops for `reason`, or `None`.
+
+    The same reading `PauseRule.from_document` makes, for a runtime that has to
+    ASK at a wait that is not about one call (a ceiling reached, a conversation
+    that cannot be shortened enough, a teammate that failed) and so needs the
+    question by name, not only the rule that governs its deadline.
+    """
+    return next((name for why, name in _named_questions(doc, agent_key) if why == reason), None)
+
+
 def _named_questions(doc: Mapping[str, Any], agent_key: str) -> list[tuple[str, str]]:
     """Every `(reason, question name)` this agent could stop at.
 

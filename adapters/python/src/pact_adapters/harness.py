@@ -25,11 +25,11 @@ from typing import Any, Callable, Mapping, Protocol
 #: means a model call, and which model is the author's line — and two spellings
 #: of the same callable is how a runtime comes to satisfy one and not the other.
 from .context_policy import (
-    PartKind,
     Summariser,
     Tidied,
     Tidier,
     from_history,
+    summary_request,
     to_history,
 )
 #: At-most-once, from the author's own `same-request-key:` line. `money.rs` does
@@ -3409,9 +3409,7 @@ def _summariser(
         # The summariser is shown the conversation as text and the summary it
         # wrote last time, which is the checkpoint rule: a summary is extended,
         # never summarised again.
-        folding = "\n".join(line for m in messages if (line := _readable(m)))
-        asked = f"Summary so far:\n{previous}\n\n{folding}" if previous else folding
-        said = str(writes(asked, model))
+        said = str(writes(summary_request(messages, previous), model))
         # What that second call cost, if the transport can say. Optional exactly
         # as `usage` is, and reported as unenforced when it cannot — an author
         # who wrote a spend cap and a `summarised-by:` model is otherwise paying
@@ -3424,29 +3422,6 @@ def _summariser(
         return said
 
     return summarise
-
-
-def _readable(message: Any) -> str:
-    """One message as the summarising model should read it.
-
-    Pictures and voice messages become a placeholder rather than nothing. The
-    summariser is a text model and cannot be shown them, but a checkpoint that
-    does not even SAY a photo arrived is Eve's "keep text, discard the rest" —
-    the behaviour `PartKind`'s own docstring criticises it for — reappearing one
-    level down, on a policy whose author wrote no `drop-parts: pictures` step.
-    D16 puts vision and audio in v1, so a tidying rung that silently erases them
-    is not a rung this project can ship.
-    """
-    said: list[str] = []
-    for part in message.parts:
-        if part.text.strip():
-            said.append(part.text.strip())
-        elif part.kind is PartKind.IMAGE:
-            said.append("[a picture that was sent in]")
-        elif part.kind is PartKind.AUDIO:
-            said.append("[a voice message that was sent in]")
-    body = "\n".join(said).strip()
-    return f"{message.role}: {body}" if body else ""
 
 
 def _tidy(

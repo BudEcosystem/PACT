@@ -44,6 +44,15 @@ SRC = Path(__file__).resolve().parents[1] / "src" / "pact_adapters"
 #: _gained_a_caller` deletes it again when one appears — a list of what must stay
 #: uncalled cannot notice a fix.
 HOST_API: dict[str, str] = {
+    # The question a run-level wait puts, by its reason. The reference harness
+    # asks through its own `Gate` (`asking.for_call`) and never needs the name;
+    # a runtime that builds the ask itself (budflow-core parks a conversation too
+    # long to send on `context-policies.<p>.asks`) reads it here, the same reading
+    # `PauseRule.from_document` makes.
+    "suspension.question_for": (
+        "the question a wait that is not about one call puts, by reason, for a "
+        "runtime that builds that ask itself; the harness asks through its Gate"
+    ),
     # 02P A4. A return type is per ACTION, and the only things in this port that
     # build Pydantic AI tools (`build_agent`, the transport) offer one tool per
     # PACT tool, with the action as an argument — so there is no tool definition

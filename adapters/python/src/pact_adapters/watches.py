@@ -122,6 +122,33 @@ def can_be_written(area: "Path | None") -> bool:
     except OSError:
         return False
 
+def write_down(base: "Path", watch: "Watch", record: Mapping[str, Any]) -> bool:
+    """Append one record to `watch`'s file under `base`; whether it landed.
+
+    The whole write, on its own, so a runtime with no `Bus` — one that keeps its
+    own journal and must write a line only once however often a run is resumed —
+    writes exactly the line a subscribed watch writes. Blocking file I/O: a
+    runtime on an event loop calls it from a worker thread.
+
+    Opened, appended and closed per line rather than held open for the run. A
+    run can be suspended for a person's answer and continue in another process a
+    day later (§7.14), and a record that only reaches the disk when a handle is
+    closed is a record that is not there when somebody asks what the run did
+    before it stopped.
+    """
+    try:
+        base.mkdir(parents=True, exist_ok=True)
+        with (base / watch.writes_to).open("a", encoding="utf-8") as f:
+            f.write(json.dumps(dict(record), sort_keys=True) + "\n")
+        return True
+    except OSError:
+        # The area was writable when the watches were attached and is not now —
+        # a disk filled, a mount went away. Watching must never be the reason a
+        # run fails: it changes nothing about what the agent does, and a record
+        # is worth less than the work it was recording.
+        return False
+
+
 #: The payload fields a line carries. Names, moments, counts and outcomes.
 #:
 #: An ALLOW-list, so the next `bus.emit` keyword is absent from every record
@@ -310,24 +337,7 @@ class Watches:
         def write(event: Event) -> None:
             record = watch.line(event)
             self.seen.append(record)
-            if base is None:
-                return
-            # Opened, appended and closed per line rather than held open for the
-            # run. A run can be suspended for a person's answer and continue in
-            # another process a day later (§7.14), and a record that only
-            # reaches the disk when a handle is closed is a record that is not
-            # there when somebody asks what the run did before it stopped.
-            try:
-                base.mkdir(parents=True, exist_ok=True)
-                with (base / watch.writes_to).open("a", encoding="utf-8") as f:
-                    f.write(json.dumps(record, sort_keys=True) + "\n")
-            except OSError:
-                # The area was writable when the watches were attached and is not
-                # now — a disk filled, a mount went away. Watching must never be
-                # the reason a run fails: it changes nothing about what the agent
-                # does, and a record is worth less than the work it was recording.
-                # `self.seen` still has the line, so an in-process reader is
-                # unaffected.
+            if base is not None and not write_down(base, watch, record):
                 if watch.name not in self.unwritten:
                     self.unwritten = self.unwritten + (watch.name,)
 
