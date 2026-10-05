@@ -1,0 +1,10 @@
+description: Asks before this machine runs a carried program for the first time.
+says: >
+  This desk wants to run a program it carries, in a locked room with no network.
+  May it?
+answer:
+  approved: yes or no
+asked-of:
+  - whoever is running this agent
+answer-within: 30m
+if-nobody-answers: stop-and-say-so

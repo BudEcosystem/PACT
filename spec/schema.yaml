@@ -933,8 +933,10 @@ groups:
           whether the same question always gets the same answer. `pure` means it
           works only from what it is given. `deterministic` means it may look at
           something outside and still always answer the same. `nondeterministic`
-          means it may not, and a run that stops and starts again has to ask it
-          afresh rather than reusing what it said.
+          means it may not, so each time it is asked counts as a new question.
+          Within one run, what it already answered is kept and replayed when the
+          run stops and starts again; only re-running a run from an earlier point
+          asks it afresh.
       takes:
         type: map of answer-shape
         shapes: *the-answer-shapes
@@ -973,7 +975,12 @@ groups:
           the program itself, in a `body/` folder beside this file. Kept as files
           rather than as settings: PACT records what is there, what kind of file
           each one is, how big it is and a fingerprint of what is in it, and
-          never opens them.
+          never opens them. A `python` body is one `.py` file (or `main.py`): it
+          is given `inputs`, keyed by the `takes:` names, and its last line's
+          value is the answer, keyed by the `answers-with:` names. A `wasm` body
+          is one `.wasm` file (or `main.wasm`): it reads the inputs as one JSON
+          object on standard input and writes the answer as one on standard
+          output.
 
   # One run of one program, bounded. The same termination algebra `limits:` uses,
   # so an author who has met one has met the other — including the rule that a

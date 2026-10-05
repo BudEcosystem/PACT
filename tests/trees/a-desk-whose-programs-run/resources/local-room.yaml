@@ -1,0 +1,6 @@
+resource-kind: sandbox
+description: The machine-local locked room for this workspace's programs.
+engines:
+  - python
+  - wasm
+asks-to-run: may-we-run

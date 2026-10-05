@@ -54,6 +54,7 @@ WIRE_NAME: dict[str, str] = {
     "remembers": "remember-as",
     "reaches": "reaches",
     "answers_with": "answers-with",
+    "programs": "program",
 }
 
 
@@ -84,6 +85,8 @@ def tool_payload(tool: ToolSpec) -> dict[str, Any]:
         out[WIRE_NAME["remembers"]] = dict(tool.remembers)
     if tool.answers_with:
         out[WIRE_NAME["answers_with"]] = {a: dict(w) for a, w in tool.answers_with.items()}
+    if tool.programs:
+        out[WIRE_NAME["programs"]] = dict(tool.programs)
     if tool.reaches is not None:
         out[WIRE_NAME["reaches"]] = {
             "kind": tool.reaches.kind,

@@ -1,0 +1,9 @@
+{
+  "about": "One case per engine: a host that runs these programs from tests/trees/a-desk-whose-programs-run must give exactly these answers (pact_adapters.programs, the body contract).",
+  "tree": "tests/trees/a-desk-whose-programs-run",
+  "cases": [
+    {"program": "check-window", "inputs": {"purchased-on": "2026-09-20", "today": "2026-10-05"}, "answer": {"verdict": "inside", "days": 15}},
+    {"program": "check-window", "inputs": {"purchased-on": "2026-08-01", "today": "2026-10-05"}, "answer": {"verdict": "outside", "days": 65}},
+    {"program": "repeat", "inputs": {"content": "the same words back"}, "answer": {"content": "the same words back"}}
+  ]
+}

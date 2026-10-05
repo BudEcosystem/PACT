@@ -20,6 +20,7 @@ from .delegation import Teamwork
 from .interceptors import Chain
 from .limits import Limits, steps_at_most, whole
 from .limits import seconds as _seconds
+from .programs import ProgramFuel, body_entry
 from .slo import Slo
 from .loops import STANDARD, Loop
 from .questions import Gate, Rejected, Shape, questions_for
@@ -133,6 +134,14 @@ class ResourceSpec:
     #: of zero, and the two must not collapse into each other.
     tool_snapshot_max_age: "float | None" = None
     description: str = ""
+    #: `engines:` — the kinds of program this locked room can run (a `sandbox`
+    #: only). `pact check` pairs it with each `program:` reached through the room;
+    #: carried so a host can say which of its runners the room stands for.
+    engines: tuple[str, ...] = ()
+    #: `asks-to-run:` — the question put before this room runs a carried body for
+    #: the first time. Already a `Rule` in the gate (`questions_for`, beside
+    #: `asks-to-connect:`); carried for the reason that one is.
+    asks_to_run: str = ""
 
 
 @dataclass(frozen=True)
@@ -205,6 +214,10 @@ class ToolSpec:
     #: `ToolDefinition.return_schema` is built from. An action that declares
     #: nothing is absent, never `{}`.
     answers_with: dict[str, dict[str, str]] = field(default_factory=dict)
+    #: Per action, the carried program it runs — the author's own `program:`
+    #: lines, keyed the way `binds` is. Only on a tool whose `connect:` names a
+    #: `sandbox`; the program itself is `ProgramSpec.from_document`.
+    programs: dict[str, str] = field(default_factory=dict)
     #: WHERE this tool reaches — the one of `connect:`, `url:` and `says:` the
     #: author wrote, with the server a `connect:` names already resolved.
     #:
@@ -316,6 +329,64 @@ class ProgramSpec:
     #: body it never opens (R5, D17). What it can do is hand the host the author's
     #: own answer, and say on `unenforced` that the answer is being trusted.
     may_reach_outside: bool = False
+    #: `takes:` and `answers-with:`, `{name: shape}` as written — what a host
+    #: holds the inputs and the answer to (`questions.Shape` reads each shape).
+    #: Carried because a runner handed names alone cannot tell a run that the
+    #: answer it got back is the wrong kind of thing, which the schema says is
+    #: "that call's failure and never a silent wrong number".
+    takes: Mapping[str, str] = field(default_factory=dict)
+    answers_with: Mapping[str, str] = field(default_factory=dict)
+    #: `fuel:`, read once (`programs.ProgramFuel`), so every host spends the
+    #: same `10m` and `2s`.
+    fuel: ProgramFuel = field(default_factory=ProgramFuel)
+    #: Where the body is, relative to the workspace root (`programs/<name>/body`),
+    #: and the files the loader recorded there. `""` and `()` for a program
+    #: written with no body. Which file a host starts is `programs.body_entry`.
+    body: str = ""
+    body_files: tuple[str, ...] = ()
+
+    @property
+    def entry(self) -> str:
+        """The body file a host starts (`programs.body_entry`), or `""`."""
+        return body_entry(self.body_files, self.engine)
+
+    @staticmethod
+    def from_document(
+        doc: Mapping[str, Any], name: str, reached_by: tuple[str, ...] = ()
+    ) -> "ProgramSpec":
+        """One entry of `programs:`, as a host needs it to start a body.
+
+        The one reader of a `programs.<name>` block, so a host asked to run a
+        program named somewhere this class never walked — a rewriting rule, a
+        projection, a `checked-by:` — reads it the way an agent's own tools do.
+        `KeyError` for a name the workspace does not carry.
+        """
+        declared = doc.get("programs") or {}
+        block = declared.get(name) if isinstance(declared, Mapping) else None
+        if not isinstance(block, Mapping):
+            raise KeyError(f"no program named {name!r}; this workspace carries: {sorted(declared)}")
+        body = block.get("body")
+        payload = body.get("$payload") if isinstance(body, Mapping) else None
+        return ProgramSpec(
+            name=name,
+            description=_text(block.get("description", "")),
+            engine=_text(block.get("engine", "")),
+            determinism=_text(block.get("determinism", "")),
+            reached_by=tuple(reached_by),
+            may_reach_outside=_programs_may_reach_outside(doc),
+            takes=_shapes(block.get("takes")),
+            answers_with=_shapes(block.get("answers-with")),
+            fuel=ProgramFuel.from_document(block.get("fuel")),
+            body=str(payload or (f"programs/{name}/body" if body is not None else "")),
+            body_files=_document_names(body) if body is not None else (),
+        )
+
+
+def _shapes(written: Any) -> dict[str, str]:
+    """A `map of answer-shape`, `{name: shape}` as text."""
+    if not isinstance(written, Mapping):
+        return {}
+    return {str(k): str(v) for k, v in written.items()}
 
 
 @dataclass(frozen=True)
@@ -707,6 +778,7 @@ class AgentSpec:
                 binds=_binds(t),
                 remembers=_remembers(t),
                 answers_with=_action_answers(t),
+                programs=_action_programs(t),
                 # The whole `resources:` map is handed over, not the workspace:
                 # the resolution happens HERE, once, so that what crosses the
                 # boundary is a server an adapter can reach rather than a name it
@@ -919,23 +991,10 @@ def _programs_reached_by(doc: dict[str, Any], agent: dict[str, Any]) -> tuple[Pr
     # The workspace's own boundary line, read once and carried on every program.
     # On the program rather than beside it, because a host that is starting one
     # body has the spec for that body in its hand and should not have to go and
-    # find the workspace to learn whether the door may be open.
-    outward = _programs_may_reach_outside(doc)
-    out = []
-    for name in sorted(reached):
-        block = declared[name]
-        block = block if isinstance(block, Mapping) else {}
-        out.append(
-            ProgramSpec(
-                name=name,
-                description=_text(block.get("description", "")),
-                engine=_text(block.get("engine", "")),
-                determinism=_text(block.get("determinism", "")),
-                reached_by=tuple(reached[name]),
-                may_reach_outside=outward,
-            )
-        )
-    return tuple(out)
+    # find the workspace to learn whether the door may be open (`ProgramSpec.from_document`).
+    return tuple(
+        ProgramSpec.from_document(doc, name, reached_by=tuple(reached[name])) for name in sorted(reached)
+    )
 
 
 def _projections(doc: dict[str, Any], agent: dict[str, Any]) -> tuple[tuple[str, str], ...]:
@@ -1099,6 +1158,18 @@ def _remembers(tool: dict[str, Any]) -> dict[str, str]:
     return out
 
 
+def _action_programs(tool: dict[str, Any]) -> dict[str, str]:
+    """One tool's `program:` lines, per action."""
+    actions = tool.get("actions") or {}
+    if not isinstance(actions, dict):
+        return {}
+    return {
+        str(name): action["program"].strip()
+        for name, action in sorted(actions.items())
+        if isinstance(action, dict) and isinstance(action.get("program"), str) and action["program"].strip()
+    }
+
+
 def _action_answers(tool: dict[str, Any]) -> dict[str, dict[str, str]]:
     """One tool's `answers-with:` lines, per action (02P A4)."""
     out: dict[str, dict[str, str]] = {}
@@ -1190,6 +1261,8 @@ def _resource(name: str, entry: Mapping[str, Any]) -> "ResourceSpec":
         # grammar drift the moment nobody is looking.
         tool_snapshot_max_age=_seconds(entry.get("tool-snapshot-max-age")),
         description=_text(entry.get("description", "")),
+        engines=tuple(str(e).strip() for e in _as_list(entry.get("engines")) if str(e).strip()),
+        asks_to_run=_text(entry.get("asks-to-run", "")),
     )
 
 

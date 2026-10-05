@@ -103,6 +103,7 @@ def _a_tool_with_everything() -> ToolSpec:
         binds={"look-up": {"account": "run-inputs.customer-id"}},
         remembers={"look-up": "last-order-seen"},
         answers_with={"look-up": {"status": "one of open, shipped"}},
+        programs={"look-up": "shorten-order"},
         reaches=Reach(kind="url", value="https://orders.example.com", method="get"),
     )
 

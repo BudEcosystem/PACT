@@ -1,0 +1,14 @@
+# The smallest WASI command there is: what it reads on standard input it writes
+# on standard output, so the answer is the inputs. Its source is `repeat.wat`.
+description: Hands back exactly the words it was given.
+engine: wasm
+determinism: pure
+takes:
+  content: text
+answers-with:
+  content: text
+fuel:
+  instructions-at-most: 10m
+  runs-for-at-most: 2s
+  memory-at-most: 64m
+  when-it-runs-out: stop-and-say-so

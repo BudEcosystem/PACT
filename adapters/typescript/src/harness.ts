@@ -129,6 +129,9 @@ export type AgentSpec = {
     // What each action hands back (02P A4), per action. Reported: a tool here
     // answers in text, so nothing holds a result to it.
     "answers-with"?: Record<string, Record<string, string>>;
+    // The carried program each action runs in a locked room, per action.
+    // Reported: this port has no room to run one in.
+    program?: Record<string, string>;
   }[];
   // Written procedures the agent may consult. A stage of a loop may narrow to
   // one, and until this field existed `may-use: [refund-policy]` — a skill the
@@ -402,6 +405,13 @@ export function notDoneHere(spec: AgentSpec): string[] {
           `(${Object.keys(shape).sort().join(", ")}), and this runtime hands a tool's ` +
           `result to the model as text, unchecked — run it on a host whose tools ` +
           `return typed results to hold it.`,
+      );
+    }
+    for (const [action, named] of Object.entries(t.program ?? {}).sort()) {
+      out.push(
+        `program: ${t.name}/${action} runs the carried program \`${named}\`, and this ` +
+          `runtime has no locked room to run it in — the tool answers from whatever ` +
+          `the caller passed in.`,
       );
     }
     if (t.reaches && t.reaches.kind === "connect") {

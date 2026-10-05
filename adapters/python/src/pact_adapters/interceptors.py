@@ -291,6 +291,11 @@ class Runner:
     """
 
     call: "Callable[[str, dict[str, Any]], str] | None" = None
+    #: The carried programs the rules sharing this box run, in the order their
+    #: sentences name them — so a host can tell before the first call whether it
+    #: can start every one (its engine, its ceilings), rather than finding out
+    #: from a rule that left the words as they were.
+    programs: list[str] = field(default_factory=list)
 
 
 class InterceptorError(ValueError):
@@ -608,6 +613,11 @@ class Chain:
         """
         if run_program is not None:
             self.runner.call = run_program
+
+    @property
+    def programs(self) -> tuple[str, ...]:
+        """The carried programs this chain's rewriting sentences run, by name."""
+        return tuple(self.runner.programs)
 
     def add(self, i: Interceptor) -> None:
         """Put it where it RUNS, not where it arrived.
@@ -1265,6 +1275,8 @@ def _compile_rules(
                     f"{', '.join(sorted(programs)) or 'nothing here yet'}."
                 )
             rewriters.append((named, power))
+            if runner is not None and named not in runner.programs:
+                runner.programs.append(named)
             continue
 
         if m := _MENTIONS.match(text):

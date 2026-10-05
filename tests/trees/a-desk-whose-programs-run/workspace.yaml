@@ -1,0 +1,9 @@
+# The shared conformance case for the two engines a host may run (P6/P7): one
+# carried program per engine, each with a REAL body, so a host that runs them and
+# PACT's own record of what they take, answer and spend can be held against the
+# same answers (`tests/conformance/programs.json`).
+name: a-desk-whose-programs-run
+workspace-id: 01JEQ8Z3M4N5P6Q7R8S9T0V6D7
+description: A desk whose date arithmetic and whose echo are carried programs with real bodies.
+owner: platform
+allow-egress: []

@@ -1,0 +1,16 @@
+description: Answers whether a purchase is still inside the refund window.
+connect: local-room
+actions:
+  check:
+    description: Works out the window from the purchase date and today's date.
+    program: check-window
+    takes:
+      purchased-on: text
+      today: text
+    reads-only: yes
+  repeat:
+    description: Hands back exactly the words it was given.
+    program: repeat
+    takes:
+      content: text
+    reads-only: yes

@@ -937,6 +937,27 @@ class Gate(MappingABC):
             for action in declared
         )
 
+    def may_stop(self, name: str, action: str = "") -> bool:
+        """Could ANY call to this tool — this action of it, when one is named —
+        be stopped, whatever arguments it is called with?
+
+        For a host that has to decide where a call may be MADE from before any
+        argument exists: a call made from inside model-written code cannot stop
+        and wait for a person, so a tool any rule could stop has to be called
+        where a wait is possible (owner decision O1: writes that need approval
+        come back as one batch). Read wide, the way [`for_call`] reads an atom it
+        cannot evaluate, because answering "no" for a tool a rule does stop is the
+        dangerous direction: a gating rule about the tool counts unless every
+        action it names is a different one.
+        """
+        for rule in self.rules.get(name) or ():
+            if not rule.gates:
+                continue
+            named = {_action_named(a) for a in rule.when} - {""}
+            if not action or not named or action in named:
+                return True
+        return False
+
     def undecided_on(self, name: str, args: Mapping[str, Any]) -> tuple[str, ...]:
         """What this gate could not decide about ONE call, ready to be said.
 

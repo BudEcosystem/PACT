@@ -1,0 +1,15 @@
+# Date arithmetic the model gets wrong often enough to matter, in Python, pure:
+# both dates are given, so the same question always gets the same answer.
+description: Works out whether a purchase is still inside the 30-day refund window.
+engine: python
+determinism: pure
+takes:
+  purchased-on: text
+  today: text
+answers-with:
+  verdict: one of inside, outside
+  days: integer
+fuel:
+  runs-for-at-most: 2s
+  memory-at-most: 64m
+  when-it-runs-out: stop-and-say-so

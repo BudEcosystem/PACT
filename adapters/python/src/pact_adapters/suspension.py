@@ -400,7 +400,15 @@ def connections_needing_permission(
         server = str(tool.get("connect") or "").strip()
         entry = resources.get(server)
         if isinstance(entry, dict):
+            # A locked room's `asks-to-run:` is the same wait one door over: the
+            # consent in front of running a carried body there at all, asked
+            # before the first run and kept for the room (`asked_as` is the
+            # resource), exactly as a connection's is. Read here so the gate and
+            # the pause rules learn of it from one walk, as they do of
+            # `asks-to-connect:`.
             asks = str(entry.get("asks-to-connect", "")).strip()
+            if not asks and str(entry.get("resource-kind", "")).strip() == "sandbox":
+                asks = str(entry.get("asks-to-run", "")).strip()
             if asks:
                 waits[used] = asks
     return waits
