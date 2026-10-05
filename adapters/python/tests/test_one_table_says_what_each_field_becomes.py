@@ -47,6 +47,29 @@ def test_every_field_the_schema_declares_has_a_row() -> None:
     assert not rows - declared, f"{sorted(rows - declared)} name fields the schema does not have"
 
 
+def test_a_field_pydantic_ai_cannot_hold_says_so_and_says_who_holds_it() -> None:
+    """A `loss` row is read as "Pydantic AI has nothing that means this", so its construct
+    opens with that word and goes on to name who holds the line instead (PACT at check time,
+    or the host at run time). A loss row that named a construct would be a mapped row
+    mislabelled; one that stopped at "nothing" would leave the reader asking who does it."""
+    for name, row in registry().fields.items():
+        if row.outcome != "loss":
+            continue
+        opening, colon, holder = row.construct.partition(":")
+        assert opening.split()[0] == "nothing" and colon and holder.strip(), (
+            f"{name} is a loss and its construct reads {row.construct!r}.\n"
+            "  fix: write it as `nothing: <who holds it, and when>`."
+        )
+
+
+def test_no_row_shares_one_usage_object_across_a_delegation() -> None:
+    """AD-R7: the usage object does not cross a delegation boundary. A member checked against
+    `usage=ctx.usage` has its own `steps-at-most:` held to its caller's total, so the table
+    never offers that as what `team:` becomes."""
+    said = {name: row.construct for name, row in registry().fields.items() if "ctx.usage" in row.construct}
+    assert not said, f"{sorted(said)} hand a member its caller's usage; a member runs on its own (AD-R7)"
+
+
 def test_every_capability_pydantic_ai_ships_has_an_entry() -> None:
     capabilities = pytest.importorskip("pydantic_ai.capabilities")
     shipped = {

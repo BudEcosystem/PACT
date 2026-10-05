@@ -42,14 +42,14 @@ fields:
     rows: [A3, A4]
     how: "holes are filled by pact_adapters.holes.fill from deps; an unfilled hole is an error, never braces"
   agent.team:
-    construct: "one function tool per member, each calling the member's Agent.run(..., usage=ctx.usage)"
+    construct: "one function tool per member, each running the member's own Agent on its own usage and limits; what it spent is then counted in the caller's run"
     outcome: mapped
     rows: [K1]
     spec-file: >-
       no field for who helps. Pydantic AI does delegation by calling one `Agent` from
       inside another's tool function, which is Python, not spec
   agent.teamwork:
-    construct: "inside the member tools: how answers are waited for and how the budget is shared"
+    construct: "the member calls of one reply joined once by delegation.ask_team: who is waited for, in what order, each member's share of the budget, and what a failure does"
     outcome: mapped
     rows: [K1, K3]
     spec-file: >-
@@ -64,7 +64,7 @@ fields:
       author's. The names are carried in the companion report and `build_agent()` binds
       them; a spec file alone cannot
   agent.accepts:
-    construct: "the user prompt: str, plus ImageUrl / AudioUrl / DocumentUrl parts"
+    construct: "the user prompt: str, plus one BinaryContent (or ImageUrl / AudioUrl / DocumentUrl) part per picture, recording or file"
     outcome: mapped
     rows: [F1]
     spec-file: "no field for the shapes it takes in"
@@ -90,7 +90,7 @@ fields:
     rows: [O7]
     spec-file: "no field for what an answer must satisfy; output validators are Python functions"
   agent.checks-at-most:
-    construct: "Agent(retries={'output': n - 1}): Pydantic AI counts retries after the first try"
+    construct: "counted by that output_validator, its own failed checks only; Agent(retries={'output': n}) is one run-wide budget that empty replies spend too"
     outcome: mapped
     rows: [A14, O7]
     spec-file: "no field for how many tries an answer gets"
@@ -99,12 +99,12 @@ fields:
     outcome: mapped
     rows: [A6]
   agent.needs:
-    construct: "nothing: held at check time against models/catalog.yaml"
+    construct: "nothing: held at check time against models/catalog.yaml, and by the host against the model it binds (resolve.ModelEntry.satisfies)"
     outcome: loss
     rows: [M1]
     spec-file: "no field for what the model behind it has to be capable of"
   agent.limits:
-    construct: "UsageLimits from usage_limits_for(); money and time ceilings and when-it-runs-out are PACT's"
+    construct: "a capability holding limits.Limits at the top of each step, after each reply and before each call, with every when-it-runs-out; UsageLimits from usage_limits_for() can only stop"
     outcome: mapped
     rows: [C8, C9, C10]
     spec-file: >-
@@ -142,7 +142,7 @@ fields:
     rows: [H9]
     spec-file: "no field for a second model on the checking stages"
   agent.loop:
-    construct: "pact:loop/standard is Agent's own tool loop; any other shape is built with pydantic-graph"
+    construct: "pact:loop/standard is Agent's own tool loop; any other shape is one capability routing each step of that loop with loops.Loop (a stage's tools filtered, its line added to the instructions)"
     outcome: mapped
     rows: [A20, K5]
     spec-file: >-
@@ -150,7 +150,7 @@ fields:
       has no stage vocabulary — `may-use:`, `does: ask-someone` and the rest have
       nothing to become
   agent.variants:
-    construct: "nothing: PACT tries each variant in order, each a separate Agent"
+    construct: "nothing: each variant is a separate Agent (resolve.strategies_of); PACT tries them in order and the host runs the one it names"
     outcome: loss
     rows: [M5]
     spec-file: "no field for model-portability strategies"
@@ -177,7 +177,7 @@ fields:
 
   # ── tool ───────────────────────────────────────────────────────────────────
   tool.available-when:
-    construct: "toolset.prepared(<static filter>)"
+    construct: "decided once when the agent is built (ir.available): what is not offered is never built, which toolset.prepared(<static filter>) would do per step"
     outcome: mapped
     rows: [T8, T13]
   tool.description:
@@ -228,7 +228,7 @@ fields:
     outcome: mapped
     rows: [A13, T7]
   action.needs-a-person:
-    construct: "requires_approval=True, parked as DeferredToolRequests.approvals"
+    construct: "requires_approval=True, or a WrapperToolset raising ApprovalRequired(metadata=<the question>); parked as DeferredToolRequests.approvals"
     outcome: carried
     rows: [T4, H1]
   action.spends-money:
@@ -236,11 +236,11 @@ fields:
     outcome: loss
     rows: [T4]
   action.same-request-key:
-    construct: "nothing: the host journal fills the named argument with the call's effect key"
+    construct: "nothing: the host fills the named argument with the call's effect key and withholds a second call carrying the same value (at_most_once.claim)"
     outcome: loss
     rows: [D2]
   action.same-request-key-across:
-    construct: "nothing: how far the host's effect key reaches"
+    construct: "nothing: how far the host's at-most-once claim reaches (this run, the team, the workspace)"
     outcome: loss
     rows: [D2]
   action.bind:
