@@ -5797,6 +5797,7 @@ table, not a judgement call:
 | `starts` | `starts:` on the `route` node that fans the team out — the only node in the emitted graph that fans out |
 | `divides-the-budget` | `divides-the-budget:` on the graph, beside the `budget:` it divides |
 | `shares` | `shares:` on the graph, beside it |
+| `may-start` | `may-start:` on the `route` node that fans the team out, with `limits.starts-at-most:` and `limits.nests-at-most:` beside the graph's `budget:`: who that node may bring in at run time (02P §8.1). What is brought in is journal data, never an emitted edge |
 
 Three rules make that table normative rather than illustrative.
 

@@ -72,6 +72,7 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
 fn check_one(agent_name: &str, agent: &Node, diags: &mut Diagnostics) {
     let Some(teamwork) = agent.get("teamwork") else { return };
     enough_is_reachable(agent_name, agent, teamwork, diags);
+    may_start_is_bounded(agent_name, agent, teamwork, diags);
     let Some(shares) = teamwork.get("shares") else {
         // No `shares:` at all is only a mistake when something divides by them.
         if divides_by_share(teamwork) {
@@ -149,6 +150,43 @@ fn enough_is_reachable(agent_name: &str, agent: &Node, teamwork: &Node, diags: &
             "Write `enough-is: {}` or fewer, or add more people under `team:`.",
             members.len()
         ),
+    ));
+}
+
+// ────────────────────────────────────────────── run-time composition is bounded
+
+/// `may-start:` without both of the ceilings that bound it (02P §8.1, 02W
+/// WF-33).
+///
+/// R16 is narrowed, not reopened: an agent may bring others in while it runs
+/// only within declared limits. The schema can say `starts-at-most:` is a whole
+/// number and cannot say that one group's line needs two lines of ANOTHER group,
+/// so this is the half only the loader can do. Read after `based-on:` is
+/// resolved, so a ceiling an agent inherits counts as written.
+fn may_start_is_bounded(agent_name: &str, agent: &Node, teamwork: &Node, diags: &mut Diagnostics) {
+    let Some(written) = teamwork.get("may-start") else { return };
+    if written.as_list().is_some_and(<[Node]>::is_empty) {
+        return; // `may-start: []` brings nobody in
+    }
+    let limits = agent.get("limits");
+    let missing: Vec<&str> = ["starts-at-most", "nests-at-most"]
+        .into_iter()
+        .filter(|field| limits.and_then(|l| l.get(field)).is_none())
+        .collect();
+    if missing.is_empty() {
+        return;
+    }
+    let lines = missing.iter().map(|m| format!("`{m}:`")).collect::<Vec<_>>().join(" and ");
+    diags.push(Diagnostic::error(
+        "loader/may-start-without-its-bounds",
+        key_span(teamwork, "may-start").unwrap_or_else(|| teamwork.span.clone()),
+        format!(
+            "{agent_name} may bring agents in while it runs (`may-start:`), and nothing says \
+             how many or how deep: {lines} missing under `limits:`."
+        ),
+        "Add under `limits:` the lines `starts-at-most: 20` and `nests-at-most: 2` (Bud's \
+         builder's figures), each with the `when-it-runs-out:` a ceiling needs."
+            .to_string(),
     ));
 }
 
@@ -471,6 +509,39 @@ agents:
       divides-the-budget: by-share
       shares:
 ";
+
+    const STARTS: &str = "
+agents:
+  orchestrator:
+    teamwork:
+      may-start: [catalogue, narrowed-new]
+";
+
+    #[test]
+    fn may_start_without_its_bounds_is_refused_and_names_both_lines() {
+        let d = run(STARTS);
+        only(&d, "loader/may-start-without-its-bounds");
+        let e = &d.items()[0];
+        assert!(e.message.contains("`starts-at-most:` and `nests-at-most:`"), "{}", e.message);
+        assert!(e.fix.contains("starts-at-most: 20"), "{}", e.fix);
+    }
+
+    #[test]
+    fn may_start_with_one_bound_names_only_the_one_missing() {
+        let d = run(&format!("{STARTS}    limits:\n      starts-at-most: 20\n"));
+        only(&d, "loader/may-start-without-its-bounds");
+        let e = &d.items()[0];
+        assert!(e.message.contains("`nests-at-most:` missing"), "{}", e.message);
+        assert!(!e.message.contains("`starts-at-most:` and"), "{}", e.message);
+    }
+
+    #[test]
+    fn may_start_with_both_bounds_or_with_nobody_listed_is_left_alone() {
+        let bounded = format!("{STARTS}    limits:\n      starts-at-most: 20\n      nests-at-most: 2\n");
+        assert!(run(&bounded).is_empty(), "{}", run(&bounded).render());
+        let nobody = "agents:\n  a:\n    teamwork:\n      may-start: []\n";
+        assert!(run(nobody).is_empty(), "{}", run(nobody).render());
+    }
 
     #[test]
     fn the_total_that_was_written_is_stated_and_the_fix_is_the_same_list_scaled_to_fit() {

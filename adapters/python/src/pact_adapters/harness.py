@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import math
 import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -36,7 +35,19 @@ from .context_policy import (
 #: the check-time half and says the runtime half is a separate question; this is
 #: the answer, and without it the field was a guarantee nothing kept.
 from .at_most_once import WITHHELD, Ledger
-from .delegation import Asker, Grant, Handoff, OverBudget, Pool, Teamwork, ask_team
+from .delegation import (
+    Asker,
+    Grant,
+    Handoff,
+    OverBudget,
+    Pool,
+    Teamwork,
+    ask_team,
+    asked_too_often,
+    carried_on_without,
+    granted,
+    request_for,
+)
 from .diagnostics import locate
 from .events import Bus
 from .facts import TURN_ENDS, Facts
@@ -1472,9 +1483,7 @@ async def run(
                     )
                     is Ruling.CLEARED
                 ):
-                    already.setdefault(
-                        name, f"(no answer: a person said to carry on without {name})"
-                    )
+                    already.setdefault(name, carried_on_without(name))
                 else:
                     gated[name] = NEEDS_APPROVAL
 
@@ -3575,35 +3584,22 @@ def delegate_by_running(
             # whose `name:` differs from its key recurse past its own figure.
             and at_work.get(member.name, 0) >= figure
         ):
-            raise RuntimeError(
-                f"'{grant.member}' has already been put to work {figure} time(s) "
-                f"on this request — `asks-itself-at-most: {figure}` is spent."
-            )
+            raise RuntimeError(asked_too_often(grant.member, figure))
         # The share is the child's ceiling, not merely a number the parent
         # remembers. A member that writes its own tighter `limits:` keeps it —
         # the smaller of the two binds, because inheriting a budget downward
         # must never RAISE one the child set for itself.
-        allowed = grant.allowance
-        own = member.limits.cost_per_request_under
-        if allowed < math.inf:
-            granted = allowed if own is None else min(own, allowed)
-            # BOTH readers of `cost-per-request-under:`, and not just the one
-            # that enforces. `Limits` and `Slo` are built from the same authored
-            # block, so a member that wrote `NaN USD` has the figure recorded in
-            # two places; replacing one left the other saying the cap held
-            # nothing while the run was being held to the join policy's real
-            # 0.10 USD share — the same stale-claim defect `Limits.__post_init__`
-            # clears, one object over. `Slo` enforces nothing either way, and its
-            # `__post_init__` drops the record the moment a real figure arrives.
-            member = replace(
-                member,
-                limits=replace(member.limits, cost_per_request_under=granted),
-                slo=replace(member.slo, cost_per_request_under=granted),
-            )
-        # `one-after-another` earns its latency only if a later member can read
-        # what an earlier one said. Eve pays the latency and hands over nothing.
-        prior = "\n".join(f"{a.member} said: {a.text}" for a in grant.so_far if a.ok)
-        asked = f"{prior}\n\n{grant.request}".strip() if prior else grant.request
+        #
+        # BOTH readers of `cost-per-request-under:`, and not just the one that
+        # enforces. `Limits` and `Slo` are built from the same authored block, so
+        # a member that wrote `NaN USD` has the figure recorded in two places;
+        # replacing one left the other saying the cap held nothing while the run
+        # was being held to the join policy's real 0.10 USD share — the same
+        # stale-claim defect `Limits.__post_init__` clears, one object over.
+        # `delegation.granted` is the one place that is done, so a runtime other
+        # than this harness holds a member to the same figure.
+        member = granted(member, grant.allowance)
+        asked = request_for(grant)  # what earlier members said, then the request
         out = await run(
             member, transport_for(member), asked, tool_impls or {}, bus=bus,
             # The parent's meter, so the member's activation is the same

@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import asyncio
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Any, Awaitable, Callable, Mapping, Sequence
 
@@ -70,6 +70,23 @@ class OnFailure(str, Enum):
     CARRY_ON = "carry-on"
     STOP_THE_OTHERS = "stop-the-others"
     ASK_A_PERSON = "ask-a-person"
+
+
+class MayStart(str, Enum):
+    """Who an agent may bring in while it runs, beyond its `team:` (02P §8.1).
+
+    R16 narrowed to governed run-time composition: what can happen is reviewed
+    (the catalogue a run draws from, the `uses:` a narrowed agent may inherit,
+    the ceilings), and only order and composition inside those bounds are left
+    to the model. Bounded by `limits.starts-at-most:` and
+    `limits.nests-at-most:`, which `pact check` requires beside it (WF-33).
+    """
+
+    #: Any agent of the workspace that runs, picked by the model.
+    CATALOGUE = "catalogue"
+    #: An agent the model describes on the spot, with its starter's `uses:` or
+    #: fewer, on its starter's model.
+    NARROWED_NEW = "narrowed-new"
 
 
 class BadTeamwork(ValueError):
@@ -327,6 +344,9 @@ class Teamwork:
     divides_the_budget: Divides = Divides.EVENLY
     shares: Mapping[str, float] = field(default_factory=dict)
     if_someone_fails: OnFailure = OnFailure.CARRY_ON
+    #: Who may be brought in while the agent runs (`may-start:`); empty means
+    #: nobody beyond `team:`, which is every document written before 02P §8.1.
+    may_start: tuple[MayStart, ...] = ()
 
     # ---------------------------------------------------------------- authoring
 
@@ -357,6 +377,13 @@ class Teamwork:
                 if_someone_fails=_word(
                     block.get("if-someone-fails"), OnFailure, "if-someone-fails",
                     OnFailure.CARRY_ON,
+                ),
+                may_start=tuple(
+                    dict.fromkeys(
+                        _word(w, MayStart, "may-start", None)
+                        for w in _listed(block.get("may-start"))
+                        if str(w).strip()
+                    )
                 ),
             )
             tw.check(members)
@@ -470,8 +497,17 @@ async def ask_team(
     known: Mapping[str, str] | None = None,
     requests: Mapping[str, str] | None = None,
     pool: "Pool | None" = None,
+    failures: tuple[type[BaseException], ...] = (Exception,),
 ) -> Handoff:
     """Ask `members` for help and wait for them according to `teamwork`.
+
+    `failures` are the exceptions from `ask` that are a MEMBER's failure, which
+    is data here (`FAILED`, and `if-someone-fails:` decides). Anything else is
+    the run's own — a runtime parking the whole run for a person, a process
+    being stopped, a journal that cannot be read — and is re-raised once the
+    members still working are stopped, because recording it as one member's
+    answer would write a fact about the run into the team's outcome. The
+    default keeps every exception a failure, as before.
 
     `known` carries members whose answers already arrived before a park, so a
     resumed run does not ask them twice — the same exactly-once rule the tool
@@ -525,7 +561,7 @@ async def ask_team(
             text = await ask(grant)
         except asyncio.CancelledError:
             raise
-        except Exception as e:  # noqa: BLE001 — a child's failure is data, not a crash
+        except failures as e:  # a child's failure is data, not a crash
             bus.emit("step.delegate.failed", member=member, reason=str(e))
             return Answer(member, ok=False, error=str(e), state=FAILED, spent=grant.spent)
         bus.emit("step.delegate.completed", member=member, spent=grant.spent)
@@ -682,7 +718,115 @@ async def _all_at_once(
     return stopped_by, ran_out_of_time
 
 
+# ------------------------------------------------------- what a member is held to
+
+
+def granted(member: Any, allowance: float, currency: str = "") -> Any:
+    """`member` (an `ir.AgentSpec`) with the share a join granted it as its own
+    `cost-per-request-under:`, in both places that line is read.
+
+    The smaller of the two binds: inheriting a budget downward must never RAISE
+    one the member set for itself. An unmetered allowance (`inf`, the pot of a
+    parent that wrote no money ceiling) changes nothing. This is the one place a
+    `Grant` becomes a member's ceiling, so a runtime other than the harness holds
+    a member to the same figure the harness does.
+
+    `currency` is the pot's, for a member that wrote no money line of its own:
+    the share is a share OF the parent's figure, so the sentence a member that
+    reaches it prints names the currency the parent's author wrote, not a bare
+    number (`Limits.cost_currency`).
+    """
+    if not allowance < math.inf:
+        return member
+    own = member.limits.cost_per_request_under
+    figure = allowance if own is None else min(own, allowance)
+    unit = member.limits.cost_currency or currency
+    return replace(
+        member,
+        limits=replace(member.limits, cost_per_request_under=figure, cost_currency=unit),
+        slo=replace(
+            member.slo,
+            cost_per_request_under=figure,
+            cost_currency=member.slo.cost_currency or currency,
+        ),
+    )
+
+
+def request_for(grant: Grant) -> str:
+    """What a member is asked: its request, after what earlier members said.
+
+    `one-after-another` earns its latency only if a later member can read what
+    an earlier one said. Eve pays the latency and hands over nothing.
+    """
+    prior = "\n".join(f"{a.member} said: {a.text}" for a in grant.so_far if a.ok)
+    return f"{prior}\n\n{grant.request}".strip() if prior else grant.request
+
+
+def carried_on_without(member: str) -> str:
+    """What stands in a failed member's place once a person said to carry on
+    without it (`if-someone-fails: ask-a-person`, answered yes)."""
+    return f"(no answer: a person said to carry on without {member})"
+
+
+def asked_too_often(member: str, figure: int) -> str:
+    """Why `member` may not be put to work again: its `asks-itself-at-most:`
+    is spent. A member's failure, so `if-someone-fails:` decides what follows."""
+    return (
+        f"'{member}' has already been put to work {figure} time(s) on this request "
+        f"— `asks-itself-at-most: {figure}` is spent."
+    )
+
+
+def refused_start(
+    starter: str,
+    *,
+    started: int,
+    starts_at_most: int | None,
+    nests_left: int | None,
+) -> str:
+    """Why `starter` may not bring another agent in now, or ''.
+
+    `started` is how many agents this request has brought in so far, counted
+    across every level (`starts-at-most:`); `nests_left` is how many levels of
+    starting are still allowed below `starter` (`nests-at-most:`, the smaller of
+    its own and what its starter had left; `None` when nothing bounds it).
+    """
+    if nests_left is not None and nests_left < 1:
+        return (
+            f"'{starter}' may not bring anyone in: it was brought in itself, as deep "
+            "as `nests-at-most:` allows."
+        )
+    if starts_at_most is not None and started >= starts_at_most:
+        return (
+            f"this request has already brought in {started} agent(s) — "
+            f"`starts-at-most: {starts_at_most}` is spent."
+        )
+    return ""
+
+
+def beyond_its_starter(starter: str, has: Sequence[str], asked: Sequence[str]) -> str:
+    """Why a narrowed agent described with `asked` may not run, or ''.
+
+    A narrowed agent runs with its starter's `uses:` or fewer and can never name
+    anything its starter lacks (02P §8.1: permissions only narrow).
+    """
+    missing = [name for name in dict.fromkeys(asked) if name not in set(has)]
+    if not missing:
+        return ""
+    return (
+        f"a narrowed agent may use only what '{starter}' uses, and "
+        f"{', '.join(repr(m) for m in missing)} is not among them. fix: describe it "
+        f"with some of: {', '.join(has) or '(nothing)'}."
+    )
+
+
 # ------------------------------------------------------------------- reading in
+
+
+def _listed(raw: Any) -> list[Any]:
+    if raw is None:
+        return []
+    return list(raw) if isinstance(raw, (list, tuple)) else [raw]
 
 
 def _word(raw: Any, kind: type[Enum], field_name: str, default: Any) -> Any:

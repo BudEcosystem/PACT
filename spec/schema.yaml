@@ -1538,6 +1538,33 @@ groups:
           ceiling like the ones above, and `when-it-runs-out:` says what
           happens then. Leave it out and a team that comes back to where it
           started is refused before anything runs.
+      starts-at-most:
+        # 02P §8.1, 02W §2.16 (R16 narrowed: governed run-time composition). The
+        # bound on `teamwork.may-start:`, which `pact check` refuses without it
+        # (WF-33): agents brought in while a run works are counted, never left
+        # to the model. Bud's builder writes 20.
+        type: integer
+        at-least: 1
+        needs-also: [when-it-runs-out]
+        surface: S-GOV
+        tier: core
+        help: >
+          how many agents one request may bring in through `may-start:`,
+          counted across every level. Starting one past it is refused, and the
+          model is told so in the answer to that start.
+      nests-at-most:
+        # The other half of WF-33: how deep run-time composition may go. A
+        # started agent that itself writes `may-start:` is held to the smaller
+        # of its own figure and what its starter has left.
+        type: integer
+        at-least: 1
+        needs-also: [when-it-runs-out]
+        surface: S-GOV
+        tier: core
+        help: >
+          how many levels deep agents brought in may themselves bring in
+          others; `1` means the ones this agent starts may start none. Bud's
+          builder writes 2.
       when-it-runs-out:
         type: one-of
         choices: [stop-and-say-so, ask-a-person, answer-with-what-it-has]
@@ -4623,6 +4650,26 @@ groups:
   # All three are separate questions, so they are three separate lines here.
   teamwork:
     fields:
+      may-start:
+        # 02P §8.1, 02W §2.16: R16 narrowed to governed run-time composition.
+        # Each start is a journaled call that spends from this request's pot,
+        # and nothing it starts is ever written into the tree. `pact check`
+        # refuses it without both `limits.starts-at-most:` and
+        # `limits.nests-at-most:` (WF-33).
+        type: list of one-of
+        choices: [catalogue, narrowed-new]
+        surface: S-TOPO
+        tier: core
+        help: >
+          who this agent may bring in while it runs, beyond its `team:`.
+          `catalogue`: any agent of this workspace that runs (not a `base:`),
+          picked by the model. `narrowed-new`: an agent the model describes on
+          the spot, its instructions and `answers-with:`, running on this
+          agent's model with this agent's `uses:` or fewer; it can never name
+          anything this agent lacks. Each start is a journaled call, spends
+          from this request's pot, and meets the same Rules and approvals as
+          any other call. Nothing it starts is ever written into the tree.
+          Needs `starts-at-most:` and `nests-at-most:` under `limits:`.
       waits-for:
         # NOT required. `agent.teamwork`'s own help says "Leave it out and it
         # waits for all of them", and this line contradicted it: an author

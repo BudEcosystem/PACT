@@ -313,6 +313,13 @@ class Limits:
     #: first. Not a Ceiling row — like `steps-at-most`, it bounds the shape of
     #: the run, and `delegate` is where it is spent.
     asks_itself_at_most: int | None = None
+    #: How many agents one request may bring in through `teamwork.may-start:`,
+    #: counted across every level, and how many levels deep they may go
+    #: (02P §8.1, 02W §2.16). Like `asks-itself-at-most`, not Ceiling rows: they
+    #: bound the shape of the run, and a START is where they are spent
+    #: (`delegation.refused_start`).
+    starts_at_most: int | None = None
+    nests_at_most: int | None = None
     when_it_runs_out: Action = Action.STOP
     #: The named question to put to a person when the action is `ask-a-person`.
     asks: str = ""
@@ -561,6 +568,8 @@ class Limits:
             cost_currency="" if cap is None else cap[1],
             tokens_at_most=whole(m.get("tokens-at-most")),
             asks_itself_at_most=whole(m.get("asks-itself-at-most")),
+            starts_at_most=whole(m.get("starts-at-most")),
+            nests_at_most=whole(m.get("nests-at-most")),
             when_it_runs_out=action(m.get("when-it-runs-out")),
             asks=str(m.get("asks") or ""),
         )

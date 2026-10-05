@@ -44,6 +44,19 @@ SRC = Path(__file__).resolve().parents[1] / "src" / "pact_adapters"
 #: _gained_a_caller` deletes it again when one appears — a list of what must stay
 #: uncalled cannot notice a fix.
 HOST_API: dict[str, str] = {
+    # 02P §8.1, 02W §2.16: governed run-time composition. The reference harness
+    # has no tool that brings an agent in while a run works, so nothing in
+    # `src/` starts one; a runtime that offers `may-start:` (budflow-core) asks
+    # these two before each start, so the bounds are read the same way wherever
+    # an agent is brought in.
+    "delegation.refused_start": (
+        "why a `may-start:` start is refused (`starts-at-most:`, `nests-at-most:`), "
+        "for a runtime that brings agents in; the harness starts none"
+    ),
+    "delegation.beyond_its_starter": (
+        "why a narrowed agent naming what its starter lacks is refused, for a "
+        "runtime that builds narrowed agents; the harness builds none"
+    ),
     # The question a run-level wait puts, by its reason. The reference harness
     # asks through its own `Gate` (`asking.for_call`) and never needs the name;
     # a runtime that builds the ask itself (budflow-core parks a conversation too
