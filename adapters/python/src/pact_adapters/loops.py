@@ -188,7 +188,7 @@ class Loop:
         add, because silently finishing there would hide a typo in `then:`.
 
         `too-many-times` never reaches here unrouted. The loop routes past a
-        spent stage before entering it (`harness._stage_to_run`), and a stage
+        spent stage before entering it (`Loop.stage_to_run`), and a stage
         that wrote no `too-many-times:` line goes wherever its `answered:` goes
         — so the stage hands on rather than stopping. That is deliberate and it
         is what `examples/refund-desk/loops/careful.yaml` relies on; the
@@ -236,6 +236,54 @@ class Loop:
             f"Fix: add a line under that stage's `then:` — "
             f"`{outcome}: {DONE}` to finish there, or the name of another stage."
         )
+
+    def stage_to_run(
+        self, name: str, visits: Mapping[str, int]
+    ) -> "tuple[Phase | None, str | None]":
+        """Which stage runs now — or why none does.
+
+        A stage whose `at-most` is already spent is routed *past* here rather than
+        entered and then refused: entering it would spend a model call to discover a
+        limit the author had already declared. Routing follows the stage's own
+        `then: too-many-times:` line, falling back to `answered:` for a stage that
+        wrote no `too-many-times:`.
+
+        Returns `(phase, None)` for the stage to run, `(None, None)` when the loop
+        has reached `done`, and `(None, why)` when every route out is also spent —
+        reachable only when spent stages route into a ring, which is the one shape
+        that would otherwise spin forever.
+
+        Public, and on the loop, because every runtime that drives a loop has to
+        answer it the same way: a second copy in an adapter would be the second
+        place this decision is made, and the first place it drifts.
+        """
+        seen: list[str] = []
+        while name != DONE:
+            phase = self.phase(name)
+            if phase.at_most is None or visits.get(name, 0) < phase.at_most:
+                return phase, None
+            if name in seen:
+                ring = seen[seen.index(name):] + [name]
+                return None, (
+                    f"every stage in {' → '.join(ring)} has used up its `at-most`, "
+                    f"and they lead only to each other. "
+                    f"Fix: raise one of those `at-most:` numbers, or point one "
+                    f"stage's `then:` at `done`."
+                )
+            seen.append(name)
+            # `at-most` reached is its own outcome, not an answer, so a stage that
+            # wrote `too-many-times:` is sent there and `too-many-times` is not
+            # vocabulary that validates and never fires.
+            #
+            # A stage that wrote none HANDS ON — it goes wherever `answered:` goes —
+            # rather than stopping. That is a real trade and it is the one the schema
+            # now describes: it keeps every stage written before `too-many-times:`
+            # existed behaving exactly as before, and `careful.yaml` depends on it.
+            # The schema said the opposite ("the run gives up") for a round, so an
+            # author read `at-most:` as a safety ceiling and got a hand-on. Write
+            # `too-many-times:` to stop.
+            name = phase.then.get("too-many-times") or self.route(phase, "answered")
+        return None, None
 
     def check_against(
         self, tool_names: tuple[str, ...], skill_names: tuple[str, ...] = ()

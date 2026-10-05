@@ -227,7 +227,7 @@ def _a_stage_used_up_its_turns(spec: AgentSpec) -> "tuple[AgentSpec, Script, dic
     """The `stage-limit` path, and the sharpest case in this file.
 
     One stage with `at-most: 1` whose `then:` leads only back to itself.
-    `_stage_to_run` detects the ring of spent stages and gives up, and the line
+    `Loop.stage_to_run` detects the ring of spent stages and gives up, and the line
     it gives up on is `result.output = result.steps[-1].text` — so `output`
     becomes whatever the model last said. Measured on this exact loop: the run
     halted at `stage-limit` carrying `{"decision": "approved", "reason":

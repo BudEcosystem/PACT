@@ -1047,7 +1047,7 @@ def test_every_shipped_shape_reaches_done_from_its_own_starting_stage(ref: str) 
 
     Walked over the stage graph rather than run: every outcome a stage declares
     is followed, and `at-most` is treated as "this stage can also be skipped
-    past", which is what `harness._stage_to_run` does. If no path reaches `done`,
+    past", which is what `Loop.stage_to_run` does. If no path reaches `done`,
     the shape is a trap whatever it is called.
     """
     loop = Loop.from_library(ref)
@@ -1179,3 +1179,37 @@ def test_the_shapes_differ_from_each_other_in_what_the_model_is_told() -> None:
         assert wording[ref] - others, (
             f"{ref} tells the model nothing that another shipped shape does not"
         )
+
+
+def test_which_stage_runs_now_is_the_loops_own_answer() -> None:
+    """`Loop.stage_to_run` is public so every runtime that drives a loop routes past
+    a spent stage the way the harness does, instead of keeping a second copy.
+
+    A stage under its `at-most:` runs; a spent one is routed past along its
+    `too-many-times:` line, or its `answered:` line when it wrote none; past the
+    last stage is `done`; and a ring of spent stages is refused in words.
+    """
+    react = Loop.from_library(REACT)
+    phase, why = react.stage_to_run("reason", {"reason": 5})
+    assert (phase.name if phase else None, why) == ("reason", None)
+    phase, why = react.stage_to_run("reason", {"reason": 6})
+    assert (phase.name if phase else None, why) == ("reply", None)
+
+    careful = Loop.from_mapping("careful", {
+        "starts-at": "gather",
+        "steps": {
+            "gather": {"does": "use-tools", "then": {"answered": "re-read"}},
+            "re-read": {"does": "check-its-work", "at-most": 2, "then": {"answered": "done"}},
+        },
+    })
+    assert careful.stage_to_run("re-read", {"re-read": 2}) == (None, None)
+
+    ring = Loop.from_mapping("ring", {
+        "starts-at": "a",
+        "steps": {
+            "a": {"does": "think", "at-most": 1, "then": {"answered": "b"}},
+            "b": {"does": "think", "at-most": 1, "then": {"answered": "a"}},
+        },
+    })
+    phase, why = ring.stage_to_run("a", {"a": 1, "b": 1})
+    assert phase is None and why is not None and "at-most" in why

@@ -1531,7 +1531,7 @@ async def run(
         # Which stage runs now. A stage that has used up its `at-most` is routed
         # past here rather than after the fact, so it never spends a model call
         # discovering that it was not allowed to run.
-        phase, gave_up = _stage_to_run(loop, phase_name, visits)
+        phase, gave_up = loop.stage_to_run(phase_name, visits)
         if phase is None:
             result.output = result.steps[-1].text if result.steps else ""
             if gave_up:
@@ -3750,51 +3750,6 @@ def _system_for(
     return "\n\n".join(parts)
 
 
-def _stage_to_run(
-    loop: Loop, name: str, visits: Mapping[str, int]
-) -> tuple[Phase | None, str | None]:
-    """Which stage runs now — or why none does.
-
-    A stage whose `at-most` is already spent is routed *past* here rather than
-    entered and then refused: entering it would spend a model call to discover a
-    limit the author had already declared. Routing follows the stage's own
-    `then: too-many-times:` line, falling back to `answered:` for a stage that
-    wrote no `too-many-times:`.
-
-    Returns `(phase, None)` for the stage to run, `(None, None)` when the loop
-    has reached `done`, and `(None, why)` when every route out is also spent —
-    reachable only when spent stages route into a ring, which is the one shape
-    that would otherwise spin forever.
-    """
-    seen: list[str] = []
-    while name != DONE:
-        phase = loop.phase(name)
-        if phase.at_most is None or visits.get(name, 0) < phase.at_most:
-            return phase, None
-        if name in seen:
-            ring = seen[seen.index(name):] + [name]
-            return None, (
-                f"every stage in {' → '.join(ring)} has used up its `at-most`, "
-                f"and they lead only to each other. "
-                f"Fix: raise one of those `at-most:` numbers, or point one "
-                f"stage's `then:` at `done`."
-            )
-        seen.append(name)
-        # `at-most` reached is its own outcome, not an answer, so a stage that
-        # wrote `too-many-times:` is sent there and `too-many-times` is not
-        # vocabulary that validates and never fires.
-        #
-        # A stage that wrote none HANDS ON — it goes wherever `answered:` goes —
-        # rather than stopping. That is a real trade and it is the one the schema
-        # now describes: it keeps every stage written before `too-many-times:`
-        # existed behaving exactly as before, and `careful.yaml` depends on it.
-        # The schema said the opposite ("the run gives up") for a round, so an
-        # author read `at-most:` as a safety ceiling and got a hand-on. Write
-        # `too-many-times:` to stop.
-        name = phase.then.get("too-many-times") or loop.route(phase, "answered")
-    return None, None
-
-
 def _where_next(
     loop: Loop,
     phase: Phase,
@@ -3827,7 +3782,7 @@ def _sent_to(
 ) -> str | None:
     """The stage a redirect named, or `None` when this loop has not got it.
 
-    Deliberately `Loop.phase` — the same door `_stage_to_run` opens — so a
+    Deliberately `Loop.phase` — the same door `Loop.stage_to_run` opens — so a
     misspelled destination gets the loop's own diagnostic, which names the loop
     and lists the stages it has. A second message written here would be a second
     thing to keep in step with the first, and it would be the one telling an
