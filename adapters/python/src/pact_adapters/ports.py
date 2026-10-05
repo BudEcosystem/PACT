@@ -55,6 +55,8 @@ WIRE_NAME: dict[str, str] = {
     "reaches": "reaches",
     "answers_with": "answers-with",
     "programs": "program",
+    "available_when": "available-when",
+    "reads_only": "reads-only",
 }
 
 
@@ -87,6 +89,10 @@ def tool_payload(tool: ToolSpec) -> dict[str, Any]:
         out[WIRE_NAME["answers_with"]] = {a: dict(w) for a, w in tool.answers_with.items()}
     if tool.programs:
         out[WIRE_NAME["programs"]] = dict(tool.programs)
+    if tool.available_when:
+        out[WIRE_NAME["available_when"]] = tool.available_when
+    if tool.reads_only:
+        out[WIRE_NAME["reads_only"]] = dict(tool.reads_only)
     if tool.reaches is not None:
         out[WIRE_NAME["reaches"]] = {
             "kind": tool.reaches.kind,

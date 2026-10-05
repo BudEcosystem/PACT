@@ -105,6 +105,8 @@ def _a_tool_with_everything() -> ToolSpec:
         answers_with={"look-up": {"status": "one of open, shipped"}},
         programs={"look-up": "shorten-order"},
         reaches=Reach(kind="url", value="https://orders.example.com", method="get"),
+        available_when="this-agent-has-helpers",
+        reads_only={"look-up": True},
     )
 
 

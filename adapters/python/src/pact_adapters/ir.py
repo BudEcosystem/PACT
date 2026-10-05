@@ -74,6 +74,23 @@ TICKS_IN_SETTINGS = frozenset({"parallel-tool-calls"})
 #: to remember.
 WAYS_A_TOOL_REACHES = ("connect", "url", "says")
 
+#: `available-when:` — each condition, and the part of the tree that satisfies
+#: it: the schema's own `satisfied-by:` table, which `tool`, `skill` and
+#: `resource` all carry (`spec/schema.yaml`). The Rust half reads it off the
+#: schema (`crates/pact-loader/src/available.rs`, which WARNS at check time when
+#: an agent can never satisfy a condition); this is the same table for the side
+#: that has to decide at run time whether the model is shown the thing at all.
+#: Held to the schema, row for row and kind for kind, by
+#: `tests/test_what_an_agent_is_offered_and_can_be_sent.py`, so a fifth
+#: condition cannot be added there without being added here. `always` has no
+#: row: nothing has to be satisfied.
+AVAILABLE_WHEN: Mapping[str, str] = {
+    "this-agent-has-helpers": "team",
+    "this-agent-has-procedures": "skills",
+    "this-agent-has-connections": "resources",
+    "a-person-can-be-asked": "questions",
+}
+
 
 @dataclass(frozen=True)
 class ResourceSpec:
@@ -142,6 +159,9 @@ class ResourceSpec:
     #: the first time. Already a `Rule` in the gate (`questions_for`, beside
     #: `asks-to-connect:`); carried for the reason that one is.
     asks_to_run: str = ""
+    #: `available-when:` — when the tools reaching this server are offered to the
+    #: model at all (G12). `""` is `always`. Decided by `available`.
+    available_when: str = ""
 
 
 @dataclass(frozen=True)
@@ -233,6 +253,16 @@ class ToolSpec:
     #: carried as an absence rather than filled in with a guess, because a reader
     #: that assumed `connect:` would send a refund to a server nobody wrote down.
     reaches: "Reach | None" = None
+    #: `available-when:` — when this tool is offered to the model at all (G12).
+    #: `""` is `always`. Whether the agent satisfies it is `available`'s answer,
+    #: and the agent is the one fact a tool file cannot carry.
+    available_when: str = ""
+    #: Per action, whether the author wrote `reads-only: yes` — keyed the way
+    #: `binds` is, `False` for an action that did not say. Read through
+    #: `said_yes`, the checker's own word list. A runtime that runs calls side by
+    #: side runs only these together: an action that did not say it only looks
+    #: things up is a write, and a write runs alone (registry `action.reads-only`).
+    reads_only: dict[str, bool] = field(default_factory=dict)
 
 
 def _document_names(written: Any) -> tuple[str, ...]:
@@ -417,6 +447,19 @@ class SkillSpec:
     #: because a procedure with no procedure in it is not what the author read
     #: back from `pact check`.
     content: str = ""
+    #: `available-when:` — when this procedure is shown to the model at all
+    #: (G12). `""` is `always`; `available` decides.
+    available_when: str = ""
+    #: The files under `references/` and `assets/` beside `SKILL.md`, by name, as
+    #: the payload walker found them, and the folder each sits in relative to the
+    #: workspace root (`""` when the skill has none). Longer material and pictures
+    #: the procedure points at: a runtime offers them to be read on demand rather
+    #: than pasting them into every request, which is why they are carried apart
+    #: from `content`.
+    references: tuple[str, ...] = ()
+    references_at: str = ""
+    assets: tuple[str, ...] = ()
+    assets_at: str = ""
 
     def in_words(self) -> str:
         """This procedure as the model reads it.
@@ -503,6 +546,13 @@ class AgentSpec:
     #: silently downgraded — a run that quietly used prose where the author asked
     #: for a JSON schema is the silent degradation T7 forbids.
     answers_with_mode: str = ""
+    #: What the agent can be sent — the author's `accepts:` lines, `{name:
+    #: shape}`, the vocabulary `questions.Shape.parse` reads. `{}` when the author
+    #: wrote none, which the schema reads as `message: text`. Carried so a runtime
+    #: can put a picture, a recording or a file named here in front of the model
+    #: as what it is, not as its path; the wire form of each is a workspace path
+    #: (`Shape.read`).
+    accepts: dict[str, str] = field(default_factory=dict)
     #: A better model for the stages that check work — `model-for-checking:`.
     #:
     #: The name only. Which transport serves it is the host's business (P-1: an
@@ -784,6 +834,8 @@ class AgentSpec:
                 # boundary is a server an adapter can reach rather than a name it
                 # would have to look up in a document it does not have (P-1).
                 reaches=_reaches(t, doc.get("resources")),
+                available_when=_text(t.get("available-when", "")),
+                reads_only=_reads_only(t),
             )
             for n, t in sorted((doc.get("tools") or {}).items())
             if n in set(_as_list(a.get("uses")))
@@ -799,6 +851,11 @@ class AgentSpec:
                 do_not_use_when=_text(s.get("do-not-use-when", "")),
                 if_unsure=_text(s.get("if-unsure", "")),
                 content=_text(s.get("content", "")),
+                available_when=_text(s.get("available-when", "")),
+                references=_document_names(s.get("references")) if s.get("references") is not None else (),
+                references_at=_payload_at(s.get("references"), f"skills/{n}/references"),
+                assets=_document_names(s.get("assets")) if s.get("assets") is not None else (),
+                assets_at=_payload_at(s.get("assets"), f"skills/{n}/assets"),
             )
             for n, s in sorted((doc.get("skills") or {}).items())
             if n in set(_as_list(a.get("uses"))) and isinstance(s, Mapping)
@@ -848,6 +905,7 @@ class AgentSpec:
                 str(k): str(v) for k, v in (a.get("answers-with") or {}).items()
             },
             answers_with_mode=str(a.get("answers-with-mode") or "").strip(),
+            accepts={str(k): str(v) for k, v in (a.get("accepts") or {}).items()},
             model_for_checking=str(a.get("model-for-checking") or "").strip(),
             pauses=PauseRule.from_document(doc, agent_key),
             loop=Loop.resolve(doc, _text(a.get("loop", ""))),
@@ -886,6 +944,42 @@ class AgentSpec:
             workspace=str(root) if root is not None else "",
             key=agent_key,
         )
+
+
+def available(agent: "AgentSpec", condition: str) -> bool:
+    """Whether something written `available-when: <condition>` is offered to
+    `agent` — the run-time half of G12.
+
+    Each condition is satisfied by what `AVAILABLE_WHEN` names, read off the
+    spec rather than the document, because these are facts about what THIS agent
+    can reach and the spec is already that reach: `team` is its helpers,
+    `skills` the procedures on its `uses:` line, `resources` a server one of its
+    tools `connect:`s to, and `questions` any rule in its gate (`asking`), which
+    is every way a person can be put a question — a policy, a `needs-a-person:`
+    line, `limits.asks`, a consent to connect. `""` and `always` are always
+    true. A condition the schema does not offer raises `ValueError`: `pact
+    check` refuses it, so a document carrying one did not come through the
+    checker, and guessing would offer or hide a capability nobody chose.
+    """
+    said = condition.strip()
+    if said in ("", "always"):
+        return True
+    satisfied_by = AVAILABLE_WHEN.get(said)
+    if satisfied_by == "team":
+        return bool(agent.team)
+    if satisfied_by == "skills":
+        return bool(agent.skills)
+    if satisfied_by == "resources":
+        return any(
+            t.reaches is not None and t.reaches.kind == "connect" and t.reaches.resource is not None
+            for t in agent.tools
+        )
+    if satisfied_by == "questions":
+        return len(agent.asking) > 0
+    raise ValueError(
+        f"`available-when: {said}` is not a condition; the conditions are always, "
+        + ", ".join(AVAILABLE_WHEN)
+    )
 
 
 def _questions_this_agent_puts(doc: dict[str, Any], agent: dict[str, Any]) -> set[str]:
@@ -1183,6 +1277,27 @@ def _action_answers(tool: dict[str, Any]) -> dict[str, dict[str, str]]:
     return out
 
 
+def _reads_only(tool: dict[str, Any]) -> dict[str, bool]:
+    """One tool's `reads-only:` lines, per action, through the checker's word list."""
+    actions = tool.get("actions") or {}
+    if not isinstance(actions, dict):
+        return {}
+    return {
+        str(name): said_yes(action.get("reads-only"))
+        for name, action in sorted(actions.items())
+        if isinstance(action, dict)
+    }
+
+
+def _payload_at(written: Any, default: str) -> str:
+    """Where a payload folder sits, relative to the workspace root: the loader's
+    own `$payload`, else the conventional folder; `""` when nothing is written."""
+    if written is None:
+        return ""
+    payload = written.get("$payload") if isinstance(written, Mapping) else None
+    return str(payload or default)
+
+
 def _reaches(tool: Any, resources: Any) -> "Reach | None":
     """Where one tool goes, read off the tool's own three candidate lines.
 
@@ -1263,6 +1378,7 @@ def _resource(name: str, entry: Mapping[str, Any]) -> "ResourceSpec":
         description=_text(entry.get("description", "")),
         engines=tuple(str(e).strip() for e in _as_list(entry.get("engines")) if str(e).strip()),
         asks_to_run=_text(entry.get("asks-to-run", "")),
+        available_when=_text(entry.get("available-when", "")),
     )
 
 
