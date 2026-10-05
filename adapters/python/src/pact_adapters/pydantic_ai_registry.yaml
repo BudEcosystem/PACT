@@ -84,6 +84,16 @@ fields:
       DOES honour it: the four words map exactly onto `str`, `PromptedOutput`,
       `NativeOutput` and `ToolOutput`. This is the clearest single reason the export has
       two halves
+  agent.checked-by:
+    construct: "an output_validator raising ModelRetry with the broken rule's words (evals.first_broken)"
+    outcome: mapped
+    rows: [O7]
+    spec-file: "no field for what an answer must satisfy; output validators are Python functions"
+  agent.checks-at-most:
+    construct: "Agent(retries={'output': n - 1}): Pydantic AI counts retries after the first try"
+    outcome: mapped
+    rows: [A14, O7]
+    spec-file: "no field for how many tries an answer gets"
   agent.run-inputs:
     construct: "deps (the run's inputs); deps_schema in an AgentSpec file"
     outcome: mapped

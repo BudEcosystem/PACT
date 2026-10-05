@@ -650,3 +650,27 @@ def test_a_threshold_nobody_can_read_is_refused_rather_than_crashing() -> None:
     assert not ok
     assert "not a threshold this can read" in why, why
     assert "> 80" in why, "it must show the shape to write"
+
+
+def test_a_variant_holds_its_steps_and_narrows_every_kind_it_can_name() -> None:
+    """`variant.steps-at-most:` is a WRITTEN ceiling (a runtime that holds only
+    what the author wrote, `steps_written`, must hold it), and `variant.may-use:`
+    narrows every kind the schema lets it name — tools, procedures, knowledge and
+    the programs the agent's own `uses:` reaches — not only the first two."""
+    doc = {
+        "agents": {"a": {
+            "uses": ["t1", "t2", "manual", "notes", "calc"],
+            "variants": {"small": {"steps-at-most": 4, "may-use": ["t1", "notes"]}},
+        }},
+        "tools": {"t1": {"description": "one"}, "t2": {"description": "two"}},
+        "skills": {"manual": {"description": "how"}},
+        "knowledge": {"notes": {"description": "notes"}},
+        "programs": {"calc": {"description": "adds", "engine": "python", "determinism": "pure"}},
+    }
+    spec = AgentSpec.from_document(doc, "a")
+    small = strategies_of(spec)["small"](spec)
+    assert (small.max_steps, small.steps_written) == (4, True)
+    assert [t.name for t in small.tools] == ["t1"]
+    assert small.skills == ()
+    assert [k.name for k in small.knowledge] == ["notes"]
+    assert [p.name for p in small.programs if "uses" in p.reached_by] == []

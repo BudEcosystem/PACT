@@ -661,6 +661,31 @@ def check(
     return CaseOutcome(case.key, True, "", tuple(unenforced))
 
 
+def first_broken(
+    rules: "list[Rule] | tuple[Rule, ...]",
+    result: RunResult,
+    judge: "Judge | None" = None,
+    unenforced: "list[str] | None" = None,
+) -> str:
+    """Why this answer breaks one of `rules`, or `""` if it breaks none.
+
+    The door an agent's own `checked-by:` goes through (02P O7): the same rule
+    shapes as `evals:`, decided the same way — every rule decidable by looking at
+    the answer first, a `judged:` one only after all of those passed, and only if
+    something can grade it (otherwise it goes on `unenforced` with a line to
+    type, exactly as `check` reports it). `result` carries the answer and the
+    run's own steps, which `must-call-before:` reads.
+    """
+    text = result.output.lower()
+    for rule in rules:
+        if rule.kind != JUDGED and (broken := _breaks(rule, result, text)):
+            return broken
+    for rule in rules:
+        if rule.kind == JUDGED and (broken := _breaks(rule, result, text, judge, unenforced)):
+            return broken
+    return ""
+
+
 def _scores_below(
     spec: MetricSpec,
     case: Case,

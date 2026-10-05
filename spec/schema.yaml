@@ -600,6 +600,30 @@ groups:
         help: >
           how the answer is constrained on the wire. Leave it out: PACT picks
           from the shape you declared above, and records what it picked.
+      checked-by:
+        # 02P O7: nothing constrained what an agent SAYS. `evals:` grades a
+        # recorded case after the fact; this holds the live answer to the same
+        # rule shapes before anyone reads it, so each check is also a test — and
+        # a failed one asks the model again with the reason rather than ending
+        # the run, which is what a `stop-the-run` interceptor would do.
+        type: list of group:eval-rule
+        surface: S-GOV
+        tier: core
+        help: >
+          what this agent's answer must satisfy before it is the answer — the
+          same rule shapes as `evals:` (`must-contain:`, `must-not-contain:`,
+          `must-say-one-of:`, `must-call-before:`, `judged:`). A failed check
+          asks again with the reason; still failing after `checks-at-most:`
+          attempts, the run stops and says which rule.
+      checks-at-most:
+        type: integer
+        at-least: 1
+        needs-also: [checked-by]
+        surface: S-GOV
+        tier: core
+        help: >
+          how many attempts in all, asking again with the reason after each
+          failed check. Leave it out for 2; write `1` to fail at the first miss.
       run-inputs:
         type: map of answer-shape
         shapes: *the-answer-shapes

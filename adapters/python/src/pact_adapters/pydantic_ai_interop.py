@@ -47,6 +47,7 @@ Both doors are honest. Neither is the other.
 
 from __future__ import annotations
 
+import json
 from typing import Any, Mapping
 
 from .exporting import ExportReport
@@ -1843,7 +1844,7 @@ def build_agent(
         said, _ = pydantic_ai_model_id(spec.model, spec.workspace)
         bound = said or None
 
-    return Agent(
+    agent = Agent(
         bound,
         name=spec.name or spec.key or None,
         description=spec.description or None,
@@ -1867,6 +1868,62 @@ def build_agent(
         # to a provider.
         defer_model_check=True,
     )
+    if spec.checked_by:
+        agent.output_validator(_answer_checks(spec))
+    return agent
+
+
+#: How a failed `checked-by:` check opens its retry prompt, and how earlier ones are counted.
+CHECK_FAILED = "Your answer breaks a rule it must keep: "
+
+
+def _answer_checks(spec: PactAgentSpec) -> Any:
+    """`checked-by:` / `checks-at-most:` (02P O7, A14) as an output validator.
+
+    Each answer is held to the rules by `evals.first_broken`, the door `evals:`
+    uses; a broken one is sent back with the rule's words (`ModelRetry`). The
+    attempts are counted from the conversation itself (the retry prompts this
+    wrote), not by Pydantic AI's output budget, which empty and thinking-only
+    replies spend as well — `checks-at-most:` counts attempts at the checks. The
+    last attempt that still breaks a rule ends the run saying which.
+    """
+    from pydantic_ai import ModelRetry
+    from pydantic_ai.exceptions import UnexpectedModelBehavior
+    from pydantic_ai.messages import ModelRequest, RetryPromptPart
+
+    from .evals import first_broken
+    from .harness import RunResult
+
+    async def checked(ctx: Any, output: Any) -> Any:
+        if getattr(ctx, "partial_output", False):
+            return output
+        said = output if isinstance(output, str) else json.dumps(_plain(output), sort_keys=True)
+        broken = first_broken(spec.checked_by, RunResult(output=said))
+        if not broken:
+            return output
+        failed = sum(
+            1
+            for m in ctx.messages
+            if isinstance(m, ModelRequest)
+            for p in m.parts
+            if isinstance(p, RetryPromptPart)
+            and isinstance(p.content, str)
+            and p.content.startswith(CHECK_FAILED)
+        )
+        if failed + 1 >= spec.checks_at_most:
+            raise UnexpectedModelBehavior(
+                f"after {spec.checks_at_most} attempt(s) the answer still breaks a "
+                f"`checked-by:` rule: {broken}"
+            )
+        raise ModelRetry(f"{CHECK_FAILED}{broken}. Answer again so that it keeps every rule.")
+
+    return checked
+
+
+def _plain(value: Any) -> Any:
+    """A structured answer as plain JSON values, for the rules to read as text."""
+    dump = getattr(value, "model_dump", None)
+    return dump(mode="json") if callable(dump) else value
 
 
 def _output_type_for(spec: PactAgentSpec) -> Any:

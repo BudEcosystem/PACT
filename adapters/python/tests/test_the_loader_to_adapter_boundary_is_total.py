@@ -221,6 +221,12 @@ def test_every_spec_field_that_holds_authored_state_is_filled_from_the_document(
         "asking",           # built from the workspace's `policies:`
         "model_for_checking",   # authored, and empty in this example
         "answers_with_mode",    # authored, and empty in this example
+        # Authored, and this example writes none: its answer is read back by
+        # the `careful` loop's `re-read` stage and by a person, not by rules.
+        "checked_by",
+        # What `checked-by:` wrote that no runtime can carry out: empty when
+        # every rule reads, and the example writes no rule at all.
+        "checked_by_unenforced",
         "settings",         # authored, and this example writes none
         "pauses",           # authored, and this example writes none
         # Authored, and this example writes none — deliberately. The D14 core is

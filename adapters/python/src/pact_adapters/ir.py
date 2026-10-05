@@ -546,6 +546,17 @@ class AgentSpec:
     #: silently downgraded — a run that quietly used prose where the author asked
     #: for a JSON schema is the silent degradation T7 forbids.
     answers_with_mode: str = ""
+    #: What every answer must satisfy before it is the answer — `checked-by:`,
+    #: the rule shapes `evals:` uses (`evals.Rule`), read by the same door
+    #: (`evals._read_rules`), so a rule this runtime cannot carry out is on
+    #: `checked_by_unenforced` in the words `evals` reports it with. A runtime
+    #: holds an answer to them with `evals.first_broken` and asks again with
+    #: the reason.
+    checked_by: tuple[Any, ...] = ()
+    checked_by_unenforced: tuple[str, ...] = ()
+    #: How many attempts an answer gets in all — `checks-at-most:`, 2 when the
+    #: author wrote `checked-by:` and left this out (the schema's own help).
+    checks_at_most: int = 2
     #: What the agent can be sent — the author's `accepts:` lines, `{name:
     #: shape}`, the vocabulary `questions.Shape.parse` reads. `{}` when the author
     #: wrote none, which the schema reads as `message: text`. Carried so a runtime
@@ -860,6 +871,12 @@ class AgentSpec:
             for n, s in sorted((doc.get("skills") or {}).items())
             if n in set(_as_list(a.get("uses"))) and isinstance(s, Mapping)
         )
+        # Local: `evals` imports the harness, which imports this module.
+        from .evals import _read_rules
+
+        checked_by, checked_by_unenforced = _read_rules(
+            a.get("checked-by"), f"agents/{agent_key}/agent.yaml (checked-by)"
+        )
         knowledge = tuple(
             KnowledgeSpec(
                 name=n,
@@ -905,6 +922,9 @@ class AgentSpec:
                 str(k): str(v) for k, v in (a.get("answers-with") or {}).items()
             },
             answers_with_mode=str(a.get("answers-with-mode") or "").strip(),
+            checked_by=checked_by,
+            checked_by_unenforced=checked_by_unenforced,
+            checks_at_most=int(a.get("checks-at-most") or 2),
             accepts={str(k): str(v) for k, v in (a.get("accepts") or {}).items()},
             model_for_checking=str(a.get("model-for-checking") or "").strip(),
             pauses=PauseRule.from_document(doc, agent_key),
