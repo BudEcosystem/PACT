@@ -949,6 +949,137 @@ class Baseline:
     generation: int = 0
 
 
+#: Where each agent's reviewed baseline is kept, beside the month's spend.
+BASELINES = "baseline.jsonl"
+
+
+@dataclass
+class Baselines:
+    """The baseline a person last approved, per agent, kept in the workspace.
+
+    `Baseline` existed and nothing kept one, so `Learner.baseline` was `None` on
+    every cycle anybody ran from the files and `_drift` answered `0.0`: the one
+    gate against "a series of individually reasonable edits walks an agent
+    somewhere nobody approved" measured nothing, and `drift.at-most:` — written,
+    loaded, `tier: core` — could never be reached.
+
+    Kept where the spend ledger is, for the reasons `MonthlySpend` gives: it has
+    to outlive the cycle, it carries only the author's own wording (never a
+    customer's), and it is a local file. Append-only, the last row per agent
+    wins, so a re-baseline is one more line and the history of what was approved
+    stays readable. Deleting `.pact/` starts the measurement again from whatever
+    the agent says next time, which is the honest reading of a workspace whose
+    record somebody threw away.
+    """
+
+    root: "Path | None" = None
+
+    @staticmethod
+    def at(root: "str | Path | None") -> "Baselines":
+        return Baselines(root=Path(root) if root else None)
+
+    @property
+    def kept(self) -> bool:
+        return self.root is not None
+
+    def of(self, agent: str) -> "Baseline | None":
+        """The baseline last kept for `agent`, or `None` when none was."""
+        if self.root is None:
+            return None
+        path = self.root / UNDER / BASELINES
+        if not path.exists():
+            return None
+        found: Baseline | None = None
+        for line in path.read_text(encoding="utf-8").splitlines():
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue  # a half-written line from a cycle somebody killed
+            if isinstance(row, Mapping) and row.get("agent") == agent:
+                found = Baseline(
+                    instructions=str(row.get("instructions") or ""),
+                    score=float(row.get("score") or 0.0),
+                    generation=int(row.get("generation") or 0),
+                )
+        return found
+
+    def keep(self, agent: str, instructions: str, score: float = 0.0) -> Baseline:
+        """Freeze `instructions` as what `agent` is measured from now on.
+
+        Called the first time a workspace improves an agent (there is nothing
+        else to measure from) and whenever a PERSON approves a change: the
+        schema's own words are "the version a person last approved". A change
+        that applied itself never moves it — that is what makes the drift
+        cumulative.
+        """
+        before = self.of(agent)
+        kept = Baseline(instructions, float(score), (before.generation + 1) if before else 0)
+        if self.root is not None:
+            _append(
+                self.root,
+                BASELINES,
+                {"agent": agent, "instructions": instructions, "score": kept.score,
+                 "generation": kept.generation},
+            )
+        return kept
+
+
+@dataclass(frozen=True)
+class LearningModel:
+    """One `learning.models:` row: what the model is for here, and which model."""
+
+    #: The author's key for the row (`execution`, `reflection`).
+    name: str
+    #: One of the model roles `allow-egress:` names.
+    role: str
+    #: The catalogue id, or `""` — "leave it out and PACT picks", which a host
+    #: reads as the catalogue's own `default:`.
+    model: str = ""
+
+
+def learning_models(doc: Mapping[str, Any]) -> tuple[LearningModel, ...]:
+    """Every `learning.models:` row, in the order written.
+
+    The schema has typed this `map of group:learning-model` for a round and no
+    source file read it, so "which model proposes improvements, kept separate
+    from the one working" was a promise only `pact check`'s egress walk kept.
+    """
+    block = doc.get("learning")
+    written = block.get("models") if isinstance(block, Mapping) else None
+    out: list[LearningModel] = []
+    for name, row in (written or {}).items():
+        if isinstance(row, Mapping):
+            out.append(LearningModel(str(name), str(row.get("role") or "").strip(),
+                                     str(row.get("model") or "").strip()))
+    return tuple(out)
+
+
+def model_for(doc: Mapping[str, Any], role: str) -> "LearningModel | None":
+    """The first row written for `role` (`reflector` writes the proposals), or `None`."""
+    return next((m for m in learning_models(doc) if m.role == role), None)
+
+
+@dataclass(frozen=True)
+class Scoring:
+    """What a host's own runner measured for one scoring run of a suite.
+
+    `Learner._score` runs PACT's harness, synchronously, on a transport — which
+    is right for PACT's own commands and wrong for a host whose agents are not
+    PACT's harness at all (a runtime that compiles the same spec to its own
+    framework, journals every call and grades with its own judge). Such a host
+    hands `cycle` a `score` that returns this, and every gate stays here: the
+    split, the blast radius, the ceilings, the drift and the verdict at the
+    author's bar are decided exactly as they are for a transport.
+    """
+
+    #: One outcome per case scored, graded by PACT's own `check`.
+    outcomes: "tuple[CaseOutcome, ...] | list[CaseOutcome]"
+    #: What the scoring cost, in the currency the price list charges in.
+    spent: float = 0.0
+    #: Whether anything could put a price on it (`priced` on the `Learner`).
+    priced: bool = False
+
+
 @dataclass
 class Outcome:
     applied: bool
@@ -1132,6 +1263,9 @@ class Learner:
             # the document — and it means a repeat cannot be recognised, which
             # `_unmeasured` says rather than pretending.
             refusals=Refusals.at(spec.workspace),
+            # The version a person last approved, as the workspace kept it, so
+            # `drift.at-most:` is measured from something (`Baselines`).
+            baseline=Baselines.at(spec.workspace).of(spec.key),
         )
 
     def _unmeasured(self) -> tuple[str, ...]:
@@ -1212,6 +1346,15 @@ class Learner:
             )
         return ()
 
+    def _scored(self, spec: AgentSpec, cases: list[Case], score) -> Verdict:
+        """One scoring run through a host's own runner (`Scoring`), counted on
+        the same three meters as `_score`'s, so every ceiling reads one figure."""
+        self.evals_spent += len(cases)
+        taken = score(spec, cases)
+        self.priced = taken.priced if self.priced is None else (self.priced and taken.priced)
+        self.money_spent += float(taken.spent)
+        return verdict(list(taken.outcomes), self.bar, min_cases=1)
+
     def _score(self, spec: AgentSpec, cases: list[Case], transport_for) -> Verdict:
         import asyncio
 
@@ -1253,8 +1396,11 @@ class Learner:
             )
         return verdict(results, self.bar, min_cases=1)
 
-    def cycle(self, proposal: Proposal, transport_for) -> Outcome:
+    def cycle(self, proposal: Proposal, transport_for=None, *, score=None) -> Outcome:
         """Evaluate one proposal. Returns what happened and why.
+
+        `score(spec, cases) -> Scoring` is a host's own runner, used in place of
+        `transport_for` and PACT's harness when given (see `Scoring`).
 
         Two lines, and the second one is the whole reason this wrapper exists.
 
@@ -1275,11 +1421,13 @@ class Learner:
         """
         from dataclasses import replace
 
+        if transport_for is None and score is None:
+            raise TypeError("a cycle scores with a transport_for or a score; it was given neither")
         return replace(
-            self._decide(proposal, transport_for), held_out=len(self.holdout)
+            self._decide(proposal, transport_for, score), held_out=len(self.holdout)
         )
 
-    def _decide(self, proposal: Proposal, transport_for) -> Outcome:
+    def _decide(self, proposal: Proposal, transport_for, score=None) -> Outcome:
         """Which answer this proposal gets, and why. See [`cycle`].
 
         Private because the count `cycle` stamps is part of the answer: an
@@ -1483,8 +1631,12 @@ class Learner:
 
         after = self._with(proposal)
         spent_before, runs_before = self.money_spent, self.evals_spent
-        before_v = self._score(self.spec, self.holdout, transport_for)
-        after_v = self._score(after, self.holdout, transport_for)
+        if score is None:
+            before_v = self._score(self.spec, self.holdout, transport_for)
+            after_v = self._score(after, self.holdout, transport_for)
+        else:
+            before_v = self._scored(self.spec, self.holdout, score)
+            after_v = self._scored(after, self.holdout, score)
         # What this cycle cost, onto the month's running total — here, before any
         # of the answers below, because every one of them returns and a cycle
         # refused for drift has still spent what it spent. Written to the
