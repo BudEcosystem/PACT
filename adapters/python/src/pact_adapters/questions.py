@@ -562,7 +562,18 @@ class Question:
                     "names nobody to escalate to. Add a line: "
                     "`escalates-to: [a team]`."
                 ])
-            return Unanswered(self, "escalate", ask_instead=replace(self, asked_of=self.escalates_to))
+            # The next people are asked the very same question, once. If they
+            # stay silent too the run stops and says so — exactly what
+            # `suspension.Suspension.escalate` does to the wait — because an
+            # escalation that could escalate again would re-ask the same
+            # `escalates-to:` audience for ever.
+            return Unanswered(
+                self, "escalate",
+                ask_instead=replace(
+                    self, asked_of=self.escalates_to,
+                    if_nobody_answers="stop-and-say-so", escalates_to=(),
+                ),
+            )
         if self.if_nobody_answers == "stop-and-say-so":
             return Unanswered(
                 self, "stop-and-say-so",

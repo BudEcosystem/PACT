@@ -201,11 +201,28 @@ def refused_in_words(
     Y18/AD-46 records for an approver's screen, and one renderer for both is one
     fewer place to forget.
     """
-    asked_of = question.asked_of if question is not None else ()
-    who = f"the person answering for {', '.join(asked_of)}" if asked_of else "a person"
     try:
         answered = answer_to(question, about, given, run_program=run_program)
     except Rejected:  # pragma: no cover - only reached if the caller mis-orders
         answered = None
+    return refused_because(question, answered)
+
+
+def refused_because(question: "Question | None", answered: "Answer | None") -> str:
+    """The same sentence, from an answer already read (`Question.validate`, or
+    the stand-in `Question.when_nobody_answers` makes).
+
+    Split out so a runtime that reads answers itself — one that resumes by
+    replaying a journal rather than through `given` — says a refusal in exactly
+    these words, instead of a near-copy of them.
+
+    An answer nobody gave (`from_silence`) says so and names nobody: the
+    deadline refused, not a person, and those two must stay tellable apart (see
+    above). Its `because` is the deadline's own words.
+    """
+    if answered is not None and answered.from_silence:
+        return f"refused: {answered.because or 'nobody answered in time'}"
+    asked_of = question.asked_of if question is not None else ()
+    who = f"the person answering for {', '.join(asked_of)}" if asked_of else "a person"
     because = answered.because if answered is not None else ""
     return f"refused: {who} said no" + (f" — {quoted(because)}" if because else "")

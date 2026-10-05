@@ -299,6 +299,12 @@ class PauseRule:
     #: `is-this-ok` governs — and printing `answer within: 4h` above a wait that
     #: expires in thirty minutes tells somebody a thing the run will not honour.
     answer_within: str = ""
+    #: Who is asked instead when nobody answers in time (`escalates-to:`), for
+    #: `if_nobody_answers == "escalate"`. Carried here for the reason
+    #: `answer_within` is: the question SHOWN at a wait may not be the one this
+    #: rule came from, and the rule is what governs the deadline and what follows
+    #: it — so the people to escalate to are the rule's, not the shown question's.
+    escalates_to: tuple[str, ...] = ()
 
     @staticmethod
     def from_question(when: str, question: Mapping[str, Any]) -> "PauseRule":
@@ -322,6 +328,7 @@ class PauseRule:
             if_nobody_answers=action,
             who_can_answer=tuple(_as_list(question.get("asked-of"))),
             answer_within=str(question.get("answer-within") or "").strip(),
+            escalates_to=tuple(_as_list(question.get("escalates-to"))),
         )
 
     @staticmethod
