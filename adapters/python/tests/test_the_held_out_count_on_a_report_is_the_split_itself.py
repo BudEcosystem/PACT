@@ -79,20 +79,22 @@ HELD = [
          expect={"decision": "declined"}),
 ]
 
-#: A wording change with nothing high-risk in it, so the cycle scores rather than
-#: refusing before it has measured anything.
+#: A wording change — the one field a cycle scores — that carries a rule word
+#: (`always`), so the cycle measures it and then holds it for review.
 EDIT = Proposal(
     field="instructions",
     before="Answer the customer.",
-    after="Answer the customer. Say the decision in the first sentence.",
+    after="Answer the customer. Always say the decision first.",
     rationale="written from a-clear-approve",
 )
 
 #: The same shape of edit with nothing in it the prose classifier recognises, so
 #: `classify` answers LOW and the cycle runs past `needs_a_person` to the exits
-#: the author's own settings decide. `EDIT` above classifies HIGH — the word
-#: "decision" reads as a rule change — and every test in the first version of
-#: this file used it, which is how three uncounted exits went unnoticed.
+#: the author's own settings decide. `EDIT` above classifies HIGH — `always`
+#: reads as a rule change — and every test in the first version of this file
+#: used it, which is how three uncounted exits went unnoticed. (It used to say
+#: "in the first sentence" and was HIGH by accident: `sent`, left open, matched
+#: `sentence`. `test_a_sentence_is_not_something_that_was_sent.py`.)
 WORDING = Proposal(
     field="instructions",
     before="Answer the customer.",

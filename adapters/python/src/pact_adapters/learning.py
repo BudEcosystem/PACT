@@ -77,8 +77,18 @@ SAFE_TO_CHANGE: dict[str, tuple[str, ...]] = {
 #: normative at CLASS-3 or above.
 #:
 #: The leading `\b` stays: it is what stops `pay` matching inside `company`.
+#:
+#: **`sent` is closed, and it is the only one.** It is a whole word and not a
+#: stem (`send` is the stem, and stays open for `sends`, `sending`), and left
+#: open it matched the first four letters of `sentence`. Measured on a host
+#: running a real cycle: `Answer in one short sentence.` -> `Answer in one short
+#: sentence, in plain words.` classified HIGH, *"the wording changes a rule, not
+#: a phrasing"*, so no agent whose instructions use the most ordinary word there
+#: is for how long an answer should be could ever have a phrasing change apply
+#: itself. A false HIGH costs a review, which is the right way round, but a
+#: classifier that says "rule" about every edit says nothing about any of them.
 HIGH_RISK_PROSE = re.compile(
-    r"\b(never|always|must not|do not|approv|declin|refund|delet|send|sent|pay|paid|"
+    r"\b(never|always|must not|do not|approv|declin|refund|delet|send|sent\b|pay|paid|"
     r"issu|escalat|without asking|automatically)",
     re.IGNORECASE,
 )
