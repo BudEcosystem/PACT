@@ -238,7 +238,9 @@ fields:
     outcome: mapped
     rows: [A6]
   action.projects-with:
-    construct: "ToolReturn(return_value=<full>, content=<what the model reads>)"
+    # `return_value` is what the model is sent and `content` a SECOND user message it is also
+    # sent (pydantic_ai/messages.py:1013-1047); only `metadata` stays out of the model's sight.
+    construct: "ToolReturn(return_value=<what the model reads>, metadata=<full>)"
     outcome: mapped
     rows: [T3]
   action.remember-as:
