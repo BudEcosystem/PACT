@@ -178,6 +178,83 @@ class RequestKeys:
         named = self.keys.get((tool, action))
         return None if named is None else (action, named)
 
+    def claim(self, tool: str, args: Mapping[str, Any]) -> "Claim | None":
+        """What this call would spend, or `None` when it is held to nothing.
+
+        Pure: it reads the call and says what it is, and spends nothing. It is
+        the half of `Ledger.hold` a runtime needs when the record of what was
+        spent is not a dict in this process — a journal that outlives a crash,
+        or a store shared by every run of a workspace, which is what
+        `same-request-key-across:` wider than `this-run` asks for. The ledger
+        and such a store then hold the same key and say the same sentence.
+        """
+        found = self.key_of(tool, args)
+        if found is None:
+            return None
+        action, argument = found
+        value = str(args[argument]).strip() if argument in args else None
+        across = self.scopes.get((tool, action), "this-run")
+        return Claim(tool=tool, action=action, argument=argument, value=value, across=across)
+
+
+@dataclass(frozen=True)
+class Claim:
+    """One call's at-most-once key, how far it reaches, and its sentences.
+
+    `value` is `None` when the call carries no value for the named argument:
+    nothing can tell two such calls apart, so there is nothing to claim and
+    `cannot_tell` says so (module docstring, "What it deliberately will not
+    guess").
+    """
+
+    tool: str
+    action: str
+    argument: str
+    value: str | None
+    #: `same-request-key-across:` as written, `this-run` when it was not.
+    across: str = "this-run"
+
+    @property
+    def key(self) -> tuple[str, str, str]:
+        """`(tool, action, value)`: what "the same call" means (module docstring)."""
+        return (self.tool, self.action, self.value or "")
+
+    def cannot_tell(self) -> str:
+        """The `RunResult.unenforced` sentence for a call with no key value."""
+        where = f"{self.tool}/{self.action}"
+        argument = self.argument
+        return (
+            f"same-request-key: {where} says two calls carrying the same "
+            f"{argument!r} are one call, and this run called it with no "
+            f"{argument!r} at all — so nothing could tell two of them apart "
+            f"and the same call could be made twice. Add {argument!r} to "
+            f"`takes:` on that action and make sure the call carries it, or "
+            f"fill it from the surrounding system with "
+            f"`bind: {{ {argument}: run-inputs.<name> }}`."
+        )
+
+    def refusal(self) -> str:
+        """What the model is handed instead of a second call.
+
+        The scope the AUTHOR wrote, not the one this process happens to keep.
+        It said "already ran in this run" whatever they wrote, and on a
+        workspace scope that is false in the direction that matters — the call
+        was made by another run, and saying it was this one sends somebody
+        looking through the wrong transcript for a payment that is not in it.
+        """
+        where_it_ran = {
+            "the-team": "already ran, somewhere in this team,",
+            "the-workspace": "already ran, somewhere in this workspace,",
+        }.get(self.across, "already ran in this run")
+        where = f"{self.tool}/{self.action}"
+        return (
+            f"not done: {where!r} {where_it_ran} with "
+            f"{self.argument} {quoted(self.value or '')}, and its "
+            f"`same-request-key: {self.argument}` makes two calls carrying the "
+            f"same {self.argument} one call — so this one was withheld rather "
+            f"than done a second time."
+        )
+
 
 @dataclass
 class Ledger:
@@ -233,45 +310,16 @@ class Ledger:
         happens here, before the tool is reached — see the module docstring for
         why a call that failed still spends its key.
         """
-        found = self.keys.key_of(tool, args)
-        if found is None:
+        claim = self.keys.claim(tool, args)
+        if claim is None:
             return ""
-        action, argument = found
-        where = f"{tool}/{action}"
-        if argument not in args:
+        if claim.value is None:
             # Nothing can tell two of these apart. Reported, not guessed at.
-            self.cannot_tell.setdefault(
-                (tool, action),
-                f"same-request-key: {where} says two calls carrying the same "
-                f"{argument!r} are one call, and this run called it with no "
-                f"{argument!r} at all — so nothing could tell two of them apart "
-                f"and the same call could be made twice. Add {argument!r} to "
-                f"`takes:` on that action and make sure the call carries it, or "
-                f"fill it from the surrounding system with "
-                f"`bind: {{ {argument}: run-inputs.<name> }}`.",
-            )
+            self.cannot_tell.setdefault((tool, claim.action), claim.cannot_tell())
             return ""
-        value = str(args[argument]).strip()
-        seen = (tool, action, value)
-        if seen in self.spent:
-            # The scope the AUTHOR wrote, not the one this process happens to
-            # keep. It said "already ran in this run" whatever they wrote, and on
-            # a workspace scope that is false in the direction that matters — the
-            # call was made by another run, and saying it was this one sends
-            # somebody looking through the wrong transcript for a payment that is
-            # not in it.
-            where_it_ran = {
-                "the-team": "already ran, somewhere in this team,",
-                "the-workspace": "already ran, somewhere in this workspace,",
-            }.get(self.keys.scopes.get((tool, action), "this-run"), "already ran in this run")
-            return (
-                f"not done: {where!r} {where_it_ran} with "
-                f"{argument} {quoted(value)}, and its "
-                f"`same-request-key: {argument}` makes two calls carrying the "
-                f"same {argument} one call — so this one was withheld rather "
-                f"than done a second time."
-            )
-        self.spent[seen] = None
+        if claim.key in self.spent:
+            return claim.refusal()
+        self.spent[claim.key] = None
         return ""
 
     def unenforced(self) -> tuple[str, ...]:

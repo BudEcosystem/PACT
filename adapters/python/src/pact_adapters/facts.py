@@ -75,6 +75,22 @@ class Fact:
     #: every such construction in this repository means. `from_document` always
     #: says which it is.
     survives: bool = True
+    #: `lasts:` as written (`one-step`, `one-turn`, `one-conversation`,
+    #: `forever`). Required by the schema, so a fact read off a document always
+    #: says; one built directly lasts `forever`, the widest, so nothing is
+    #: forgotten that its author did not say to forget.
+    lasts: str = "forever"
+    #: `forget-after:` as written (a duration such as `30d`), or `None`.
+    forget_after: Any = None
+    #: `starts-as:`: its value before anything has happened, or `None`.
+    starts_as: Any = None
+    #: `shaped-like:`: what a value must look like (the `takes:` vocabulary),
+    #: or `None` for any text. A runtime holds a write to it.
+    shaped_like: Mapping[str, Any] | None = None
+    #: `never-from:`: the sources that may never write here (`tool output`,
+    #: `retrieval`, `the customer`, `a teammate`). PACT carries the line; the
+    #: system keeping the store refuses the write (the schema's own help).
+    never_from: tuple[str, ...] = ()
 
     def said(self, value: Any) -> str:
         """How the fact reads once the messages behind it are gone.
@@ -114,19 +130,39 @@ class Facts:
             if not isinstance(raw, Mapping):
                 continue
             stale = raw.get("stops-being-true-when") or []
+            shaped = raw.get("shaped-like")
             out[str(name)] = Fact(
                 name=str(name),
                 description=str(raw.get("description") or name),
                 stale_when=tuple(str(s) for s in stale),
                 survives=said_yes(raw.get("survives-shortening")),
+                lasts=str(raw.get("lasts") or "forever"),
+                forget_after=raw.get("forget-after"),
+                starts_as=raw.get("starts-as"),
+                shaped_like=dict(shaped) if isinstance(shaped, Mapping) else None,
+                never_from=tuple(str(s) for s in raw.get("never-from") or ()),
             )
         return Facts(declared=out)
+
+    def fresh(self) -> "Facts":
+        """The same declarations, nothing held: what one run starts from.
+
+        `AgentSpec.facts` is one object per compiled agent, so a runtime that
+        records into it shares one run's memory with every other run of that
+        agent. A run takes its own copy here and records into that.
+        """
+        return Facts(declared=self.declared)
 
     def record(self, name: str, value: Any) -> None:
         """The run learned something. Silent for anything not declared: a fact
         nobody said should survive is not one this module may invent."""
         if name in self.declared:
             self.held[name] = value
+
+    def forget(self, name: str) -> None:
+        """The run was told to forget it (`forget`). Not stale, so not reported
+        as `forgotten`: nothing that relied on it was surprised."""
+        self.held.pop(name, None)
 
     def something_happened(self, what: str) -> list[str]:
         """Report an event; forget every fact that named it as making it stale.

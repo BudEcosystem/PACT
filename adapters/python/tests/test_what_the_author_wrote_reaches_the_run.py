@@ -344,6 +344,16 @@ def test_a_fact_the_author_marked_survivable_reaches_the_tidier_from_the_documen
     )
 
 
+def test_a_run_restates_its_own_facts_not_another_runs(document: dict) -> None:
+    """`AgentSpec.facts` is one object per agent, shared by every run of it. A
+    runtime that keeps runs apart gives the tidier that run's copy
+    (`Facts.fresh`), and the copy is what is restated."""
+    spec = AgentSpec.from_document(document, "refund-desk")
+    mine = spec.facts.fresh()
+    tidier = spec.tidier(4000, None, facts=mine)
+    assert tidier is not None and tidier.facts is mine and tidier.facts is not spec.facts
+
+
 def test_the_fact_is_only_restated_because_the_author_asked_for_it(document: dict) -> None:
     """The control arm, on the property that survived.
 

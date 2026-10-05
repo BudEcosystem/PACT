@@ -638,7 +638,10 @@ class AgentSpec:
         return tuple(s.name for s in self.skills)
 
     def tidier(
-        self, window: int | None, summarise: "Summariser | None" = None
+        self,
+        window: int | None,
+        summarise: "Summariser | None" = None,
+        facts: "Facts | None" = None,
     ) -> "Tidier | None":
         """The author's `context-policy:` ready to run, or nothing.
 
@@ -655,14 +658,16 @@ class AgentSpec:
         """
         if self.context_policy is None or not window:
             return None
-        # `facts=` is passed HERE rather than by the caller, because a caller who
-        # forgets it gets a tidier that silently drops the run's evidence. That
-        # is not a hypothetical: it is what shipped.
+        # `facts=` is filled HERE rather than left to the caller, because a
+        # caller who forgets it gets a tidier that silently drops the run's
+        # evidence. That is not a hypothetical: it is what shipped. A runtime
+        # that keeps one run's facts apart from another's (`Facts.fresh`) passes
+        # that run's copy; leaving it out reads the spec's own.
         return Tidier(
             self.context_policy,
             budget_tokens=window,
             summarise=summarise,
-            facts=self.facts,
+            facts=self.facts if facts is None else facts,
         )
 
     @property
