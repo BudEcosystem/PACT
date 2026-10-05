@@ -939,7 +939,9 @@ def assemble_instructions(authored: str, external: Iterable[str] = ()) -> str:
 #: uses the list to tell a tool DEFINITION from a bare JSON Schema, and a schema
 #: carrying its own `description:` key would otherwise be read as a tool with a
 #: description and no arguments.
-_SCHEMA_KEYS = ("inputSchema", "input_schema", "parameters_json_schema", "parameters")
+#: `input_schema` first: MCP SDK v2 renamed the field and FastMCP 4 warns on every read of the
+#: old `inputSchema` (`FastMCPDeprecationWarning`), which a pinned server would print per call.
+_SCHEMA_KEYS = ("input_schema", "inputSchema", "parameters_json_schema", "parameters")
 
 
 def _published_whole(published: Any, instructions: str) -> dict[str, Any]:
