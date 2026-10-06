@@ -131,6 +131,10 @@ fn every_shipped_tree_loads_to_the_same_document() {
     );
 }
 
+/// The surfaces whose fields DECIDE something at run time: what is governed, and
+/// what is enforced. A field on one of these is held from the day it is added.
+const GOVERNS: [&str; 2] = ["S-GOV", "S-EXEC"];
+
 /// `<group>.<field>` → the four attributes that decide what it MEANS.
 ///
 /// Read out of the YAML rather than off `Schema`, because `surface:` and
@@ -164,10 +168,17 @@ fn field_inventory() -> BTreeMap<String, String> {
 
 /// The specification grows; it never softens.
 ///
-/// Additions need no blessing — that is the whole point of a subset test, and it
-/// is what lets nine phases add fields without a golden churning under them.
-/// What fails is a field that USED to be there and now is not, or one whose
-/// type, governance surface, tier or requiredness moved.
+/// Most additions need no blessing — that is the whole point of a subset test,
+/// and it is what lets nine phases add fields without a golden churning under
+/// them. What fails is a field that USED to be there and now is not, or one
+/// whose type, governance surface, tier or requiredness moved.
+///
+/// One kind of addition does need it: a field on a surface that DECIDES
+/// something (`S-GOV`, `S-EXEC`). A subset test holds only what is in the file,
+/// so a governance field added and never blessed was held to nothing: moving
+/// `agent.checked-by` from `S-GOV` to `S-GEN`, which takes it out of the zone a
+/// person must approve changes in, passed every test. Such a field is in the
+/// file from the day it exists, or this fails and says to put it there.
 #[test]
 fn the_specification_only_ever_grows() {
     let now = field_inventory();
@@ -194,6 +205,25 @@ fn the_specification_only_ever_grows() {
             Some(_) => {}
         }
     }
+    let held: std::collections::BTreeSet<&str> =
+        was.lines().filter_map(|l| l.split_once('\t')).map(|(key, _)| key).collect();
+    let unheld: Vec<String> = now
+        .iter()
+        .filter(|(key, attrs)| {
+            !held.contains(key.as_str())
+                && GOVERNS.iter().any(|surface| attrs.contains(&format!("| {surface} |")))
+        })
+        .map(|(key, attrs)| format!("{key}\t{attrs}"))
+        .collect();
+    assert!(
+        unheld.is_empty(),
+        "{} field(s) on a surface that decides something are in the specification and \
+         not in {}, so nothing holds their surface where it is:\n  {}\n\n\
+         Look at each surface and tier, then re-bless with PACT_BLESS=1.",
+        unheld.len(),
+        path.display(),
+        unheld.join("\n  ")
+    );
     assert!(
         gone.is_empty() && moved.is_empty(),
         "the specification did not only grow.\n\n\

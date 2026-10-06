@@ -1,0 +1,5 @@
+steps-at-most: 8
+# The two bounds `may-start:` cannot be written without.
+starts-at-most: 4
+nests-at-most: 1
+when-it-runs-out: stop-and-say-so

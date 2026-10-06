@@ -42,6 +42,18 @@ FILES = {
         "  contract: a file\n"
     ),
     "agents/helper/agent.yaml": "description: helps the desk\ninstructions: Help.\n",
+    # Reaches one place, by `url:`: no connection, no procedure, nobody to ask.
+    "agents/caller/agent.yaml": "description: calls out\ninstructions: Call.\nuses: [lookup]\n",
+    # Its one action waits for a person, so a person can be asked.
+    "agents/payer/agent.yaml": "description: pays\ninstructions: Pay.\nuses: [refunds]\n",
+    "tools/lookup.yaml": (
+        "description: Looks a postcode up.\nurl: host/lookup\nmethod: get\nactions:\n"
+        "  find:\n    takes:\n      postcode: text\n    reads-only: yes\n"
+    ),
+    "tools/refunds.yaml": (
+        "description: Pays refunds.\nconnect: ticket-server\nactions:\n"
+        "  pay:\n    takes:\n      ticket-id: text\n    needs-a-person: yes\n"
+    ),
     "agents/lead/agent.yaml": (
         "description: leads\ninstructions: Lead.\nuses: [tickets, handover, house-style]\n"
         "team:\n  helper: helps with anything\n"
@@ -85,7 +97,7 @@ def _specs(tmp_path: Path) -> dict[str, AgentSpec]:
     checked = _pact("check", str(root))
     assert checked.returncode == 0, checked.stdout + checked.stderr
     doc = json.loads(_pact("show", str(root)).stdout)
-    return {name: AgentSpec.from_document(doc, name) for name in ("desk", "lead")}
+    return {name: AgentSpec.from_document(doc, name) for name in ("desk", "lead", "caller", "payer")}
 
 
 def test_the_conditions_are_the_schemas_own_table() -> None:
@@ -115,6 +127,16 @@ def test_available_when_is_carried_and_decided_by_the_agents_own_reach(tmp_path:
     assert available(desk, "always") and available(desk, "")
     with pytest.raises(ValueError, match="not a condition"):
         available(desk, "the-moon-is-full")
+    # And the other answer to each of the three, on an agent that gives it: a
+    # condition only ever asserted one way is held by nothing ("always yes" and
+    # "always no" both passed). `caller` reaches one place, by `url:`, and uses
+    # no skill; `payer`'s one action waits for a person.
+    caller, payer = specs["caller"], specs["payer"]
+    assert not available(caller, "this-agent-has-connections"), "a `url:` is not a connection"
+    assert not available(caller, "this-agent-has-procedures")
+    assert not available(caller, "a-person-can-be-asked")
+    assert available(payer, "a-person-can-be-asked")
+    assert available(payer, "this-agent-has-connections") and not available(payer, "this-agent-has-helpers")
 
 
 def test_reads_only_is_carried_per_action(tmp_path: Path) -> None:

@@ -1,0 +1,20 @@
+description: The shop's orders.
+connect: order-server
+actions:
+  look-up:
+    description: Read one order.
+    reads-only: yes
+    takes:
+      order-number: text
+    # What the action hands back, in the shapes an agent's `answers-with:` takes.
+    answers-with:
+      total: money
+      status: one of delivered, in-transit, lost
+  issue-refund:
+    description: Send money back for one order.
+    takes:
+      order-number: text
+      amount: money
+    spends-money: yes
+    same-request-key: order-number
+    needs-a-person: yes

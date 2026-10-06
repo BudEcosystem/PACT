@@ -1,3 +1,4 @@
+action.answers-with	map of answer-shape | S-CAP | expert | optional
 action.bind	map of text | S-EXEC | core | optional
 action.description	text | S-ROUTE | core | optional
 action.inspects	list of text | S-EXEC | core | optional
@@ -14,6 +15,8 @@ agent.accepts	map of answer-shape | S-CAP | core | optional
 agent.answers-with	map of answer-shape | S-CAP | core | optional
 agent.answers-with-mode	one-of | S-CAP | expert | optional
 agent.base	yes-no | S-GOV | expert | optional
+agent.checked-by	list of group:eval-rule | S-GOV | core | optional
+agent.checks-at-most	integer | S-GOV | core | optional
 agent.context-policy	text | S-CTRL | core | optional
 agent.description	text | S-GEN | core | required
 agent.evals	text | S-GOV | core | optional
@@ -109,8 +112,10 @@ limits.feel	one-of | S-GOV | core | optional
 limits.finishes-within	duration | S-GOV | core | optional
 limits.first-reply-within	duration | S-GOV | expert | optional
 limits.measured-at	one-of | S-GOV | expert | optional
+limits.nests-at-most	integer | S-GOV | core | optional
 limits.per-word-under	duration | S-GOV | expert | optional
 limits.runs-for-at-most	duration | S-GOV | core | optional
+limits.starts-at-most	integer | S-GOV | core | optional
 limits.steps-at-most	integer | S-GOV | core | optional
 limits.tokens-at-most	integer | S-GOV | core | optional
 limits.tool-calls-at-most	integer | S-GOV | core | optional
@@ -248,6 +253,7 @@ teamwork.divides-the-budget	one-of | S-GOV | core | optional
 teamwork.enough-is	integer | S-TOPO | core | optional
 teamwork.gives-up-after	duration | S-GOV | core | optional
 teamwork.if-someone-fails	one-of | S-EXEC | core | optional
+teamwork.may-start	list of one-of | S-TOPO | core | optional
 teamwork.shares	map of percent | S-GOV | core | optional
 teamwork.starts	one-of | S-CTRL | core | optional
 teamwork.waits-for	one-of | S-TOPO | core | optional

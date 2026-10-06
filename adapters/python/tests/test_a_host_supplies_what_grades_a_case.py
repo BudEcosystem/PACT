@@ -44,6 +44,26 @@ def test_a_program_metric_is_scored_by_the_runner_the_host_hands_check() -> None
     assert asked[0] == ("exact-amount", {"actual": "40 USD", "expected": "40 USD", "asked": "refund the lamp", "unit": "USD"})
 
 
+def test_a_carried_grader_is_not_run_for_a_case_a_plain_rule_already_settled() -> None:
+    """The negative half: the runner is the last thing reached, never the first.
+    A case a string check failed is failed by that check, and no program runs."""
+    asked: list[str] = []
+
+    def run_program(name: str, inputs: dict) -> str:
+        asked.append(name)
+        return "1.0"
+
+    metric = MetricSpec.parse({"uri": "program:exact-amount", "threshold": 0.9})
+    rule = Rule("must-contain", ("refund",))
+    settled = check(Case("c1", "x", {}), RunResult(output="no"), [rule], metrics=[metric], run_program=run_program)
+    assert not settled.passed and "refund" in settled.why and asked == []
+    # And a score below the author's bar fails the case, with the runner's own figure.
+    low = check(
+        Case("c2", "x", {}), RunResult(output="a refund"), [rule], metrics=[metric], run_program=lambda n, i: "0.5"
+    )
+    assert not low.passed and "program:exact-amount" in low.why
+
+
 def test_without_a_runner_a_program_metric_is_still_reported_not_scored() -> None:
     metric = MetricSpec.parse({"uri": "program:exact-amount"})
     outcome = check(Case("c1", "x", {}), RunResult(output="40 USD"), [], metrics=[metric])

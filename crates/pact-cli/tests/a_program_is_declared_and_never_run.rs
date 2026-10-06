@@ -183,3 +183,42 @@ fn the_consent_to_run_reaches_the_list_of_waits() {
     assert_eq!(code, Some(0), "{waits}{err}");
     assert!(waits.contains("may-we-run"), "a runtime is obliged to walk this list:\n{waits}");
 }
+
+/// An action that runs a program may say what it hands back (02P A4), and it is
+/// held to what the program says: the program is what runs.
+///
+/// Nothing compared the two, so `verdict: text` over a program answering
+/// `verdict: one of inside, outside` loaded cleanly, and a host holding a result
+/// to one block refused what the other allowed.
+#[test]
+fn an_action_that_hands_back_something_its_program_does_not_is_refused() {
+    const ACTION: &str = "    program: check-window\n";
+    // The same words: nothing to say.
+    let same = broken(
+        "same-answer",
+        &[("tools/refund-window.yaml", ACTION, "    program: check-window\n    answers-with:\n      verdict: One of  inside, outside\n")],
+    );
+    let (code, out, err) = run(&["check", &same, "--deny-warnings"]);
+    assert_eq!(code, Some(0), "saying the same is not a mistake:\n{out}{err}");
+    let _ = std::fs::remove_dir_all(&same);
+
+    for (name, block, names) in [
+        ("other-shape", "      verdict: text\n", "`verdict`"),
+        ("other-line", "      verdict: one of inside, outside\n      days: integer\n", "`days`"),
+    ] {
+        let dst = broken(
+            name,
+            &[("tools/refund-window.yaml", ACTION, &format!("{ACTION}    answers-with:\n{block}"))],
+        );
+        let (code, out, err) = run(&["check", &dst]);
+        let said = format!("{out}{err}");
+        assert_eq!(code, Some(1), "{said}");
+        assert!(
+            said.contains("rule: loader/an-action-and-its-program-hand-back-different-things"),
+            "{said}"
+        );
+        assert!(said.contains(names), "it names the line that differs:\n{said}");
+        assert!(said.contains("refund-window.yaml:"), "at the action's own file:\n{said}");
+        let _ = std::fs::remove_dir_all(&dst);
+    }
+}

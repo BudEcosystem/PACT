@@ -1,0 +1,19 @@
+name: Desk
+description: Decides refunds for {{run-inputs.shop}}.
+run-inputs:
+  shop: text
+uses: [orders]
+team:
+  helper: looks up how an order was delivered
+instructions: |
+  You decide refunds for {{run-inputs.shop}}.
+  Look the order up before you decide, and say what happens to the money.
+# The answer is held to these before it is the answer, three attempts in all.
+checked-by:
+  - must-contain: [refund]
+    because: the customer must be told what happens to the money
+  - must-call-before:
+      call: orders/issue-refund
+      first: orders/look-up
+    because: no refund goes out on an order nobody looked at
+checks-at-most: 3

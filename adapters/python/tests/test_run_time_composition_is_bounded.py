@@ -193,3 +193,28 @@ def test_what_a_member_is_asked_and_what_stands_in_for_one_a_person_let_go() -> 
     assert carried_on_without("fraud-checker") == (
         "(no answer: a person said to carry on without fraud-checker)"
     )
+
+
+def test_the_tree_that_writes_every_phase_1_field_reaches_each_reader() -> None:
+    """`may-start:` and its bounds were written by no tree: every test above
+    builds the document in Python. `tests/trees/a-desk-that-writes-every-phase-1-field`
+    writes each Phase 1 field in a file, and this reads each through the real
+    loader and the reader a runtime uses."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from trees import pact, shown
+
+    from pact_adapters.holes import Hole
+
+    root = REPO / "tests" / "trees" / "a-desk-that-writes-every-phase-1-field"
+    checked = pact("check", str(root), "--deny-warnings")
+    assert checked.returncode == 0, checked.stdout + checked.stderr
+    desk = AgentSpec.from_document(shown(root), "desk")
+    assert desk.teamwork.may_start == (MayStart.CATALOGUE, MayStart.NARROWED_NEW)
+    assert (desk.limits.starts_at_most, desk.limits.nests_at_most) == (4, 1)
+    assert [r.kind for r in desk.checked_by] == ["must-contain", "must-call-before"]
+    assert desk.checks_at_most == 3
+    assert desk.holes == (Hole("run-inputs", "shop"),) and set(desk.run_inputs) == {"shop"}
+    (orders,) = desk.tools
+    assert orders.answers_with == {
+        "look-up": {"total": "money", "status": "one of delivered, in-transit, lost"}
+    }

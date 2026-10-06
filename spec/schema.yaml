@@ -2336,6 +2336,12 @@ groups:
         # `ToolDefinition.return_schema`, and what a `bind: steps.<n>.<field>`
         # can be checked against. Each line is held to the shape vocabulary at
         # check time by the type alone (`answer-shape`).
+        #
+        # An action that names a `program:` runs that program, so what it hands
+        # back is the program's `answers-with:`. The action may leave this out
+        # or say the same, line for line; two blocks that disagree are refused
+        # by `pact check` (`crates/pact-loader/src/programs.rs`), because a host
+        # holding a result to one would refuse what the other allows.
         type: map of answer-shape
         shapes: *the-answer-shapes
         surface: S-CAP
@@ -2345,7 +2351,8 @@ groups:
           `latest: number` or `status: one of ok, degraded`. The same shapes an
           agent's `answers-with:` takes. A host whose tools return typed
           results holds each one to it; a runtime whose tools answer in text
-          says, on the run's report, that it checked nothing.
+          says, on the run's report, that it checked nothing. On an action that
+          runs a `program:`, leave it out or say what the program says.
       program:
         # WHAT RUNS, when this action's tool reaches a sandbox. It is on the
         # ACTION and not on the tool because a tool reaches one place and may

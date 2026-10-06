@@ -1,0 +1,18 @@
+# One tree that writes every field the Phase 1 work added, so each has a file
+# an author can read and a test that loads it:
+#
+#   agents/desk/agent.yaml     run-inputs: and the holes it fills, checked-by:,
+#                              checks-at-most:
+#   agents/desk/limits.yaml    starts-at-most:, nests-at-most:
+#   agents/desk/teamwork.yaml  may-start:
+#   tools/orders.yaml          an action's answers-with:
+#
+# Until this tree, `may-start:` and its two bounds were written by no fixture at
+# all: every test of them built the document in Python. Held by
+# `crates/pact-cli/tests/the_phase_1_fields_have_a_tree_that_writes_them.rs`
+# and `adapters/python/tests/test_run_time_composition_is_bounded.py`.
+name: a-desk-that-writes-every-phase-1-field
+workspace-id: 01K6ZP1F1ELDSWR1TTENDWN000
+description: A refund desk that writes each Phase 1 field once.
+owner: platform
+allow-egress: []

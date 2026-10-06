@@ -652,7 +652,10 @@ def check(
     for spec in scores:
         if not spec.deterministic:
             continue
-        missed = _scores_below(spec, case, result, unenforced, run_program=run_program)
+        # No `run_program` here: this pass takes `pact:` scores only, which are
+        # decided by looking at the answer. A carried grader is run in the last
+        # pass, and only for a case nothing cheaper already settled.
+        missed = _scores_below(spec, case, result, unenforced)
         if missed:
             return CaseOutcome(case.key, False, missed, tuple(unenforced))
 

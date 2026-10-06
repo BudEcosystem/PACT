@@ -514,6 +514,67 @@ fn a_stage_that_writes_code_has_a_room(root: &Node, diags: &mut Diagnostics) {
 /// The stage kind that writes its own code, as `phase.does` spells it.
 const RUN_CODE: &str = "run-code";
 
+/// What a block of `answers-with:` lines says: each name with its shape as
+/// written, spaces and case aside.
+fn hands_back(owner: &Node) -> Option<std::collections::BTreeMap<String, String>> {
+    let lines = owner.get("answers-with")?.as_map()?;
+    Some(
+        lines
+            .iter()
+            .map(|(name, shape)| {
+                let written = shape
+                    .node
+                    .as_str()
+                    .map_or_else(|| shape.node.to_json().to_string(), str::to_string);
+                (name.clone(), written.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase())
+            })
+            .collect(),
+    )
+}
+
+/// An action that runs a program hands back what the program hands back.
+///
+/// Both may say so (`answers-with:`, 02P A4), and nothing compared them: an
+/// action promising `verdict: text` over a program that answers `verdict: one
+/// of inside, outside` loaded cleanly, and a host holding the result to one of
+/// the two refused what the other allowed. The program is what runs, so its
+/// word is the answer; the action may leave the block out, or say the same.
+fn hands_back_what_its_program_does(
+    tool: &str,
+    action_name: &str,
+    action: &Node,
+    named: &str,
+    program: &Node,
+) -> Option<Diagnostic> {
+    let said = hands_back(action)?;
+    let runs = hands_back(program).unwrap_or_default();
+    if said == runs {
+        return None;
+    }
+    let differs: Vec<String> = said
+        .keys()
+        .chain(runs.keys())
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .filter(|k| said.get(*k) != runs.get(*k))
+        .map(|k| format!("`{k}`"))
+        .collect();
+    Some(Diagnostic::error(
+        "loader/an-action-and-its-program-hand-back-different-things",
+        action.get("answers-with").map_or_else(|| action.span.clone(), |n| n.span.start_of_block()),
+        format!(
+            "'{tool}/{action_name}' runs the program '{named}', and the two `answers-with:` \
+             blocks disagree about {}{}.",
+            differs.join(", "),
+            if runs.is_empty() { format!(" — '{named}' says nothing about what it hands back") } else { String::new() }
+        ),
+        format!(
+            "Delete `answers-with:` from '{tool}/{action_name}' (the program's is what a \
+             result is held to), or make the two say the same, line for line."
+        ),
+    ))
+}
+
 /// Refuse an arrangement where nothing can run the program that was named.
 pub fn check(root: &Node, schema: &Schema, diags: &mut Diagnostics) {
     a_stage_that_writes_code_has_a_room(root, diags);
@@ -539,6 +600,11 @@ pub fn check(root: &Node, schema: &Schema, diags: &mut Diagnostics) {
             // schema where the author wrote it. This pass only asks whether the
             // arrangement can work.
             let Some(program) = programs.and_then(|p| p.get(named)) else { continue };
+            if let Some(d) =
+                hands_back_what_its_program_does(tool_name, action_name, &action.node, named, &program.node)
+            {
+                diags.push(d);
+            }
             let Some(engine) = program.node.get("engine").and_then(Node::as_str) else {
                 continue;
             };

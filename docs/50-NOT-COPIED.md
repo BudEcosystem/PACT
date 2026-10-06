@@ -344,6 +344,21 @@ that a person can read this morning and a reviewer can compare against yesterday
 If the shape itself should change, that is the learning loop, and it produces a
 diff to a file.
 
+**Narrowed, not lifted (02P §8.1, 02W §2.16).** One part of this refusal has been
+taken back, and it is the part that was never about code. `teamwork.may-start:`
+lets an agent bring others in while it runs: `catalogue`, any agent of the
+workspace that runs, picked by the model; and `narrowed-new`, an agent the model
+describes on the spot (instructions and `answers-with:`), running on its
+starter's model with its starter's `uses:` or fewer. What makes that reviewable
+is written before the run and held during it: `pact check` refuses `may-start:`
+without `limits.starts-at-most:` and `limits.nests-at-most:`, each start is a
+call that spends from the request's one pot and meets the same rules and
+approvals as any other, and nothing a run starts is ever written into the tree.
+So the refusal that stands is the one this section's title names: orchestration
+**code** the model writes, and any structural change that does not arrive as a
+diff a person can read first. Who is brought in, inside bounds a person signed,
+is no longer refused.
+
 ### 3.3 Extensions as installable packages
 
 **What Eve ships.** Reusable bundles mounted from packages, with a namespace,
@@ -447,7 +462,7 @@ a restatement, and points at the section that argues it.
 | R13 | Any wording that lets silence approve | if the word existed, every downstream guarantee would be one edit away from being switched off | decline, escalate, or stop and say so | §2 (G7) |
 | R14 | A join rule written as an expression | same as R6; and five named ways to wait cover what teams actually do | `waits-for`, plus a schema edit when a sixth is needed | §2 (G8) |
 | R15 | A hosted catalogue as the source of model facts | a machine with no network must still be able to validate and resolve, and a fetched catalogue makes that impossible | a local catalogue file; better, say what the model must be able to do and let PACT pick | §3.1 |
-| R16 | Orchestration code the model writes while it runs | it cannot be reviewed before it runs, diffed, signed, or reproduced — and structural change is exactly what needs a person | `team:` and `teamwork:`; structural change arrives as a diff | §3.2 |
+| R16 | Orchestration code the model writes while it runs | it cannot be reviewed before it runs, diffed, signed, or reproduced — and structural change is exactly what needs a person | `team:` and `teamwork:`; structural change arrives as a diff. Who an agent may bring in while it runs is `teamwork.may-start:`, inside `starts-at-most:` and `nests-at-most:` | §3.2, **narrowed — see its last paragraph** |
 | R17 | Extensions as installable packages | naming already solves sharing, and a package layer costs the property that everything the system does is in the folder you were handed | put the shared thing at the workspace root and name it | §3.3 |
 | R18 | Checks that can only be written as code | the evaluation suite is what decides whether a port worked, so a suite most authors cannot write makes most agents unportable | example cases, plain rules, or promoted conversations; code stays possible, never necessary | §3.4 |
 | R24 | An interceptor power a written rule cannot reach — `change-the-request` and `change-the-answer` were choices in `may:` that no sentence in the vocabulary produces, so declaring one and then writing any rule got the rule refused by the next check down | a choice a non-coder can type that nothing can ever use reads as a capability and is worse than an absent one; and offering it made the list of five look like five answers when three of them were the answers | the three that reach something: `hide-values`, `stop-the-run`, `send-elsewhere`. Rewriting a request or an answer stays available to the system running the agent, through the typed escape §5.5 requires — see §6 below | §2 (G5), **amended — see §8.5** |

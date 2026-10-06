@@ -128,3 +128,14 @@ def test_every_conformance_case_fits_the_shapes_its_program_declares(document: d
         for name, value in case["answer"].items():
             Shape.parse(spec.answers_with[name]).read(value)
     assert engines == {"python", "wasm"}  # one case per engine a host may supply
+
+
+def test_the_file_a_host_starts_is_never_a_guess() -> None:
+    """The halves the two shipped bodies never reach: each has exactly one file
+    of its engine's kind, so "take the first" and "always `main`" both passed."""
+    assert body_entry(("a.py", "b.py"), "python") == "", "several and no `main`: naming one is a guess"
+    assert body_entry(("a.py", "main.py", "b.py"), "python") == "main.py"
+    assert body_entry(("util.ts", "main.ts", "main.py"), "typescript") == "main.ts"
+    assert body_entry(("notes.md", "b.wasm", "a.py"), "wasm") == "b.wasm", "the engine's kind, not the first file"
+    assert body_entry(("notes.md",), "python") == "", "nothing of the engine's kind"
+    assert body_entry(("main.py",), "ruby") == "", "an engine with no contract starts nothing"
