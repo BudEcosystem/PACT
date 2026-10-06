@@ -659,18 +659,52 @@ def test_a_variant_holds_its_steps_and_narrows_every_kind_it_can_name() -> None:
     the programs the agent's own `uses:` reaches — not only the first two."""
     doc = {
         "agents": {"a": {
-            "uses": ["t1", "t2", "manual", "notes", "calc"],
-            "variants": {"small": {"steps-at-most": 4, "may-use": ["t1", "notes"]}},
+            "uses": ["t1", "t2", "manual", "style", "notes", "faq", "calc", "tally"],
+            "variants": {"small": {"steps-at-most": 4, "may-use": ["t1", "style", "notes", "tally"]}},
         }},
         "tools": {"t1": {"description": "one"}, "t2": {"description": "two"}},
-        "skills": {"manual": {"description": "how"}},
-        "knowledge": {"notes": {"description": "notes"}},
-        "programs": {"calc": {"description": "adds", "engine": "python", "determinism": "pure"}},
+        "skills": {"manual": {"description": "how"}, "style": {"description": "how we write"}},
+        "knowledge": {"notes": {"description": "notes"}, "faq": {"description": "questions"}},
+        "programs": {
+            "calc": {"description": "adds", "engine": "python", "determinism": "pure"},
+            "tally": {"description": "counts", "engine": "python", "determinism": "pure"},
+        },
     }
     spec = AgentSpec.from_document(doc, "a")
+    # Two of each kind and one of each kept, so a kind left un-narrowed shows:
+    # with one set of documents and that one named, "narrowed" and "untouched"
+    # were the same answer.
+    assert [k.name for k in spec.knowledge] == ["faq", "notes"]
     small = strategies_of(spec)["small"](spec)
     assert (small.max_steps, small.steps_written) == (4, True)
     assert [t.name for t in small.tools] == ["t1"]
-    assert small.skills == ()
+    assert [s.name for s in small.skills] == ["style"]
     assert [k.name for k in small.knowledge] == ["notes"]
-    assert [p.name for p in small.programs if "uses" in p.reached_by] == []
+    assert [p.name for p in small.programs if "uses" in p.reached_by] == ["tally"]
+
+
+def test_a_variant_that_may_use_one_name_written_without_a_dash_keeps_only_that(
+    tmp_path: Path,
+) -> None:
+    """`may-use: lookup` is a list of one, and `pact check` accepts it. Read only
+    when it was a list, the lone form narrowed nothing: a read-only variant ran
+    with the tool that writes."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from trees import pact, shown, write
+
+    tool = "description: {d}\nurl: host/{n}\nmethod: post\nactions:\n  go:\n    takes:\n      id: text\n"
+    root = write(tmp_path / "w", {
+        "workspace.yaml": "name: variants\nallow-egress: []\n",
+        "agents/desk.yaml": (
+            "description: helps\ninstructions: Help.\nuses: [lookup, refund]\n"
+            "variants:\n  read-only:\n    when: a model that should only look\n    may-use: lookup\n"
+        ),
+        "tools/lookup.yaml": tool.format(d="Looks an order up.", n="lookup"),
+        "tools/refund.yaml": tool.format(d="Pays a refund.", n="refund"),
+    })
+    checked = pact("check", str(root))
+    assert checked.returncode == 0, checked.stdout + checked.stderr
+    spec = AgentSpec.from_document(shown(root), "desk")
+    assert [t.name for t in spec.tools] == ["lookup", "refund"]
+    narrowed = strategies_of(spec)["read-only"](spec)
+    assert [t.name for t in narrowed.tools] == ["lookup"]

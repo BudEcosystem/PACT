@@ -22,9 +22,11 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from pact_adapters.at_most_once import Claim, Ledger, RequestKeys  # noqa: E402
 from pact_adapters.facts import Facts  # noqa: E402
+from trees import pact, shown, write  # noqa: E402
 
 REMEMBERS = {
     "agents": {
@@ -64,6 +66,27 @@ def test_a_fact_carries_every_term_its_entry_wrote() -> None:
         None,
         (),
     )
+
+
+def test_a_source_written_without_a_dash_is_one_source_and_not_its_letters(tmp_path: Path) -> None:
+    """`never-from: tool output` is the spelling the schema's own help uses, and
+    `pact check` accepts it. Read by iterating, it became `('t', 'o', 'o', 'l',
+    ...)`: a guard that names no source a value can come from, so it refused
+    nothing. The same for `stops-being-true-when:` one field along."""
+    root = write(tmp_path / "w", {
+        "workspace.yaml": "name: memory\nallow-egress: []\n",
+        "agents/pal.yaml": (
+            "description: remembers\ninstructions: Help.\nremembers:\n  note:\n"
+            "    description: a note\n    lasts: one-conversation\n"
+            "    never-from: tool output\n    survives-shortening: yes\n"
+            "    stops-being-true-when: the turn ends\n"
+        ),
+    })
+    checked = pact("check", str(root), "--deny-warnings")
+    assert checked.returncode == 0, checked.stdout + checked.stderr
+    note = Facts.from_document(shown(root), "pal").declared["note"]
+    assert note.never_from == ("tool output",)
+    assert note.stale_when == ("the turn ends",)
 
 
 def test_a_fresh_copy_holds_nothing_and_shares_nothing() -> None:

@@ -131,23 +131,28 @@ class Facts:
         """One `remembers:` block, wherever it is written — an agent's, or a
         port's (`port.remembers:` is the same `map of group:state`, so it is
         read by the same reader and held to the same terms)."""
+        # `ir` imports this module, so its lone-value reader is fetched here.
+        # `never-from: tool output` is one source, the same line as a list of
+        # one; iterating the text instead read it as nine letters, and a guard
+        # naming the letter `t` refuses nothing.
+        from .ir import _as_list
+
         block = block if isinstance(block, Mapping) else {}
         out: dict[str, Fact] = {}
         for name, raw in block.items():
             if not isinstance(raw, Mapping):
                 continue
-            stale = raw.get("stops-being-true-when") or []
             shaped = raw.get("shaped-like")
             out[str(name)] = Fact(
                 name=str(name),
                 description=str(raw.get("description") or name),
-                stale_when=tuple(str(s) for s in stale),
+                stale_when=tuple(_as_list(raw.get("stops-being-true-when"))),
                 survives=said_yes(raw.get("survives-shortening")),
                 lasts=str(raw.get("lasts") or "forever"),
                 forget_after=raw.get("forget-after"),
                 starts_as=raw.get("starts-as"),
                 shaped_like=dict(shaped) if isinstance(shaped, Mapping) else None,
-                never_from=tuple(str(s) for s in raw.get("never-from") or ()),
+                never_from=tuple(_as_list(raw.get("never-from"))),
             )
         return Facts(declared=out)
 
