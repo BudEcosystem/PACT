@@ -111,19 +111,27 @@ def test_the_gate_refuses_to_run_the_suite_without_the_loader() -> None:
 
 
 def test_the_type_check_is_not_skipped_where_a_skip_would_be_a_hole() -> None:
-    """`test-all.sh` skips the TypeScript type check when node_modules is absent,
-    on purpose — a contributor without node still gets a useful run.
+    """`test-all.sh` refuses to run without the TypeScript install, and CI installs it.
 
-    In CI that skip is a hole, so the workflow installs them and the skip never
-    fires. The two behaviours are correct in their own places, which is exactly
-    why the workflow has to say so rather than inheriting silence.
+    It used to skip the type check when `node_modules` was absent, "so a
+    contributor without node still gets a useful run". What they got was a
+    green suite in which one adapter test failed and ninety-five skipped
+    themselves, every one that drives the second port, with the skip printed
+    once among two thousand lines. A gate that cannot run the comparison the
+    portability claim rests on says so and stops, as it does for the loader
+    and for `node`.
     """
     gate = GATE.read_text()
-    assert "skipped: run" in gate, "the local skip is gone — was that deliberate?"
+    assert "skipped: run" not in gate, "the silent skip is back"
+    missing = re.search(r"if \[ ! -d adapters/typescript/node_modules \]; then(.*?)\nfi\n", gate, re.DOTALL)
+    assert missing and "exit 1" in missing.group(1), (
+        "the gate does not FAIL when the TypeScript install is missing"
+    )
+    assert "npm install" in missing.group(1), "and it must say what to type"
     workflow = WORKFLOW.read_text()
     assert "npm ci" in workflow or "npm install" in workflow, (
-        "CI does not install the TypeScript dev dependencies, so the type check "
-        "skips there too and 1,238 lines of the second port go unchecked"
+        "CI does not install the TypeScript dev dependencies, so the gate stops "
+        "there before a single test has run"
     )
 
 

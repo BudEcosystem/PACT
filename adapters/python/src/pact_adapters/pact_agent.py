@@ -50,18 +50,15 @@ direction carries a report.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import dataclasses
 import inspect
 import json
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import Any, Awaitable, Mapping, Sequence, TypeVar
 
 from pydantic_ai import DeferredToolRequests
-# The same helper `AbstractAgent.run_sync` uses to enter an async run from sync
-# code, imported rather than re-written for the reason `run_sync` below gives:
-# a second answer to "how does a sync caller await this" is a second thing to
-# get wrong about cancellation.
-from pydantic_ai._utils import run_until_complete
 from pydantic_ai.agent.abstract import AbstractAgent
 from pydantic_ai.exceptions import UserError
 from pydantic_ai.messages import (
@@ -113,6 +110,39 @@ _MARKS_KEY = "pact"
 
 
 # ─────────────────────────────────────────── what a run that did not answer is
+
+
+
+_R = TypeVar("_R")
+
+
+def _run_until_complete(coro: "Awaitable[_R]") -> _R:
+    """Drive `coro` on the caller's event loop, cleaning up after it if interrupted.
+
+    What `AbstractAgent.run_sync` does to enter an async run from sync code,
+    written with `asyncio`'s public API. It used to be imported from
+    `pydantic_ai._utils`, a private module this package may not read: a name
+    with an underscore is one the SDK is free to move in any release, and a
+    host that forbids private upstream imports could not import this module at
+    all. On an interrupt (Ctrl-C) the run's own task is cancelled and drained,
+    so its `finally` blocks run; no other task on the caller's loop is touched.
+    """
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = None
+    if loop is None or loop.is_closed():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    task = asyncio.ensure_future(coro, loop=loop)
+    try:
+        return loop.run_until_complete(task)
+    except BaseException:
+        if not task.done():
+            task.cancel()
+            with contextlib.suppress(BaseException):
+                loop.run_until_complete(task)
+        raise
 
 
 @dataclass(frozen=True)
@@ -1291,16 +1321,14 @@ class PactAgent(AbstractAgent[dict, Any]):
         ceiling parks a synchronous caller exactly as readily as an async one,
         and a resume nobody can reach is the same dead end as no resume at all.
 
-        `run_until_complete` and not `asyncio.run`, because it is the helper the
-        inherited `run_sync` already uses for this exact step: it drives the
-        coroutine on the CALLER's event loop, and on a `KeyboardInterrupt` it
-        cancels and drains its own task rather than leaving the run's `finally`
-        blocks un-run. A hand-rolled loop here would be a second answer to how a
-        sync caller enters an async run.
+        `_run_until_complete` and not `asyncio.run`, for what the inherited
+        `run_sync` does at this exact step: it drives the coroutine on the
+        CALLER's event loop, and on a `KeyboardInterrupt` it cancels and drains
+        its own task rather than leaving the run's `finally` blocks un-run.
         """
         if resume is None and answer is None:
             return super().run_sync(user_prompt, **how)
-        return run_until_complete(
+        return _run_until_complete(
             self.run(user_prompt, resume=resume, answer=answer, **how)
         )
 

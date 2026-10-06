@@ -11,9 +11,12 @@ One search order, written once:
 1. `PACT_BIN` — the host said exactly which binary; nothing else is consulted,
    so a typo there is reported rather than papered over by a different build.
 2. `pact` on the `PATH` — an installed loader.
-3. `<checkout>/target/release/pact`, then `<checkout>/target/debug/pact` — a
-   source checkout, release first because it is the build a person makes to use
-   rather than to debug.
+3. `<checkout>/target/release/pact` or `<checkout>/target/debug/pact` — a
+   source checkout, and whichever of the two was built LAST. Release used to
+   win outright, and the gate (`scripts/test-all.sh`, every test that reads
+   through the loader) builds and tests debug: so after a change to the loader
+   a stale release binary went on answering for everything that found it this
+   way, with the fixed one sitting beside it.
 """
 
 from __future__ import annotations
@@ -71,8 +74,6 @@ def pact_binary(
     if on_path:
         return Path(on_path)
     root = REPO if repo is None else repo
-    for build in ("release", "debug"):
-        candidate = root / "target" / build / "pact"
-        if candidate.is_file():
-            return candidate
-    return None
+    built = [b for b in (root / "target" / kind / "pact" for kind in ("release", "debug")) if b.is_file()]
+    # The newest build; release when the two are the same age.
+    return max(built, key=lambda b: b.stat().st_mtime_ns, default=None)

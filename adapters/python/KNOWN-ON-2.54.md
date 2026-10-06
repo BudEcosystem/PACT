@@ -2,10 +2,15 @@
 
 `pydantic-ai-slim` moved from 2.21.0 to 2.54.0 (`pydantic-graph` with it).
 `uv run --extra all --extra test pytest tests/ -q`: 2140 passed, 8 skipped at
-the move (the opt-in live and absent-runtime skips that existed on 2.21); 2150
-passed, 9 skipped at the end of the Phase 1 work (the ninth is the opt-in live
-test, `PACT_LIVE_BASE_URL`/`PACT_LIVE_MODEL`, which passes against gpt-oss-20b).
+the move (the opt-in live and absent-runtime skips that existed on 2.21). The
+Phase 1 work added one skip, the opt-in live test (`PACT_LIVE_BASE_URL`,
+`PACT_LIVE_MODEL`, and `PACT_LIVE_API_KEY` when the server wants a key).
 **No test fails on 2.54.**
+
+The count today is not repeated here. It was, and it went stale as soon as a
+test was added. It is on `README.md`'s status line, which
+`tests/test_the_headline_test_count_is_the_count.py` holds to what pytest
+collects.
 
 What the move broke, and how each was fixed:
 
@@ -18,12 +23,20 @@ What the move broke, and how each was fixed:
 
 ## Private Pydantic AI names PACT still reads
 
-None of these is on the run path (`harness.run`). They are what the live
-importer (`from_pydantic_ai_agent`) and the facade read because Pydantic AI has
-no public read for them; the next pin move should check each first.
+No module imports one: `tests/test_the_loader_is_found_one_way.py::
+test_no_module_imports_a_private_name_from_pydantic_ai` walks every module
+under `src/pact_adapters`. The two that were imported are gone:
+`pact_agent.py` enters a run from sync code with its own helper over public
+`asyncio` (it was `pydantic_ai._utils.run_until_complete`), and the
+capabilities the SDK injects are read off a bare `Agent`'s public
+`root_capability` (it was `pydantic_ai.agent._AUTO_INJECT_CAPABILITY_TYPES`).
 
-- `pact_agent.py`: `pydantic_ai._utils.run_until_complete`
-- `pydantic_ai_interop.py`, live importer: `pydantic_ai.agent._AUTO_INJECT_CAPABILITY_TYPES`,
-  and on `Agent`: `_instructions`, `_system_prompts`, `_system_prompt_functions`,
+What is left is attributes of a live `Agent` object, read by the live importer
+(`from_pydantic_ai_agent`) because Pydantic AI has no public read for them.
+None is on the run path (`harness.run`); the next pin move should check each
+first.
+
+- `pydantic_ai_interop.py`, live importer, on `Agent`: `_instructions`,
+  `_system_prompts`, `_system_prompt_functions`,
   `_system_prompt_dynamic_functions`, `_tool_timeout`, `_metadata`,
   `_output_validators`, `_max_tool_retries`, `_max_output_retries`

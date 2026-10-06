@@ -48,6 +48,9 @@ Both doors are honest. Neither is the other.
 from __future__ import annotations
 
 import json
+import sys
+from dataclasses import replace
+from functools import lru_cache
 from typing import Any, Mapping
 
 from .exporting import ExportReport
@@ -1008,10 +1011,9 @@ def _authored_capabilities(agent: Any) -> list[Any]:
     quiet on an agent with them.
 
     The list is read from the SDK rather than written here, so an upgrade that
-    injects a third does not silently start reporting it. If that private name
-    ever goes, the fallback is to name none of them — which fails towards
-    reporting too much, and a reader can see a capability they did not write far
-    more easily than they can see one that was never mentioned.
+    injects a third does not silently start reporting it — and read from what
+    the SDK DOES, not from a private name of it: the kinds an agent nobody
+    configured already carries (`_what_every_agent_carries`).
 
     **By value and not by type**, which is the difference between filtering the
     injected one and filtering the author's. `_inject_auto_capabilities` appends
@@ -1030,12 +1032,7 @@ def _authored_capabilities(agent: Any) -> list[Any]:
     root = getattr(agent, "root_capability", None)
     if root is None:
         return []
-    try:
-        from pydantic_ai.agent import _AUTO_INJECT_CAPABILITY_TYPES  # type: ignore[attr-defined]
-
-        automatic = tuple(_AUTO_INJECT_CAPABILITY_TYPES)
-    except (ImportError, AttributeError):  # pragma: no cover - SDK rename
-        automatic = ()
+    automatic = _what_every_agent_carries()
 
     def injected(capability: Any) -> bool:
         for kind in automatic:
@@ -1048,6 +1045,20 @@ def _authored_capabilities(agent: Any) -> list[Any]:
         return False
 
     return [c for c in (getattr(root, "capabilities", ()) or ()) if not injected(c)]
+
+
+@lru_cache(maxsize=1)
+def _what_every_agent_carries() -> tuple[type, ...]:
+    """The kinds of capability an agent has before its author gives it any.
+
+    Asked of the SDK through its public surface: build an agent with nothing on
+    it and read `root_capability`. It was `pydantic_ai.agent`'s private
+    `_AUTO_INJECT_CAPABILITY_TYPES`, which a release may rename without notice.
+    """
+    from pydantic_ai import Agent
+
+    bare = Agent(defer_model_check=True)
+    return tuple(type(c) for c in (getattr(bare.root_capability, "capabilities", ()) or ()))
 
 
 #: What a live `Agent` carries that PACT does not: the spec-file reasons word for

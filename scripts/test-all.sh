@@ -41,12 +41,21 @@ echo "── TypeScript ──"
 # exited 0, so the gate that exists to close TS-1 could not fail the build.
 # Measured — `const _audit_probe: number = "not a number";` in harness.ts printed
 # `error TS2322`, then `(skipped: ...)`, then exit 0. Gate on the TOOLCHAIN being
-# there instead, so a missing install skips and a type error fails.
-if [ -d adapters/typescript/node_modules ]; then
-  (cd adapters/typescript && npx --no-install tsc --noEmit)
-else
-  echo "  (skipped: run \`npm install\` in adapters/typescript)"
+# there instead, so a type error fails.
+#
+# And a missing install FAILS, where it used to skip. The skip was not only the
+# typecheck: without `node_modules` one adapter test fails and ninety-five skip
+# themselves (the Vercel AI transport and every comparison that goes through it),
+# so this script went on to print a green suite that had not run them. Same
+# reason as the two checks below, for the CLI and for `node`.
+if [ ! -d adapters/typescript/node_modules ]; then
+  echo "error: adapters/typescript/node_modules is missing, so the second port is" >&2
+  echo "  neither type-checked nor able to run the tests that drive it; they would" >&2
+  echo "  skip silently and this script would report a suite that did not run them." >&2
+  echo "  fix: (cd adapters/typescript && npm install)" >&2
+  exit 1
 fi
+(cd adapters/typescript && npx --no-install tsc --noEmit)
 echo "── Adapters (7 targets: Pydantic AI, LangGraph, LangChain, AutoGen, OpenAI Agents, Anthropic, Vercel AI) ──"
 # The CLI has to be BUILT, not merely buildable. Dozens of adapter test files
 # load the worked example through the real loader and skip themselves when the
@@ -56,7 +65,7 @@ echo "── Adapters (7 targets: Pydantic AI, LangGraph, LangChain, AutoGen, Op
 # the thing invariant P-1 is about. The `cargo run` above builds it; this is the
 # assertion that it did.
 if [ ! -x target/debug/pact ]; then
-  echo "error: target/debug/pact is missing, and 69 test files read the worked" >&2
+  echo "error: target/debug/pact is missing, and 70 test files read the worked" >&2
   echo "  example through it. Running the suite now would skip them silently." >&2
   echo "  fix: cargo build -p pact-cli" >&2
   exit 1
