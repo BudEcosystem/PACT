@@ -591,14 +591,20 @@ def test_an_approved_refund_sent_again_is_refused_without_a_second_question(
     document: dict,
 ) -> None:
     """The same, for a refund a person DID approve: 300 USD waits, is approved
-    and is paid once; sent again it is withheld, and nobody is asked twice."""
+    and is paid once; sent again it is withheld, and nobody is asked twice.
+
+    The model sends it again TWICE in its next reply, because that is the shape
+    that asked a person again: the yes they gave still answers the first of the
+    two (`payments`), and the second is a call of its own (`payments#1`) that
+    nobody has answered. It parked the run for a refund whose key was spent.
+    """
     big = {**REFUND, "amount": 300}
     spec = AgentSpec.from_document(document, "refund-desk")
     paid: list[dict[str, Any]] = []
     tools = {"payments": lambda a: paid.append(dict(a)) or "paid 300 USD for O-9"}
 
     def script() -> Script:
-        return _script(("Refunding.", (big,)), ("Refunding again.", (big,)))
+        return _script(("Refunding.", (big,)), ("Refunding again, to be sure.", (big, big)))
 
     waiting = _run_worked_example(spec, script, tools)
     assert waiting.halted == "suspended" and not paid, (waiting.halted, paid)
@@ -610,9 +616,12 @@ def test_an_approved_refund_sent_again_is_refused_without_a_second_question(
             resume=waiting.suspension, answer=said, run_inputs={"customer-id": "C-9"})
     )
     assert len(paid) == 1, paid
-    assert out.halted != "suspended", out.suspension and out.suspension.in_words
+    assert out.halted != "suspended", (
+        f"a person was asked again about a refund already paid: "
+        f"{out.suspension and out.suspension.in_words}"
+    )
     withheld = [r for step in out.steps for r in step.tool_results if r.startswith("not done:")]
-    assert withheld and "O-9" in withheld[0], out.trace()
+    assert len(withheld) == 2 and all("O-9" in w for w in withheld), out.trace()
 
 
 def test_the_same_refund_asked_for_twice_leaves_the_same_trace_on_every_transport(
