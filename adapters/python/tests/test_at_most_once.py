@@ -540,6 +540,81 @@ def test_a_refund_issued_before_a_park_cannot_be_issued_again_after_it(
     )
 
 
+def test_a_look_spends_nothing_and_says_what_a_hold_would(authored: RequestKeys) -> None:
+    """`Ledger.look` is the half of `hold` that can be asked before a person is.
+
+    It must never spend: a look that claimed would refuse the very call it was
+    asked about once that call was approved.
+    """
+    ledger = Ledger(authored)
+    assert ledger.look("payments", dict(REFUND)) == ""
+    assert ledger.look("payments", dict(REFUND)) == "", "a look spent the key"
+    assert ledger.hold("payments", dict(REFUND)) == ""
+    refusal = ledger.look("payments", dict(REFUND))
+    assert refusal and refusal == ledger.hold("payments", dict(REFUND))
+    assert ledger.look("payments", {**REFUND, "order-number": "O-14"}) == ""
+    # No value for the key: nothing to tell apart, so nothing to refuse.
+    assert ledger.look("payments", {"action": "issue-refund", "amount": 40}) == ""
+
+
+def test_nobody_is_asked_to_approve_a_refund_that_cannot_be_paid_again(
+    document: dict,
+) -> None:
+    """A person is asked about a call only while it can still run.
+
+    O-9 is refunded 40 USD, under the worked example's 200 USD line, so nobody
+    is asked and it is paid. The model then asks to refund O-9 again, 300 USD
+    this time, which is over the line. The order used to be: decide who waits
+    at the top of the step, hold the key when the call runs. So the run parked
+    and asked a person to approve 300 USD for an order whose
+    `same-request-key: order-number` was already spent, and their yes was
+    answered with the at-most-once refusal. Measured on a live model: one
+    purchase decision recorded once and approved four times.
+    """
+    spec = AgentSpec.from_document(document, "refund-desk")
+    paid: list[dict[str, Any]] = []
+    out = _run_worked_example(
+        spec,
+        lambda: _script(("Refunding.", (REFUND,)), ("And more.", ({**REFUND, "amount": 300},))),
+        {"payments": lambda a: paid.append(dict(a)) or "paid 40 USD for O-9"},
+    )
+    assert out.halted != "suspended", (
+        f"a person was asked about a refund that cannot be paid again: "
+        f"{out.suspension and out.suspension.in_words}"
+    )
+    assert [a["amount"] for a in paid] == [40], paid
+    withheld = [r for step in out.steps for r in step.tool_results if r.startswith("not done:")]
+    assert withheld and "O-9" in withheld[0], out.trace()
+
+
+def test_an_approved_refund_sent_again_is_refused_without_a_second_question(
+    document: dict,
+) -> None:
+    """The same, for a refund a person DID approve: 300 USD waits, is approved
+    and is paid once; sent again it is withheld, and nobody is asked twice."""
+    big = {**REFUND, "amount": 300}
+    spec = AgentSpec.from_document(document, "refund-desk")
+    paid: list[dict[str, Any]] = []
+    tools = {"payments": lambda a: paid.append(dict(a)) or "paid 300 USD for O-9"}
+
+    def script() -> Script:
+        return _script(("Refunding.", (big,)), ("Refunding again.", (big,)))
+
+    waiting = _run_worked_example(spec, script, tools)
+    assert waiting.halted == "suspended" and not paid, (waiting.halted, paid)
+    said = waiting.suspension.answer(
+        **{"payments": "yes", "payments.because": "the lamp arrived broken"}
+    )
+    out = asyncio.run(
+        run(spec, ReferenceTransport(script()), "refund O-9", tools,
+            resume=waiting.suspension, answer=said, run_inputs={"customer-id": "C-9"})
+    )
+    assert len(paid) == 1, paid
+    assert out.halted != "suspended", out.suspension and out.suspension.in_words
+    withheld = [r for step in out.steps for r in step.tool_results if r.startswith("not done:")]
+    assert withheld and "O-9" in withheld[0], out.trace()
+
+
 def test_the_same_refund_asked_for_twice_leaves_the_same_trace_on_every_transport(
     document: dict,
 ) -> None:

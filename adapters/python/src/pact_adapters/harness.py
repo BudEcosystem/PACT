@@ -1982,8 +1982,20 @@ async def run(
         #
         # Only slots with at least one reason go in, so `slot in step_gated`
         # below goes on meaning "this call is waiting for something".
+        #
+        # And nobody waits for a call that cannot run. A key another call
+        # already spent (`same-request-key:`) means `once.hold` below will
+        # withhold this one whatever a person answers, so it is not put to
+        # them: it falls through to that refusal, which the model reads as the
+        # call's result. A look, not a claim — the key is spent only when a
+        # call is let through — and read off the arguments the tool would
+        # receive (`_with_binds`), like the claim. A call this run already
+        # made (`already`) is replayed from its record and never reaches here
+        # twice, so the key a call itself spent is not held against it.
         step_gated: dict[str, tuple[Wait, ...]] = {}
         for slot, c in zip(slots, calls):
+            if c.name not in already and once.look(c.name, _with_binds(spec, c, supplied).args):
+                continue
             if waits := asking.waits_for(c.name, c.args, gated.get(c.name, "")):
                 step_gated[slot] = waits
 

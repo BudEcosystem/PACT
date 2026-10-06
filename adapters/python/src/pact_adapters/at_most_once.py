@@ -322,6 +322,26 @@ class Ledger:
         self.spent[claim.key] = None
         return ""
 
+    def look(self, tool: str, args: Mapping[str, Any]) -> str:
+        """What `hold` would refuse this call with, spending nothing.
+
+        `""` when the call could still run. Asked BEFORE a person is asked
+        about a call: a key another call already spent means this one cannot
+        happen whatever they answer, and asking them anyway is a false
+        statement to the one reader whose time costs most. Measured on a live
+        model that re-sent an approved purchase: one decision recorded once and
+        approved four times, each yes answered with the refusal below.
+
+        The key is still spent in one place only, `hold`, when a call is let
+        through, so `hold`'s reason for being one method stands: a look that
+        forgot to record has refused nothing it should not have, and permitted
+        nothing, because it permits nothing.
+        """
+        claim = self.keys.claim(tool, args)
+        if claim is None or claim.value is None or claim.key not in self.spent:
+            return ""
+        return claim.refusal()
+
     def unenforced(self) -> tuple[str, ...]:
         """Every `same-request-key:` line this run could not hold a call to.
 
