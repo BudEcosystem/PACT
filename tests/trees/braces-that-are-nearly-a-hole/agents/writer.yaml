@@ -1,0 +1,8 @@
+description: Writes listings in a brand's voice.
+run-inputs:
+  brand: text
+instructions: |
+  Three braces: {{{run-inputs.brand}}}
+  A filter: {{run-inputs.brand | upper}}
+  A space in the name: {{ run-inputs. brand }}
+  A hole: {{run-inputs.brand}}

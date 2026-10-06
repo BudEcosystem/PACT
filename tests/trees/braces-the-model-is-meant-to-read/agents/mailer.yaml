@@ -1,0 +1,7 @@
+description: Drafts the mail-merge template a campaign for {{run-inputs.brand}} is sent from.
+run-inputs:
+  brand: text
+instructions: |
+  Write an email template for {{run-inputs.brand}}.
+  Greet the reader as {{first_name}}; the mail system fills that in, not you.
+  Quote their order as \{{order_id}}, and write the brand's own tag as \{{run-inputs.brand}}.

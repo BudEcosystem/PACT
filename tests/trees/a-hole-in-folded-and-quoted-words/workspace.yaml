@@ -1,0 +1,6 @@
+# Where a diagnostic points when the words are folded or quoted. A value's
+# lines are not the file's: a `>` block joins its lines and a quoted scalar
+# folds them, so counting newlines in the value pointed at the wrong line. Each
+# misspelt hole below is reported at the line it is written on: 6 and 11.
+name: a-hole-in-folded-and-quoted-words
+allow-egress: []

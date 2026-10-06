@@ -285,7 +285,10 @@ impl Diagnostics {
         }
     }
 
-    pub(crate) fn source_of(&self, path: &Utf8Path) -> Option<&str> {
+    /// The registered text of `path`, for a check that has to point INSIDE a
+    /// value: a value's span is the whole value, and where a word sits in a
+    /// folded or quoted one can only be read off the file.
+    pub fn source_of(&self, path: &Utf8Path) -> Option<&str> {
         self.sources.iter().find(|(p, _)| p == path).map(|(_, t)| t.as_str())
     }
 

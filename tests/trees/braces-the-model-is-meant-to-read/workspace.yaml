@@ -1,0 +1,11 @@
+# Instructions that tell a model to WRITE a template. The braces are the
+# author's own, and they reach the model as written.
+#
+# `{{first_name}}` names nothing this agent declares, so nothing fills it: it
+# loads, with one warning (`loader/not-a-hole`) in case it was a typo for a
+# hole. `\{{order_id}}` says the same thing on purpose, and is the one escape:
+# no warning, and a runtime sends it without the backslash. Held by
+# `crates/pact-cli/tests/a_hole_in_the_words_is_held_where_the_author_is.rs`
+# and `adapters/python/tests/test_a_hole_in_the_words_is_filled_when_a_run_starts.py`.
+name: braces-the-model-is-meant-to-read
+allow-egress: []

@@ -1077,6 +1077,13 @@ def _variant(written: Mapping[str, Any]) -> Strategy:
             changes["programs"] = tuple(
                 p for p in s.programs if p.name in keep or "uses" not in p.reached_by
             )
+        if "instructions" in changes:
+            # The words changed, so what a run must fill changed with them. Left
+            # as the authored agent's, a hole only the variant writes was one no
+            # host was told to supply and nothing filled.
+            changes["holes"] = tuple(
+                dict.fromkeys(holes_in(changes["instructions"]) + holes_in(s.description))
+            )
         return replace(s, **changes) if changes else s
 
     return apply

@@ -54,6 +54,7 @@ from functools import lru_cache
 from typing import Any, Mapping
 
 from .exporting import ExportReport
+from .holes import holes_in
 from .importing import ImportReport
 from .ir import AgentSpec as PactAgentSpec
 from .loader import FIX as LOADER_FIX
@@ -1441,6 +1442,19 @@ def to_pydantic_ai_spec(
     if told := _field_text(block.get("instructions")):
         spec["instructions"] = told
         report.carried["instructions"] = "`instructions`"
+    # 02P A1. The words are carried as written, holes and all, and a spec file is
+    # read with no run: nobody fills `{{run-inputs.brand}}`, so the model reads
+    # the braces. Carried and lossy, so it is said (`exporting`: every loss).
+    for words in ("description", "instructions"):
+        if unfilled := holes_in(str(spec.get(words) or "")):
+            report.not_carried[f"{words}.holes"] = (
+                f"`{words}:` has "
+                + ", ".join(f"`{{{{{h.address}}}}}`" for h in unfilled)
+                + ", which PACT fills when a run starts, and a spec file is read "
+                "with no run, so the braces are carried as written and reach the "
+                "model unfilled. fix: build the agent with "
+                "`build_agent(spec, run_inputs=..., remembered=...)`, which fills them"
+            )
 
     if isinstance(block.get("settings"), Mapping) and block["settings"]:
         wire, dropped = _pact_settings_to_model_settings(block["settings"])

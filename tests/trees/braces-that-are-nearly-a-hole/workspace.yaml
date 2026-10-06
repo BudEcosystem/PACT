@@ -1,0 +1,5 @@
+# Three ways of nearly writing a hole. Each names a namespace and is not a
+# hole, so nothing fills it and the model would read the braces: one warning
+# each (`loader/almost-a-hole`). The fourth line is a real hole and is quiet.
+name: braces-that-are-nearly-a-hole
+allow-egress: []

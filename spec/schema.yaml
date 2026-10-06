@@ -512,7 +512,11 @@ groups:
           customer's name. The surrounding system fills it in before the model
           reads the words, and the model never fills it. The name has to be one
           of this agent's own `run-inputs:` or `remembers:`, and a hole naming
-          anything else is refused here.
+          anything else is refused here. Braces the model is meant to read as
+          braces, such as the `{{first_name}}` of a template you ask it to
+          write, are written with a backslash in front: `\{{first_name}}`.
+          Without the backslash they still reach the model as written, with a
+          warning in case a hole was meant.
       team:
         type: map of text
         key-names: agents

@@ -1,0 +1,6 @@
+# A variant's words become the agent's instructions, so a hole in them is
+# filled like any other and is held like any other. `small` names a run input
+# this agent does not declare, in `says:`; `terse` names a remembered fact it
+# does not declare, in `instructions:`. Both are refused; `plain` is fine.
+name: a-variant-with-a-hole-nothing-fills
+allow-egress: []

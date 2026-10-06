@@ -1,0 +1,11 @@
+run-inputs:
+  brand: text
+description: "Writes listings
+  for one brand at a time,
+  in that brand's own voice,
+  which is {{run-inputs.brnad}}."
+instructions: >
+  Write in this voice.
+  Keep sentences short.
+
+  Use the brand {{run-inputs.band}} by name.

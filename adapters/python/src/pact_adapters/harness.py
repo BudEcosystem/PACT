@@ -676,13 +676,14 @@ async def run(
     # was handed and what the conversation already knows. Strict: a hole with no
     # value raises `holes.Unfilled` naming it, because literal braces in front
     # of a model are the silent mis-translation the holes exist to end.
-    if spec.holes:
-        spec = replace(
-            spec,
-            instructions=fill(
-                spec.instructions, run_inputs=supplied, remembers=spec.facts.held
-            ),
-        )
+    #
+    # Always, not only when `spec.holes` names some: an escaped `\{{` is sent
+    # without its backslash, and that is `fill`'s to do whether or not anything
+    # else in the words is a hole.
+    spec = replace(
+        spec,
+        instructions=fill(spec.instructions, run_inputs=supplied, remembers=spec.facts.held),
+    )
     bus = bus or Bus()
     #: Agents this request may put to work because a VALUE named one — the
     #: dynamic half of `team:` (P4). `{name of the agent: why it is here}`.

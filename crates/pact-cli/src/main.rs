@@ -2457,6 +2457,44 @@ fn waits_cmd(path: &Utf8PathBuf, unsafe_spec: bool) -> Result<i32> {
     Ok(0)
 }
 
+/// Say so when a published description still has a hole in it.
+///
+/// `pact card` and `pact discover` publish `description:` for a reader that has
+/// no run, so `{{run-inputs.brand}}` goes out with its braces: nobody fills it.
+/// Carried as written, and said, because a loss nobody is told about is the
+/// kind both commands already refuse to have (an agent the loader skipped).
+fn described_with_a_hole(
+    agent: &str,
+    entry: &pact_doc::Node,
+    rule: &'static str,
+    published: &str,
+    diags: &mut Diagnostics,
+) {
+    let Some(described) = entry.get("description") else { return };
+    let Some(words) = described.as_str() else { return };
+    let unfilled: Vec<String> = pact_loader::holes::holes_in(words)
+        .into_iter()
+        .filter(|h| h.written.starts_with("run-inputs.") || h.written.starts_with("remembers."))
+        .map(|h| format!("`{{{{{}}}}}`", h.written))
+        .collect();
+    if unfilled.is_empty() {
+        return;
+    }
+    diags.push(pact_diag::Diagnostic::warning(
+        rule,
+        described.span.clone(),
+        format!(
+            "`{agent}`'s description says {}, which is filled when a run starts. \
+             {published} is read with no run, so it is published with the braces as \
+             written.",
+            unfilled.join(" and ")
+        ),
+        "Describe the agent in words that need no value, and keep the hole in \
+         `instructions:`."
+            .to_string(),
+    ));
+}
+
 /// D2/AC-6.1: the runtime finds agents by walking the tree. No registration
 /// step, no build artifact, no `.pact/` dependency.
 fn discover_cmd(path: &Utf8PathBuf, unsafe_spec: bool) -> Result<i32> {
@@ -2484,6 +2522,18 @@ fn discover_cmd(path: &Utf8PathBuf, unsafe_spec: bool) -> Result<i32> {
             eprintln!("skipping {root}: nothing loadable");
             continue;
         };
+        // The inventory publishes each description as written, like a card.
+        for (key, entry) in document.get("agents").and_then(pact_doc::Node::as_map).into_iter().flatten() {
+            if !discover::is_base(&entry.node) {
+                described_with_a_hole(
+                    key,
+                    &entry.node,
+                    "discover/a-description-filled-when-a-run-starts",
+                    "An inventory",
+                    &mut d,
+                );
+            }
+        }
         // Warnings on stderr, stdout untouched — the same channel as before.
         d.sort();
         if !d.is_empty() {
@@ -2523,6 +2573,17 @@ fn card_cmd(agent: &str, root: &Utf8PathBuf, unsafe_spec: bool, base_url: &str) 
     if diags.has_errors() {
         eprint!("{}", diags.render());
         return Ok(1);
+    }
+    // A description that is filled when a run starts is published with its
+    // braces: a card is read with no run, so nobody fills them.
+    if let Some(a) = node.as_ref().and_then(|d| d.get("agents")?.get(agent)) {
+        described_with_a_hole(
+            agent,
+            a,
+            "card/a-description-filled-when-a-run-starts",
+            "A card",
+            &mut diags,
+        );
     }
     // The same stderr channel `show` and `discover` now use, for the same
     // reason: a card is what another system reads INSTEAD of the tree, so an

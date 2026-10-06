@@ -1,0 +1,14 @@
+description: Writes listings in a brand's voice.
+run-inputs:
+  brand: text
+instructions: Write in the voice of {{run-inputs.brand}}.
+variants:
+  plain:
+    when: a model that needs it said twice
+    says: Keep to the voice of {{run-inputs.brand}} throughout.
+  small:
+    when: a smaller model that drifts
+    says: Match the tone in {{run-inputs.tone}}.
+  terse:
+    when: a model that reads long instructions badly
+    instructions: Write as {{run-inputs.brand}} and keep {{remembers.mood}}.
