@@ -247,3 +247,34 @@ fn every_refusal_here_reads_without_programming_knowledge_and_ends_in_a_fix() {
         let _ = std::fs::remove_dir_all(&root);
     }
 }
+
+#[test]
+fn a_line_no_clock_can_keep_is_refused_on_the_shipped_timer() {
+    // `every:` is "plain words, or a cron line", and the table that reads the
+    // words lived only in the Python reader: `every fortnight` and the 30th of
+    // February loaded cleanly here, under `--deny-warnings`, and failed the
+    // server that was meant to keep the timer. `Friday at 4` loaded too, and
+    // fired at four in the morning.
+    //
+    // Through the binary, on the author's own file: `pact_loader::schedules`
+    // has its own tests, and its one call site in `main.rs` had none in this
+    // workspace, so commenting the call out left `cargo test` green.
+    for (name, written, says) in [
+        ("fortnight", "every fortnight", "is not a time PACT can read"),
+        ("no-such-day", "'0 0 30 2 *'", "never comes round"),
+        ("which-four", "Friday at 4", "4am or 4pm"),
+    ] {
+        let root = edited(
+            name,
+            "ports/weekly-review.yaml",
+            "every: Friday at 4pm",
+            &format!("every: {written}"),
+        );
+        let (ok, text) = check(&root);
+        assert!(!ok, "`every: {written}` loaded:\n{text}");
+        assert!(text.contains("rule: loader/every-is-not-a-time"), "{text}");
+        assert!(text.contains(says), "it says what is wrong with it:\n{text}");
+        assert!(text.contains("weekly-review.yaml:"), "at the port's own line:\n{text}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+}

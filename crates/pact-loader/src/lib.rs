@@ -148,6 +148,7 @@ pub mod reach;
 pub mod reachability;
 pub mod redaction;
 pub mod report;
+pub mod schedules;
 pub mod review;
 pub mod teams;
 pub mod teamwork;

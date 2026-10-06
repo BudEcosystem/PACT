@@ -17,6 +17,17 @@ that refuses to start. What it reads:
 * days at a time: `Friday at 4pm`, `weekday mornings at 9`, `every day at
   16:30`, `Mondays and Thursdays at noon`, `weekends at 10am`.
 
+**A time is never guessed either.** An hour says which half of the day it is in
+(`4pm`, `16:30`, `mornings at 9`, `noon`) or the line is refused: `Friday at 4`
+used to fire at four in the morning. A part of the day means the hours people
+mean by it (`_PART_OF_DAY`): `nights at 2` is two in the morning and `every
+night at 12` is midnight, where both used to be read as the afternoon.
+
+**The same grammar where the author is.** `pact check` holds `every:` to this
+table too (`crates/pact-loader/src/schedules.rs`), so a line no clock can keep
+is refused when it is written and not when a runtime starts. The two readers are
+held to one list of lines, `tests/conformance/schedules.json`.
+
 **Two forms, so an interval is honest.** A calendar schedule is a six-field
 cron line (seconds first). An interval is `@every <n>s`, counted from the Unix
 epoch, because cron cannot say "every 7 seconds" (`*/7` fires at :56 and again
@@ -60,8 +71,16 @@ _NAMED = {
     "weekly": "0 0 0 * * 1", "monthly": "0 0 0 1 * *", "every hour": "@every 3600s",
     "every minute": "@every 60s", "every second": "@every 1s",
 }
-_PART_OF_DAY = {"morning": "am", "mornings": "am", "afternoon": "pm", "afternoons": "pm",
-                "evening": "pm", "evenings": "pm", "night": "pm", "nights": "pm"}
+#: The hours each part of a day can mean, and which half of the day each is in.
+#: An hour a part does not hold (`mornings at 12`, `evenings at 2`) is refused,
+#: never moved to the other half.
+_PART_OF_DAY: dict[str, dict[int, str]] = {
+    "morning": {h: "am" for h in range(1, 12)},
+    "afternoon": {12: "pm", **{h: "pm" for h in range(1, 7)}},
+    "evening": {h: "pm" for h in range(4, 12)},
+    # The small hours are the night's, and its twelve is midnight.
+    "night": {**{h: "pm" for h in range(6, 12)}, 12: "am", **{h: "am" for h in range(1, 6)}},
+}
 
 FORMS = (
     "plain words like `Friday at 4pm`, `weekday mornings at 9`, `every 10 minutes` or "
@@ -84,8 +103,9 @@ class Schedule:
 
     @staticmethod
     def parse(written: str) -> "Schedule":
-        text = " ".join(str(written or "").lower().replace(",", " , ").split())
-        text = text.replace(" , ", ", ")
+        # Spaces only. Commas are left where they are: a cron list (`0 9 * * 1,4`) is one
+        # field, and spacing it out made it two, read as a line with seconds or as nothing.
+        text = " ".join(str(written or "").lower().split())
         if not text:
             raise Unreadable(f"`every:` is empty. Write when to run: {FORMS}.")
         try:
@@ -95,7 +115,11 @@ class Schedule:
         if line is None:
             raise Unreadable(f"`every: {written}` is not a time PACT can read. Write {FORMS}.")
         found = Schedule(str(written).strip(), line)
-        if found.next_after(datetime(2000, 1, 1, tzinfo=timezone.utc)) is None:
+        try:
+            comes = found.next_after(datetime(2000, 1, 1, tzinfo=timezone.utc))
+        except OverflowError:  # an interval longer than any date a clock can name
+            comes = None
+        if comes is None:
             raise Unreadable(f"`every: {written}` never comes round (no such day). Write {FORMS}.")
         return found
 
@@ -143,7 +167,7 @@ def _day_matches(day: datetime, doms: set[int], dows: set[int], dom_free: bool, 
 
 
 def _interval(text: str) -> str | None:
-    found = re.fullmatch(r"every (\d+) (second|minute|hour|day)s?", text)
+    found = re.fullmatch(r"every ([0-9]+) (second|minute|hour|day)s?", text)
     if not found:
         return None
     n = int(found.group(1)) * _UNITS[found.group(2)]
@@ -152,7 +176,7 @@ def _interval(text: str) -> str | None:
 
 def _cron(text: str) -> str | None:
     fields = text.split()
-    if len(fields) not in (5, 6) or not all(re.fullmatch(r"[\w*/,\-]+", f) for f in fields):
+    if len(fields) not in (5, 6) or not all(re.fullmatch(r"[a-z0-9*/,\-]+", f) for f in fields):
         return None
     fields = ["0", *fields] if len(fields) == 5 else fields
     try:
@@ -171,14 +195,18 @@ def _calendar(text: str) -> str | None:
     days_part, _, time_part = text.partition(" at ")
     words = days_part.replace(",", " ").split()
     part = ""
-    if words and words[-1] in _PART_OF_DAY:
-        part = _PART_OF_DAY[words.pop()]
+    if words and words[-1].rstrip("s") in _PART_OF_DAY:
+        part = words.pop().rstrip("s")
     days = _days(words)
     if days is None:
         return None
-    hour, minute = (0, 0) if not time_part else _time(time_part, part) or (-1, -1)
-    if hour < 0:
+    if not time_part:
+        # `weekday mornings` names no hour, and midnight is not a morning.
+        return None if part else f"0 0 0 * * {days}"
+    found = _time(time_part, part)
+    if found is None:
         return None
+    hour, minute = found
     return f"0 {minute} {hour} * * {days}"
 
 
@@ -201,20 +229,35 @@ def _days(words: list[str]) -> str | None:
 
 
 def _time(text: str, part: str) -> tuple[int, int] | None:
+    """The hour and minute `text` names, or None when it is not a time at all.
+
+    Raises `Unreadable` for a time that could be either half of the day, or
+    that the part of the day written beside it does not hold.
+    """
     text = text.strip()
     if text in ("noon", "midday"):
         return 12, 0
     if text == "midnight":
         return 0, 0
-    found = re.fullmatch(r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)?", text)
+    found = re.fullmatch(r"([0-9]{1,2})(?::([0-9]{2}))?\s*(am|pm)?", text)
     if not found:
         return None
     hour, minute = int(found.group(1)), int(found.group(2) or 0)
-    meridiem = found.group(3) or part
+    meridiem = found.group(3) or ""
+    if part:
+        half = _PART_OF_DAY[part].get(hour)
+        if half is None or meridiem not in ("", half):
+            raise Unreadable(f"`{text}` is not an hour of the {part}.")
+        meridiem = half
     if meridiem:
         if not 1 <= hour <= 12:
             return None
         hour = hour % 12 + (12 if meridiem == "pm" else 0)
+    elif found.group(2) is None and 1 <= hour <= 12:
+        raise Unreadable(
+            f"`at {hour}` could be {hour}am or {hour}pm: say which, or write the "
+            f"24-hour time (`{hour:02d}:00`)."
+        )
     return (hour, minute) if hour <= 23 and minute <= 59 else None
 
 
@@ -227,16 +270,24 @@ def _values(field: str, low: int, high: int, names: dict[str, int], name: str) -
     out: set[int] = set()
     for item in field.split(","):
         body, _, step_text = item.partition("/")
-        step = int(step_text) if step_text else 1
+        step = _whole(step_text) if step_text else 1
         if step < 1:
             raise ValueError(name)
         if body == "*":
             lo, hi = low, high
         else:
             first, _, last = body.partition("-")
-            lo = names[first] if first in names else int(first)
-            hi = (names[last] if last in names else int(last)) if last else (high if step_text else lo)
+            lo = names[first] if first in names else _whole(first)
+            hi = (names[last] if last in names else _whole(last)) if last else (high if step_text else lo)
         if not (low <= lo <= hi <= high):
             raise Unreadable(f"`{field}` is outside {low}-{high}, the {name}s a cron line can name.")
         out.update(range(lo, hi + 1, step))
     return out
+
+
+def _whole(text: str) -> int:
+    """Digits and nothing else: `int()` also takes `1_0`, `+5` and a space, and the loader's
+    reader takes none of them."""
+    if not (text.isascii() and text.isdigit()):
+        raise ValueError(text)
+    return int(text)

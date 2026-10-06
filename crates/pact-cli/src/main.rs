@@ -1744,6 +1744,11 @@ fn validate(
         // derivation that let `kind:` stop being required: a port carrying
         // `every:` is a timer whether or not it says so.
         pact_loader::ports::check(root, &schema, &mut diags);
+        // And what the line SAYS: `every:` is held to the grammar a clock can
+        // keep. The table lived only in the Python reader, so `every: every
+        // fortnight` and the 30th of February loaded cleanly here and failed
+        // the server that was supposed to keep the timer.
+        pact_loader::schedules::check(root, &mut diags);
         // And the ninth, which is a set question rather than a pair question, so
         // no field attribute can reach it: a tool says where it reaches on
         // exactly one of `connect:`, `url:` and `says:`, and `needs-also:` and
