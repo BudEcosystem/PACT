@@ -535,3 +535,27 @@ def test_a_threshold_that_is_not_a_finite_number_reads_as_no_threshold_at_all() 
     real = {**gate, "more-than": 200.0}
     assert questions._atom_stops(real, {"amount": "10000 USD"}) is True
     assert questions._atom_stops(real, {"amount": "10 USD"}) is False
+
+
+@pytest.mark.parametrize("amount", ["Infinity", "NaN", "inf USD", float("inf"), float("nan")])
+def test_an_amount_that_is_not_a_finite_number_does_not_slip_under_the_gate(
+    amount: object,
+) -> None:
+    """The same fail-open, on the other side of the comparison.
+
+    The threshold was closed above; the ARGUMENT was not. `_amount` reads a
+    non-finite amount as no figure, and `_atom_stops` then treated "no figure"
+    as "no amount": `value is not None and value > threshold` is `False`, so a
+    model asking to refund `Infinity` went past a 200 USD gate with nobody
+    asked. An amount the call carries and nothing can read stops the call.
+    """
+    from pact_adapters import questions  # noqa: PLC0415
+
+    gate = {"tool": "payments/issue-refund", "arg": "amount", "more-than": "200 USD"}
+    assert questions._atom_stops(gate, {"amount": amount}) is True, (
+        f"a refund of {amount!r} went out unasked under `more-than: 200 USD`"
+    )
+    # The controls: a call with no amount at all is not over any line, and a
+    # figure is still compared as one.
+    assert questions._atom_stops(gate, {"order-number": "O-9"}) is False
+    assert questions._atom_stops(gate, {"amount": "10 USD"}) is False

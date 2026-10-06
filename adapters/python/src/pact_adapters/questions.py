@@ -1369,8 +1369,16 @@ def _atom_stops(
     threshold = _amount(atom.get("more-than"))
     if threshold is None:
         return True
-    value = _amount(args.get(str(atom.get("arg") or "")))
-    return value is not None and value > threshold
+    # An amount the call does not carry is not over any line, so the rule is
+    # not about this call. One it DOES carry and nothing can read as a figure
+    # (`inf`, `NaN`, `"Infinity"`, which `_amount` reads as no figure) stops:
+    # treating it as absent let a refund of infinity past a 200 USD gate with
+    # nobody asked, the same fail-open the threshold side closed above.
+    arg = str(atom.get("arg") or "")
+    if arg not in args:
+        return False
+    value = _amount(args[arg])
+    return value is None or value > threshold
 
 
 #: Every way a figure is written, INCLUDING the ones with nothing before the
