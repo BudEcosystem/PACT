@@ -94,7 +94,6 @@ NOT_ABOUT_CAPABILITY: dict[str, str] = {
     "judge.GRADE_TOKENS": "how many tokens one grading call may use",
     "judge.GRADE_TIMEOUT_S": "how long to wait for a grader before giving up",
     "interceptors.NEEDLE": "how much context a redaction diagnostic quotes",
-    "resolve.BUILTIN_CATALOGUE": "the path to the shipped price list, not a value",
     "loops.LIBRARY": "the shipped loop shapes; the numbers in it are each shape's "
                      "own `at-most:`, which an author forks by copying the file",
 }

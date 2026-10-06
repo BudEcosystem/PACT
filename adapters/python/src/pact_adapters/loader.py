@@ -37,6 +37,24 @@ FIX = (
 )
 
 
+def shipped(*parts: str) -> Path:
+    """A file of the PACT checkout that travels with the package: `shipped("spec",
+    "schema.yaml")`, `shipped("models", "catalog.yaml")`.
+
+    A wheel carries each inside the package (`pact_adapters/<parts>`, `pyproject.toml`'s
+    `force-include`), because an installed package sits in no checkout: it used to resolve no
+    shipped model and find no schema. A source checkout reads the checkout's own file, so an
+    edit there is seen at once.
+    """
+    carried = Path(__file__).resolve().parent.joinpath(*parts)
+    return carried if carried.is_file() else REPO.joinpath(*parts)
+
+
+def schema_path() -> Path:
+    """PACT's specification, `spec/schema.yaml`: the one description of every kind and field."""
+    return shipped("spec", "schema.yaml")
+
+
 def pact_binary(
     *, environ: Mapping[str, str] | None = None, repo: Path | None = None
 ) -> Path | None:

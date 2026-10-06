@@ -86,3 +86,9 @@ build-backend = "hatchling.build"
 # purpose — they read the worked example through the real Rust loader, which is
 # not something a wheel should carry.
 packages = ["src/pact_adapters"]
+
+# The specification and the model catalogue travel with the package, so a host with no checkout
+# can still read what a kind's fields are and resolve a shipped model (`pact_adapters.loader.shipped`).
+[tool.hatch.build.targets.wheel.force-include]
+"../../spec/schema.yaml" = "pact_adapters/spec/schema.yaml"
+"../../models/catalog.yaml" = "pact_adapters/models/catalog.yaml"

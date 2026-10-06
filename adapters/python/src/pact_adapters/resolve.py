@@ -61,16 +61,19 @@ from .evals import (
     verdict,
 )
 from .harness import delegate_by_running, run
+from .holes import holes_in
 from .ir import AgentSpec
+from .loader import REPO, shipped
 from .yes_no import said_yes
 
-#: Where the distribution keeps its catalogue, relative to this file:
-#: `<repo>/adapters/python/src/pact_adapters/resolve.py` -> `<repo>/models/`.
+#: Where the distribution keeps its catalogue: `<repo>/models/catalog.yaml` in a
+#: checkout, and inside the package in a wheel (`loader.shipped`), which sits in
+#: no checkout and used to resolve no shipped model at all.
 #: §4.2 names the location normatively and names the address it is served under
 #: (`pact:catalog/builtin`); resolving it from the package rather than from the
 #: caller's working directory is what makes "the author never authors it" true
 #: for a process started anywhere.
-BUILTIN_CATALOGUE = Path(__file__).resolve().parents[4] / "models" / "catalog.yaml"
+BUILTIN_CATALOGUE = shipped("models", "catalog.yaml")
 
 #: What a row writes when the figure exists but nobody in this distribution can
 #: attribute it (§4.2). Read as "no window", exactly as an absent transport
@@ -938,10 +941,10 @@ def _line_of(lines: list[str], needle: str) -> int:
 
 def _shown(path: Path) -> str:
     """The path as whoever ships the distribution would type it."""
-    try:
-        return str(path.relative_to(Path(__file__).resolve().parents[4]))
-    except ValueError:
-        return str(path)
+    for home in (Path(__file__).resolve().parent, REPO):  # a wheel's copy, then a checkout's
+        if path.is_relative_to(home):
+            return str(path.relative_to(home))
+    return str(path)
 
 
 @dataclass
