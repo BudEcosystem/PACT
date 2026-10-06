@@ -32,13 +32,27 @@ covered by something that fails. A mutation that survives is proof of a hole; a
 mutation that dies is only evidence against one. That asymmetry is why the cases
 are named after the guarantee rather than the line, and why the reason each one
 matters is written beside it.
+
+**It breaks a copy, never the source.** Each case used to write the mutant over
+the real `src/pact_adapters/<module>` and restore it in a `finally`, for about
+a minute a run. That directory is what an editable install imports, so any
+other process started in the window (a host's own suite, a worker) ran with the
+park path or the quarantine check disabled, and a kill in the window left the
+mutation on disk. The mutant now goes into a throwaway copy of
+`adapters/python/{src,tests}` with the rest of the checkout linked beside it,
+and the subset runs there. `test_the_real_source_is_untouched_while_a_copy_is_broken`
+watches the real directory for the whole of a run.
 """
 
 from __future__ import annotations
 
 import hashlib
+import os
+import shutil
 import subprocess
-import sys
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -108,51 +122,153 @@ CASES = [
 ]
 
 
-def _run(tests: tuple[str, ...]) -> int:
-    done = subprocess.run(
-        [str(PY), "-m", "pytest", *[f"tests/{t}" for t in tests], "-q", "-x", "--no-header"],
-        cwd=HERE.parent,
+def _copy_of_the_checkout(root: Path) -> Path:
+    """`adapters/python` in a throwaway checkout: `src` and `tests` copied, the rest linked.
+
+    Copied, because `src` is what gets broken and the tests find the checkout
+    from their own resolved path (`parents[3]`), so a linked `tests` would walk
+    straight back to the real one. Linked, for everything they then read from
+    it: the examples, the built loader, the schema.
+    """
+    repo = HERE.parents[2]
+    python = root / "adapters" / "python"
+    python.mkdir(parents=True)
+    quiet = shutil.ignore_patterns("__pycache__", ".pytest_cache")
+    for folder in ("src", "tests"):
+        shutil.copytree(HERE.parent / folder, python / folder, ignore=quiet)
+    for real, copy in ((repo, root), (repo / "adapters", root / "adapters"), (HERE.parent, python)):
+        for entry in real.iterdir():
+            if not (copy / entry.name).exists() and entry.name not in ("__pycache__", ".pytest_cache"):
+                (copy / entry.name).symlink_to(entry)
+    return python
+
+
+def _run(python: Path, tests: tuple[str, ...]) -> subprocess.CompletedProcess[str]:
+    """The subset, run in the copy and importing the copy's `pact_adapters`."""
+    return subprocess.run(
+        [str(PY), "-m", "pytest", *[f"tests/{t}" for t in tests], "-q", "-x", "--no-header",
+         "-p", "no:cacheprovider"],
+        cwd=python,
+        # Ahead of the venv's editable install, which names the real `src`.
+        env={**os.environ, "PYTHONPATH": str(python / "src"), "PYTHONDONTWRITEBYTECODE": "1"},
         capture_output=True,
         text=True,
         timeout=600,
     )
-    return done.returncode
 
 
-@pytest.mark.skipif(not PY.exists(), reason="needs the project venv to run a subprocess")
-@pytest.mark.parametrize("name,module,find,replace,tests,why", CASES, ids=[c[0] for c in CASES])
-def test_breaking_this_line_is_something_the_suite_notices(
-    name: str, module: str, find: str, replace: str, tests: tuple[str, ...], why: str
-) -> None:
-    """One guarantee, broken on purpose, and the suite has to fail."""
-    path = SRC / module
+@pytest.fixture(scope="module")
+def copy(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """The throwaway `adapters/python`, proven to pass before anything is broken.
+
+    Without the control a copy that cannot run at all (a missing link, a wrong
+    interpreter) fails every subset, and every mutation "dies": green for the
+    reason this file exists to rule out.
+    """
+    python = _copy_of_the_checkout(tmp_path_factory.mktemp("mutation") / "repo")
+    control = _run(python, FACADE_TESTS + FENCE_TESTS)
+    assert control.returncode == 0, (
+        "the unbroken copy does not pass, so a failure in it says nothing about a "
+        f"mutation:\n{control.stdout[-3000:]}{control.stderr[-1000:]}"
+    )
+    return python
+
+
+def _digest(folder: Path) -> str:
+    """Every source file under `folder`, by name and content."""
+    seen = hashlib.sha256()
+    for path in sorted(folder.rglob("*")):
+        if path.is_file() and "__pycache__" not in path.parts:
+            seen.update(str(path.relative_to(folder)).encode() + b"\0" + path.read_bytes())
+    return seen.hexdigest()
+
+
+@contextmanager
+def _watching(folder: Path) -> Iterator[set[str]]:
+    """Every state `folder` is seen in while the block runs, hashed in a thread."""
+    seen = {_digest(folder)}
+    done = threading.Event()
+
+    def watch() -> None:
+        while not done.wait(0.05):
+            seen.add(_digest(folder))
+
+    watcher = threading.Thread(target=watch, daemon=True)
+    watcher.start()
+    try:
+        yield seen
+    finally:
+        done.set()
+        watcher.join()
+        seen.add(_digest(folder))
+
+
+def _broken(copy: Path, module: str, find: str, replace: str, tests: tuple[str, ...]) -> int:
+    """What the subset returns with one line of the COPY's `module` broken."""
+    path = copy / "src" / "pact_adapters" / module
     original = path.read_text()
-    before = hashlib.sha256(original.encode()).hexdigest()
-
     assert original.count(find) == 1, (
         f"`{find}` appears {original.count(find)} times in {module}, not once. "
         "This case can no longer aim at the line it was written for — fix the "
         "case rather than deleting it, because an unaimed mutation reports green."
     )
-
     try:
         path.write_text(original.replace(find, replace + find, 1) if replace.startswith("pass")
                         else original.replace(find, replace, 1))
-        assert _run(tests) != 0, (
-            f"{module} was broken — {name} — and {list(tests)} still passed.\n"
-            f"WHY IT MATTERS: {why}\n"
-            "A guarantee nothing would miss is not a guarantee. Write the "
-            "assertion that catches this before adding to these files again."
-        )
+        return _run(copy, tests).returncode
     finally:
-        path.write_text(original)
+        path.write_text(original)  # the next case breaks one line, not two
 
-    assert hashlib.sha256(path.read_text().encode()).hexdigest() == before, (
-        f"{module} was not restored byte-for-byte. A mutation left behind is how "
-        "`crates/pact-schema/src/lib.rs` spent an afternoon with the NaN spend-cap "
-        "refusal disabled, invisible to pytest because Python tests run against a "
-        "prebuilt loader binary."
+
+@pytest.mark.skipif(not PY.exists(), reason="needs the project venv to run a subprocess")
+@pytest.mark.parametrize("name,module,find,replace,tests,why", CASES, ids=[c[0] for c in CASES])
+def test_breaking_this_line_is_something_the_suite_notices(
+    copy: Path, name: str, module: str, find: str, replace: str, tests: tuple[str, ...], why: str
+) -> None:
+    """One guarantee, broken on purpose, and the suite has to fail."""
+    assert (SRC / module).read_text() == (copy / "src" / "pact_adapters" / module).read_text(), (
+        f"the copy's {module} is not the source's, so breaking it tests nothing here"
     )
+    assert _broken(copy, module, find, replace, tests) != 0, (
+        f"{module} was broken — {name} — and {list(tests)} still passed.\n"
+        f"WHY IT MATTERS: {why}\n"
+        "A guarantee nothing would miss is not a guarantee. Write the "
+        "assertion that catches this before adding to these files again."
+    )
+
+
+@pytest.mark.skipif(not PY.exists(), reason="needs the project venv to run a subprocess")
+def test_the_real_source_is_untouched_while_a_copy_is_broken(copy: Path) -> None:
+    """The source an editable install imports is never the thing that is broken.
+
+    Watched for the whole of one mutation run, not compared before and after: a
+    file written and restored is byte-identical afterwards, and that is exactly
+    what the old `finally` did while every other process importing the package
+    got a module with its park path disabled. A mutation left behind by a kill
+    is how `crates/pact-schema/src/lib.rs` spent an afternoon with the NaN
+    spend-cap refusal off.
+    """
+    name, module, find, replace, tests, _why = CASES[0]
+    with _watching(SRC) as seen:
+        assert _broken(copy, module, find, replace, tests) != 0, name
+    assert len(seen) == 1, (
+        f"src/pact_adapters changed while a mutation ran ({len(seen)} states seen): "
+        "the mutant was written over the source other processes import"
+    )
+
+
+def test_a_write_that_is_put_back_is_still_something_the_watch_sees(tmp_path: Path) -> None:
+    """The oracle above, shown to bite: what the old test did to the real
+    source (write the mutant, run, restore), done to a scratch folder."""
+    import time
+
+    module = tmp_path / "module.py"
+    module.write_text("if parked:\n    raise Suspended()\n")
+    with _watching(tmp_path) as seen:
+        module.write_text("if False:\n    raise Suspended()\n")
+        time.sleep(0.3)
+        module.write_text("if parked:\n    raise Suspended()\n")
+    assert len(seen) == 2, seen
 
 
 def test_nothing_in_the_tree_is_carrying_a_mutation_right_now() -> None:
