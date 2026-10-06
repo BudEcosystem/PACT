@@ -1,9 +1,10 @@
 """Two things a runtime other than the harness needs from the termination algebra.
 
-* `feel:` supplies `finishes-within:`, and `finishes-within:` is a stop — so a
-  `feel:` with `when-it-runs-out:` beside it is a wall-clock ceiling, reported
-  under the line the author actually wrote. Without `when-it-runs-out:` it stays
-  a latency band: the module never picks the action at a stop.
+* `feel:` is a latency band and never a stop. For a while it became a
+  wall-clock ceiling whenever ANY ceiling wrote `when-it-runs-out:`, so
+  `feel: voice` beside `tool-calls-at-most: 40` ended the run after five
+  seconds, a figure the author never wrote. A stop is a written figure:
+  `finishes-within:` or `runs-for-at-most:`.
 * `Limits.kept_going` is the one answer to "a person said keep going": a fresh
   budget of the written size, from where the run is, for every ceiling — so a
   runtime that replays a journal (budflow) reads the same grant the harness
@@ -18,18 +19,24 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from pact_adapters.limits import Action, Limits, Meter  # noqa: E402
-from pact_adapters.slo import FEELS  # noqa: E402
+from pact_adapters.slo import FEELS, Slo  # noqa: E402
 
 
-def test_feel_is_the_wall_clock_stop_when_the_action_is_written() -> None:
-    limits = Limits.from_mapping({"feel": "interactive", "when-it-runs-out": "stop-and-say-so"})
-    assert limits.wall_clock_s == FEELS["interactive"][1]
-    reached = limits.reached(Meter(carried=FEELS["interactive"][1]), 0.0)
-    assert reached is not None and reached.ceiling.field == "feel"
-    assert "`feel`" in reached.sentence()
+def test_feel_beside_another_ceiling_is_not_a_wall_clock_nobody_wrote() -> None:
+    limits = Limits.from_mapping(
+        {"feel": "voice", "tool-calls-at-most": 40, "when-it-runs-out": "stop-and-say-so"}
+    )
+    assert limits.wall_clock_s is None
+    assert [c.field for c in limits.ceilings()] == ["tool-calls-at-most"]
+    assert limits.reached(Meter(carried=FEELS["voice"][1] + 1), 0.0) is None
 
 
-def test_feel_with_no_action_written_stops_nothing() -> None:
+def test_feel_is_still_the_latency_band_a_report_measures_against() -> None:
+    slo = Slo.from_mapping({"feel": "voice", "when-it-runs-out": "stop-and-say-so"})
+    assert (slo.first_reply_within_s, slo.finishes_within_s) == FEELS["voice"]
+
+
+def test_feel_alone_stops_nothing() -> None:
     assert Limits.from_mapping({"feel": "batch"}).ceilings() == ()
 
 

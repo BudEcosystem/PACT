@@ -224,12 +224,12 @@ _CEILING_FIELDS: tuple[tuple[str, str | None, str], ...] = (
 #: a report sending an author to a line that appears nowhere in their document.
 #: `from_mapping` sets one of these two and nothing else ever should.
 #:
-#: `feel` is the third, and it is a line the author wrote: `feel: interactive`
-#: supplies `finishes-within:` when nobody wrote one (`slo.FEELS`), and a
-#: `finishes-within:` is a stop. Reported as `feel`, because that is the line
-#: in the file; quoting `finishes-within` would send the author to a line that
-#: is not there.
-_WALL_CLOCK_FIELDS: tuple[str, ...] = ("runs-for-at-most", "finishes-within", "feel")
+#: `feel` is NOT a third. It is a latency band (`slo.FEELS`, reported by `Slo`)
+#: and stops nothing: for a while `feel: voice` beside any ceiling that wrote
+#: `when-it-runs-out:` ended the run after five seconds "the limit you set with
+#: `feel`", a figure the author never wrote. A stop is a line with a figure on
+#: it: `finishes-within:` or `runs-for-at-most:`.
+_WALL_CLOCK_FIELDS: tuple[str, ...] = ("runs-for-at-most", "finishes-within")
 
 
 @dataclass(frozen=True)
@@ -535,20 +535,6 @@ class Limits:
         wall, wall_field = seconds(m.get("runs-for-at-most")), "runs-for-at-most"
         if wall is None:
             wall, wall_field = seconds(m.get("finishes-within")), "finishes-within"
-        # `feel:` supplies `finishes-within:` when neither line is written —
-        # its help says so, and `finishes-within:`'s says that is a stop — but
-        # only where the author has said what happens at the stop. The schema
-        # makes every written ceiling carry `when-it-runs-out:` so that this
-        # module never picks the action; `feel:` carries no such requirement,
-        # so a `feel:` with no `when-it-runs-out:` beside it stays a latency
-        # band (`Slo`) and stops nothing, rather than stopping on an action
-        # nobody chose.
-        if wall is None and m.get("when-it-runs-out") is not None:
-            from .slo import FEELS  # `slo` reads its figures through this module
-
-            band = FEELS.get(str(m.get("feel") or "").strip())
-            if band is not None:
-                wall, wall_field = band[1], "feel"
         # Both halves of the cap, off one read. Two reads would be two chances
         # for the amount and the currency to come from different lines.
         cap = money(m.get("cost-per-request-under"))

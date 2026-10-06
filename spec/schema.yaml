@@ -1445,10 +1445,11 @@ groups:
         surface: S-GOV
         tier: core
         help: >
-          what kind of waiting is acceptable. This one word supplies
-          `first-reply-within:` and `finishes-within:` when you have not written
-          them, so most agents need only this line. Anything you write yourself
-          wins.
+          what kind of waiting is acceptable. This one word supplies the two
+          latency figures a report measures a run against, `first-reply-within:`
+          and `finishes-within:`, when you have not written them. Anything you
+          write yourself wins. It stops nothing: a run is stopped by a line
+          with a figure on it, `finishes-within:` or `runs-for-at-most:`.
       finishes-within:
         type: duration
         surface: S-GOV
