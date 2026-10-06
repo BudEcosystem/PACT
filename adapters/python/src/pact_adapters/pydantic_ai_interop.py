@@ -1782,6 +1782,9 @@ def build_agent(
     *,
     call_tool: Any = None,
     model: Any = None,
+    run_inputs: "Mapping[str, Any] | None" = None,
+    remembered: "Mapping[str, Any] | None" = None,
+    judge: Any = None,
 ) -> Any:
     """One PACT agent as a live Pydantic AI `Agent`, tools and approvals bound.
 
@@ -1804,6 +1807,18 @@ def build_agent(
       intact, because both systems stop the same call and wait for the same
       person.
 
+    **The words are filled when the agent is built.** An agent built here is
+    built for one run's values: `run_inputs` and `remembered` fill the
+    `{{run-inputs.<n>}}` and `{{remembers.<n>}}` holes in its instructions and
+    description (`holes.fill`), and a hole with no value raises `holes.Unfilled`
+    naming it. They used to reach the model as literal braces.
+
+    **Its answer is held to `checked-by:`, or the build is refused.** Each rule
+    is decided by `evals.first_broken`, `checks-at-most:` attempts in all. A
+    `judged:` rule needs something to grade it: pass `judge=` (an
+    `evals`-style grader, `judge.Judge`), or the build raises, because skipping
+    the rule would return an answer nobody held to it.
+
     **What is still not enforced, and must be said out loud.** The loop is
     Pydantic AI's. `loop:` stages, `interceptors:`, `teamwork:`,
     `context-policy:`, `remembers:` and `when-it-runs-out:` are PACT harness
@@ -1816,6 +1831,19 @@ def build_agent(
     from pydantic_ai.toolsets import FunctionToolset
     from pydantic_ai.toolsets.external import ExternalToolset
     from pydantic_ai.tools import ToolDefinition
+
+    from .evals import JUDGED
+    from .holes import fill
+
+    ungraded = [r.sentence for r in spec.checked_by if r.kind == JUDGED] if judge is None else []
+    if ungraded:
+        raise ValueError(
+            f"{spec.key or 'this agent'}'s `checked-by:` says `judged: {ungraded[0]}`, "
+            "and nothing here can grade it, so the answer would be returned without "
+            "that rule being applied. fix: pass `judge=` (for a workspace, "
+            "`judge.judge_of(...)`), or take the `judged:` line off `checked-by:`."
+        )
+    filled = {"run_inputs": run_inputs, "remembers": remembered}
 
     needs_person = _tools_needing_approval(spec)
 
@@ -1872,11 +1900,22 @@ def build_agent(
     agent = Agent(
         bound,
         name=spec.name or spec.key or None,
-        description=spec.description or None,
-        instructions=_instructions_with_skills(spec) or None,
+        description=fill(spec.description, **filled) or None,
+        # The agent's own words are filled; a skill is a document to read, and
+        # braces in one are that document's.
+        instructions=_instructions_with_skills(
+            replace(spec, instructions=fill(spec.instructions, **filled))
+        )
+        or None,
         model_settings=settings or None,
         output_type=_output_type_for(spec),
         toolsets=toolsets or None,
+        # `checks-at-most:` is counted by the check itself (`_answer_checks`).
+        # Pydantic AI's own output budget is 1 retry unless told otherwise
+        # (`Agent(retries=)`, `{'tools': 1, 'output': 1}`), so `checks-at-most:
+        # 3` ended at the second failed answer with "Exceeded maximum output
+        # retries (1)": a ceiling nobody wrote, ahead of the one the author did.
+        retries={"output": sys.maxsize} if spec.checked_by else None,
         # Building an agent must not require the credentials to RUN it.
         # `Agent.__init__` otherwise calls `models.infer_model`, which constructs
         # the provider and performs its environment checks then and there — so
@@ -1894,7 +1933,7 @@ def build_agent(
         defer_model_check=True,
     )
     if spec.checked_by:
-        agent.output_validator(_answer_checks(spec))
+        agent.output_validator(_answer_checks(spec, judge))
     return agent
 
 
@@ -1902,7 +1941,7 @@ def build_agent(
 CHECK_FAILED = "Your answer breaks a rule it must keep: "
 
 
-def _answer_checks(spec: PactAgentSpec) -> Any:
+def _answer_checks(spec: PactAgentSpec, judge: Any = None) -> Any:
     """`checked-by:` / `checks-at-most:` (02P O7, A14) as an output validator.
 
     Each answer is held to the rules by `evals.first_broken`, the door `evals:`
@@ -1911,19 +1950,41 @@ def _answer_checks(spec: PactAgentSpec) -> Any:
     wrote), not by Pydantic AI's output budget, which empty and thinking-only
     replies spend as well — `checks-at-most:` counts attempts at the checks. The
     last attempt that still breaks a rule ends the run saying which.
+
+    `must-call-before:` reads what the run DID, so the calls the model asked for
+    are read off the conversation and handed to the rule with the answer. A
+    `judged:` rule is graded by `judge`, off the event loop: a grader is a model
+    call, and `evals` makes it a blocking one.
     """
+    import asyncio
+
     from pydantic_ai import ModelRetry
     from pydantic_ai.exceptions import UnexpectedModelBehavior
-    from pydantic_ai.messages import ModelRequest, RetryPromptPart
+    from pydantic_ai.messages import ModelRequest, ModelResponse, RetryPromptPart, ToolCallPart
 
     from .evals import first_broken
-    from .harness import RunResult
+    from .harness import RunResult, Step, ToolCall
 
     async def checked(ctx: Any, output: Any) -> Any:
         if getattr(ctx, "partial_output", False):
             return output
         said = output if isinstance(output, str) else json.dumps(_plain(output), sort_keys=True)
-        broken = first_broken(spec.checked_by, RunResult(output=said))
+        steps = [
+            Step(
+                index=i,
+                text="",
+                tool_calls=tuple(
+                    ToolCall(p.tool_name, p.args_as_dict()) for p in m.parts if isinstance(p, ToolCallPart)
+                ),
+            )
+            for i, m in enumerate(ctx.messages)
+            if isinstance(m, ModelResponse)
+        ]
+        answered = RunResult(output=said, steps=steps)
+        if judge is None:
+            broken = first_broken(spec.checked_by, answered)
+        else:
+            broken = await asyncio.to_thread(first_broken, spec.checked_by, answered, judge)
         if not broken:
             return output
         failed = sum(

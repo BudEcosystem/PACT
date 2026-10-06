@@ -1306,7 +1306,7 @@ async def run(
     # 02P A4. An action's `answers-with:` is checked by `pact check` and carried
     # by `ir.ToolSpec`, and a tool here answers in TEXT, so nothing on this
     # runtime holds a result to it. Said, for `bind:`'s reason one line up.
-    result.unenforced = result.unenforced + _unchecked_answers(spec)
+    result.unenforced = result.unenforced + _unchecked_answers(spec) + _unheld(spec)
     # A7. PACT does not retrieve, so a set of documents this run never consulted
     # is the ordinary state on a machine with no index — and it must not be the
     # SILENT state, because the agent then answers from what the model already
@@ -3164,6 +3164,43 @@ def _unchecked_answers(spec: AgentSpec) -> tuple[str, ...]:
         for tool in spec.tools
         for action, shape in sorted(tool.answers_with.items())
     )
+
+
+def _unheld(spec: AgentSpec) -> tuple[str, ...]:
+    """The lines this loop reads nothing of, said rather than skipped.
+
+    `checked-by:`, `teamwork.may-start:` and a list under `model:` are checked
+    by `pact check` and carried by `ir`, and nothing in `run` holds any of them:
+    an answer is returned without being held to its rules, nobody can be
+    started who is not on `team:`, and the one transport this run was handed is
+    the only model it will ever ask. Silence here let `pact-eval` score an agent
+    whose checks never ran as though they had.
+    """
+    out: list[str] = []
+    if spec.checked_by:
+        out.append(
+            f"checked-by: {spec.key or 'this agent'} holds an answer to "
+            f"{len(spec.checked_by)} rule(s) before it is the answer, and this "
+            "runtime returns the answer unchecked. fix: run it on a runtime that "
+            "holds `checked-by:`, or hold the answer yourself with "
+            "`evals.first_broken(spec.checked_by, result)`."
+        )
+    if spec.teamwork.may_start:
+        allowed = ", ".join(sorted(str(getattr(w, "value", w)) for w in spec.teamwork.may_start))
+        out.append(
+            f"may-start: {spec.key or 'this agent'} may bring in {allowed} while it "
+            "runs, and this runtime offers it nobody beyond `team:`, so nothing was "
+            "started. fix: run it on a runtime that holds `may-start:`."
+        )
+    if len(spec.models) > 1:
+        rest = ", ".join(spec.models[1:])
+        out.append(
+            f"model: {spec.key or 'this agent'} falls back to {rest} when "
+            f"{spec.models[0]} fails, and this run was handed one transport, so a "
+            "failed call was not tried anywhere else. fix: hand `run` a transport "
+            "that tries the list in order."
+        )
+    return tuple(out)
 
 
 def _call_tool(fn, call: "ToolCall") -> str:
