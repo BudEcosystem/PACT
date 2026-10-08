@@ -424,6 +424,25 @@ def test_a_card_number_nested_inside_another_argument_is_masked_too() -> None:
     assert out["args"]["payer"]["cards"] == ["[card number removed]", "keep me"]
 
 
+@pytest.mark.parametrize("card", [
+    "4111\u00a01111\u00a01111\u00a01111",  # no-break spaces: HTML `&nbsp;`, Word, PDF text
+    "4111\u202f1111\u202f1111\u202f1111",  # narrow no-break spaces
+    "4111\u20091111\u20091111\u20091111",  # thin spaces
+    "4111.1111.1111.1111",                    # dots
+], ids=["nbsp", "narrow-nbsp", "thin-space", "dots"])
+def test_a_card_number_parted_by_other_separators_is_masked_and_a_decimal_is_not(card: str) -> None:
+    """The groups were parted only by an ASCII space or a hyphen, so a card
+    copied from a web page, a Word file or a PDF, or written with dots, went
+    through untouched. One dot is a decimal number, and stays."""
+    c = Chain.from_document(_masking_tool_args(), "a")
+    out, _ = c.run("step.tool.before", {
+        "name": "payments",
+        "args": {"note": f"paid by card {card}.", "at": "1759912345.678", "amount": "12345678901.25"},
+    })
+    assert out["args"]["note"] == "paid by card [card number removed].", out
+    assert out["args"]["at"] == "1759912345.678" and out["args"]["amount"] == "12345678901.25"
+
+
 def test_a_card_number_that_arrived_as_a_number_is_masked_and_an_amount_is_not() -> None:
     """`{"card": 4111111111111111}` is a string that skipped its quotes.
 

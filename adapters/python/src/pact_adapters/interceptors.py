@@ -829,7 +829,17 @@ RECOGNISES: Mapping[str, str] = {
     # message and in a tool argument. This module's own note says over-matching
     # is the safe direction here and under-matching is not, so the bound is open
     # at the top rather than a ceiling that turns into a miss.
-    "card number": r"\b(?:\d[ -]*?){12,}\d\b",
+    #
+    # The groups were parted only by an ASCII space or a hyphen, so a card as
+    # HTML (`&nbsp;`), Word and PDF text give it, with no-break spaces (U+00A0,
+    # the narrow U+202F, the figure and thin spaces U+2007 and U+2009), reached
+    # the model whole, and so did one written with dots. A dotted run counts only
+    # with at least two dots: one dot is a decimal number, and an amount or a
+    # timestamp with a fraction is not a card.
+    "card number": (
+        r"\b(?:\d[ \u00a0\u2007\u2009\u202f-]*?){12,}\d\b"
+        r"|\b(?=(?:\d\.?){13,}\b)\d+(?:\.\d+){2,}\b"
+    ),
     "bank account": (
         # IBAN in four-character groups. The trailing `{1,3}` is the short last
         # group a real IBAN ends on — a GB one is 22 characters, so written in
