@@ -41,6 +41,8 @@ as an attachment; delete it and you still have a working agent.
 | [Advantages](#advantages) | What you get that you did not have |
 | [Disadvantages](#disadvantages-and-when-not-to-use-pact) | Honest costs, and when to use something else |
 | [Compared with](#compared-with) | Eve, LangGraph, CrewAI, A2A, MCP |
+| [Runtimes](#runtimes) | What runs a PACT tree in production today |
+| [What's new](#whats-new) | What the latest round added to the spec and the adapters |
 | [Status](#status) | What is proven, and what is still owed |
 
 ---
@@ -573,17 +575,58 @@ consent gate and the published-tool digest that the protocol leaves to you.
 
 ---
 
+## Runtimes
+
+The harness in `adapters/python` runs a tree on any of the seven targets, and it is the
+reference every other runtime is measured against. For production use on Pydantic AI there is
+**[Bud Agent Flow](https://github.com/BudEcosystem/Bud-Agent-Flow)**: it compiles each agent of
+a tree into a real Pydantic AI 2.54 agent, with no per-agent code and no change to Pydantic AI,
+and runs it against a journal, so approvals survive restarts, a killed run resumes without
+repeating a write, and every limit, loop, team, eval and port comes from the tree. It implements
+261 of the spec's 306 fields, each proven by a test (the other 45 have no run-time behaviour),
+and has been run against 19 complex multi-agent scenarios on two real models with every rule
+holding. Where it and this harness differ, it says so, field by field.
+
+---
+
+## What's new
+
+The latest round, driven by running PACT trees in production on Pydantic AI, added these to
+the spec. Every one is checked by `pact check` and held by the harness. The details are in
+[`CHANGELOG.md`](CHANGELOG.md).
+
+| Added | What you write | What it does |
+|---|---|---|
+| **Values known only at run time** | `{{run-inputs.brand}}`, `{{remembers.tone}}` in `instructions:` | the system fills them before the model reads the words; a hole that names nothing the agent declares is refused; `\{{...}}` keeps braces for the model |
+| **Fallback models** | `model: [qwen2.5-14b-instruct, qwen2.5-7b-instruct]` | the next model is tried only when a call fails at the provider; each one is held to `allow-egress:` and `needs:` |
+| **Answers checked before they count** | `checked-by:` with `must-contain:`, `must-say-one-of:`, ...; `checks-at-most:` | a failed check asks again with the reason; still failing, the run stops and names the rule |
+| **Typed action results** | `answers-with:` on an action | what a tool hands back, in the same shapes as an agent's answer; checked against a program's own `answers-with:` |
+| **Agents started at run time** | `teamwork.may-start: [catalogue, narrowed-new]` with `limits.starts-at-most:` and `nests-at-most:` | an agent may bring in others while it works, each start journaled, counted and paid from the request's pot; nothing is written into the tree |
+| **One grammar for schedules** | `every:` on a port's timer | read one way by every runtime; an hour is never guessed |
+| **Program bodies, specified** | `programs:` with `engine: python` or `wasm` | a Python body gets `inputs` and answers with its last line; a WASM body reads and writes one JSON object |
+| **Learning, scored by the host** | `learning.yaml` | a cycle is scored by the host's own runner from a kept baseline, and "held for a person" is its own outcome |
+
+It also tightened what already existed: nobody is asked to approve a call that at-most-once
+would refuse anyway; an amount nothing can read as a figure stops at the gate; a card number
+written with no-break spaces or dots is redacted too; `feel:` is a latency band that stops
+nothing. The Python adapters now run on **Pydantic AI 2.54**, import none of its private names,
+never hand it a ceiling nobody wrote, and keep one table (`pydantic_ai_registry.yaml`) of what
+each field becomes there. The core installs with three packages, and every other framework is an
+extra.
+
+---
+
 ## Status
 
 | | |
 |---|---|
 | **Design** | Thesis, 28 binding decisions, FRD (120 requirements), 60-row refusal ledger — complete |
 | **Research** | 14 source-grounded studies, ~15,750 lines, over 140 repos (~15 GB) + 57 papers |
-| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **3509 tests (1139 Rust + 2370 adapter), clippy clean, TypeScript type-checked** |
+| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **3513 tests (1139 Rust + 2374 adapter), clippy clean, TypeScript type-checked** |
 | **Adapters** | **All 7 named targets**, proven against one shared conformance suite |
 
 ```bash
-./scripts/test-all.sh          # 3509 tests, Rust + 7 adapters, fully offline
+./scripts/test-all.sh          # 3513 tests, Rust + 7 adapters, fully offline
 ```
 
 **What is still owed** is not hidden — it lives in
