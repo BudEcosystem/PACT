@@ -1,0 +1,4 @@
+description: An approval rule to make your own, and the question it asks.
+version: "0.1"
+from: bundles/approvals-kit
+brings: [policies, questions]

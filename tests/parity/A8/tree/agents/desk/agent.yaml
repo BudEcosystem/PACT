@@ -1,0 +1,5 @@
+description: Answers order questions.
+instructions: Answer the customer briefly.
+settings:
+  temperature: 0.2
+  max-tokens: 300

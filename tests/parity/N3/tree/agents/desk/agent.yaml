@@ -1,0 +1,7 @@
+description: Answers order questions.
+instructions: The customer prefers {{remembers.language}}.
+remembers:
+  language:
+    description: the language the customer prefers
+    lasts: forever
+    starts-as: English

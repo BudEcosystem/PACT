@@ -8,7 +8,29 @@ holds that did not; the commits are listed under it for whoever wants the detail
 Running PACT trees in production on Pydantic AI 2.54, through
 [Bud Agent Flow](https://github.com/BudEcosystem/Bud-Agent-Flow), drove these changes. Every
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
-runs offline: 3513 tests, 1139 Rust and 2374 adapter.
+runs offline: 3602 tests, 1145 Rust and 2457 adapter.
+
+### The parity suite, and five defects the corpus hit (9 October)
+
+- **`tests/parity/`**: one folder per 02P row Phase 1 compiles, each a fixture and an
+  `expect.yaml`, run by `adapters/python/tests/test_parity.py`: the import accounts for every key,
+  the report a person reads uses plain words, and each row's behaviour holds on PACT's own Pydantic
+  AI path. One completeness test fails on any Pydantic AI name the registry has no row for, through
+  seven doors (capabilities, `AgentSpec` keys, `ModelSettings` keys, message parts, stream events,
+  `ToolDefinition` fields, `GraphBuilder` members). `ImportReport.in_plain_words()` is that report,
+  and `pact-import` prints it first.
+- **Two calls to one tool in one step are two calls.** The harness kept a step's results and
+  refusals keyed by the tool's name, so a cleared call waited while a sibling of the same tool
+  waited, and a no to one refused both. They are keyed by the call (`harness.slots_of`).
+- **A pattern a bundle contributes is checked as a pattern.** Its `more-than: <limit>` hole was
+  refused as a finished rule (`loader/threshold-is-not-a-figure`); it is held to its own
+  `expects:` instead, as a workspace's pattern is.
+- **`redaction.yaml` can name a social security number**, and a bank account in lower case is a
+  bank account.
+- **The "not a shape" refusal names only shapes that parse** (it offered descriptions such as
+  "an amount of money, like `25.00 USD`").
+- **`tools/catalog.yaml` is the tool `catalog`.** A file named after a kind directly in a
+  collection's folder was read as the folder's own settings.
 
 ### New in the spec
 

@@ -399,6 +399,11 @@ capabilities:
 # `AgentSpec` file, `agent.<attr>` the attribute of a live `Agent` a report names,
 # `settings.<key>` a `ModelSettings` key outside the twelve
 # `pydantic_ai_transport._SETTINGS` maps (that table is the authority on those).
+# Four more doors are named so the completeness test (02P §6 S4) can hold every
+# name the installed Pydantic AI has: `part.<Class>` a message part (what a
+# conversation is made of), `event.<Class>` a member of `AgentStreamEvent`,
+# `tool-definition.<field>` a field of `ToolDefinition`, and `graph.<method>` a
+# public member of pydantic-graph's `GraphBuilder`.
 # `pact:` is PACT's spelling of one that crosses; `why:` the named loss; `left:`
 # what an export leaves to Pydantic AI's own default, and why.
 names:
@@ -573,3 +578,354 @@ names:
     outcome: loss
     rows: [A10]
     why: "raw request-body fields for one provider. Not a fact about the agent"
+
+  # ── message parts (02P C1): what crosses into a PACT history and what does not.
+  # The crossing is `pact_agent.to_pact_history` / `from_history`, whose own report
+  # names each field it leaves behind.
+  part.SystemPromptPart:
+    outcome: loss
+    rows: [C1]
+    why: >-
+      a system prompt that arrived inside a conversation. PACT builds the system text
+      for each stage from the author's `instructions:`, skills and `answers-with:`, so
+      one handed in from elsewhere does not cross
+  part.UserPromptPart:
+    outcome: mapped
+    rows: [C1, F1]
+    pact: "a `user` turn of the history (`content:`); a part that is not text is named in the crossing's report"
+  part.ToolReturnPart:
+    outcome: mapped
+    rows: [C1, T3]
+    pact: "a `tool` turn of the history (`name:` and `content:`)"
+  part.RetryPromptPart:
+    outcome: loss
+    rows: [C1]
+    why: >-
+      another framework's loop correcting the model. PACT owns the loop, and reading a
+      retry as a turn would make the agent answer the correction instead of the question
+  part.SpeechPart:
+    outcome: loss
+    rows: [M11]
+    why: &speech >-
+      speech to speech in one realtime session. Each voice turn is a message in PACT;
+      a realtime session does not cross
+  part.ToolSearchCallPart:
+    outcome: loss
+    rows: [T9]
+    why: &tool-search >-
+      Pydantic AI's own tool search, which the runtime turns on by itself. There is
+      nothing to write in PACT, so nothing records the search
+  part.ToolSearchReturnPart:
+    outcome: loss
+    rows: [T9]
+    why: *tool-search
+  part.LoadCapabilityCallPart:
+    outcome: loss
+    rows: [X3]
+    why: &load-capability >-
+      a capability loaded on demand. Skills always load on demand in PACT, so a load
+      is not a turn of the conversation
+  part.LoadCapabilityReturnPart:
+    outcome: loss
+    rows: [X3]
+    why: *load-capability
+  part.ToolAvailabilityDeltaPart:
+    outcome: loss
+    rows: [T8, T9]
+    why: &tools-offered >-
+      a change in which tools the model is offered, made by Pydantic AI's loop. PACT
+      decides what a stage may use when the tree is checked (`may-use:`,
+      `available-when:`)
+  part.TextPart:
+    outcome: mapped
+    rows: [C1]
+    pact: "an `assistant` turn's `content:`"
+  part.ToolCallPart:
+    outcome: mapped
+    rows: [C1]
+    pact: "an `assistant` turn's `tool_calls:` (the names; the crossing's report says the arguments stay behind)"
+  part.ThinkingPart:
+    outcome: mapped
+    rows: [C1]
+    pact: "an `assistant` turn's `thinking:`, which `drop-parts: the model's own thinking` matches"
+  part.NativeToolCallPart:
+    outcome: loss
+    rows: [N7]
+    why: &native >-
+      a tool the provider ran on its own side. PACT reaches other systems only through
+      the tools the author wrote, so a provider's own call has nowhere to go
+  part.NativeToolReturnPart:
+    outcome: loss
+    rows: [N7]
+    why: *native
+  part.NativeToolSearchCallPart:
+    outcome: loss
+    rows: [N7, T9]
+    why: *native
+  part.NativeToolSearchReturnPart:
+    outcome: loss
+    rows: [N7, T9]
+    why: *native
+  part.CompactionPart:
+    outcome: loss
+    rows: [C4]
+    why: >-
+      a provider's own summary of the earlier conversation. PACT shortens a
+      conversation with `context-policy:` (`summarise-older`), which any model can do
+  part.FilePart:
+    outcome: loss
+    rows: [F4]
+    why: >-
+      a file the model made inside a reply. A PACT history holds words; an answer that
+      is a file is written `answers-with:` with `file` or `images`
+
+  # ── stream events (02P S2): PACT's facade does not stream a run part by part
+  # (`PactAgent.run_stream_events` yields the finished run once), so no event
+  # crosses. Each names the `watch:` address that sees the same moment.
+  event.PartStartEvent:
+    outcome: loss
+    rows: [S2]
+    why: &part-events >-
+      a part of a reply as it streams. PACT does not stream parts; a `watch:` on
+      `step.message.completed` sees each finished reply
+  event.PartDeltaEvent:
+    outcome: loss
+    rows: [S2]
+    why: *part-events
+  event.PartEndEvent:
+    outcome: loss
+    rows: [S2]
+    why: *part-events
+  event.FinalResultEvent:
+    outcome: loss
+    rows: [S2]
+    why: "the moment the final answer begins. A `watch:` on `turn.message.completed` sees the answer"
+  event.EnqueuedMessagesEvent:
+    outcome: loss
+    rows: [A21]
+    why: "messages queued into a running run. PACT has no steering yet; a run takes its input when it starts"
+  event.FunctionToolCallEvent:
+    outcome: loss
+    rows: [S2]
+    why: "a tool call starting. A `watch:` on `step.tool.started` sees it"
+  event.FunctionToolResultEvent:
+    outcome: loss
+    rows: [S2]
+    why: "a tool call's result. A `watch:` on `step.tool.completed` sees it"
+  event.ToolAvailabilityDeltaEvent:
+    outcome: loss
+    rows: [T8, T9]
+    why: *tools-offered
+  event.OutputToolCallEvent:
+    outcome: loss
+    rows: [S2, O4]
+    why: &output-tool >-
+      Pydantic AI's output tool, its way of taking a typed answer. PACT takes the
+      answer in `answers-with:`; a `watch:` on `turn.message.completed` sees it
+  event.OutputToolResultEvent:
+    outcome: loss
+    rows: [S2, O4]
+    why: *output-tool
+  event.DeferredToolRequestsEvent:
+    outcome: loss
+    rows: [H1, H2]
+    why: "a run ending to wait. A PACT run parks with a `Suspension`; a `watch:` on `step.approval.requested` sees it"
+  event.DeferredToolResultsEvent:
+    outcome: loss
+    rows: [H3, H4]
+    why: "the answers a waiting run resumes with. A `watch:` on `step.approval.completed` sees each"
+  event.RealtimeTurnCompleteEvent:
+    outcome: loss
+    rows: [M11]
+    why: *speech
+  event.RealtimeInputSpeechStartEvent:
+    outcome: loss
+    rows: [M11]
+    why: *speech
+  event.RealtimeInputSpeechEndEvent:
+    outcome: loss
+    rows: [M11]
+    why: *speech
+  event.RealtimeOutputSpeechStartEvent:
+    outcome: loss
+    rows: [M11]
+    why: *speech
+  event.RealtimeOutputSpeechEndEvent:
+    outcome: loss
+    rows: [M11]
+    why: *speech
+  event.RealtimeResponseInterruptedEvent:
+    outcome: loss
+    rows: [M11]
+    why: *speech
+  event.RealtimeInputTranscriptionErrorEvent:
+    outcome: loss
+    rows: [M11]
+    why: *speech
+  event.RealtimeSessionReconnectEvent:
+    outcome: loss
+    rows: [M11]
+    why: *speech
+  event.RealtimeSessionErrorEvent:
+    outcome: loss
+    rows: [M11]
+    why: *speech
+  event.CustomEvent:
+    outcome: loss
+    rows: [S3]
+    why: &own-events >-
+      an event a capability or a tool's own code emits. Code does not cross (02P §1
+      rule 3); a `watch:` sees the moments PACT's own run passes
+  event.CapabilityEvent:
+    outcome: loss
+    rows: [S3, X1]
+    why: *own-events
+
+  # ── `ToolDefinition` fields (02P T1, T2, T7): what PACT's tool files say of each.
+  tool-definition.name:
+    outcome: carried
+    rows: [T1]
+    pact: "the tool's file name, `tools/<name>.yaml`"
+  tool-definition.description:
+    outcome: carried
+    rows: [T1]
+    pact: "`description:` of the tool and of each action"
+  tool-definition.parameters_json_schema:
+    outcome: carried
+    rows: [T1]
+    pact: "`actions.<a>.takes:`"
+  tool-definition.return_schema:
+    outcome: carried
+    rows: [T2]
+    pact: "`actions.<a>.answers-with:`"
+  tool-definition.include_return_schema:
+    outcome: mapped
+    rows: [T2]
+    pact: "`actions.<a>.answers-with:`, shown to the model from the schema `return_schema_for` builds"
+  tool-definition.kind:
+    outcome: mapped
+    rows: [T7, T11, H1]
+    pact: "a tool with a host executor is `function`; with none, `external` (the run ends with `DeferredToolRequests`); a call `policy:` gates is held for a person"
+  tool-definition.sequential:
+    outcome: mapped
+    rows: [A13, T7]
+    pact: "`reads-only:` — a read may run beside others; a write runs alone"
+  tool-definition.strict:
+    outcome: loss
+    rows: [T7]
+    why: >-
+      whether the provider must keep to the argument schema exactly. PACT reads every
+      argument against `takes:` itself, so the host's model decides and nothing is
+      written
+  tool-definition.timeout:
+    outcome: loss
+    rows: [A15]
+    why: *tool_timeout
+  tool-definition.metadata:
+    outcome: loss
+    rows: [T7]
+    why: "what a toolset tags a tool with for its own code. Not a fact about what the tool does"
+  tool-definition.outer_typed_dict_key:
+    outcome: loss
+    rows: [T7]
+    why: "how Pydantic AI unwraps arguments for one Python function. A PACT action's arguments are `takes:` as written"
+  tool-definition.defer_loading:
+    outcome: loss
+    rows: [T9]
+    why: *tool-search
+  tool-definition.unless_native:
+    outcome: loss
+    rows: [N1]
+    why: &native-pair >-
+      how Pydantic AI pairs a local tool with a provider's own one. PACT reaches other
+      systems only through the tools the author wrote
+  tool-definition.with_native:
+    outcome: loss
+    rows: [N1]
+    why: *native-pair
+  tool-definition.tool_kind:
+    outcome: loss
+    rows: [T7]
+    why: "which runtime executes the tool. PACT's tools are the author's files, and who runs one is the host's choice"
+  tool-definition.toolset_id:
+    outcome: loss
+    rows: [T12]
+    why: &whose-tool >-
+      which toolset or capability a tool came from, Pydantic AI's own bookkeeping.
+      PACT flattens every tool into `uses:`
+  tool-definition.capability_id:
+    outcome: loss
+    rows: [T12, X1]
+    why: *whose-tool
+
+  # ── pydantic-graph `GraphBuilder` (02P G1-G9). PACT has no workflow document yet
+  # (`workflows/<n>.yaml`, 02W), so a built graph does not cross. The G rows say
+  # what each becomes when it does.
+  graph.Source:
+    outcome: loss
+    rows: [G1]
+    why: &no-workflows >-
+      part of a pydantic-graph graph. A PACT tree has no workflows yet, so a built
+      graph does not cross; 02P §2.13 says what each part becomes when workflows land
+  graph.Destination:
+    outcome: loss
+    rows: [G1]
+    why: *no-workflows
+  graph.add:
+    outcome: loss
+    rows: [G1]
+    why: *no-workflows
+  graph.add_edge:
+    outcome: loss
+    rows: [G1]
+    why: *no-workflows
+  graph.add_mapping_edge:
+    outcome: loss
+    rows: [G5]
+    why: *no-workflows
+  graph.build:
+    outcome: loss
+    rows: [G1]
+    why: *no-workflows
+  graph.decision:
+    outcome: loss
+    rows: [G3]
+    why: *no-workflows
+  graph.edge_from:
+    outcome: loss
+    rows: [G1, G4]
+    why: *no-workflows
+  graph.end_node:
+    outcome: loss
+    rows: [G7]
+    why: *no-workflows
+  graph.join:
+    outcome: loss
+    rows: [G6]
+    why: *no-workflows
+  graph.match:
+    outcome: loss
+    rows: [G3]
+    why: *no-workflows
+  graph.match_node:
+    outcome: loss
+    rows: [G3]
+    why: *no-workflows
+  graph.node:
+    outcome: loss
+    rows: [G1]
+    why: *no-workflows
+  graph.start_node:
+    outcome: loss
+    rows: [G7]
+    why: *no-workflows
+  graph.step:
+    outcome: loss
+    rows: [G2]
+    why: *no-workflows
+  graph.stream:
+    outcome: loss
+    rows: [G8]
+    why: >-
+      a step that streams. Streams are out of scope for PACT workflows (02P G8), so
+      it stays a loss when workflows land

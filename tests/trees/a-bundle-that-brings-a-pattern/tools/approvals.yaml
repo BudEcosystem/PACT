@@ -1,0 +1,11 @@
+description: The system of record for decisions.
+connect: approvals-server
+actions:
+  record-decision:
+    description: Record that a request was approved or declined, with its amount.
+    takes:
+      request-id: text
+      amount: money
+      decision: one of approved, declined
+    spends-money: no
+    same-request-key: request-id

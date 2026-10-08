@@ -1,0 +1,6 @@
+description: Answers order questions.
+instructions: Answer the customer briefly.
+checked-by:
+  - must-contain: [order]
+    because: the customer must hear about the order
+checks-at-most: 1

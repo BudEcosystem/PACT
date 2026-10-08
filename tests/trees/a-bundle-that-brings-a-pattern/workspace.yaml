@@ -1,0 +1,6 @@
+name: a-bundle-that-brings-a-pattern
+description: A workspace that mounts a bundle whose approval rule is a pattern, with its figure left for the workspace to fill.
+owner: support-operations
+
+# Nothing here talks to anything outside this box.
+allow-egress: []

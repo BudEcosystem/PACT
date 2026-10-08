@@ -1,0 +1,16 @@
+# 02P N3: a named memory: what the agent remembers fills its `{{remembers.<n>}}` holes.
+row: N3
+says: 'a named memory: what the agent remembers fills its `{{remembers.<n>}}` holes'
+remembered:
+  language: Welsh
+model:
+- say: ok
+expect:
+  instructions-have:
+  - The customer prefers Welsh.
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable: []

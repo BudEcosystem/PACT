@@ -1,0 +1,16 @@
+# 02P A2: `description:` with a hole is filled from the run's inputs; no braces reach anyone.
+row: A2
+says: '`description:` with a hole is filled from the run''s inputs; no braces reach
+  anyone'
+inputs:
+  brand: Lumen Lamps
+model:
+- say: ok
+expect:
+  description: Answers order questions for Lumen Lamps.
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable: []

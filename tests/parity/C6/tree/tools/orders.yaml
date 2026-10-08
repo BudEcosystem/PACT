@@ -1,0 +1,10 @@
+description: Looks orders up and refunds them.
+connect: orders-server
+actions:
+  order-status:
+    description: The status of one order.
+    reads-only: yes
+    takes:
+      order-number: text
+    answers-with:
+      status: one of placed, shipped, delivered

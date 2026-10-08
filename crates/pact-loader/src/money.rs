@@ -543,7 +543,18 @@ fn a_threshold_that_is_not_a_figure(document: &Node, diags: &mut Diagnostics) {
 /// `currency.rs::walk` already made this call for the currency half, for the
 /// same reason and in the same words: *"A walk that knew where to look would
 /// have to be updated for the next one."*
+///
+/// **Not inside a pattern.** A pattern (`expects:`) is a way of making a
+/// document, and its `more-than: <limit>` is a hole the caller fills. In a
+/// workspace the pattern is gone before this runs (`derive::resolve`), and the
+/// copy made from it is checked here with its figure filled in. A pattern a
+/// bundle contributes stays where it was written, so this walk used to meet the
+/// hole and refuse a correct pattern as a finished rule with no figure. It is
+/// held to its own declarations instead (`bundles`), as a workspace's is.
 fn every_gate(node: &Node, seen: &mut dyn FnMut(&Node)) {
+    if crate::templates::is_a_pattern(node) {
+        return;
+    }
     if let Some(map) = node.as_map() {
         if map.get("more-than").is_some() {
             seen(node);

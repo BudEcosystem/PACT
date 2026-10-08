@@ -1,0 +1,22 @@
+# 02P H1: a call the policy gates parks the run on `DeferredToolRequests.approvals`, and nothing runs.
+row: H1
+says: a call the policy gates parks the run on `DeferredToolRequests.approvals`, and
+  nothing runs
+model:
+- call: payments
+  args:
+    action: refund
+    order-number: A-1
+    amount: 40.00 USD
+expect:
+  waiting:
+  - payments
+  calls: []
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  - requires_approval
+  - toolsets
+  not-portable: []

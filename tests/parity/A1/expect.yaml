@@ -1,0 +1,13 @@
+# 02P A1: `Agent(...)` is one `agents/<n>/agent.yaml`: the agent runs and answers.
+row: A1
+says: '`Agent(...)` is one `agents/<n>/agent.yaml`: the agent runs and answers'
+model:
+- say: Your order has shipped.
+expect:
+  output: Your order has shipped.
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable: []

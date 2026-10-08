@@ -79,7 +79,7 @@ from pydantic_ai.usage import RunUsage
 
 from . import harness
 from .exporting import ExportReport
-from .harness import CHOSEN_ANSWER_MODE, RunResult, _system_for
+from .harness import CHOSEN_ANSWER_MODE, RunResult, _system_for, slots_of
 from .ir import AgentSpec
 from .limits import Reached
 from .pydantic_ai_interop import (
@@ -1856,30 +1856,25 @@ def _pending(parked: Suspension) -> "list[tuple[str, Any]]":
     (`harness.run` sets `pending = resume.awaiting` and replays the step from
     it). The harness deliberately carries out everything the gate cleared BEFORE
     it parks — *"a person who approves two of three actions gets those two"* —
-    and records each under `already[call.name]`, which `_park_state` copies onto
+    and records each under `already[<its slot>]`, which `_park_state` copies onto
     `completed`. Publishing all of `awaiting` as `approvals` therefore asks
     somebody to authorise the refund that has already gone out, and a host whose
     approval UI is driven by this list shows a decision that cannot be made.
 
     **The slot is the harness's, and its first call keeps the BARE name.**
-    `harness.py:1461-1465` mints `c.name` for a step's first call to a tool and
+    ``harness.slots_of`` mints `c.name` for a step's first call to a tool and
     `<name>#<n>` only from the second on, and that slot is the key an answer is
     filed and read under. Numbering from one instead gives the FIRST call
     `payments#1`, which is the harness's name for the SECOND — so an approval of
     the 40 USD refund arrives as the answer to the 300 USD one beside it.
     """
-    seen: dict[str, int] = {}
-    pending: list[tuple[str, Any]] = []
-    for call in parked.awaiting:
-        nth = seen.get(call.name, 0)
-        seen[call.name] = nth + 1
-        # By NAME, because `completed` is keyed by name — which is also why the
-        # harness holds back a cleared call whose name still has another call
-        # waiting: one entry cannot hold two outcomes, so either both ran or
-        # neither did.
-        if call.name not in parked.completed:
-            pending.append((call.name if nth == 0 else f"{call.name}#{nth}", call))
-    return pending
+    # By SLOT, the key `completed` has: a call the gate cleared ran before the
+    # park even when another call to its tool is still waiting.
+    return [
+        (slot, call)
+        for slot, call in zip(slots_of(parked.awaiting), parked.awaiting)
+        if slot not in parked.completed
+    ]
 
 
 def _waiting_on(parked: Suspension) -> DeferredToolRequests:
@@ -1891,7 +1886,7 @@ def _waiting_on(parked: Suspension) -> DeferredToolRequests:
     the harness will execute it itself when the wait clears.
 
     **Every key is PACT's own.** The slot comes from `_pending`, which is
-    `harness.py:1461-1465` — the bare tool name for a step's first call to it,
+    ``harness.slots_of`` — the bare tool name for a step's first call to it,
     `<tool>#<n>` from the second on — and never a provider's `tool_call_id`,
     because a provider id is minted by whichever model happened to serve the step
     and a resume has to survive the process dying. Minting them here instead is

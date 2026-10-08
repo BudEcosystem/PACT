@@ -1,0 +1,18 @@
+# 02P A8: `settings:` reach the model request as `ModelSettings`.
+row: A8
+says: '`settings:` reach the model request as `ModelSettings`'
+model:
+- say: ok
+expect:
+  settings:
+    temperature: 0.2
+    max_tokens: 300
+import:
+  mapped:
+  - description
+  - instructions
+  - model_settings
+  - model_settings.max_tokens
+  - model_settings.temperature
+  - name
+  not-portable: []

@@ -1,0 +1,6 @@
+description: Answers order questions.
+instructions: Answer the customer briefly.
+limits:
+  cost-per-request-under: 0.05 USD
+  runs-for-at-most: 2m
+  when-it-runs-out: stop-and-say-so

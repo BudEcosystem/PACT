@@ -1,0 +1,11 @@
+description: A person's yes or no on a refund.
+says: Refund this order?
+answer:
+  approved: yes or no
+  because: text
+shows:
+  - order-number
+  - amount
+asked-of: [support-leads]
+answer-within: 1d
+if-nobody-answers: decline

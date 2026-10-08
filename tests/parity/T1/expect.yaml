@@ -1,0 +1,17 @@
+# 02P T1: a tool file is a tool the model is offered with its `takes:` as the schema.
+row: T1
+says: a tool file is a tool the model is offered with its `takes:` as the schema
+model:
+- say: ok
+expect:
+  offered:
+    orders:
+    - action
+    - order-number
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  - toolsets
+  not-portable: []

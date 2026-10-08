@@ -571,7 +571,8 @@ consent gate and the published-tool digest that the protocol leaves to you.
 | [`examples/answers-from-documents`](examples/answers-from-documents) | Retrieval with citation rules |
 | [`examples/mcp-desk`](examples/mcp-desk) | A tool that reaches a real MCP server, with consent |
 | [`examples/patterns/`](examples/patterns) | Eight orchestration patterns: debate, quorum, race, swarm, pipeline, weighted, escalation, first-answer |
-| [`tests/trees/`](tests/trees) | Thirteen fixtures, each the smallest tree that shows one thing |
+| [`tests/trees/`](tests/trees) | Twenty fixtures, each the smallest tree that shows one thing |
+| [`tests/parity/`](tests/parity) | The Pydantic AI parity suite: one fixture per row Phase 1 compiles, and what each must show |
 
 ---
 
@@ -605,13 +606,16 @@ the spec. Every one is checked by `pact check` and held by the harness. The deta
 | **One grammar for schedules** | `every:` on a port's timer | read one way by every runtime; an hour is never guessed |
 | **Program bodies, specified** | `programs:` with `engine: python` or `wasm` | a Python body gets `inputs` and answers with its last line; a WASM body reads and writes one JSON object |
 | **Learning, scored by the host** | `learning.yaml` | a cycle is scored by the host's own runner from a kept baseline, and "held for a person" is its own outcome |
+| **A social security number, hidden** | `anything that looks like a social security number` in `redaction.yaml` | a US one is hidden however it is parted; a bank account in lower case is a bank account too |
 
 It also tightened what already existed: nobody is asked to approve a call that at-most-once
 would refuse anyway; an amount nothing can read as a figure stops at the gate; a card number
 written with no-break spaces or dots is redacted too; `feel:` is a latency band that stops
 nothing. The Python adapters now run on **Pydantic AI 2.54**, import none of its private names,
 never hand it a ceiling nobody wrote, and keep one table (`pydantic_ai_registry.yaml`) of what
-each field becomes there. The core installs with three packages, and every other framework is an
+each field becomes there, held by a parity suite (`tests/parity/`) that fails on any Pydantic AI
+name the table has never seen. Two calls to one tool in one step are answered one by one; a
+pattern a bundle brings is checked as a pattern; `tools/catalog.yaml` is the tool `catalog`. The core installs with three packages, and every other framework is an
 extra.
 
 ---
@@ -622,11 +626,11 @@ extra.
 |---|---|
 | **Design** | Thesis, 28 binding decisions, FRD (120 requirements), 60-row refusal ledger — complete |
 | **Research** | 14 source-grounded studies, ~15,750 lines, over 140 repos (~15 GB) + 57 papers |
-| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **3513 tests (1139 Rust + 2374 adapter), clippy clean, TypeScript type-checked** |
+| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **3602 tests (1145 Rust + 2457 adapter), clippy clean, TypeScript type-checked** |
 | **Adapters** | **All 7 named targets**, proven against one shared conformance suite |
 
 ```bash
-./scripts/test-all.sh          # 3513 tests, Rust + 7 adapters, fully offline
+./scripts/test-all.sh          # 3602 tests, Rust + 7 adapters, fully offline
 ```
 
 **What is still owed** is not hidden — it lives in
@@ -664,10 +668,11 @@ crates/              Rust core
   pact-cli/          check · show · waits · discover · card — never runs your code
 adapters/python/     reference harness, six transports, resolver, evals, learning
 adapters/typescript/ the second port — Node, smaller on purpose, and says so
-spec/schema.yaml     the specification, written in PACT (4,661 lines)
+spec/schema.yaml     the specification, written in PACT (4,792 lines)
 spec/loops/          six loop shapes, authored the way anybody's are
 examples/            the worked example, plus eight orchestration patterns
-tests/trees/         thirteen fixtures, one idea each
+tests/trees/         twenty fixtures, one idea each
+tests/parity/        the Pydantic AI parity suite, one folder per row
 docs/                thesis · decisions · FRD · plan · refusals · gaps
 ```
 

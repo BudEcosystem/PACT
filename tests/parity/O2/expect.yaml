@@ -1,0 +1,23 @@
+# 02P O2: a typed `answers-with:` (a choice, money, a whole number, yes or no) comes back as that shape.
+row: O2
+says: a typed `answers-with:` (a choice, money, a whole number, yes or no) comes back
+  as that shape
+model:
+- say:
+    status: shipped
+    refund: 0.00 USD
+    parcels: 2
+    late: false
+expect:
+  output:
+    status: shipped
+    refund: 0.00 USD
+    parcels: 2
+    late: false
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  - output_type
+  not-portable: []

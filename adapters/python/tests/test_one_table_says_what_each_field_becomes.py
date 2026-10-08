@@ -1,15 +1,15 @@
 """02P §4: one registry from PACT field to Pydantic AI construct.
 
 `pydantic_ai_registry.yaml` replaced the tables `pydantic_ai_interop.py` kept
-by hand. These hold it whole in both directions: every agent, tool and action
-field the schema declares has a row, and every capability class, `AgentSpec`
-field and `ModelSettings` key the installed Pydantic AI has an entry, so moving
-the pin is a test run.
+by hand. These hold the PACT half whole: every agent, tool and action field the
+schema declares has a row. The Pydantic AI half (every capability, `AgentSpec`
+field, `ModelSettings` key, message part, stream event, `ToolDefinition` field
+and `GraphBuilder` member the installed packages have) is the parity suite's
+one completeness check, `test_parity.py::test_s4_*`.
 """
 
 from __future__ import annotations
 
-import inspect
 import sys
 from pathlib import Path
 
@@ -70,21 +70,6 @@ def test_no_row_shares_one_usage_object_across_a_delegation() -> None:
     assert not said, f"{sorted(said)} hand a member its caller's usage; a member runs on its own (AD-R7)"
 
 
-def test_every_capability_pydantic_ai_ships_has_an_entry() -> None:
-    capabilities = pytest.importorskip("pydantic_ai.capabilities")
-    shipped = {
-        name
-        for name, value in vars(capabilities).items()
-        if inspect.isclass(value) and issubclass(value, capabilities.AbstractCapability)
-    }
-    shipped |= set(getattr(capabilities, "CAPABILITY_TYPES", {}))
-    missing = sorted(shipped - set(registry().capabilities))
-    assert not missing, (
-        f"Pydantic AI exports {missing} and {PATH.name} has never heard of them.\n"
-        "  fix: add each under `capabilities:` with its 02P row and outcome."
-    )
-
-
 def test_the_hand_kept_tables_are_gone() -> None:
     for name in ("_CAPABILITY_MAPS", "_TOOL_NAMES", "_middleware_reason"):
         assert not hasattr(pydantic_ai_interop, name), f"{name} is a second copy of the registry"
@@ -106,28 +91,6 @@ def test_the_importers_and_the_exporter_read_their_words_from_the_registry() -> 
     # each in the YAML), plus what only an object has.
     for key in ("end_strategy", "retries", "tool_timeout", "metadata", "instrument"):
         assert agent[key].why == spec[key].why
-
-
-def test_every_name_an_agent_spec_file_can_hold_has_an_entry() -> None:
-    spec_mod = pytest.importorskip("pydantic_ai.agent.spec")
-    declared = set(spec_mod.AgentSpec.model_fields)
-    missing = sorted(declared - set(registry().through("spec")))
-    assert not missing, (
-        f"`AgentSpec` declares {missing} and {PATH.name} says nothing of them.\n"
-        "  fix: add each under `names:` as `spec.<key>` with `pact:` or `why:`."
-    )
-
-
-def test_every_model_setting_is_either_a_settings_key_or_a_named_loss() -> None:
-    settings = pytest.importorskip("pydantic_ai.settings")
-    from pact_adapters.transports.pydantic_ai_transport import _SETTINGS
-
-    accounted = set(_SETTINGS.values()) | set(registry().through("settings"))
-    missing = sorted(set(settings.ModelSettings.__annotations__) - accounted)
-    assert not missing, (
-        f"`ModelSettings` has {missing}, which neither `settings:` nor {PATH.name} names.\n"
-        "  fix: add a `settings:` key, or a `settings.<key>` entry under `names:` saying why not."
-    )
 
 
 def test_spec_file_reasons_are_on_agent_fields_only() -> None:

@@ -94,6 +94,24 @@ class ToolCall:
     args: dict[str, Any]
 
 
+def slots_of(calls: "tuple[ToolCall, ...] | list[ToolCall]") -> list[str]:
+    """Each call's slot in its step: the key its answer and its result go under.
+
+    A tool's FIRST call in a step keeps the tool's bare name, which is every step
+    in the worked example and every answer anybody has already written down; a
+    second call to the same tool is `<name>#1`, a third `<name>#2`. One function,
+    because the step, a resume and `PactAgent` each have to mint the same slot
+    for the same call.
+    """
+    seen: dict[str, int] = {}
+    slots: list[str] = []
+    for c in calls:
+        n = seen.get(c.name, 0)
+        seen[c.name] = n + 1
+        slots.append(c.name if n == 0 else f"{c.name}#{n}")
+    return slots
+
+
 @dataclass(frozen=True)
 class Step:
     """One turn of the loop, recorded so two runs can be compared exactly."""
@@ -1451,8 +1469,8 @@ async def run(
                 # own words is the honest reading — the run continues knowing it,
                 # rather than continuing as if an answer had arrived.
                 person_said[resume.phase] = "Nobody answered in time."
-            for call in resume.awaiting:
-                already.setdefault(call.name, "refused: nobody answered in time")
+            for slot in slots_of(resume.awaiting):
+                already.setdefault(slot, "refused: nobody answered in time")
         else:
             # A teammate's reply IS the result of the call that delegated to
             # them, so it lands as a completed call rather than as a clearance.
@@ -1951,12 +1969,7 @@ async def run(
         # `slot()` keeps the plain tool name when a step calls that tool once,
         # which is every step in the worked example and every answer anybody has
         # already written down; only a repeat gets `payments#1`.
-        seen_names: dict[str, int] = {}
-        slots: list[str] = []
-        for c in calls:
-            n = seen_names.get(c.name, 0)
-            seen_names[c.name] = n + 1
-            slots.append(c.name if n == 0 else f"{c.name}#{n}")
+        slots = slots_of(calls)
 
         # What the author's approval policy stops, decided against the arguments
         # the model actually chose. Per step and not once per run: `payments`
@@ -1995,7 +2008,7 @@ async def run(
         # twice, so the key a call itself spent is not held against it.
         step_gated: dict[str, tuple[Wait, ...]] = {}
         for slot, c in zip(slots, calls):
-            if c.name not in already and once.look(c.name, _with_binds(spec, c, supplied).args):
+            if slot not in already and once.look(c.name, _with_binds(spec, c, supplied).args):
                 continue
             if waits := asking.waits_for(c.name, c.args, gated.get(c.name, "")):
                 step_gated[slot] = waits
@@ -2057,58 +2070,41 @@ async def run(
         # back from the tool it asked for, so it can carry on or stop rather than
         # finding that the thing it asked for never happened and nothing says so.
         #
-        # Decided per NAME, because `already` is keyed by name and one entry
-        # cannot hold two outcomes — the same limit that makes two calls to one
-        # tool WAIT together below. So a refusal of any call to a name stops every
-        # call to that name in this batch: the safe direction, since the other one
-        # is issuing a refund a person turned down.
-        #
-        # What it must never do is claim somebody refused a call they were never
-        # shown, which is the mis-statement `refused_in_words` exists to avoid at
-        # the level of a single answer. So a name only PARTLY refused says the
-        # refusal that really happened and then says why the rest of the name
-        # stopped too, as a limit of the record rather than as something a person
-        # did — the reader gets the reason they gave and is not told they gave it
-        # about a call they never saw.
-        by_name: dict[str, list[tuple[str, ToolCall]]] = {}
+        # Decided per CALL (its slot), the key `already` has. It was keyed by the
+        # tool's name, so one entry could not hold two outcomes and a refusal of
+        # one call to a name stopped every call to that name in the batch: a
+        # person who said no to `slack` posting in the channel also stopped the
+        # private summary to the requester from the same step, which nobody had
+        # asked them about (Bud Flow's differential test, case 03, N11). Each call
+        # now carries its own answer, so a refusal stops the call that was
+        # refused and nothing beside it.
         for slot, c in zip(slots, calls):
-            by_name.setdefault(c.name, []).append((slot, c))
-        for name, group in by_name.items():
-            if name in already or name in refused:
+            if slot in already or c.name in refused:
                 continue
             turned_down = [
-                (slot, c, w)
-                for slot, c in group
-                for w in step_gated.get(slot, ())
-                if rulings[(slot, w.reason)] is Ruling.REFUSED
+                w for w in step_gated.get(slot, ()) if rulings[(slot, w.reason)] is Ruling.REFUSED
             ]
             if not turned_down:
                 continue
-            at, refused_call, wait = turned_down[0]
-            said_no = refused_in_words(
-                wait.asked_as or at,
-                _asked_at(asking, wait.reason, refused_call.name, refused_call.args),
+            wait = turned_down[0]
+            already[slot] = refused_in_words(
+                wait.asked_as or slot,
+                _asked_at(asking, wait.reason, c.name, c.args),
                 given,
                 run_program=run_program,
             )
-            if len({where_at for where_at, _, _ in turned_down}) < len(group):
-                said_no += (
-                    f". This step made {len(group)} calls to {name!r} and one record "
-                    f"per tool cannot hold two answers, so none of them happened"
-                )
-            already[name] = said_no
             # The address a call that was decided-and-not-done already uses — the
             # same one a tool the stage withholds and a call a rule redirected are
             # published under. A refusal is not a new kind of event, it is one
             # more reason for that one.
             bus.emit(
-                "step.tool.cancelled", at=(i,), name=name, reason="a person said no",
+                "step.tool.cancelled", at=(i,), name=c.name, reason="a person said no",
             )
         blocked = [
             (slot, c, w)
             for slot, c in zip(slots, calls)
             for w in step_gated.get(slot, ())
-            if c.name not in already
+            if slot not in already
             and c.name not in refused
             and rulings[(slot, w.reason)] is Ruling.NOT_YET
         ]
@@ -2141,19 +2137,15 @@ async def run(
             #   resumed run served the model that error and the teammate was never
             #   asked at all.
             #
-            # And a cleared call whose NAME still has another call waiting waits
-            # too, because `already` is keyed by name: one entry cannot hold two
-            # outcomes, so carrying an approved 300 USD refund forward would hand
-            # its result to the 40 USD one nobody has answered. Both wait, and
-            # answering both releases both, which is what happened before any of
-            # this changed.
-            waiting_names = {c.name for _, c, _ in blocked}
+            # A cleared call runs even when another call to the same tool is still
+            # waiting: `already` is keyed by the call's slot, so the approved
+            # 300 USD refund and the 40 USD one nobody has answered yet are two
+            # entries and neither can be handed the other's result.
             for slot, call in zip(slots, calls):
                 if (
-                    call.name in already
+                    slot in already
                     or call.name in refused
                     or call.name in delegates
-                    or call.name in waiting_names
                     or any(
                         rulings[(slot, w.reason)] is not Ruling.CLEARED
                         for w in step_gated.get(slot, ())
@@ -2180,7 +2172,7 @@ async def run(
                 # any other. Without this a batch that parks for a second call
                 # could issue the first refund twice across two resumes, which
                 # is the one thing the field forbids.
-                already[call.name] = once.hold(call.name, carried.args) or _call_tool(
+                already[slot] = once.hold(call.name, carried.args) or _call_tool(
                     tool_impls.get(call.name), carried
                 )
             # The first uncleared reason of the first blocked call, which is the
@@ -2304,8 +2296,8 @@ async def run(
         # member's latency rather than the slowest's.
         replies: dict[str, str] = {}
         to_ask = [
-            c for c in calls
-            if c.name in delegates and c.name not in already and c.name not in refused
+            c for slot, c in zip(slots, calls)
+            if c.name in delegates and slot not in already and c.name not in refused
         ]
         if to_ask:
             _, decision = chain.run(
@@ -2340,15 +2332,14 @@ async def run(
                     if a.ok:
                         already[a.member] = a.text
                 for slot, call in zip(slots, calls):
-                    if (slot in step_gated or call.name in delegates
-                            or call.name in already):
+                    if slot in step_gated or call.name in delegates or slot in already:
                         continue
                     carried = _with_binds(spec, call, supplied)
                     # A call carried out before the run parks spends its key
                     # like any other. Without this a batch that parks for a
                     # second call could issue the first refund twice across two
                     # resumes, which is the one thing the field forbids.
-                    already[call.name] = once.hold(call.name, carried.args) or _call_tool(
+                    already[slot] = once.hold(call.name, carried.args) or _call_tool(
                         tool_impls.get(call.name), carried
                     )
                 who = handoff.needs_a_person
@@ -2420,7 +2411,7 @@ async def run(
                 outputs.append(replies[call.name])
                 ran.append(call)
                 continue
-            if call.name in already:
+            if slot in already:
                 # A call carried out BEFORE the run parked, replayed from where
                 # it was put aside. Two things lived below this `continue` and
                 # neither happened to it: what the author said to keep was never
@@ -2434,7 +2425,7 @@ async def run(
                 # reason for the rules to stop.
                 seen, decision = chain.run(
                     "step.tool.completed",
-                    {"name": call.name, "content": already[call.name]},
+                    {"name": call.name, "content": already[slot]},
                 )
                 if decision.stop is not None:
                     result.halted = "stopped-by-rule"

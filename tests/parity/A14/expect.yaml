@@ -1,0 +1,17 @@
+# 02P A14: `checks-at-most: 1`: a second answer that breaks a `checked-by:` rule fails the run.
+row: A14
+says: '`checks-at-most: 1`: a second answer that breaks a `checked-by:` rule fails
+  the run'
+model:
+- say: Hello.
+- say: Hello again.
+expect:
+  raises: UnexpectedModelBehavior
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - output_validators
+  - retries

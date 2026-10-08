@@ -1,0 +1,10 @@
+# 02P N1: a provider's own tool imports as a tool to write under `uses:`.
+row: N1
+says: a provider's own tool imports as a tool to write under `uses:`
+import:
+  mapped:
+  - capabilities
+  - capabilities.WebSearch
+  - instructions
+  - model
+  not-portable: []

@@ -1,0 +1,19 @@
+# 02P C10: PACT's money and time ceilings have no Pydantic AI home: the export names them, and none is invented.
+row: C10
+says: 'PACT''s money and time ceilings have no Pydantic AI home: the export names
+  them, and none is invented'
+model:
+- say: ok
+expect:
+  usage-limits:
+    request_limit: null
+    tool_calls_limit: null
+    total_tokens_limit: null
+  export-not-carried:
+  - limits
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable: []

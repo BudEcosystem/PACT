@@ -332,16 +332,14 @@ def test_a_teammate_is_still_asked_after_a_gate_parks_the_batch(name: str) -> No
     assert after.halted == "final", after.halted
 
 
-def test_two_calls_to_one_tool_wait_together_until_both_are_answered() -> None:
-    """One ledger entry cannot hold two outcomes, so the name waits as a whole.
+def test_each_call_to_one_tool_is_answered_on_its_own() -> None:
+    """Two calls to one tool in one step are two entries in the step's ledger.
 
-    `already` is keyed by tool NAME. Carrying the approved 300 USD refund
-    forward while the 40 USD one is still unanswered would put its result under
-    `payments`, and the next resume would hand that same result to the call
-    nobody has answered — a refund reported as paid that never happened, and a
-    second one silently made from one person's yes about the first. Two calls to
-    one name therefore wait together, and answering both releases both, which is
-    exactly what happened before any of this changed.
+    The ledger (`already`) is keyed by each call's SLOT — `payments` for the
+    first, `payments#1` for the second — so the approved 300 USD refund runs the
+    moment it is approved, and the 40 USD one nobody has answered keeps waiting
+    under its own key. It was keyed by the tool's NAME, so both waited until both
+    were answered: one entry could not hold two outcomes.
     """
     spec = AgentSpec(
         name="Refund Desk", description="Decides refunds", instructions="Refund.",
@@ -366,37 +364,26 @@ def test_two_calls_to_one_tool_wait_together_until_both_are_answered() -> None:
             answer=Resumption(first.suspension.correlation_key,
                               {"payments": "approve"}), now=1.0)
     )
-    assert paid == [], f"neither may run while one of the two is unanswered: {paid}"
+    assert paid == [300], f"the approved refund runs, the unanswered one waits: {paid}"
     assert half.halted == "suspended"
     assert [e.name for e in half.suspension.asks] == ["payments#1"]
 
-    # Answered TOGETHER, both go through, once each. Holding a cleared call back
-    # because a same-named sibling is still waiting must cost the ordinary case
-    # nothing — this is the assertion that says so.
-    both = asyncio.run(
+    rest = asyncio.run(
         run(spec, ReferenceTransport(twice), "refund both", tools,
-            needs_approval=frozenset({"payments"}), resume=first.suspension,
-            answer=first.suspension.answer(**{"payments": "approve",
-                                              "payments#1": "approve"}), now=1.0)
+            needs_approval=frozenset({"payments"}), resume=half.suspension,
+            answer=half.suspension.answer(**{"payments#1": "approve"}), now=2.0)
     )
-    assert both.halted == "final", both.halted
-    assert paid == [300, 40], paid
+    assert rest.halted == "final", rest.halted
+    assert paid == [300, 40], f"each refund once, the first not again: {paid}"
 
 
-def test_refusing_one_of_two_calls_to_one_tool_stops_both_and_says_why() -> None:
-    """The other side of the same limit, and the one the two items disagreed on.
+def test_refusing_one_of_two_calls_to_one_tool_stops_only_that_one() -> None:
+    """A no stops the call it was about, and nothing beside it.
 
-    A refusal ends its own wait (`test_a_person_can_say_no.py`) and a cleared
-    call runs before the park (above). Put both in one batch, over ONE tool name,
-    and they collide: `already` holds one outcome per name, so the approved 40
-    USD refund cannot be carried forward beside the refused 300 USD one — its
-    result would be handed to the call a person turned down.
-
-    So a name is decided as a whole, in the refusing direction, which is the safe
-    one: the alternative is issuing a refund somebody said no to. What must not
-    happen is the record claiming they refused a call they were never shown, so
-    it carries the refusal that really happened AND says why the rest of the name
-    stopped with it.
+    The 300 USD refund is refused and the 40 USD one approved, in one answer.
+    With the ledger keyed by the tool's name, the refusal stopped both and the
+    record had to explain why the second stopped too. Keyed by call, the 40 USD
+    refund goes out, and the record says only the no that was given.
     """
     spec = AgentSpec(
         name="Refund Desk", description="Decides refunds", instructions="Refund.",
@@ -421,12 +408,10 @@ def test_refusing_one_of_two_calls_to_one_tool_stops_both_and_says_why() -> None
     )
 
     assert after.halted != "suspended", "a no is an answer, not another wait"
-    assert paid == [], f"a refund a person refused must not go out beside one they allowed: {paid}"
+    assert paid == [40], f"only the refund a person allowed goes out: {paid}"
     said = [r for step in after.trace() for r in step["results"]]
-    assert any("said no" in r for r in said), said
-    assert any("cannot hold two answers" in r for r in said), (
-        f"the record has to say why the second one stopped too: {said}"
-    )
+    assert sum("said no" in r for r in said) == 1, said
+    assert "refunded 40" in said, said
 
 
 # ─────────────────────────────────────────────── through the author's own line

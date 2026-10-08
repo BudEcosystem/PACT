@@ -1,0 +1,27 @@
+# 02P P1: a tool with `connect:` is offered, and its call reaches the host's connection with its action.
+row: P1
+says: a tool with `connect:` is offered, and its call reaches the host's connection
+  with its action
+model:
+- call: orders
+  args:
+    action: order-status
+    order-number: A-1
+- say: It has shipped.
+tool-returns:
+  orders:
+    status: shipped
+expect:
+  calls:
+  - orders:
+      action: order-status
+      order-number: A-1
+  model-saw:
+  - shipped
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  - toolsets
+  not-portable: []

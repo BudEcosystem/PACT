@@ -1,0 +1,21 @@
+# 02P C6: nothing to write: `instructions:` are sent again with every request.
+row: C6
+says: 'nothing to write: `instructions:` are sent again with every request'
+model:
+- call: orders
+  args:
+    action: order-status
+    order-number: A-1
+- say: It has shipped.
+tool-returns:
+  orders:
+    status: shipped
+expect:
+  every-request-has-instructions: true
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  - toolsets
+  not-portable: []

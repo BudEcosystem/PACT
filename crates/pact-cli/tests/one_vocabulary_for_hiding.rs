@@ -222,7 +222,9 @@ fn the_two_fields_are_held_against_one_list_and_not_two_copies_of_it() {
         "the bare hiding sentence must be written once, not once per kind"
     );
     assert_eq!(
-        text.matches("a thing: [card number, bank account, email address, phone number]")
+        text.matches(
+            "a thing: [card number, bank account, email address, phone number, social security number]",
+        )
             .count(),
         1,
         "the things that can be recognised must be written once, not once per kind"

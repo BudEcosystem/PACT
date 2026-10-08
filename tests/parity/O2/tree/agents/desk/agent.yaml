@@ -1,0 +1,7 @@
+description: Answers order questions.
+instructions: Answer the customer briefly.
+answers-with:
+  status: one of placed, shipped, delivered
+  refund: money
+  parcels: whole number
+  late: yes or no

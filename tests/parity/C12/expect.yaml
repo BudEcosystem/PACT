@@ -1,0 +1,18 @@
+# 02P C12: `RunUsage` is the run meter: one request per model call, counted.
+row: C12
+says: '`RunUsage` is the run meter: one request per model call, counted'
+model:
+- call: orders
+  args:
+    action: order-status
+    order-number: A-1
+- say: It has shipped.
+expect:
+  requests: 2
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  - toolsets
+  not-portable: []

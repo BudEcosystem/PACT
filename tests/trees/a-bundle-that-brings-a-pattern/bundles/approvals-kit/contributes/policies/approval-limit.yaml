@@ -1,0 +1,11 @@
+# A pattern: a workspace makes its own rule with `based-on: approval-limit` and
+# writes the figure under `with:`. `<limit>` is a hole, not a figure.
+expects:
+  limit:
+    shape: money
+    help: the largest request recorded without asking, for example 500 USD
+ask-a-person:
+  - when:
+      - { tool: approvals/record-decision, arg: amount, more-than: <limit> }
+    because: a request above the limit is the approvers' decision
+    question: approve-this-request

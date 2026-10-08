@@ -215,10 +215,17 @@ class Shape:
         for kind, spellings in _SPELLINGS.items():
             if s in spellings:
                 return Shape(kind)
+        # Every option named here is a spelling `parse` accepts, as the loader's
+        # `schema/not-an-answer-shape` fix lists them. This used to join
+        # `_DESCRIBED`, which reads well and does not parse: a model told to use
+        # "an amount of money, like `25.00 USD`" wrote `25.00 USD`, and was
+        # refused six times before it found `money` (Bud Flow's complex live
+        # scenario 64).
         raise Rejected([
             f"'{written}' is not a shape an answer can have. Use one of: "
-            + ", ".join(_DESCRIBED[k] for k in _SPELLINGS)
-            + " — or `one of a, b, c`."
+            + ", ".join(_SPELLINGS)
+            + " — or `one of a, b, c` to choose between things you name. "
+            "An amount of money is `money`, and its answers are written like `25.00 USD`."
         ])
 
     def written(self) -> str:

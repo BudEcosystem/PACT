@@ -183,7 +183,7 @@ def test_the_shapes_accept_what_a_person_actually_types() -> None:
 def test_a_shape_nobody_recognises_says_what_the_shapes_are() -> None:
     with pytest.raises(Rejected) as e:
         Shape.parse("a vibe")
-    assert "yes or no" in str(e.value) and "one of a, b, c" in str(e.value)
+    assert "yes-or-no" in str(e.value) and "one of a, b, c" in str(e.value)
 
 
 # ─────────────────────────────────────────────────────────── silence never approves

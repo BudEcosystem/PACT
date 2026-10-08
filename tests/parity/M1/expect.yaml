@@ -1,0 +1,14 @@
+# 02P M1: `model:` names a catalogue row, which resolves to a Pydantic AI model id.
+row: M1
+says: '`model:` names a catalogue row, which resolves to a Pydantic AI model id'
+model:
+- say: ok
+expect:
+  model-id: ollama:qwen2.5:14b-instruct
+import:
+  mapped:
+  - description
+  - instructions
+  - model
+  - name
+  not-portable: []

@@ -1,0 +1,19 @@
+# 02P C8: `limits:` `steps-at-most` is `UsageLimits.request_limit`: the run stops at the ceiling.
+row: C8
+says: '`limits:` `steps-at-most` is `UsageLimits.request_limit`: the run stops at
+  the ceiling'
+limits: true
+model:
+- call: orders
+  args:
+    action: order-status
+    order-number: A-1
+expect:
+  raises: UsageLimitExceeded
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  - toolsets
+  not-portable: []

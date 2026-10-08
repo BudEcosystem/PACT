@@ -1487,6 +1487,14 @@ fn validate(
     // `{use:}` on. `values:` is then removed, so a tree that used a figure and a
     // tree that wrote it out longhand are one document — same shape, same
     // digest, and nothing below this line ever learns the feature exists.
+    // A file named after a kind in a collection's folder (`tools/catalog.yaml`)
+    // is that collection's entry, as any other file there is. The loader read it
+    // as the folder's own settings, since it does not know which folders are
+    // collections; the specification does, so this comes first.
+    if let Some(root) = node.as_mut() {
+        pact_loader::kindfiles::read_as_entries(root, &spec);
+    }
+
     if let Some(root) = node.as_mut() {
         pact_loader::values::resolve(root, &spec, &mut diags, &mut substituted);
     }

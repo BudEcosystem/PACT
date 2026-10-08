@@ -1,0 +1,14 @@
+# 02P A3: static `instructions:` are the text the model receives.
+row: A3
+says: static `instructions:` are the text the model receives
+model:
+- say: ok
+expect:
+  instructions-have:
+  - Answer the customer briefly.
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable: []

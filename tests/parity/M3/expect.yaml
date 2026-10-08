@@ -1,0 +1,16 @@
+# 02P M3: `model: [a, b]` is `FallbackModel`: a forced error on the first answers from the second.
+row: M3
+says: '`model: [a, b]` is `FallbackModel`: a forced error on the first answers from
+  the second'
+fallback: true
+model:
+- say: From the second.
+expect:
+  output: From the second.
+import:
+  mapped:
+  - description
+  - instructions
+  - model
+  - name
+  not-portable: []

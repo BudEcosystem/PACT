@@ -1,0 +1,34 @@
+# 02P H3: answered with edited arguments, the call runs with the values the person wrote, once.
+row: H3
+says: answered with edited arguments, the call runs with the values the person wrote,
+  once
+model:
+- call: payments
+  args:
+    action: refund
+    order-number: A-1
+    amount: 40.00 USD
+- say: Refunded.
+answers:
+  payments:
+    edit:
+      action: refund
+      order-number: A-1
+      amount: 25.00 USD
+expect:
+  waiting:
+  - payments
+  calls:
+  - payments:
+      action: refund
+      order-number: A-1
+      amount: 25.00 USD
+  output: Refunded.
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  - requires_approval
+  - toolsets
+  not-portable: []

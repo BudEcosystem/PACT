@@ -1,0 +1,13 @@
+# 02P O1: no `answers-with:` is `output_type=str`.
+row: O1
+says: no `answers-with:` is `output_type=str`
+model:
+- say: Plain words.
+expect:
+  output: Plain words.
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable: []

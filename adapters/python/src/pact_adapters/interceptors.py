@@ -845,13 +845,23 @@ RECOGNISES: Mapping[str, str] = {
         # group a real IBAN ends on — a GB one is 22 characters, so written in
         # fours it ends `... 9268 19`, and without this the two digits stayed on
         # the page beside `[removed]`.
-        r"\b[A-Z]{2}\d{2}(?:[ ][A-Z0-9]{4}){2,7}(?:[ ][A-Z0-9]{1,3})?\b"
-        r"|\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b"              # IBAN, run together
+        #
+        # Either case. People type an IBAN in lower case (`gb82west1234...`), and
+        # the pattern read capitals only, so a lowercase one reached the model
+        # whole (Bud Flow's complex live scenario 42).
+        r"(?i:\b[A-Z]{2}\d{2}(?:[ ][A-Z0-9]{4}){2,7}(?:[ ][A-Z0-9]{1,3})?\b)"
+        r"|(?i:\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b)"        # IBAN, run together
         r"|\b\d{2}[- ]\d{2}[- ]\d{2}\b"                   # UK sort code
         r"|\b\d{8}\b"                                     # UK account number
     ),
     "email address": r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b",
     "phone number": r"\+?\d[\d ()-]{7,}\d",
+    # A US social security number: three, two and four digits, parted the same
+    # way throughout (`123-45-6789`, `123 45 6789`) or run together. Nine digits
+    # run together over-match an order number of that length, which is the safe
+    # direction here. No group and no back-reference: `_scanner` joins every
+    # pattern into one expression, where a group number would mean another's.
+    "social security number": r"\b(?:\d{3}-\d{2}-\d{4}|\d{3} \d{2} \d{4}|\d{9})\b",
 }
 
 

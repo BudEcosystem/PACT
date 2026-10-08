@@ -1,0 +1,20 @@
+# 02P T11: with no executor, tools are an `ExternalToolset`: the run ends with the calls for the host to make.
+row: T11
+says: 'with no executor, tools are an `ExternalToolset`: the run ends with the calls
+  for the host to make'
+executor: false
+model:
+- call: orders
+  args:
+    action: order-status
+    order-number: A-1
+expect:
+  deferred-calls:
+  - orders
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  - toolsets
+  not-portable: []

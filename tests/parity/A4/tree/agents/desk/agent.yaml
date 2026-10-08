@@ -1,0 +1,4 @@
+description: Answers order questions.
+instructions: You answer for {{run-inputs.brand}}, and only for it.
+run-inputs:
+  brand: text

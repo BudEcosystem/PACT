@@ -1,0 +1,16 @@
+# 02P T2: an action's `answers-with:` is the tool's return schema.
+row: T2
+says: an action's `answers-with:` is the tool's return schema
+model:
+- say: ok
+expect:
+  returns:
+    orders/order-status:
+    - status
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  - toolsets
+  not-portable: []

@@ -139,6 +139,7 @@ pub mod derive;
 pub mod firstfile;
 pub mod handover;
 pub mod holes;
+pub mod kindfiles;
 pub mod money;
 pub mod policy;
 pub mod ports;

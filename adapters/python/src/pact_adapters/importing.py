@@ -67,6 +67,41 @@ class ImportReport:
         said = set(self.mapped) | set(self.unmapped) | set(self.not_portable)
         return tuple(sorted(k for k in self.seen if k not in said))
 
+    def in_plain_words(self) -> str:
+        """The report a person reads in a product, in its plain words (02P §1 rule 7).
+
+        Counts only, in the words of the product's own vocabulary: what came
+        across, what cannot, what was not understood and what is left to write.
+        No technical name is in it — not PACT's, not the source's — because the
+        person reading it may never open the technical details. `in_words()` is
+        the technical view and names every key.
+        """
+
+        def things(n: int) -> str:
+            return f"{n} thing" if n == 1 else f"{n} things"
+
+        lines = [f"{things(len(self.mapped))} came across."]
+        if self.not_portable:
+            lines.append(
+                f"{things(len(self.not_portable))} can't come across, and each one says "
+                "what to write instead."
+            )
+        if self.unmapped:
+            lines.append(
+                f"{things(len(self.unmapped))} {'was' if len(self.unmapped) == 1 else 'were'} "
+                "not understood, so nothing was done with "
+                f"{'it' if len(self.unmapped) == 1 else 'them'}."
+            )
+        if self.still_to_write:
+            lines.append(f"You still have to write {things(len(self.still_to_write))} before it can run.")
+        if self.silent_drops:
+            lines.append(
+                f"{things(len(self.silent_drops))} {'was' if len(self.silent_drops) == 1 else 'were'} "
+                "left out with no note. That is a fault in this import: please report it."
+            )
+        lines.append("Turn on technical details to see each one.")
+        return " ".join(lines)
+
     def in_words(self) -> str:
         """The report a person reads after importing something."""
         lines = [f"Imported {self.kind}.", ""]
@@ -299,9 +334,10 @@ pact-import — turn a framework's own artifact into a PACT agent
 USAGE:
     pact-import FILE [--as a2a-card|anthropic-request|pydantic-ai-spec]
 
-Prints the agent as YAML, and the ImportReport underneath it. Nothing is
-written: what comes back is a STUB, because these formats carry less than a PACT
-agent does, and the report says exactly what you still have to write.
+Prints the agent as YAML, then the ImportReport: in plain words first, then
+key by key. Nothing is written: what comes back is a STUB, because these
+formats carry less than a PACT agent does, and the report says exactly what
+you still have to write.
 
 `pydantic-ai-spec` reads a Pydantic AI agent spec — the YAML or JSON that
 `Agent.from_file()` loads. It is the one source here that is a real agent
@@ -384,7 +420,7 @@ def main(argv: "list[str] | None" = None) -> int:
     agent, report = READERS[kind](artifact)
 
     sys.stdout.write(yaml.safe_dump(agent, sort_keys=False, allow_unicode=True))
-    sys.stdout.write("\n" + report.in_words() + "\n")
+    sys.stdout.write("\n" + report.in_plain_words() + "\n\n" + report.in_words() + "\n")
     return 1 if report.silent_drops else 0
 
 

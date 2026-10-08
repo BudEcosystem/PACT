@@ -1,0 +1,16 @@
+# 02P A4: a hole in `instructions:` is filled; the model receives the filled text.
+row: A4
+says: a hole in `instructions:` is filled; the model receives the filled text
+inputs:
+  brand: Lumen Lamps
+model:
+- say: ok
+expect:
+  instructions-have:
+  - You answer for Lumen Lamps, and only for it.
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable: []

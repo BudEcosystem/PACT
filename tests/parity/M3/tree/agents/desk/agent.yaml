@@ -1,0 +1,3 @@
+description: Answers order questions.
+instructions: Answer the customer briefly.
+model: [qwen2.5-14b-instruct, gpt-oss-20b]

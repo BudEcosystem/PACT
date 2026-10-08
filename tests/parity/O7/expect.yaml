@@ -1,0 +1,20 @@
+# 02P O7: a `checked-by:` rule the answer breaks sends it back once, then the kept answer is the answer.
+row: O7
+says: a `checked-by:` rule the answer breaks sends it back once, then the kept answer
+  is the answer
+model:
+- say: Hello.
+- say: Your order has shipped.
+expect:
+  output: Your order has shipped.
+  requests: 2
+  model-saw:
+  - the customer must hear about the order
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - output_validators
+  - retries

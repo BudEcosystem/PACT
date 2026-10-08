@@ -1,0 +1,10 @@
+description: Refunds orders.
+connect: payments-server
+actions:
+  refund:
+    description: Refund one order.
+    takes:
+      order-number: text
+      amount: money
+    spends-money: yes
+    same-request-key: order-number

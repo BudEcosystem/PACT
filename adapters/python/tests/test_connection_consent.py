@@ -437,12 +437,13 @@ def test_two_calls_over_one_connection_are_one_consent_and_then_their_own_approv
     assert approval is not None, "allowing the connection is not approving the refund"
     assert approval.reason == NEEDS_APPROVAL
     assert [e.name for e in approval.asks] == ["payments", "payments.because"]
-    # The 40 USD refund the consent cleared has NOT run, and that is the one
-    # rule two calls to one tool are subject to: `already` is keyed by tool name,
-    # so one entry cannot hold two outcomes, and carrying the small refund
-    # forward would hand its result to the big one nobody has answered. Both
-    # wait; answering the big one releases both.
-    assert [n for n, _ in seen.calls] == ["zendesk"], seen.calls
+    # The 40 USD refund the consent cleared HAS run, before the park: each call
+    # has its own entry in the step's ledger (its slot), so the small refund's
+    # result is its own and cannot be handed to the big one nobody has answered.
+    # It used to wait beside the big one, because the ledger was keyed by the
+    # tool's name and one entry could not hold two outcomes.
+    assert [n for n, _ in seen.calls] == ["zendesk", "payments"], seen.calls
+    assert seen.calls[-1][1]["amount"] == "40.00 USD", seen.calls
 
 
 def test_refusing_the_refund_ends_the_run_without_asking_for_the_consent_again(
@@ -478,14 +479,11 @@ def test_refusing_the_refund_ends_the_run_without_asking_for_the_consent_again(
     )
 
     assert after.halted == "final", after.halted
-    # Neither refund happened. The 300 USD one because a person refused it; the
-    # 40 USD one because `already` is keyed by tool name and cannot hold two
-    # outcomes, so a refusal of one call to a tool stops every call to it in that
-    # batch — the safe direction, the other being a refund a person turned down.
-    assert [n for n, _ in seen.calls] == ["zendesk"], seen.calls
+    # The 300 USD refund did not happen: a person refused it. The 40 USD one ran
+    # once, when the consent cleared it, and the refusal of its sibling does not
+    # undo or repeat it: each call has its own entry in the step's ledger.
+    assert [n for n, _ in seen.calls] == ["zendesk", "payments"], seen.calls
+    assert seen.calls[-1][1]["amount"] == "40.00 USD", seen.calls
     said = json.dumps(after.trace())
     assert "outside the refund window" in said, "the record carries their reason"
     assert "support-leads" in said, "and who was asked"
-    # And it says why the second refund stopped as well, rather than letting a
-    # reader take it for a second person's no.
-    assert "one record per tool cannot hold two answers" in said, said

@@ -4041,14 +4041,14 @@ groups:
         forms: &the-hiding-sentences
           declares: may
           binds: when
-          # The four things a rule can be told to recognise, as DATA beside the
+          # The five things a rule can be told to recognise, as DATA beside the
           # sentences that use them. They lived only in `interceptors.RECOGNISES`
           # for a round, so `replace anything that looks like a passport number`
           # printed "loaded cleanly" here and was refused by name in Python —
           # while this field's own help says such a sentence is "never accepted
           # and quietly ignored".
           recognises:
-            a thing: [card number, bank account, email address, phone number]
+            a thing: [card number, bank account, email address, phone number, social security number]
           # And the holes that name something the workspace has. `<a tool>` used
           # to be free text inside the sentence, so `if paymnets is called more
           # than 1 time` loaded clean and the second refund went through — the
@@ -4224,8 +4224,9 @@ groups:
           teaches you the other. That file may only hide, so it takes the first
           three; this one may do all eight if it says so under `may:`.
           The things that can be recognised are: card number, bank account,
-          email address, phone number. Anything else is refused by name, with
-          these forms listed — never accepted and quietly ignored.
+          email address, phone number, social security number. Anything else
+          is refused by name, with these forms listed — never accepted and
+          quietly ignored.
           Each sentence needs its own line under `may:`, and only that one: an
           `anything that looks like ...`, `replace ...` or `do the same ...`
           line needs `hide-values`, and it reaches the words in a message or the
@@ -4312,7 +4313,7 @@ groups:
           it — that last one is not a line on its own, so it needs one of the
           other two somewhere above it, and written first it is refused with
           those two offered. The things that can be recognised are card number,
-          bank account, email address and phone number.
+          bank account, email address, phone number and social security number.
           These are the same sentences you write under `rules:` in an
           interceptor — one set of words for one act, so learning either one
           teaches you the other. The two sentences that count tool calls belong

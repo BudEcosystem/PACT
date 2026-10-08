@@ -1,0 +1,11 @@
+description: The approvers' yes or no on a request above the limit.
+says: Approve this request?
+answer:
+  approved: yes or no
+  because: text
+shows:
+  - request-id
+  - amount
+asked-of: [approvers]
+answer-within: 2d
+if-nobody-answers: decline

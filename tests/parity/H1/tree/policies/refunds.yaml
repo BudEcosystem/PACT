@@ -1,0 +1,5 @@
+ask-a-person:
+  - when:
+      - { tool: payments/refund }
+    because: every refund is a person's decision
+    question: approve-refund

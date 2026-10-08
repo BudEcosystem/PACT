@@ -1,0 +1,4 @@
+description: Answers order questions for {{run-inputs.brand}}.
+instructions: Answer the customer briefly.
+run-inputs:
+  brand: text

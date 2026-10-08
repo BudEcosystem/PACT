@@ -21,6 +21,25 @@ What the move broke, and how each was fixed:
 | `test_both_directions_…::test_the_skills_the_author_wrote_reach_the_model` | the test read `agent._instructions` | it reads what a `FunctionModel` is sent |
 | `test_the_mcp_export_says_which_shape_it_speaks.py::test_the_pin_the_report_names_is_the_pin_that_is_installed` | the `mcp` extra now pins `fastmcp-slim[client]>=3.3.0,<5`, admitting FastMCP 4 (MCP SDK v2, `2026-07-28`, no `initialize` handshake) | `_MCP_SHAPE` says the shape is the host's install, naming both eras |
 
+## The parity suite holds the pin
+
+`tests/test_parity.py` is 02P §6's suite. Its completeness check (S4) reads, by
+introspecting the installed packages' public members only, every capability
+class and `CAPABILITY_TYPES` entry, every `AgentSpec` field, every
+`ModelSettings` key, every message part (`ModelRequestPart`,
+`ModelResponsePart`), every `AgentStreamEvent` member, every `ToolDefinition`
+field and every public `GraphBuilder` member, and fails on any name
+`pydantic_ai_registry.yaml` has no row for. On 2.54 that is 19 message parts, 23
+stream events, 17 `ToolDefinition` fields and 16 `GraphBuilder` members beside
+the doors that were already held; each has its outcome and its 02P row. Moving
+the pin is a run of that one test: a name it prints is a row to write, never
+code.
+
+`tests/parity/<row>/` holds one folder per 02P row Phase 1 compiles (23 rows),
+each a fixture and an `expect.yaml`; the same test imports each back (S1), checks
+the plain-words report (S5), and runs each tree's agent through `build_agent` on
+a scripted `FunctionModel`.
+
 ## Private Pydantic AI names PACT still reads
 
 No module imports one: `tests/test_the_loader_is_found_one_way.py::
