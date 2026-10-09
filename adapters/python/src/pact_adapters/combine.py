@@ -93,6 +93,9 @@ class Combine:
     lowest: bool = False
     #: vote: only an answer everyone agreed on counts.
     everyone: bool = False
+    #: top-n: the time zone a date and time written with none is read in (a
+    #: workflow's `time-zone:`); with none, such a value has no order.
+    zone: str | None = None
 
     @staticmethod
     def parse(written: str) -> "Combine":
@@ -145,7 +148,7 @@ class Combine:
             return (Fraction(figure), currency(item), places, whole)
         if self.rule == "vote":
             return ((_key(item), item, 1),)
-        ranked = ordered_as(item.get(self.by) if isinstance(item, Mapping) else item)
+        ranked = self._rank_of(item)
         return () if ranked is None else ((ranked, item),)
 
     def join(self, earlier: Any, later: Any) -> Any:
@@ -171,14 +174,33 @@ class Combine:
             for key, value, count in later:
                 counts.setdefault(key, [value, 0])[1] += count
             return tuple((key, value, count) for key, (value, count) in counts.items())
-        ranked = (*earlier, *later)
+        return tuple(self._best_first((*earlier, *later), f"`top {self.n}`")[: self.n])
+
+    def ranked(self, items: Iterable[Any], asked_by: str = "") -> list[Any]:
+        """Every item, best first by `by` as `top-n` ranks them (the earliest of
+        equals first), then, in input order, every item with nothing to rank it
+        by: a list worked through in order (`ordered-by:` on an `each`), where
+        no item is left out. `asked_by` names what asked, in a refusal (the
+        rule's own words, `top <n>`, when unwritten)."""
+        items = list(items)
+        lifted = [(self._rank_of(item), item) for item in items]
+        best = self._best_first([p for p in lifted if p[0] is not None], asked_by or f"`top {self.n}`")
+        return [item for _, item in best] + [item for rank, item in lifted if rank is None]
+
+    def _rank_of(self, item: Any) -> tuple[str, Any] | None:
+        return ordered_as(item.get(self.by) if isinstance(item, Mapping) else item, self.zone)
+
+    def _best_first(self, ranked: Iterable[tuple[Any, Any]], said_by: str) -> list[tuple[Any, Any]]:
+        """`ranked` (rank, item) pairs best first, refused when they have no order
+        between them (two kinds, or money in two currencies)."""
+        ranked = list(ranked)
         kinds = sorted({kind for (kind, _), _ in ranked})
         currencies = {k for k in kinds if k not in _TIMES} - {""}
         if len({_ranks_as(k) for k in kinds}) > 1 or len(currencies) > 1:
             said = " against ".join(_said(k) for k in kinds)
-            raise Rejected([f"`top {self.n}` cannot rank {said} by `{self.by}`: they have no order between them."])
+            raise Rejected([f"{said_by} cannot rank {said} by `{self.by}`: they have no order between them."])
         # sorted() is stable both ways round: the earliest of equals stays first.
-        return tuple(sorted(ranked, key=lambda p: p[0][1], reverse=not self.lowest)[: self.n])
+        return sorted(ranked, key=lambda p: p[0][1], reverse=not self.lowest)
 
     def add(self, partial: Any, item: Any) -> Any:
         return self.join(partial, self.lift(item))

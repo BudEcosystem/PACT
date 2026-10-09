@@ -469,6 +469,61 @@ class Teamwork:
         # other way out, handled by the driver.
         return settled >= len(asked)
 
+    def handoff(
+        self,
+        answers: Mapping[str, Answer],
+        asked: Sequence[str],
+        *,
+        stopped_by: str = "",
+        ran_out_of_time: bool = False,
+        spent: Callable[[str], float] | None = None,
+    ) -> "Handoff":
+        """The outcome of a join that has run its course: the one verdict every driver
+        of a join reaches (`ask_team` here; a runtime's own join, such as a workflow's
+        `each` or `together`, from what came back to it).
+
+        `answers` holds what came back by member (`NOT_ASKED` for a member with no
+        answer yet); `stopped_by` names the member whose failure stopped the others
+        (`if-someone-fails: stop-the-others`); `ran_out_of_time` says the clock
+        (`gives-up-after:`) ended the wait; `spent` is what a member spent, for the
+        members that never answered. A member still without an answer was
+        overtaken by the clock (`out-of-time`), cut short once the join was met or
+        stopped (`not-waited-for`), or, taking turns, never reached (`not-asked`):
+        three different facts about a run, and Eve's barrier can state none of them.
+        """
+        spent = spent or (lambda member: 0.0)
+        got = dict(answers)
+        for m in asked:
+            if got[m].state != NOT_ASKED:
+                continue
+            if ran_out_of_time:
+                got[m] = Answer(m, state=OUT_OF_TIME, spent=spent(m))
+            elif self.starts is Starts.ALL_AT_ONCE:
+                got[m] = Answer(m, state=CANCELLED, spent=spent(m))
+        satisfied = self.met_by(got, asked)
+        why = needs_a_person = ""
+        # Whoever failed, after the join has run its course. `ask-a-person` does not
+        # cut the siblings short the way `stop-the-others` does: the person is about
+        # to be asked whether to carry on without one member, and that is a better
+        # question when the other answers are already in hand.
+        failed = [m for m in asked if got[m].state == FAILED]
+        if stopped_by:
+            satisfied = False
+            why = f"{stopped_by} could not answer, and teamwork says stop-the-others"
+        elif failed and self.if_someone_fails is OnFailure.ASK_A_PERSON:
+            satisfied = False
+            needs_a_person = failed[0]
+            why = f"{needs_a_person} could not answer, and teamwork says ask-a-person"
+        elif self.waits_for is Waits.IN_TIME:
+            # A deadline join is satisfied by whatever arrived, but "nothing
+            # arrived" is a failure and must not read like a success.
+            satisfied = any(got[m].state == ANSWERED for m in asked)
+            if not satisfied:
+                why = "nobody answered in time"
+        elif not satisfied:
+            why = f"{self.waits_for.value} was not met"
+        return Handoff(self.waits_for, tuple(got[m] for m in asked), satisfied, why, needs_a_person)
+
     def unreachable_for(self, asked: Sequence[str]) -> str:
         """Why this join can never be met for *this* batch, or ''.
 
@@ -575,51 +630,16 @@ async def ask_team(
     else:
         stopped_by, ran_out_of_time = await _all_at_once(todo, one, tw, answers, asked, bus)
 
-    # Whoever is still without an answer was overtaken by the clock, cut short
-    # once the join was met, or — taking turns — never reached at all. Those are
-    # three different facts about a run and Eve's barrier can state none of them.
-    for m in asked:
-        if answers[m].state != NOT_ASKED or m not in todo:
-            continue
-        if ran_out_of_time:
-            answers[m] = Answer(m, state=OUT_OF_TIME, spent=pool.spent_by(m))
-        elif tw.starts is Starts.ALL_AT_ONCE:
-            answers[m] = Answer(m, state=CANCELLED, spent=pool.spent_by(m))
-
-    satisfied = tw.met_by(answers, asked)
-    why = ""
-    needs_a_person = ""
-    # Whoever failed, after the join has run its course. `ask-a-person` does not
-    # cut the siblings short the way `stop-the-others` does: the person is about
-    # to be asked whether to carry on without one member, and that is a better
-    # question when the other answers are already in hand.
-    failed_members = [m for m in asked if answers[m].state == FAILED]
-
-    if stopped_by:
-        satisfied = False
-        why = f"{stopped_by} could not answer, and teamwork says stop-the-others"
-    elif failed_members and tw.if_someone_fails is OnFailure.ASK_A_PERSON:
-        satisfied = False
-        needs_a_person = failed_members[0]
-        why = f"{needs_a_person} could not answer, and teamwork says ask-a-person"
-    elif tw.waits_for is Waits.IN_TIME:
-        # A deadline join is satisfied by whatever arrived, but "nothing
-        # arrived" is a failure and must not read like a success.
-        satisfied = any(answers[m].state == ANSWERED for m in asked)
-        if not satisfied:
-            why = "nobody answered in time"
-    elif not satisfied:
-        why = f"{tw.waits_for.value} was not met"
-
+    handoff = tw.handoff(
+        answers, asked, stopped_by=stopped_by, ran_out_of_time=ran_out_of_time, spent=pool.spent_by
+    )
     bus.emit(
-        "turn.delegate.completed" if satisfied else "turn.delegate.failed",
+        "turn.delegate.completed" if handoff.satisfied else "turn.delegate.failed",
         waits_for=tw.waits_for.value,
-        answered=[m for m in asked if answers[m].state == ANSWERED],
-        reason=why,
+        answered=[a.member for a in handoff.answers if a.state == ANSWERED],
+        reason=handoff.why,
     )
-    return Handoff(
-        tw.waits_for, tuple(answers[m] for m in asked), satisfied, why, needs_a_person
-    )
+    return handoff
 
 
 async def _in_turn(

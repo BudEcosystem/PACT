@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from pact_adapters.delegation import (  # noqa: E402
     ANSWERED,
+    Answer,
     CANCELLED,
     FAILED,
     NOT_ASKED,
@@ -1202,3 +1203,38 @@ def test_two_calls_to_one_teammate_keep_its_answer_across_a_park_for_another() -
     said = resumed.steps[0].tool_results
     assert said[0] == before and said[1] == before, said
     assert "carry on without fraud-checker" in said[2], said
+
+
+# ----------------------------------------------------- one verdict for every join
+
+
+def test_a_join_driven_elsewhere_reaches_ask_teams_verdict_in_its_words() -> None:
+    """A runtime that runs the members itself (a workflow's `each`) hands what came
+    back to `Teamwork.handoff` and gets the same states, verdict and words as
+    `ask_team`: nobody's answer is dropped, and why each has none is told."""
+    asked = ("a", "b", "c")
+    came = {"a": Answer("a", "yes", ok=True, state=ANSWERED), "b": Answer("b"), "c": Answer("c")}
+
+    late = Teamwork(waits_for=Waits.IN_TIME, gives_up_after=1.0).handoff(came, asked, ran_out_of_time=True)
+    assert [a.state for a in late.answers] == [ANSWERED, OUT_OF_TIME, OUT_OF_TIME]
+    assert late.satisfied and late.said("b") == "(no answer: b did not reply in time)"
+
+    nobody = Teamwork(waits_for=Waits.IN_TIME, gives_up_after=1.0).handoff(
+        {m: Answer(m) for m in asked}, asked, ran_out_of_time=True
+    )
+    assert not nobody.satisfied and nobody.why == "nobody answered in time"
+
+    first = Teamwork(waits_for=Waits.ANYONE).handoff(came, asked)
+    assert first.satisfied and [a.state for a in first.answers] == [ANSWERED, CANCELLED, CANCELLED]
+    assert first.said("c") == "(no answer: c was still working when anyone was met)"
+
+    broke = dict(came, b=Answer("b", error="boom", state=FAILED))
+    stopped = Teamwork(if_someone_fails=OnFailure.STOP_THE_OTHERS).handoff(broke, asked, stopped_by="b")
+    assert not stopped.satisfied and stopped.why == "b could not answer, and teamwork says stop-the-others"
+    assert stopped.said("c") == "(no answer: c was stopped because b could not answer, and teamwork says stop-the-others)"
+
+    short = Teamwork(waits_for=Waits.ENOUGH, enough_is=2).handoff(dict(came, b=broke["b"], c=broke["b"]), asked)
+    assert not short.satisfied and short.why == "enough-of-them was not met"
+
+    turns = Teamwork(starts=Starts.ONE_AFTER_ANOTHER, waits_for=Waits.ANYONE).handoff(came, asked)
+    assert [a.state for a in turns.answers] == [ANSWERED, NOT_ASKED, NOT_ASKED]

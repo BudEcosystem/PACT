@@ -161,6 +161,25 @@ def test_top_n_ranks_a_date_as_a_date() -> None:
         Combine.parse("top 1 highest by due").combined([early, {"due": 3}])
 
 
+def test_a_list_ranked_through_keeps_every_item_and_ranks_as_top_n_does() -> None:
+    """`Combine.ranked`: best first as `top-n` ranks (the earliest of equals first),
+    then every item with nothing to rank it by, in input order: none left out."""
+    items = [{"id": "a", "s": 2}, {"id": "b"}, {"id": "c", "s": 5}, {"id": "d", "s": 2}, {"id": "e", "s": None}]
+    high = Combine(rule="top-n", by="s")
+    assert [i["id"] for i in high.ranked(items)] == ["c", "a", "d", "b", "e"]
+    assert [i["id"] for i in Combine(rule="top-n", by="s", lowest=True).ranked(items)] == ["a", "d", "c", "b", "e"]
+    assert high.ranked(items)[:1] == [Combine.parse("top 1 highest by s").combined(items)]
+    with pytest.raises(Rejected, match="^`ordered-by: s` cannot rank a number against a date"):
+        try:
+            high.ranked([{"s": 1}, {"s": "2026-01-05"}], "`ordered-by: s`")
+        except Rejected as exc:
+            raise Rejected([" ".join(exc.problems)]) from None
+    # A date and time with no zone has no order, unless the rule is told the zone it is read in.
+    naive = [{"s": "2026-01-01T09:00:00"}, {"s": "2026-03-01T09:00:00"}]
+    assert Combine(rule="top-n", by="s").ranked(naive) == naive
+    assert Combine(rule="top-n", by="s", zone="Europe/London").ranked(naive) == naive[::-1]
+
+
 def test_the_spellings_are_the_schemas_and_a_rule_outside_them_is_refused() -> None:
     """One copy: the checker's `combine-rules:` list."""
     assert set(spellings()) == {"keep-all", "keep-the-latest", "merge", "add-up", "vote", "top-n"}
