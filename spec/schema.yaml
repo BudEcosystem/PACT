@@ -3693,8 +3693,8 @@ groups:
         tier: core
         help: >
           how long a run's record is kept after it ends — `90 days`, or
-          `{at: input.matter-closed-on, after: 7 years}`. Leave it out and the
-          workspace's retention applies.
+          `{at: input.matter-closed-on, after: 2555 days}` (seven years).
+          Leave it out and the workspace's retention applies.
       undone-by:
         # `<tool>/<action>` or a workflow: two names in one string, so it is
         # resolved by `workflows.rs` and not by `names:` (as `approvals.rs`

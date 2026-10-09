@@ -70,24 +70,27 @@
 //! each other — *"point one stage's `then:` at `done`"*. One shape, said in one
 //! way, and said before the budget is spent rather than after.
 //!
-//! # Why the walk needs no vocabulary of its own
+//! # What the walk follows
 //!
-//! It follows *every* value under a stage's `then:`, not the three outcomes by
-//! name. Two reasons, and they are the same reason:
+//! Every value under a stage's `then:` whose outcome that stage's `does:` can
+//! end in, and a `decide`'s `chooses-between:` labels (`workflows::successors`).
+//! Which outcomes a `does:` ends in is one table, `workflows::outcomes` (02W
+//! §2.4), which WF-3 also holds the author to: in an agent's loop, the shipped
+//! outcomes; in a workflow, `answered` for a `call`, `each` or `together`, and
+//! so on. A line for an outcome that cannot happen leads nowhere a run can go,
+//! so it reaches nothing (and WF-3 says so where it is written). A key under
+//! `then:` that is not an outcome at all is reported by the unknown-field check
+//! against the schema's `outcome` group.
 //!
-//! - **The outcome names live in the schema** (`group: outcome`), so naming them
-//!   here would be a capability-affecting literal buried in the core (F-1) and
-//!   a fourth outcome would cost a recompile instead of a line of YAML. A key
-//!   under `then:` that is *not* an outcome is already reported, by the
-//!   unknown-field check against that group.
-//! - **The documented fallbacks add no target.** `answered` with nowhere to go
-//!   finishes; `too-many-times` with nowhere to go *"goes wherever `answered:`
-//!   goes"* (the schema's own words under `then:`, and
-//!   `harness._stage_to_run`'s `phase.then.get("too-many-times") or
-//!   loop.route(phase, "answered")`), which is a target already written down;
-//!   `used-a-tool` with nowhere to go stops the run. So the set of successors a
-//!   run can actually take is exactly the set of values written under `then:`,
-//!   and honouring the fallbacks is what taking all of them *does*.
+//! **The documented fallbacks add no target.** `answered` with nowhere to go
+//! finishes; `too-many-times` with nowhere to go *"goes wherever `answered:`
+//! goes"* (the schema's own words under `then:`, and
+//! `harness._stage_to_run`'s `phase.then.get("too-many-times") or
+//! loop.route(phase, "answered")`), which is a target already written down;
+//! `used-a-tool` with nowhere to go stops the run. So the set of successors a
+//! run can actually take is exactly the set of values written under the
+//! outcomes it can end in, and honouring the fallbacks is what taking all of
+//! them *does*.
 //!
 //! # What it deliberately stays quiet about
 //!
@@ -141,7 +144,7 @@ pub fn every_stage_is_reachable(document: &Node, diags: &mut Diagnostics) {
     for (name, entry) in document.get("workflows").and_then(Node::as_map).into_iter().flatten() {
         let Some(steps) = entry.node.get("steps").and_then(Node::as_map) else { continue };
         if let Some(start) = entry.node.get("starts-at").and_then(Node::as_str).map(str::trim) {
-            unreached(&format!("the workflow '{name}'"), "the run", start, steps, diags);
+            unreached(&format!("the workflow '{name}'"), "the run", start, steps, true, diags);
         }
         insides(steps, diags);
     }
@@ -168,7 +171,7 @@ fn insides(steps: &pact_doc::Map, diags: &mut Diagnostics) {
         if does != "together" {
             match entry.node.get("starts-at").and_then(Node::as_str).map(str::trim) {
                 Some(start) if !start.is_empty() => {
-                    unreached(&format!("'{stage}'"), "the run", start, inner, diags);
+                    unreached(&format!("'{stage}'"), "the run", start, inner, true, diags);
                 }
                 _ => diags.push(Diagnostic::error(
                     "loader/loop-with-no-first-stage",
@@ -228,7 +231,7 @@ fn one_loop(name: &str, shape: &Node, diags: &mut Diagnostics) {
         ));
         return;
     }
-    if unreached("this loop", "the agent", start, steps, diags) {
+    if unreached("this loop", "the agent", start, steps, false, diags) {
         // Every stage runs. Now the other question, which the walk that just
         // finished cannot answer by walking any further forward: is there a way
         // out of here at all.
@@ -241,7 +244,16 @@ fn one_loop(name: &str, shape: &Node, diags: &mut Diagnostics) {
 ///
 /// `what` names the stages' owner in the sentence (`this loop`, `the workflow
 /// 'trial-booking'`) and `who` what moves through them (`the agent`, `the run`).
-fn unreached(what: &str, who: &str, start: &str, steps: &pact_doc::Map, diags: &mut Diagnostics) -> bool {
+/// `in_workflow` says which outcomes a stage can end in (02W §2.4): a line under
+/// `then:` for an outcome that never happens leads nowhere a run can go.
+fn unreached(
+    what: &str,
+    who: &str,
+    start: &str,
+    steps: &pact_doc::Map,
+    in_workflow: bool,
+    diags: &mut Diagnostics,
+) -> bool {
     if !steps.contains_key(start) || !walkable(steps) {
         return false;
     }
@@ -255,7 +267,7 @@ fn unreached(what: &str, who: &str, start: &str, steps: &pact_doc::Map, diags: &
         let Some(stage) = steps.get(name) else { continue };
         // Every target is a real stage, `done` or `stop-and-say-so` —
         // `walkable` said so above.
-        for target in crate::workflows::successors(&stage.node) {
+        for target in crate::workflows::successors(&stage.node, in_workflow) {
             if reached.insert(target) {
                 frontier.push(target);
             }

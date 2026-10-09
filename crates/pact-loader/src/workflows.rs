@@ -8,8 +8,8 @@
 //! |---|---|---|
 //! | `loader/a-workflow-with-a-mind-of-its-own` | WF-1 | a workflow writes `model:`, `instructions:`, `loop:`, `team:` or `uses:` |
 //! | `loader/a-stage-a-workflow-cannot-have` | WF-2 | a workflow stage does `think`, `use-tools`, `check-its-work` or `run-code` |
-//! | `loader/a-stage-an-agent-cannot-have` | — | an agent's loop does `call`, `decide`, `each`, `repeat` or `together` (WF-2 turned round) |
-//! | `loader/a-line-this-stage-never-reads` | WF-3 | a line written beside a `does:` it does not belong to |
+//! | `loader/a-stage-an-agent-cannot-have` | — | an agent's loop does `call`, `decide`, `each`, `repeat` or `together` (WF-2 turned round), or one of its stages writes a line or an outcome only a workflow's stage reads |
+//! | `loader/a-line-this-stage-never-reads` | WF-3 | a line written beside a `does:` it does not belong to, an outcome under `then:` its `does:` never ends in (02W §2.4), or `items-at-most:` anywhere but an `each`'s own `limits:` |
 //! | `loader/workflows-that-call-each-other` | WF-8 | the workflow call graph has a circle |
 //! | `loader/for-each-with-no-ceiling` | WF-10 | an `each` with no `limits.items-at-most` |
 //! | `loader/items-told-apart-by-position` | WF-11 | an `each` whose body writes and has no `identified-by:` |
@@ -18,7 +18,7 @@
 //! | `loader/forget-after-is-now-kept-for` | WF-37 | `forget-after:` on remembered state (a warning, for one release) |
 //! | `loader/a-path-that-answers-nothing` | WF-38 | `answers-with:` is declared and a path ends with no `answer` stage |
 //! | `loader/no-such-name` | shipped | a `call:`, `may-call:` or `undone-by:` names nothing here |
-//! | `loader/a-name-the-workspace-already-has` | shipped, extended | a workflow shares its name with an agent or a program, or a `call:` could mean two of them |
+//! | `loader/a-name-the-workspace-already-has` | new | a workflow shares its name with an agent or a program, or a `call:` could mean two of them |
 //!
 //! A stage reached through `steps:` is one stage whatever holds it, so the
 //! walk below is the one walk for an agent's loop, a workflow, and the inside
@@ -69,6 +69,38 @@ const BELONGS_WITH: &[(&str, &[&str])] = &[
     ("remembers", &["repeat"]),
 ];
 
+/// The lines only a workflow's runtime reads, whatever its stage does. An
+/// agent's loop runs inside one model run, which reads none of them, so in a
+/// loop they would be a ceiling, a check or an undo nobody keeps.
+const WORKFLOW_LINES: &[&str] = &["limits", "checked-by", "checks-at-most", "undone-by"];
+
+/// The outcomes an agent's loop has ended in since before workflows (the
+/// shipped `outcome` group), whatever its stage does.
+const LOOP_OUTCOMES: &[&str] = &[
+    "used-a-tool",
+    "answered",
+    "too-many-times",
+    "decided-by",
+    "may-go-to",
+];
+
+/// What a stage can end in, by `does` (02W §2.4). A workflow's `decide` goes
+/// where its `chooses-between:` labels say and an `answer` ends the run (or the
+/// item, or the round), so neither has a `then:`.
+fn outcomes(in_workflow: bool, does: &str) -> &'static [&'static str] {
+    if !in_workflow {
+        return LOOP_OUTCOMES;
+    }
+    match does {
+        "call" | "each" | "together" => &["answered"],
+        "repeat" => &["answered", "too-many-times"],
+        "ask-someone" => &["answered", "declined", "nobody-answered", "heard"],
+        "decide" | "answer" => &[],
+        // A thinking stage, refused in a workflow by WF-2 and told once there.
+        _ => LOOP_OUTCOMES,
+    }
+}
+
 /// What an `each`'s `teamwork:` may not say: these belong to a named team.
 const TEAM_ONLY: &[&str] = &["starts", "shares", "may-start"];
 
@@ -81,10 +113,19 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
             }
         }
     }
+    for (name, entry) in document
+        .get("agents")
+        .and_then(Node::as_map)
+        .into_iter()
+        .flatten()
+    {
+        no_items_here(&format!("The agent '{name}'"), &entry.node, diags);
+    }
     let workflows = document.get("workflows").and_then(Node::as_map);
     for (name, entry) in workflows.into_iter().flatten() {
         let w = &entry.node;
         a_mind_of_its_own(name, w, diags);
+        no_items_here(&format!("The workflow '{name}'"), w, diags);
         if let Some(steps) = w.get("steps").and_then(Node::as_map) {
             stages(document, &Scope::Workflow, steps, diags);
             answers_on_every_path(name, w, steps, diags);
@@ -192,9 +233,16 @@ fn stages(document: &Node, scope: &Scope, steps: &Map, diags: &mut Diagnostics) 
             )),
             _ => {}
         }
-        never_read(stage, does, fields, diags);
+        never_read(scope, stage, does, fields, diags);
         if !scope.in_workflow() {
             continue;
+        }
+        if does != "each" {
+            no_items_here(
+                &format!("'{stage}', which does `{does}`,"),
+                &entry.node,
+                diags,
+            );
         }
         if let Some(undo) = fields.get("undone-by") {
             undo_names_something(document, stage, undo, diags);
@@ -219,8 +267,14 @@ fn stages(document: &Node, scope: &Scope, steps: &Map, diags: &mut Diagnostics) 
     }
 }
 
-/// WF-3: a line written beside a `does:` it does not belong to.
-fn never_read(stage: &str, does: &str, fields: &Map, diags: &mut Diagnostics) {
+/// WF-3: a line written beside a `does:` it does not belong to, and an outcome
+/// its `does:` never ends in. In an agent's loop, every line and outcome only a
+/// workflow's stage reads.
+fn never_read(scope: &Scope, stage: &str, does: &str, fields: &Map, diags: &mut Diagnostics) {
+    if let Scope::Loop(name) = scope {
+        return only_a_workflow_reads(name, stage, does, fields, diags);
+    }
+    outcomes_it_never_ends_in(stage, does, fields, diags);
     for (key, entry) in fields {
         let Some((_, with)) = BELONGS_WITH.iter().find(|(k, _)| k == key) else {
             continue;
@@ -264,6 +318,110 @@ fn never_read(stage: &str, does: &str, fields: &Map, diags: &mut Diagnostics) {
             ));
         }
     }
+}
+
+/// An agent's loop: a line or an outcome only a workflow's stage reads. A stage
+/// whose `does:` is a workflow's is told once, at its `does:`.
+fn only_a_workflow_reads(
+    loop_name: &str,
+    stage: &str,
+    does: &str,
+    fields: &Map,
+    diags: &mut Diagnostics,
+) {
+    if WORKFLOW_ONLY.contains(&does) {
+        return;
+    }
+    let lines = fields.iter().filter(|(key, _)| {
+        WORKFLOW_LINES.contains(&key.as_str()) || BELONGS_WITH.iter().any(|(k, _)| k == key)
+    });
+    let then = fields.get("then").and_then(|e| e.node.as_map());
+    let ends = then
+        .into_iter()
+        .flatten()
+        .filter(|(key, _)| !LOOP_OUTCOMES.contains(&key.as_str()));
+    for (entry, said) in lines
+        .map(|(k, e)| (e, format!("`{k}:`")))
+        .chain(ends.map(|(k, e)| (e, format!("`then.{k}:`"))))
+    {
+        diags.push(Diagnostic::error(
+            "loader/a-stage-an-agent-cannot-have",
+            entry.key_span.clone(),
+            format!(
+                "'{stage}' in the loop '{loop_name}' writes {said}, which only a workflow's stage \
+                 reads: an agent's loop runs inside one model run, so nothing would keep this line."
+            ),
+            "Delete it, or write this stage in a workflow under `workflows/` that calls the agent."
+                .to_string(),
+        ));
+    }
+}
+
+/// WF-3 for `then:` (02W §2.4): an outcome this stage's `does:` never ends in.
+fn outcomes_it_never_ends_in(stage: &str, does: &str, fields: &Map, diags: &mut Diagnostics) {
+    let Some(then) = fields.get("then") else {
+        return;
+    };
+    let can = outcomes(true, does);
+    if can.is_empty() {
+        let (goes, fix) = if does == "decide" {
+            (
+                "goes where its `chooses-between:` labels say",
+                "Delete `then:` and name where each label goes under `chooses-between:`.",
+            )
+        } else {
+            (
+                "ends the run, or the item or round it is in",
+                "Delete `then:`; to go on after it, make it a stage that does `call` instead.",
+            )
+        };
+        diags.push(Diagnostic::error(
+            "loader/a-line-this-stage-never-reads",
+            then.key_span.clone(),
+            format!("'{stage}' does `{does}` and writes `then:`, and a `{does}` {goes}, so nothing ever reads it."),
+            fix.to_string(),
+        ));
+        return;
+    }
+    for (key, entry) in then.node.as_map().into_iter().flatten() {
+        if can.contains(&key.as_str()) {
+            continue;
+        }
+        diags.push(Diagnostic::error(
+            "loader/a-line-this-stage-never-reads",
+            entry.key_span.clone(),
+            format!(
+                "'{stage}' does `{does}` and writes `then.{key}:`, and a `{does}` ends only in {}, \
+                 so this never happens and nothing ever reads it.",
+                can.iter()
+                    .map(|o| format!("`{o}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            "Delete it.".to_string(),
+        ));
+    }
+}
+
+/// `items-at-most:` is read on an `each`'s own `limits:` and nowhere else.
+fn no_items_here(who: &str, node: &Node, diags: &mut Diagnostics) {
+    let Some(items) = node
+        .get("limits")
+        .and_then(Node::as_map)
+        .and_then(|l| l.get("items-at-most"))
+    else {
+        return;
+    };
+    diags.push(Diagnostic::error(
+        "loader/a-line-this-stage-never-reads",
+        items.key_span.clone(),
+        format!(
+            "{who} writes `limits.items-at-most:`, which only a stage that does `each` reads, so \
+             it is a ceiling on nothing."
+        ),
+        "Move it under the `limits:` of the `each` stage that goes through the list, or delete it."
+            .to_string(),
+    ));
 }
 
 /// A `call` stage: its targets name something (`loader/no-such-name`), and a
@@ -397,29 +555,46 @@ fn first_write(document: &Node, steps: &Map, seen: &mut BTreeSet<String>) -> Opt
     None
 }
 
+/// Whether calling `target` can write: a tool's action that is not `reads-only:
+/// yes`; a workflow whose stages write; an agent that uses a tool that writes,
+/// or uses or has on its `team:` an agent or a workflow that writes. `seen`
+/// holds every agent and workflow already followed, so a circle ends.
 fn writes(document: &Node, target: &str, seen: &mut BTreeSet<String>) -> bool {
     if let Some((tool, action)) = target.split_once('/') {
         return action_writes(document, tool, action);
     }
-    if let Some(w) = entry_in(document, "workflows", target) {
-        if !seen.insert(target.to_string()) {
-            return false;
-        }
-        return w
-            .get("steps")
+    if let Some(tool) = entry_in(document, "tools", target) {
+        return tool
+            .get("actions")
             .and_then(Node::as_map)
-            .is_some_and(|steps| first_write(document, steps, seen).is_some());
+            .is_some_and(|actions| actions.keys().any(|a| action_writes(document, target, a)));
     }
-    let Some(agent) = entry_in(document, "agents", target) else {
+    let workflow = entry_in(document, "workflows", target);
+    let agent = entry_in(document, "agents", target);
+    if (workflow.is_none() && agent.is_none()) || !seen.insert(target.to_string()) {
         return false;
-    };
-    let uses = agent.get("uses").map(list).unwrap_or_default();
-    uses.into_iter().filter_map(Node::as_str).any(|tool| {
-        entry_in(document, "tools", tool)
-            .and_then(|t| t.get("actions"))
+    }
+    if let Some(w) = workflow
+        && w.get("steps")
             .and_then(Node::as_map)
-            .is_some_and(|actions| actions.keys().any(|a| action_writes(document, tool, a)))
-    })
+            .is_some_and(|steps| first_write(document, steps, seen).is_some())
+    {
+        return true;
+    }
+    let Some(agent) = agent else { return false };
+    let uses = agent.get("uses").map(list).unwrap_or_default();
+    let team = agent
+        .get("team")
+        .and_then(Node::as_map)
+        .into_iter()
+        .flat_map(|m| m.keys());
+    let reached: Vec<String> = uses
+        .into_iter()
+        .filter_map(Node::as_str)
+        .map(|n| n.trim().to_string())
+        .chain(team.cloned())
+        .collect();
+    reached.iter().any(|n| writes(document, n, seen))
 }
 
 fn action_writes(document: &Node, tool: &str, action: &str) -> bool {
@@ -485,7 +660,7 @@ fn answers_on_every_path(name: &str, w: &Node, steps: &Map, diags: &mut Diagnost
             ));
             return;
         }
-        for next in successors(stage) {
+        for next in successors(stage, true) {
             if next != "done" && steps.contains_key(next) && seen.insert(next) {
                 came_from.insert(next, here);
                 frontier.push(next);
@@ -495,7 +670,8 @@ fn answers_on_every_path(name: &str, w: &Node, steps: &Map, diags: &mut Diagnost
 }
 
 /// Where a stage ends the run, if it can: the line that sends it to `done`, or
-/// the stage itself when it answers and has nowhere to go.
+/// the stage itself when it answers and has nowhere to go. Only outcomes its
+/// `does:` can end in count (02W §2.4).
 fn ends_here(stage: &Node) -> Option<Span> {
     let kind = does(stage)?;
     if kind == "decide" {
@@ -505,15 +681,12 @@ fn ends_here(stage: &Node) -> Option<Span> {
             .find(|e| e.node.as_str().map(str::trim) == Some("done"))
             .map(|e| e.node.span.clone());
     }
-    let routed = stage.as_map()?.get("then").and_then(|e| e.node.as_map());
-    let Some(then) = routed else {
-        return Some(stage.span.start_of_block());
-    };
-    if !then.contains_key("answered") {
+    let routed = routes(stage, true);
+    if !routed.iter().any(|(outcome, _)| *outcome == "answered") {
         return Some(stage.span.start_of_block());
     }
-    then.values().find_map(|e| match &e.node.value {
-        Value::Str(s) if s.trim() == "done" => Some(e.node.span.clone()),
+    routed.into_iter().find_map(|(_, to)| match &to.value {
+        Value::Str(s) if s.trim() == "done" => Some(to.span.clone()),
         Value::Map(heard) => heard
             .values()
             .find(|h| h.node.as_str().map(str::trim) == Some("done"))
@@ -522,22 +695,43 @@ fn ends_here(stage: &Node) -> Option<Span> {
     })
 }
 
-/// Every stage this one can go to next: the values under `then:` (and `heard:`)
-/// and under `chooses-between:`.
-pub(crate) fn successors(stage: &Node) -> Vec<&str> {
+/// The lines under a stage's `then:` whose outcome its `does:` can end in
+/// (02W §2.4 in a workflow; the shipped outcomes in an agent's loop). A stage
+/// with no `does:` is left to the schema, and every line of it is followed.
+fn routes(stage: &Node, in_workflow: bool) -> Vec<(&str, &Node)> {
+    let can = does(stage).map(|d| outcomes(in_workflow, d));
+    stage
+        .get("then")
+        .and_then(Node::as_map)
+        .into_iter()
+        .flatten()
+        .filter(|(outcome, _)| can.is_none_or(|c| c.contains(&outcome.as_str())))
+        .map(|(outcome, e)| (outcome.as_str(), &e.node))
+        .collect()
+}
+
+/// Every stage this one can go to next: the values under the `then:` lines it
+/// can end in (and `heard:`), and under a `decide`'s `chooses-between:`.
+pub(crate) fn successors(stage: &Node, in_workflow: bool) -> Vec<&str> {
     let mut out = Vec::new();
-    for key in ["then", "chooses-between"] {
-        let Some(map) = stage.get(key).and_then(Node::as_map) else {
-            continue;
-        };
-        for entry in map.values() {
-            match &entry.node.value {
-                Value::Str(s) => out.push(s.trim()),
-                Value::Map(m) => {
-                    out.extend(m.values().filter_map(|e| e.node.as_str()).map(str::trim))
-                }
-                _ => {}
-            }
+    let mut to: Vec<&Node> = routes(stage, in_workflow)
+        .into_iter()
+        .map(|(_, n)| n)
+        .collect();
+    if does(stage).is_none_or(|d| d == "decide") {
+        to.extend(
+            stage
+                .get("chooses-between")
+                .and_then(Node::as_map)
+                .into_iter()
+                .flat_map(|m| m.values().map(|e| &e.node)),
+        );
+    }
+    for node in to {
+        match &node.value {
+            Value::Str(s) => out.push(s.trim()),
+            Value::Map(m) => out.extend(m.values().filter_map(|e| e.node.as_str()).map(str::trim)),
+            _ => {}
         }
     }
     out
@@ -900,9 +1094,24 @@ mod tests {
              chooses-between:\n  yes: c\n  no: done\n",
         );
         assert_eq!(
-            successors(&stage),
+            successors(&stage, true),
             vec!["a", "b", "stop-and-say-so", "c", "done"]
         );
+    }
+
+    #[test]
+    fn a_stage_goes_on_only_through_the_outcomes_its_does_has() {
+        let decide = doc("does: decide\nchooses-between:\n  yes: c\nthen:\n  answered: a\n");
+        assert_eq!(successors(&decide, true), vec!["c"]);
+        let call = doc("does: call\nthen:\n  answered: a\n  declined: b\n  used-a-tool: c\n");
+        assert_eq!(successors(&call, true), vec!["a"]);
+        assert_eq!(
+            successors(&doc("does: answer\nthen:\n  answered: a\n"), true),
+            Vec::<&str>::new()
+        );
+        // An agent's loop keeps the outcomes it has always had, and no workflow's.
+        let think = doc("does: think\nthen:\n  used-a-tool: a\n  answered: b\n  declined: c\n");
+        assert_eq!(successors(&think, false), vec!["a", "b"]);
     }
 
     #[test]

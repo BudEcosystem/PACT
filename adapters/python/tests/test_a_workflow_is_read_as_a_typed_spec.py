@@ -9,6 +9,7 @@ a workflow has and loads clean under `pact check --deny-warnings`.
 
 from __future__ import annotations
 
+import copy
 import sys
 from pathlib import Path
 
@@ -102,3 +103,12 @@ def test_a_moment_written_as_a_length_of_time_counts_after_the_stage_starts() ->
         at="input.x", before="24h", counted_in="business-days"
     )
     assert Moment.from_written(None) is None
+
+
+def test_a_workflow_gets_its_own_owners_and_never_those_of_a_name_it_begins() -> None:
+    doc = copy.deepcopy(shown(TREE))
+    doc["workflows"]["invoice"] = doc["workflows"]["recheck"]
+    doc["owners"]["workflows/invoice"] = {"owned-by": "billing"}
+    (owned,) = WorkflowSpec.from_workflow(doc, "invoice").owners
+    assert (owned.path, owned.owned_by) == ("workflows/invoice", "billing")
+    assert [o.path for o in WorkflowSpec.from_workflow(doc, "invoices").owners] == ["workflows/invoices/steps/pay"]

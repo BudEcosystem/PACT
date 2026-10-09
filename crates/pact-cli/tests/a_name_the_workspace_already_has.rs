@@ -376,23 +376,66 @@ fn first_entry_of(kind: &str) -> String {
 /// `call: sorter` and a run of `sorter` could not tell which one was meant.
 #[test]
 fn a_workflow_may_not_take_a_name_an_agent_already_has() {
-    let src = repo().join("tests/trees/a-workflow-of-every-shape");
-    let dst = std::env::temp_dir().join(format!("pact-name-clash-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dst);
-    copy_tree(&src, &dst);
+    let dst = every_shape("agent-clash");
     std::fs::write(
         dst.join("workflows/sorter.yaml"),
         "description: Sorts.\nstarts-at: go\nsteps:\n  go:\n    does: call\n    call: ledger/read-invoice\n",
     )
     .unwrap();
-    let out = pact().args(["check", dst.to_str().unwrap()]).output().expect("runs");
-    let text = String::from_utf8_lossy(&out.stdout);
-    assert!(!out.status.success(), "{text}");
+    let (ok, text) = loaded(&dst);
+    assert!(!ok, "{text}");
     assert!(text.contains("rule: loader/a-name-the-workspace-already-has"), "{text}");
     assert!(text.contains("'sorter' is an agent and a workflow"), "{text}");
     assert!(text.contains("the workflow to `sorter-flow`"), "{text}");
     // Told once, at the workflow — not again at the stage that calls it.
     assert_eq!(text.matches("a-name-the-workspace-already-has").count(), 1, "{text}");
+}
+
+/// A program a workflow shares its name with is refused the same way, at the
+/// workflow.
+#[test]
+fn a_workflow_may_not_take_a_name_a_program_already_has() {
+    let dst = every_shape("program-clash");
+    write_program(&dst, "recheck");
+    let (ok, text) = loaded(&dst);
+    assert!(!ok, "{text}");
+    assert!(text.contains("rule: loader/a-name-the-workspace-already-has"), "{text}");
+    assert!(text.contains("'recheck' is a program and a workflow"), "{text}");
+    assert!(text.contains("workflows/recheck.yaml"), "told at the workflow:\n{text}");
+    assert_eq!(text.matches("a-name-the-workspace-already-has").count(), 1, "{text}");
+}
+
+/// No workflow is involved, so the clash is told where it bites: at the
+/// `call:` that could mean the agent or the program.
+#[test]
+fn a_call_to_a_name_an_agent_and_a_program_share_is_refused_at_the_call() {
+    let dst = every_shape("call-clash");
+    write_program(&dst, "sorter");
+    let (ok, text) = loaded(&dst);
+    assert!(!ok, "{text}");
+    assert!(text.contains("rule: loader/a-name-the-workspace-already-has"), "{text}");
+    assert!(text.contains("'sorter' is an agent and a program"), "{text}");
+    assert!(text.contains("workflows/invoices.yaml"), "told at the call:\n{text}");
+}
+
+/// `pact check` with the shipped specification.
+fn loaded(root: &Path) -> (bool, String) {
+    let out = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
+    (out.status.success(), String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// A copy of `tests/trees/a-workflow-of-every-shape`.
+fn every_shape(name: &str) -> PathBuf {
+    let dst = std::env::temp_dir().join(format!("pact-name-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dst);
+    copy_tree(&repo().join("tests/trees/a-workflow-of-every-shape"), &dst);
+    dst
+}
+
+/// A program `name`, declared as `tests/trees/a-desk-with-a-program` declares one.
+fn write_program(root: &Path, name: &str) {
+    let src = repo().join("tests/trees/a-desk-with-a-program/programs/check-window");
+    copy_tree(&src, &root.join("programs").join(name));
 }
 
 fn copy_tree(src: &Path, dst: &Path) {

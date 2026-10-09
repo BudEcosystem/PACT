@@ -3,7 +3,9 @@
 //! It calls agents, tools, programs and other workflows, and it has no mind of
 //! its own: `model:`, `instructions:`, `loop:`, `team:` and `uses:` are refused
 //! on it (WF-1), and so are the four stages that think (WF-2). The other way
-//! round, an agent's own loop may not write a workflow's stages.
+//! round, an agent's own loop may not write a workflow's stages, nor a line or
+//! an outcome only a workflow's stage reads. A stage is held to the outcomes
+//! its `does:` has (02W §2.4), and `items-at-most:` to an `each`.
 //!
 //! Every test drives the real binary over a copy of
 //! `tests/trees/a-workflow-that-calls-and-answers/`, the smallest workflow there
@@ -228,5 +230,214 @@ fn a_call_to_something_that_is_not_here_names_what_is() {
     assert!(
         !ok && text.contains("'look' calls 'helper', and this workspace has nothing by that name"),
         "{text}"
+    );
+}
+
+/// An agent's loop runs inside one model run, which reads no line only a
+/// workflow's runtime reads, so each is refused where it is written: a ceiling,
+/// a check or an undo the author wrote is never silently missing.
+#[test]
+fn an_agents_loop_may_not_write_a_line_only_a_workflow_reads() {
+    for (key, said, lines) in [
+        (
+            "limits",
+            "`limits:`",
+            "    limits:\n      items-at-most: 3\n      when-it-runs-out: stop-and-say-so\n",
+        ),
+        (
+            "checked-by",
+            "`checked-by:`",
+            "    checked-by:\n      - must-contain: [order]\n",
+        ),
+        (
+            "checks-at-most",
+            "`checks-at-most:`",
+            "    checks-at-most: 2\n",
+        ),
+        (
+            "undone-by",
+            "`undone-by:`",
+            "    undone-by: orders/look-up\n",
+        ),
+        ("over", "`over:`", "    over: input.x\n"),
+        (
+            "declined",
+            "`then.declined:`",
+            "    then:\n      answered: done\n      declined: done\n",
+        ),
+        (
+            "heard",
+            "`then.heard:`",
+            "    then:\n      answered: done\n      heard:\n        fee: done\n",
+        ),
+    ] {
+        let root = edited(
+            &format!("agent-line-{key}"),
+            &[],
+            &[
+                (
+                    "agents/desk/agent.yaml",
+                    "description: Answers.\ninstructions: Answer.\nloop: mine\n",
+                ),
+                (
+                    "loops/mine.yaml",
+                    &format!(
+                        "description: One stage.\nstarts-at: go\nsteps:\n  go:\n    does: think\n{lines}"
+                    ),
+                ),
+            ],
+        );
+        let (ok, text) = check(&root);
+        assert!(!ok, "`{key}` in an agent's loop must be refused:\n{text}");
+        assert!(
+            text.contains("rule: loader/a-stage-an-agent-cannot-have"),
+            "[{key}] {text}"
+        );
+        assert!(
+            text.contains(&format!("'go' in the loop 'mine' writes {said}")),
+            "[{key}] {text}"
+        );
+        assert!(
+            text.contains("write this stage in a workflow under `workflows/`"),
+            "[{key}] {text}"
+        );
+    }
+}
+
+/// A stage ends only in the outcomes its `does:` has (02W §2.4). A line for
+/// any other is refused, and leads nowhere: a stage only it reaches is a stage
+/// nothing reaches, and a `done` under it ends no path.
+#[test]
+fn a_stage_is_held_to_the_outcomes_its_does_has() {
+    let extra = "  spare:\n    does: answer\n";
+    for (name, from, to, said) in [
+        (
+            "answer-then",
+            "  reply:\n    does: answer\n",
+            "  reply:\n    does: answer\n    then:\n      answered: spare\n",
+            "'reply' does `answer` and writes `then:`",
+        ),
+        (
+            "call-declined",
+            "      answered: reply\n",
+            "      answered: reply\n      declined: spare\n",
+            "'look' does `call` and writes `then.declined:`",
+        ),
+        (
+            "call-used-a-tool",
+            "      answered: reply\n",
+            "      answered: reply\n      used-a-tool: spare\n",
+            "'look' does `call` and writes `then.used-a-tool:`",
+        ),
+        (
+            "call-nobody",
+            "      answered: reply\n",
+            "      answered: reply\n      nobody-answered: spare\n",
+            "'look' does `call` and writes `then.nobody-answered:`",
+        ),
+    ] {
+        let root = edited(name, &[(FLOW, from, &format!("{to}{extra}"))], &[]);
+        let (ok, text) = check(&root);
+        assert!(!ok, "[{name}] {text}");
+        assert!(
+            text.contains("rule: loader/a-line-this-stage-never-reads"),
+            "[{name}] {text}"
+        );
+        assert!(text.contains(said), "[{name}] {text}");
+        // The line leads nowhere, so the stage only it reaches runs never.
+        assert!(
+            text.contains("rule: loader/stage-nothing-reaches") && text.contains("'spare'"),
+            "[{name}] a stage only an impossible outcome reaches is unreachable:\n{text}"
+        );
+    }
+}
+
+#[test]
+fn a_decide_has_no_then() {
+    let root = edited(
+        "decide-then",
+        &[(
+            FLOW,
+            "    then:\n      answered: reply\n  reply:\n",
+            "    then:\n      answered: pick\n  pick:\n    does: decide\n    chooses-between:\n      \
+             known: reply\n    then:\n      answered: spare\n  spare:\n    does: answer\n  reply:\n",
+        )],
+        &[],
+    );
+    let (ok, text) = check(&root);
+    assert!(!ok, "{text}");
+    assert!(
+        text.contains("'pick' does `decide` and writes `then:`"),
+        "{text}"
+    );
+    assert!(
+        text.contains("Delete `then:` and name where each label goes"),
+        "{text}"
+    );
+    assert!(
+        text.contains("rule: loader/stage-nothing-reaches") && text.contains("'spare'"),
+        "a `decide`'s `then:` reaches nothing:\n{text}"
+    );
+}
+
+/// A `done` under an outcome a stage never ends in ends no path, so WF-38 does
+/// not fire for it: only the WF-3 line does.
+#[test]
+fn an_outcome_that_cannot_happen_ends_no_path() {
+    let root = edited(
+        "declined-done",
+        &[(
+            FLOW,
+            "      answered: reply\n",
+            "      answered: reply\n      declined: done\n",
+        )],
+        &[],
+    );
+    let (ok, text) = check(&root);
+    assert!(!ok, "{text}");
+    assert!(text.contains("then.declined:"), "{text}");
+    assert!(!text.contains("a-path-that-answers-nothing"), "{text}");
+}
+
+/// `items-at-most:` is a ceiling on an `each`'s items and is read nowhere else:
+/// on an agent, a workflow or another stage it is refused, with the fix that
+/// moves it.
+#[test]
+fn items_at_most_is_read_only_on_an_each() {
+    let ceiling = "  items-at-most: 3\n  when-it-runs-out: stop-and-say-so\n";
+    let refused = |root: PathBuf, said: &str| {
+        let (ok, text) = check(&root);
+        assert!(!ok, "{text}");
+        assert!(
+            text.contains("rule: loader/a-line-this-stage-never-reads"),
+            "{text}"
+        );
+        assert!(text.contains(said), "{text}");
+        assert!(
+            text.contains("Move it under the `limits:` of the `each` stage"),
+            "{text}"
+        );
+    };
+    let on_workflow = format!("limits:\n{ceiling}accepts:\n");
+    refused(
+        edited("on-a-workflow", &[(FLOW, "accepts:\n", &on_workflow)], &[]),
+        "The workflow 'order-status' writes `limits.items-at-most:`",
+    );
+    let on_call = format!(
+        "    call: orders/look-up\n    limits:\n{}",
+        ceiling.replace("  ", "      ")
+    );
+    refused(
+        edited(
+            "on-a-call",
+            &[(FLOW, "    call: orders/look-up\n", &on_call)],
+            &[],
+        ),
+        "'look', which does `call`, writes `limits.items-at-most:`",
+    );
+    let agent = format!("description: Answers.\ninstructions: Answer.\nlimits:\n{ceiling}");
+    refused(
+        edited("on-an-agent", &[], &[("agents/desk/agent.yaml", &agent)]),
+        "The agent 'desk' writes `limits.items-at-most:`",
     );
 }

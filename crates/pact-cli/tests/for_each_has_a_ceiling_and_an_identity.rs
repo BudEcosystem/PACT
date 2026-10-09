@@ -191,3 +191,48 @@ fn a_write_inside_a_called_workflow_is_a_write_inside_the_each() {
         "{text}"
     );
 }
+
+/// A supervisor and its specialists: the `each` calls a workflow that calls a
+/// lead agent, and only a member of the lead's `team:` uses the tool that
+/// writes. That is still a write for each item.
+#[test]
+fn a_write_by_a_team_member_is_a_write_inside_the_each() {
+    let root = edited(
+        "team-writes",
+        &[
+            (FLOW, "    identified-by: [content-hash]\n", ""),
+            (
+                FLOW,
+                "        call: ledger/post\n",
+                "        call: recheck\n",
+            ),
+            (FLOW, "        undone-by: ledger/unpost\n", ""),
+            (
+                "workflows/recheck.yaml",
+                "call: ledger/read-invoice",
+                "call: lead",
+            ),
+        ],
+        &[
+            (
+                "agents/lead/agent.yaml",
+                "description: Hands invoices to the clerk.\ninstructions: Ask the clerk.\n\
+                 team:\n  clerk: Posts invoices to the ledger.\n",
+            ),
+            (
+                "agents/clerk/agent.yaml",
+                "description: Posts invoices.\ninstructions: Post the invoice.\nuses: [ledger]\n",
+            ),
+        ],
+    );
+    let (ok, text) = check(&root);
+    assert!(!ok, "{text}");
+    assert!(
+        text.contains("rule: loader/items-told-apart-by-position"),
+        "{text}"
+    );
+    assert!(
+        text.contains("'each-attachment' writes for each item ('pay' does)"),
+        "{text}"
+    );
+}

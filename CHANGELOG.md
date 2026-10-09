@@ -8,7 +8,7 @@ holds that did not; the commits are listed under it for whoever wants the detail
 Running PACT trees in production on Pydantic AI 2.54, through
 [Bud Agent Flow](https://github.com/BudEcosystem/Bud-Agent-Flow), drove these changes. Every
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
-runs offline: 3672 tests, 1175 Rust and 2497 adapter.
+runs offline: 3686 tests, 1184 Rust and 2502 adapter.
 
 ### Workflows: a `workflows/` collection and its structure (9 October)
 
@@ -22,9 +22,14 @@ runs offline: 3672 tests, 1175 Rust and 2497 adapter.
   `keep-the-latest`, `merge`, `add-up`, `vote`, `top <n> highest|lowest by <field>`).
 - **`pact check` holds a workflow's structure** (`crates/pact-loader/src/workflows.rs`): a workflow
   with a mind of its own (WF-1), a stage that thinks (WF-2) and, the other way round, an agent's
-  loop that writes a workflow's stage; a line beside a `does:` it does not belong to (WF-3);
+  loop that writes a workflow's stage, or a line or an outcome only a workflow's stage reads
+  (`limits:`, `checked-by:`, `checks-at-most:`, `undone-by:`, `then.declined:`, ...); a line
+  beside a `does:` it does not belong to, an outcome under `then:` its `does:` never ends in
+  (02W §2.4: a `decide` and an `answer` have no `then:`), and `items-at-most:` anywhere but an
+  `each`'s own `limits:` (WF-3);
   workflows that call each other in a circle (WF-8); an `each` with no ceiling (WF-10) or whose
-  items are told apart by position (WF-11); a `repeat` with no bottom (WF-12); a version of
+  items are told apart by position (WF-11, a write by a member of a called agent's `team:`
+  included); a `repeat` with no bottom (WF-12); a version of
   something that has none (WF-35); a path that answers nothing (WF-38); a call to a name that is
   not here; and a workflow sharing a name with an agent or a program. Reachability walks a
   workflow and the inside of each `each`, `repeat` and `together`.

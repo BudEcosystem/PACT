@@ -1731,6 +1731,7 @@ class WorkflowSpec:
                     locked_until=Moment.from_written(o.get("locked-until")),
                 )
                 for path, o in owners.items()
-                if isinstance(o, Mapping) and str(path).startswith(f"workflows/{key}")
+                if isinstance(o, Mapping)
+                and (str(path) == f"workflows/{key}" or str(path).startswith(f"workflows/{key}/"))
             ),
         )
