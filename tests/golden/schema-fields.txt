@@ -53,6 +53,9 @@ case.with	map of anything | S-GOV | core | optional
 catalog.default	text | S-CAP | expert | optional
 catalog.models	map of group:model | S-CAP | expert | optional
 catalog.version	text | S-GEN | expert | optional
+comparand.now-minus	duration | S-EXEC | core | optional
+comparand.now-plus	duration | S-EXEC | core | optional
+comparand.value	text | S-EXEC | core | optional
 context-policy.always-keep	list of text | S-CTRL | core | optional
 context-policy.asks	text | S-EXEC | core | optional
 context-policy.description	text | S-GEN | core | optional
@@ -222,6 +225,10 @@ resource.resource-kind	one-of | S-CAP | core | required
 resource.tool-snapshot-digest	text | S-GOV | expert | optional
 resource.tool-snapshot-max-age	duration | S-GOV | expert | optional
 resource.tool-snapshot-taken-at	text | S-GOV | expert | optional
+route-rule.because	text | S-GEN | core | optional
+route-rule.choose	text | S-EXEC | core | required
+route-rule.when	list of group:when-this | S-EXEC | core | optional
+rung.rules	list of group:route-rule | S-EXEC | core | required
 served-by.endpoint	text | S-CAP | expert | optional
 served-by.runtime	text | S-CAP | expert | required
 settings.frequency-penalty	number | S-CTRL | expert | optional
@@ -250,6 +257,7 @@ skill.use-when	text | S-ROUTE | core | optional
 stage.asks	text | S-EXEC | core | optional
 stage.at-most	integer | S-GOV | expert | optional
 stage.bind	map of text | S-EXEC | core | optional
+stage.by	list of group:rung | S-CTRL | core | optional
 stage.call	text | S-TOPO | core | optional
 stage.checked-by	list of group:eval-rule | S-GOV | core | optional
 stage.checks-at-most	integer | S-GOV | core | optional
@@ -315,10 +323,14 @@ watch.description	text | S-GEN | core | required
 watch.when	event-address | S-GOV | core | required
 watch.writes-to	file-name | S-GOV | core | required
 when-this.arg	text | S-EXEC | core | optional
-when-this.is	text | S-EXEC | core | optional
+when-this.contains-any-of	list of text | S-EXEC | core | optional
+when-this.is	comparand | S-EXEC | core | optional
+when-this.is-empty	yes-no | S-EXEC | core | optional
 when-this.is-one-of	list of text | S-EXEC | core | optional
-when-this.more-than	text | S-EXEC | core | optional
-when-this.tool	text | S-EXEC | core | required
+when-this.less-than	comparand | S-EXEC | core | optional
+when-this.more-than	comparand | S-EXEC | core | optional
+when-this.tool	text | S-EXEC | core | optional
+when-this.value	text | S-EXEC | core | optional
 workflow.accepts	map of answer-shape | S-CAP | core | optional
 workflow.answers-with	map of answer-shape | S-CAP | core | optional
 workflow.base	yes-no | S-GOV | expert | optional

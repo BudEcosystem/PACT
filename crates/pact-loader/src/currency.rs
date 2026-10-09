@@ -636,12 +636,14 @@ policies:
             .filter(|f| f.may_be_money && !matches!(f.ty, Ty::Money))
             .map(|f| f.name.as_str())
             .collect();
+        // `less-than:` joined it with the condition grammar (02W §2.6); both
+        // are held by `money::a_threshold_that_is_not_a_figure`'s `ORDERED`.
         assert_eq!(
             permissive,
-            BTreeSet::from(["more-than"]),
+            BTreeSet::from(["less-than", "more-than"]),
             "`may-be-money: yes` is now on a field this crate figure-checks nobody. \
-             `crates/pact-loader/src/money.rs` finds `more-than:` wherever a document \
-             writes it, but it finds it BY NAME — a `may-be-money` field called anything \
+             `crates/pact-loader/src/money.rs` finds `more-than:` and `less-than:` wherever \
+             a document writes them, but it finds them BY NAME — a `may-be-money` field called anything \
              else gets the price-list check from this file, no floor from \
              `Schema::check_floor` (it is `type: text` and never coerces to money), and no \
              figure check anywhere, so it can be written `NaN USD` and never compared \

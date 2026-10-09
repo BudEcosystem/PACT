@@ -33,7 +33,8 @@
 //! before any check reads the tree (`values.rs`), and a value table read when
 //! a stage starts is the value-table work that follows.
 
-use crate::workflows::{self, Kind, Resolved};
+use crate::conditions::{self, Kind, Position};
+use crate::workflows::{self, Kind as Called, Resolved};
 use pact_diag::{Diagnostic, Diagnostics, Span};
 use pact_doc::{Entry, Map, Node, Value};
 use pact_schema::shape::{self, Line, Shape};
@@ -109,7 +110,7 @@ pub fn check(document: &Node, schema: &Schema, diags: &mut Diagnostics) {
 // ─────────────────────────────────────────────────────────────────── shapes
 
 /// The answer-shape vocabulary and the workspace's named shapes.
-struct Shapes<'a> {
+pub(crate) struct Shapes<'a> {
     vocabulary: Vec<(String, Vec<String>)>,
     named: Vec<&'a str>,
     parts: BTreeMap<&'a str, &'a Map>,
@@ -117,7 +118,7 @@ struct Shapes<'a> {
 }
 
 impl<'a> Shapes<'a> {
-    fn of(document: &'a Node, schema: &Schema) -> Self {
+    pub(crate) fn of(document: &'a Node, schema: &Schema) -> Self {
         let map = document.get("shapes").and_then(Node::as_map);
         let mut parts = BTreeMap::new();
         let mut declared_at = BTreeMap::new();
@@ -136,7 +137,7 @@ impl<'a> Shapes<'a> {
     }
 
     /// A written line, or `None` when it is no shape (the schema says so).
-    fn line(&self, node: &Node) -> Option<Line> {
+    pub(crate) fn line(&self, node: &Node) -> Option<Line> {
         shape::parse(node.as_str()?, &self.vocabulary, &self.named).ok()
     }
 
@@ -376,6 +377,18 @@ impl<'a> Flow<'a> {
             let does = workflows::does(&entry.node).unwrap_or("");
             if does == "call" {
                 self.call(frames, stage, fields, diags);
+            }
+            if does == "decide" {
+                conditions::decides(stage, fields, &entry.node, diags);
+                let rungs = fields.get("by").and_then(|e| e.node.as_list());
+                for rung in rungs.into_iter().flatten() {
+                    let rules = rung.get("rules").and_then(Node::as_list);
+                    for rule in rules.into_iter().flatten() {
+                        if let Some(when) = rule.get("when") {
+                            self.conditions(frames, stage, when, Reading::At, diags);
+                        }
+                    }
+                }
             }
             if let Some(over) = fields.get("over") {
                 self.read(frames, stage, &over.node, None, Reading::At, diags);
@@ -680,8 +693,8 @@ impl<'a> Flow<'a> {
         let values = values_in(&until.node);
         let mut changes = false;
         let hears = hears_in(body);
-        for value in values.iter().copied() {
-            self.read(frames, stage, value, None, Reading::RoundEnd, diags);
+        self.conditions(frames, stage, &until.node, Reading::RoundEnd, diags);
+        for value in &values {
             let said = value.as_str().unwrap_or("").trim();
             let (root, rest) = said.split_once('.').unwrap_or((said, ""));
             let first = rest.split('.').next().unwrap_or("");
@@ -692,8 +705,7 @@ impl<'a> Flow<'a> {
                 _ => false,
             };
         }
-        // An `until:` of `tool:` lines only asks a tool each round, which may
-        // answer differently; WF-14 reads what a line's `value:` names.
+        // An `until:` with no `value:` at all is WF-18's to tell, line by line.
         if !changes && !values.is_empty() {
             diags.push(Diagnostic::error(
                 "loader/until-that-cannot-change",
@@ -709,6 +721,32 @@ impl<'a> Flow<'a> {
                     first_stage(fields, body)
                 ),
             ));
+        }
+    }
+
+    /// A `when:` or an `until:`: each line's `value:` and `{value: ...}` is a
+    /// binding read where the stage reads it (WF-4 to WF-7), and the line is
+    /// held by the one condition reader, its value's shape resolved here.
+    fn conditions(
+        &self,
+        frames: &[Frame<'a>],
+        stage: &str,
+        lines: &Node,
+        reading: Reading,
+        diags: &mut Diagnostics,
+    ) {
+        for value in values_in(lines) {
+            self.read(frames, stage, value, None, reading, diags);
+        }
+        let kind = |n: &Node| -> Option<Kind> {
+            if n.as_str()?.trim().starts_with("used.") {
+                return Some(Kind::Percent);
+            }
+            conditions::of_shape(&self.shape_of_path(frames, n)?.shape)
+        };
+        for when in workflows::list(lines) {
+            let left = when.get("value").and_then(&kind);
+            conditions::line(when, Position::Elsewhere, left, &kind, diags);
         }
     }
 
@@ -1349,7 +1387,7 @@ impl<'a> Flow<'a> {
     /// `None` when the target says nothing about what it takes.
     fn inputs_of(&self, target: &str) -> Option<Vec<(String, Option<Line>, String)>> {
         let (map, bound): (&Map, BTreeSet<&str>) = match workflows::resolve(self.document, target) {
-            Resolved::One(Kind::Action) => {
+            Resolved::One(Called::Action) => {
                 let (tool, action) = target.split_once('/')?;
                 let a = workflows::entry_in(self.document, "tools", tool)?
                     .get("actions")?
@@ -1361,13 +1399,13 @@ impl<'a> Flow<'a> {
                     .unwrap_or_default();
                 (a.get("takes")?.as_map()?, bound)
             }
-            Resolved::One(kind @ (Kind::Agent | Kind::Workflow)) => (
+            Resolved::One(kind @ (Called::Agent | Called::Workflow)) => (
                 workflows::entry_in(self.document, kind.collection(), target)?
                     .get("accepts")?
                     .as_map()?,
                 BTreeSet::new(),
             ),
-            Resolved::One(Kind::Program) => (
+            Resolved::One(Called::Program) => (
                 workflows::entry_in(self.document, "programs", target)?
                     .get("takes")?
                     .as_map()?,
@@ -1401,7 +1439,7 @@ impl<'a> Flow<'a> {
             "call" => {
                 let target = stage.get("call")?.as_str()?.trim();
                 let answers = match workflows::resolve(self.document, target) {
-                    Resolved::One(Kind::Action) => {
+                    Resolved::One(Called::Action) => {
                         let (tool, action) = target.split_once('/')?;
                         workflows::entry_in(self.document, "tools", tool)?
                             .get("actions")?
@@ -1799,6 +1837,7 @@ workflows:
       pick:
         does: decide
         chooses-between: { yes: b, no: c }
+        by: [{ rules: [{ choose: 'no' }] }]
       b:
         does: call
         call: t/read
@@ -2034,7 +2073,7 @@ workflows:
             .replace("BIND", "input.id")
             .replace(
                 "            then: { answered: b }\n",
-                "            then: { answered: pick }\n          pick:\n            does: decide\n            chooses-between: { yes: b, no: done }\n",
+                "            then: { answered: pick }\n          pick:\n            does: decide\n            chooses-between: { yes: b, no: done }\n            by: [{ rules: [{ choose: 'no' }] }]\n",
             );
         let found = rules(&text);
         assert_eq!(found.len(), 1, "{found:?}");
@@ -2056,8 +2095,10 @@ workflows:
     }
 
     #[test]
-    fn an_until_of_tool_lines_only_is_left_to_the_tool() {
-        assert!(round("{ tool: t/read }", "input.id").is_empty());
+    fn an_until_that_looks_at_a_call_is_refused_by_the_condition_reader() {
+        let said = round("{ tool: t/read }", "input.id");
+        assert_eq!(said.len(), 1, "{said:?}");
+        assert_eq!(said[0].0, "loader/compared-in-the-wrong-shape");
     }
 
     #[test]

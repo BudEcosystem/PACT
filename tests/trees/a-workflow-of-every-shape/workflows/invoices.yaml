@@ -33,6 +33,13 @@ steps:
     chooses-between:
       invoice: approve
       other: reply
+    by:
+      - rules:
+          - when:
+              - { value: steps.sort.kind, is: invoice }
+            choose: invoice
+            because: The sorter read it as an invoice.
+          - choose: other
   approve:
     does: ask-someone
     asks: go-ahead

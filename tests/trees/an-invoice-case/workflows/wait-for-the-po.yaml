@@ -1,0 +1,22 @@
+description: Matches an invoice again until its purchase order has arrived, three times at most.
+accepts:
+  invoice: invoice
+answers-with:
+  matched: yes or no
+starts-at: again
+steps:
+  again:
+    does: repeat
+    at-most: 3
+    until:
+      - { value: steps.look.result, is: matched }
+    starts-at: look
+    steps:
+      look:
+        does: call
+        call: netsuite/match-po
+        bind: { po: input.invoice.po }
+    then: { answered: reply }
+
+  reply:
+    does: answer

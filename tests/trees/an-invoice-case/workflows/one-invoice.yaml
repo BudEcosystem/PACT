@@ -1,0 +1,53 @@
+description: Posts one invoice, routed by what matching found and how sure the reading was.
+accepts:
+  invoice: invoice
+answers-with:
+  posted: yes or no
+starts-at: match
+steps:
+  match:
+    does: call
+    call: netsuite/match-po
+    bind: { po: input.invoice.po }
+    then: { answered: route }
+
+  route:
+    does: decide
+    chooses-between: { clean: tiers, exception: tell-clerk }
+    by:
+      - rules:
+          - when: [{ value: steps.match.result, is-one-of: [price-variance, quantity-short, no-po] }]
+            choose: exception
+          - when: [{ value: input.invoice.lowest-confidence, less-than: 0.85 }]
+            choose: exception
+            because: A field was read with low confidence.
+          - choose: clean
+
+  # The approval matrix, as rules a controller owns.
+  tiers:
+    does: decide
+    chooses-between: { auto: post, owner: owner-approves }
+    by:
+      - rules:
+          - when:
+              - { value: input.invoice.total, less-than: 5000 USD }
+              - { value: steps.match.result, is: matched }
+            choose: auto
+          - choose: owner
+
+  owner-approves:
+    does: ask-someone
+    asks: budget-owner-approves
+    then: { answered: post, declined: tell-clerk, nobody-answered: tell-clerk }
+
+  post:
+    does: call
+    call: netsuite/post-bill
+    bind: { po: input.invoice.po, total: input.invoice.total }
+    then: { answered: posted }
+
+  posted:
+    does: answer
+
+  tell-clerk:
+    does: answer

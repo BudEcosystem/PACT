@@ -1676,6 +1676,12 @@ fn validate(
         // `OK — … loaded cleanly (468 settings).` and a 300 USD refund went
         // through with nobody asked and nothing reported.
         pact_loader::approvals::check(root, &mut diags);
+        // And every condition an approval rule writes, held by the one reader
+        // of a condition (`conditions.rs`) that a workflow's routing rules and
+        // `until:` lines go through too (from `bindings::check`, which knows
+        // the shapes of what they read): a score compared with money, a line
+        // that looks at nothing, the same words wherever it is written.
+        pact_loader::conditions::check(root, &schema, &mut diags);
         // A1: a `{{run-inputs.<n>}}` or `{{remembers.<n>}}` hole in an agent's
         // `instructions:` or `description:` that names nothing would reach the
         // model as literal braces. The schema cannot see inside the text.

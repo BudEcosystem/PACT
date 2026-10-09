@@ -100,6 +100,12 @@ pub enum Ty {
     /// starts (`48h`), or a `moment` group (`{at: input.starts-at, before:
     /// 24h}`). Every field that takes a time takes this, and only this.
     Moment,
+    /// The right-hand side of a comparison (02W §2.0): a figure or a word
+    /// written as the value it is compared with is declared (`5000 USD`, `85%`,
+    /// `enterprise`), or a `comparand` group with exactly one of `value:`,
+    /// `now-plus:` and `now-minus:`. Whether the figure fits the value is
+    /// `pact-loader`'s `conditions.rs`, the only place that reads both.
+    Comparand,
     /// One of a fixed set of words.
     OneOf(Vec<String>),
     /// A list of values of one type.
@@ -166,6 +172,9 @@ impl Ty {
             ),
             Ty::Moment => "a length of time like `48h`, or a moment like \
                            `{at: input.starts-at, before: 24h}`"
+                .into(),
+            Ty::Comparand => "a figure like `5000 USD` or a word like `enterprise`, or one of \
+                              `{value: <binding>}`, `{now-plus: 14 days}`, `{now-minus: 30 days}`"
                 .into(),
             Ty::OneOf(v) => format!("one of: {}", v.join(", ")),
             Ty::ListOf(t) => format!("a list, where each item is {}", t.describe()),
@@ -1497,6 +1506,26 @@ impl Schema {
                 self.check_value(node, &Ty::Group("moment".into()), field, diags, at)
             }
             Ty::Moment => self.check_value(node, &Ty::Duration, field, diags, at),
+            // Each setting is checked as the `comparand` group's, and exactly one
+            // is written: `{value: a, now-plus: 1 day}` compares with two things.
+            Ty::Comparand if node.as_map().is_some() => {
+                self.check_value(node, &Ty::Group("comparand".into()), field, diags, at);
+                let written = node.as_map().map_or(0, |m| m.len());
+                if written != 1 {
+                    diags.push(Diagnostic::error(
+                        "schema/not-a-comparand",
+                        node.span.clone(),
+                        format!(
+                            "'{}' compares with {} — so nothing says what it is compared with.",
+                            field.name,
+                            if written == 0 { "nothing" } else { "more than one thing at once" }
+                        ),
+                        "Write exactly one of `value: <binding>`, `now-plus: <length of time>` and \
+                         `now-minus: <length of time>` — or a figure on its own, like `5000 USD`."
+                            .to_string(),
+                    ));
+                }
+            }
             Ty::Group(name) => match self.groups.get(name) {
                 Some(g) => self.check_group(node, g, diags, &at.inside(node)),
                 None => diags.push(Diagnostic::error(
@@ -3225,6 +3254,7 @@ fn placeholder(ty: &Ty) -> String {
             .and_then(|(_, spellings)| spellings.first().cloned())
             .unwrap_or_else(|| "keep-all".into()),
         Ty::Moment => "3 days".into(),
+        Ty::Comparand => "80".into(),
         // A moment the field really REACHES, when it names any. Built out of
         // the first word of each position, the offer was
         // `session.message.requested` — three good words in the right order that

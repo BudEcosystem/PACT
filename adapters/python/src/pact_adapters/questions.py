@@ -47,7 +47,6 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
-import math
 import re
 from collections.abc import Mapping as MappingABC
 from dataclasses import dataclass, field, replace
@@ -58,6 +57,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 #: One diagnostic shape for the whole adapter — see `diagnostics`. A rule this
 #: vocabulary cannot decide names the real file and the real line, exactly as a
 #: mistake in a context policy or an interceptor does.
+from .conditions import ABSENT, amount, compares, holds
 from .diagnostics import locate
 from .yes_no import said_yes
 
@@ -1406,7 +1406,7 @@ class Rule:
         """
         if not self.when:
             return True
-        if any("more-than" in atom for atom in self.when):
+        if any(compares(atom) for atom in self.when):
             return True
         return _action_of(args) != "" or not any(_action_named(a) for a in self.when)
 
@@ -1421,7 +1421,7 @@ class Rule:
         return max((_amount(a.get("more-than")) or 0.0 for a in self.when), default=0.0)
 
     def fires_on(self, args: Mapping[str, Any]) -> bool:
-        return all(_atom_holds(a, args, self.may_read) for a in self.when)
+        return all(_atom_stops(a, args, "", self.may_read) for a in self.when)
 
     def stops_on(self, args: Mapping[str, Any], as_action: str = "") -> bool:
         """Does this rule STOP the call — as opposed to merely being about it?
@@ -1498,78 +1498,18 @@ def _reads_something_it_may_not(
     return bool(offered) and arg not in offered
 
 
-def _equality_holds(atom: Mapping[str, Any], args: Mapping[str, Any]) -> "bool | None":
-    """`is:` / `is-one-of:` against the argument, or `None` when neither is written.
+def _compared(atom: Mapping[str, Any], args: Mapping[str, Any]) -> bool | None:
+    """The atom's comparison against the argument it names, read by PACT's one
+    condition reader (`conditions.holds`): `None` when it cannot be told.
 
-    A3. `more-than:` compares a MAGNITUDE, and a customer tier, a country or a
-    reason code has none — so an approval gate could ask about money and about
-    nothing else. `when-this.arg` even carried `needs-also: [more-than]`, which
-    refused `{tool: t/go, arg: reason, is: fraud}` outright: a rule the author
-    had written correctly.
-
-    Compared as text, folded, because the value comes off a model's tool call and
-    `Enterprise` and `enterprise` are the same tier. The same bargain
-    `Shape.read` already strikes for the answers a person types.
-
-    `None` means this atom says nothing about equality, so the caller falls
-    through to whatever else it carries.
-    """
-    if "is" in atom:
-        wanted = [atom.get("is")]
-    elif "is-one-of" in atom:
-        one_of = atom.get("is-one-of")
-        wanted = list(one_of) if isinstance(one_of, (list, tuple)) else [one_of]
-    else:
-        return None
+    The argument is read off the model's call, so a value the call does not
+    carry holds nothing but `is-empty: yes` — it is not the call the rule is
+    about. A comparison with another value or with `now` cannot be told here —
+    a gate has only the call — so it stops and asks; `pact check` refuses one
+    written in an approval rule, and this is the answer for a document built in
+    code."""
     named = str(atom.get("arg") or "")
-    if named not in args:
-        # The rule is about a value this call does not carry, so it is not the
-        # call the rule is about — the same reading `more-than:` takes one
-        # function down when its argument is absent.
-        return False
-    got = str(args.get(named)).strip().lower()
-    return any(str(w).strip().lower() == got for w in wanted if w is not None)
-
-
-def _atom_holds(
-    atom: Mapping[str, Any],
-    args: Mapping[str, Any],
-    may_read: Mapping[str, frozenset[str]] = {},
-) -> bool:
-    """Does one condition hold for these arguments?
-
-    The vocabulary is closed and small on purpose: `more-than` over an argument
-    the action declared under `inspects:`, and which action of the tool the rule
-    is about. Anything else is unevaluable here and counts as holding — see
-    [`Gate.for_call`].
-
-    The action half only ever narrows, and only on a KNOWN mismatch: a call
-    saying `action: read-ticket` is not the call a `zendesk/reply` rule is about,
-    so that rule's wording is not put in front of a person about it. A call that
-    says nothing still holds, because this side chooses wording for a run already
-    parked and guessing wide there costs nothing.
-
-    A condition reading an argument `inspects:` does not offer is unevaluable in
-    the same way and holds for the same reason: this side is choosing the wording
-    for a run something else already stopped, and the run that stopped it is
-    [`_atom_stops`] one function down, where the permission bites.
-    """
-    called = _action_of(args)
-    action = _action_named(atom)
-    if action and called and called != action:
-        return False
-    if _reads_something_it_may_not(atom, may_read):
-        return True
-    equal = _equality_holds(atom, args)
-    if equal is not None:
-        return equal
-    if "more-than" not in atom:
-        return True
-    threshold = _amount(atom.get("more-than"))
-    value = _amount(args.get(str(atom.get("arg") or "")))
-    if threshold is None or value is None:
-        return True
-    return value > threshold
+    return holds(atom, args[named] if named in args else ABSENT)
 
 
 def _atom_stops(
@@ -1578,12 +1518,18 @@ def _atom_stops(
     as_action: str = "",
     may_read: Mapping[str, frozenset[str]] = {},
 ) -> bool:
-    """Does one condition stop this call? See [`Rule.stops_on`].
+    """Does one condition hold for this call — and so, read by
+    [`Rule.stops_on`], stop it? [`Rule.fires_on`] reads it too, to choose the
+    wording for a run already parked, so a person is never asked about a call
+    the gate would not have stopped.
 
-    A threshold PACT cannot read still stops — a malformed `more-than:` is a
+    A comparison PACT cannot read still stops — a malformed `more-than:` is a
     mistake, and refusing to ask because of one would turn a typo into a
-    disabled gate. A threshold whose ARGUMENT is absent does not: the rule is
-    about a figure, and a call carrying no figure is not the call it is about.
+    disabled gate; so does an argument that is there and is no figure (`inf`,
+    `NaN`, `"Infinity"`), which treated as absent let a refund of infinity past a
+    200 USD gate with nobody asked. An argument the call does not carry does
+    not stop: the rule is about a figure, and a call carrying no figure is not
+    the call it is about.
 
     A threshold PACT may not read stops for exactly the first of those reasons.
     `inspects:` names the arguments a rule is allowed to look at, so a rule
@@ -1609,101 +1555,12 @@ def _atom_stops(
         return False
     if _reads_something_it_may_not(atom, may_read):
         return True
-    equal = _equality_holds(atom, args)
-    if equal is not None:
-        return equal
-    if "more-than" not in atom:
-        return True
-    threshold = _amount(atom.get("more-than"))
-    if threshold is None:
-        return True
-    # An amount the call does not carry is not over any line, so the rule is
-    # not about this call. One it DOES carry and nothing can read as a figure
-    # (`inf`, `NaN`, `"Infinity"`, which `_amount` reads as no figure) stops:
-    # treating it as absent let a refund of infinity past a 200 USD gate with
-    # nobody asked, the same fail-open the threshold side closed above.
-    arg = str(atom.get("arg") or "")
-    if arg not in args:
-        return False
-    value = _amount(args[arg])
-    return value is None or value > threshold
+    return _compared(atom, args) is not False
 
 
-#: Every way a figure is written, INCLUDING the ones with nothing before the
-#: decimal point.
-#:
-#: The first version was `-?\d+(?:\.\d+)?`, which requires a digit in front of
-#: the dot — and because [`_GROUPING`] strips the space first, `'.50 USD'`
-#: became `'.50USD'` and the first thing that matched was `50`. So a gate an
-#: author wrote at fifty cents was read at fifty dollars and did not fire on a
-#: 40 USD refund. MEASURED, before this:
-#:
-#:     '$.50'    -> 50.0        '$0.50'    -> 0.5
-#:     '.50 USD' -> 50.0        '0.50 USD' -> 0.5
-#:     '-.5 USD' -> 5.0         '-5 USD'   -> -5.0
-#:     '1e5 USD' -> 1.0
-#:
-#: with `pact check` and `pact show` passing every one of them cleanly. Three
-#: separate wrong figures out of one missing alternative: off by 100x, sign
-#: flipped (the `-?` cannot start at a `-` it is not allowed to reach), and an
-#: exponent dropped. The sign one is the sharpest, because
-#: `a_gate_that_stops_for_a_person_on_any_spend_at_all_is_left_alone` DECIDES
-#: that a negative threshold is legal — "a gate is not a ceiling" — so
-#: `more-than: -.5 USD` is a gate deliberately written to stop on every refund
-#: there is, and it stopped none under five dollars.
-#:
-#: This is the half `crates/pact-loader/src/money.rs` cannot reach: those are
-#: all figures, so no "that is not a figure" refusal could ever have caught
-#: them. The two grammars are held together by
-#: `tests/test_a_spend_cap_that_can_never_be_reached.py`, which asserts that for
-#: every threshold the checker lets through, the figure read back here is the
-#: figure that was written.
-_NUMBER = re.compile(r"-?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?")
-
-#: Every way a person or a model writes a thousands separator. Stripped before
-#: the number is read, because the pattern above stops at one — so
-#: `'1,500.00 USD'` read as **1.0** and slipped under a 200 USD approval
-#: threshold. Measured end to end on the worked example: the payments call ran,
-#: the tool was invoked, and `RunResult.halted == 'final'` — money moved with
-#: nobody asked, on an argument the MODEL chooses. Both sides of every comparison
-#: come through here, so one strip covers rule thresholds and call arguments.
-_GROUPING = str.maketrans("", "", ",_ ")
-
-
-def _amount(value: Any) -> float | None:
-    """The number inside `200 USD`, `$25`, `40.00 USD`, `1,500.00 USD` or `12`.
-
-    One reader for both sides of the comparison, so a rule written `200 USD` and
-    an argument the model wrote as `$210` are compared as numbers rather than as
-    strings — which is how `"210.00 USD" > "200 USD"` would quietly be false.
-
-    A number that is not a finite one is not a figure, and is read as no figure
-    at all. THE TWO SPELLINGS USED TO LAND ON OPPOSITE SIDES OF THE GATE, which
-    was the one genuinely fail-OPEN path in this whole area: `'NaN USD'` is text,
-    finds no digits, returns `None`, and `_atom_stops` then stops the call — but
-    a float `nan` arriving from a spec built in code went through the branch
-    above and came back as `nan`, and `nan > anything` is `False`, so the gate
-    silently never fired. Measured:
-
-        _atom_stops({..., 'more-than': float('nan')}, {'amount': '999999 USD'})
-        -> False
-        _atom_stops({..., 'more-than': float('inf')}, {'amount': '999999 USD'})
-        -> False
-
-    A gate that lets a 999,999 USD refund past with nobody asked, and no report
-    entry anywhere — FR-8.1.1 (T7): *"No lossy operation anywhere may proceed
-    silently; each MUST emit a report entry and be fail-closed by default."* The
-    guard is on the VALUE and not on any one reader, which is where B3's record
-    says it belongs (`docs/70-PRODUCTION-GAP-REGISTER.md`, *"The guard is on the
-    VALUE, not on a reader"*), and it costs one line: both spellings now return
-    `None`, and `None` is the case `_atom_stops` already handles by stopping.
-    """
-    if isinstance(value, bool) or value is None:
-        return None
-    if isinstance(value, (int, float)):
-        return float(value) if math.isfinite(value) else None
-    m = _NUMBER.search(str(value).translate(_GROUPING))
-    return float(m.group()) if m else None
+#: The figure reader every comparison uses, kept under its old name here for the
+#: callers that read thresholds directly.
+_amount = amount
 
 
 def policies_over(

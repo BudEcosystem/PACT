@@ -1,0 +1,3 @@
+resource-kind: mcp-server
+endpoint: host/finance
+description: Where the company's purchase orders and bills are kept.

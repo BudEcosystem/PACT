@@ -1,0 +1,12 @@
+name: an-invoice-case
+workspace-id: 01JEQ8Z3M4N5P6Q7R8S9T0WF07
+description: One invoice, routed by what matching found and how sure the reading was, then by its total (#48).
+owner: platform
+allow-egress: []
+time-zone: America/Chicago
+shapes:
+  invoice:
+    po: text
+    total: money
+    lowest-confidence: number
+    due-on: date

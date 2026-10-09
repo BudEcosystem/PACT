@@ -8,7 +8,42 @@ holds that did not; the commits are listed under it for whoever wants the detail
 Running PACT trees in production on Pydantic AI 2.54, through
 [Bud Agent Flow](https://github.com/BudEcosystem/Bud-Agent-Flow), drove these changes. Every
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
-runs offline: 3765 tests, 1238 Rust and 2527 adapter.
+runs offline: 3811 tests, 1263 Rust and 2548 adapter.
+
+### Workflows: one condition grammar, decide by rules, combine rules (9 October)
+
+- **One condition grammar, read by one function on each side** (02W §2.6, F1 reopened).
+  `when-this` gains `value:` (a binding), `less-than:`, `contains-any-of:` and `is-empty:`, so
+  there are six condition words, and `tool:` is no longer required. The right-hand side is a
+  `comparand`: a figure written as the value is declared (`5000 USD`, `85%`, `0.85`,
+  `2026-10-09`, `enterprise`) or exactly one of `{value: <binding>}`, `{now-plus: 14 days}`,
+  `{now-minus: 30 days}` (`schema/not-a-comparand`). An approval rule's `when:`, a routing rule's
+  `when:` and a repeat's `until:` are held by `crates/pact-loader/src/conditions.rs`, which
+  tells the same mistake in the same words in every position: `loader/compared-in-the-wrong-shape`
+  (WF-18, extended) now refuses a value compared with a figure of another shape wherever the
+  shape is declared (a score against money, a date against a number, money against
+  `now-plus:`), a line that looks at both `tool:` and `value:` or at neither, `tool:` outside an
+  approval rule and `value:` inside one, and a `{value:}` or `{now-plus:}` comparand in an approval rule (a gate has only the call). `loader/threshold-is-not-a-figure` covers `less-than:`
+  too. There are no combinators; "or" is two rules (`or_is_two_rules`).
+- **Python's one reader**: `pact_adapters.conditions` — `holds(line, value, read=, now=, zone=)`
+  answers every word (`None` when a line cannot be told), `all_hold` and `choose` read a rules
+  rung. `now` is the caller's, so a replay reads the journaled `now`; days count on the calendar
+  in the value's zone (`{now-plus: 1 day}` is 25 hours across the autumn clock change), hours on
+  the clock. The approval gate's comparisons go through it (`questions._atom_stops`; its lenient
+  twin is gone), so the new words work in a policy.
+- **Decide by written rules** (02W §2.5, rules half): `stage.by:` takes `rung`s, a rung its
+  `rules:`, each `route-rule` its `when:`, `choose:` and `because:`, read into
+  `ir.StageSpec.by`. `loader/a-label-with-nowhere-to-go` (WF-15) refuses a label the stage's
+  `chooses-between:` lacks, offering the nearest; `loader/a-decide-that-can-run-out-of-rungs`
+  (WF-16) a `decide` with no rung, or whose last rung is rules with no "otherwise".
+- **The six combine rules mean one thing** (`pact_adapters.combine.Combine`): each a fold with an
+  associative `join`, so items combined inside a segment and segments combined by a parent come
+  to the same result, ties included (the earliest item wins), held by a property test. The
+  spellings are read from `spec/schema.yaml`'s one copy.
+- Fixture `tests/trees/an-invoice-case/` (#48's routing and tiers); conformance tests
+  `one_grammar_for_every_condition`, `compared_in_its_own_shape`, `or_is_two_rules` and
+  `a_decide_cannot_run_out_of_rungs`; an `until:` of `tool:` lines is now refused (WF-18) and
+  WF-14's positive half is tested.
 
 ### Workflows: bindings and shapes (9 October)
 

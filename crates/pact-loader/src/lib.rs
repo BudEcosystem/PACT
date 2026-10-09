@@ -135,6 +135,7 @@ pub mod bindings;
 pub mod available;
 pub mod bundles;
 pub mod callable;
+pub mod conditions;
 pub mod currency;
 pub mod derive;
 pub mod firstfile;

@@ -32,6 +32,11 @@ steps:
   complete:
     does: decide
     chooses-between: { complete: fee, missing: deficiencies }
+    by:
+      - rules:
+          - when: [{ value: steps.check.missing, is-empty: yes }]
+            choose: complete
+          - choose: missing
 
   deficiencies:
     does: call
@@ -75,6 +80,13 @@ steps:
   route:
     does: decide
     chooses-between: { fast-track: reserve, minor: engineer, major: supplemental }
+    by:
+      - rules:
+          - when: [{ value: steps.screen.result, is: all-pass }]
+            choose: fast-track
+          - when: [{ value: steps.screen.result, is: minor-failure }]
+            choose: minor
+          - choose: major
 
   engineer:
     does: ask-someone

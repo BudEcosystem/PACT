@@ -1,0 +1,7 @@
+description: Whether the budget owner approves paying this invoice.
+says: May this invoice be paid?
+answer:
+  approved: yes or no
+asked-of: [the-requester]
+answer-within: 2 days
+if-nobody-answers: decline

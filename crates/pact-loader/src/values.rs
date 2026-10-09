@@ -94,6 +94,7 @@ fn a_figure_can_stand_here(ty: &Ty) -> bool {
             | Ty::AnswerShape(_)
             | Ty::CombineRule(_)
             | Ty::Moment
+            | Ty::Comparand
             | Ty::OneOf(_)
             | Ty::EventAddress(_, _)
     )

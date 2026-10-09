@@ -15,6 +15,7 @@ from typing import Any
 from .at_most_once import RequestKeys
 from .facts import Facts
 from .holes import Hole, holes_in
+from .conditions import Rung
 from .context_policy import ContextPolicy, Summariser, Tidier
 from .delegation import Teamwork
 from .interceptors import Chain
@@ -1569,6 +1570,9 @@ class StageSpec:
     waits_for_result: bool = True
     version: str = ""
     chooses_between: Mapping[str, str] = field(default_factory=dict)
+    #: `by:` — the ways of deciding, tried in order (02W §2.5); a rules rung is
+    #: answered by `conditions.choose`.
+    by: tuple[Rung, ...] = ()
     over: str = ""
     identified_by: tuple[str, ...] = ()
     ordered_by: str = ""
@@ -1613,6 +1617,7 @@ class StageSpec:
             waits_for_result=raw.get("waits-for-result") is None or said_yes(raw.get("waits-for-result")),
             version=_text(raw.get("version", "")),
             chooses_between={str(k): str(v) for k, v in (raw.get("chooses-between") or {}).items()},
+            by=tuple(Rung.from_written(r) for r in raw.get("by") or () if isinstance(r, Mapping)),
             over=_text(raw.get("over", "")),
             identified_by=tuple(_as_list(raw.get("identified-by"))),
             ordered_by=_text(raw.get("ordered-by", "")),

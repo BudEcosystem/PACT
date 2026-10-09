@@ -396,7 +396,7 @@ fn check_companions_can_be_quoted(group: &Group, fields: &pact_doc::Map, diags: 
 
 const TYPE_NAMES: &[&str] = &[
     "text", "yes-no", "number", "integer", "duration", "money", "percent", "threshold",
-    "size", "file-name", "answer-shape", "combine-rule", "moment", "one-of", "event-address",
+    "size", "file-name", "answer-shape", "combine-rule", "moment", "comparand", "one-of", "event-address",
     "anything", "list of <type>", "map of <type>", "group:<name>",
 ];
 
@@ -452,6 +452,7 @@ fn parse_ty(s: &str, v: &Vocabularies) -> Option<Ty> {
             Ty::CombineRule(v.combine_rules.to_vec())
         }
         "moment" => Ty::Moment,
+        "comparand" => Ty::Comparand,
         "one-of" => {
             if choices.is_empty() {
                 return None;

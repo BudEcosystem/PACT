@@ -175,10 +175,46 @@ fn a_value_remembered_from_inside_the_round_loads_clean() {
 }
 
 #[test]
-fn an_until_of_tool_lines_only_loads_and_asks_its_tool_each_round() {
-    // WF-14 reads what an `until:` line's `value:` names. Until `value:` lines
-    // can be written (the condition grammar), a line that asks a tool each
-    // round may answer differently, so it is left to the tool.
+fn an_until_that_reads_what_the_round_writes_loads_clean() {
+    // WF-14's positive half, now that `value:` can be written (02W §2.6): the
+    // round's own stage changes every round, so the `until:` can come to hold.
+    let root = edited(
+        "until-round",
+        &[(
+            FLOW,
+            ROUND,
+            "    at-most: 2\n    until:\n      - { value: steps.recheck.run, is-empty: no }\n    starts-at: recheck\n",
+        )],
+        &[],
+    );
+    let (ok, text) = check(&root);
+    assert!(ok, "{text}");
+}
+
+#[test]
+fn an_until_that_reads_nothing_the_round_writes_is_refused() {
+    let root = edited(
+        "until-fixed",
+        &[(
+            FLOW,
+            ROUND,
+            "    at-most: 2\n    until:\n      - { value: input.received-on, is-empty: no }\n    starts-at: recheck\n",
+        )],
+        &[],
+    );
+    let (ok, text) = check(&root);
+    assert!(!ok, "{text}");
+    assert!(text.contains("rule: loader/until-that-cannot-change"), "{text}");
+    assert!(
+        text.contains("'check-twice' repeats until something holds, and its `until:` reads nothing the round writes"),
+        "{text}"
+    );
+}
+
+#[test]
+fn an_until_that_looks_at_a_call_is_refused_because_a_round_calls_nothing_there() {
+    // `tool:` is an approval rule's: a condition in a workflow looks at a value
+    // (WF-18). Before the condition grammar it loaded and was left to the tool.
     let root = edited(
         "until-tool",
         &[(
@@ -189,7 +225,9 @@ fn an_until_of_tool_lines_only_loads_and_asks_its_tool_each_round() {
         &[],
     );
     let (ok, text) = check(&root);
-    assert!(ok, "{text}");
+    assert!(!ok, "{text}");
+    assert!(text.contains("rule: loader/compared-in-the-wrong-shape"), "{text}");
+    assert!(text.contains("fix: Write `value:` instead"), "{text}");
 }
 
 #[test]

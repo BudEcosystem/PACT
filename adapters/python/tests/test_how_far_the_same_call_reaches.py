@@ -121,7 +121,7 @@ def test_the_scope_does_not_claim_a_companion_a_field_cannot_hold() -> None:
 
 # ───────────────────────────────── A3: a gate that compares something else
 
-from pact_adapters.questions import _atom_holds, _atom_stops  # noqa: E402
+from pact_adapters.questions import Question, Rule, _atom_stops  # noqa: E402
 
 
 def test_a_gate_can_stop_on_a_value_that_is_not_a_number() -> None:
@@ -152,13 +152,16 @@ def test_a_call_carrying_none_of_the_value_is_not_the_call_the_rule_is_about() -
 
 
 def test_both_halves_of_the_gate_read_equality_the_same_way() -> None:
-    """`_atom_holds` chooses the wording a person reads and `_atom_stops`
+    """`Rule.fires_on` chooses the wording a person reads and `Rule.stops_on`
     decides whether the call is withheld. Two readings of one rule is how a
-    person gets asked about a call that was never stopped."""
+    person gets asked about a call that was never stopped, so both read one
+    function."""
     atom = {"tool": "crm/write", "arg": "tier", "is": "enterprise"}
+    rule = Rule(question=Question.approval(), when=(atom,))
     for args, want in [
         ({"action": "write", "tier": "enterprise"}, True),
         ({"action": "write", "tier": "small"}, False),
+        ({"action": "write"}, False),
     ]:
-        assert _atom_holds(atom, args) is want, args
-        assert _atom_stops(atom, args, as_action="write") is want, args
+        assert rule.fires_on(args) is want, args
+        assert rule.stops_on(args, as_action="write") is want, args

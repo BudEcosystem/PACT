@@ -2731,17 +2731,30 @@ groups:
           `questions`. The question carries the wording and the shape of the
           answer, so two rules can share one without repeating either.
 
-  # One situation an approval rule watches for. The tool name carries the action
-  # after a `/`, and both halves are resolved — `crates/pact-loader/src/approvals.rs`
-  # splits it and holds the head against `tools:` and the tail against that
-  # tool's `actions:`, because a plain `names: tools` cannot reach inside a
-  # `<tool>/<action>` spelling.
+  # One condition, wherever a condition is written (02W §2.6): an approval
+  # rule's `when:`, a routing rule's `when:`, a repeat's `until:` and a port's
+  # `only-when:`. One grammar, read by one function on each side — the loader's
+  # `conditions.rs` and Python's `conditions.holds` — so a line means the same
+  # thing in all four places and a mistake in it is told in the same words.
+  #
+  # A line looks at exactly one thing: an argument of the call an approval rule
+  # is about (`tool:`, with `arg:`), or a value anywhere else (`value:`). WF-18
+  # refuses both, neither, and the wrong one for where the line is written. The
+  # tool name carries the action after a `/`, and both halves are resolved —
+  # `crates/pact-loader/src/approvals.rs` splits it and holds the head against
+  # `tools:` and the tail against that tool's `actions:`, because a plain
+  # `names: tools` cannot reach inside a `<tool>/<action>` spelling.
+  #
+  # There are no combinators: every line of a `when:` must hold, and "or" is two
+  # rules (`or_is_two_rules`). There is no arithmetic.
   when-this:
-    describe: something an approval rule can watch for
+    describe: something a condition can look at
     fields:
       tool:
+        # `required: yes` removed (02W §2.6): a line is about a call's argument
+        # or about a value, and exactly one of `tool:` and `value:` is written
+        # (WF-18, `conditions.rs`), which a field's own `required:` cannot say.
         type: text
-        required: yes
         surface: S-EXEC
         tier: core
         help: >
@@ -2751,6 +2764,19 @@ groups:
           A call that does not say which action it is leaves this rule unapplied
           and the run says so. To ask about every call to a tool, write one rule
           per action — that also stops the calls that name no action at all.
+          Only an approval rule is about a call: in a workflow, or for anything
+          that is not an argument, write `value:` instead.
+      value:
+        type: text
+        needs-one-of: [is, is-one-of, more-than, less-than, contains-any-of, is-empty]
+        surface: S-EXEC
+        tier: core
+        help: >
+          the value to look at, as a binding — `steps.match.result`,
+          `run-inputs.requester.verified`, `remembers.ai-reading-paused`,
+          `used.cost-per-request-under`. Written in a routing rule, an `until:`
+          or a port's `only-when:`; an approval rule looks at the call with
+          `tool:` and `arg:` instead.
       arg:
         # A3. `needs-also:` fires on PRESENCE and names ONE field, so it could
         # say "`arg:` needs `more-than:`" and could not say "and exactly one way
@@ -2759,7 +2785,7 @@ groups:
         # but 'more-than' is not" — a rule the author had written correctly, and
         # the reason an approval gate could compare nothing except money.
         type: text
-        needs-one-of: [more-than, is, is-one-of]
+        needs-one-of: [is, is-one-of, more-than, less-than, contains-any-of, is-empty]
         surface: S-EXEC
         tier: core
         help: >
@@ -2772,46 +2798,95 @@ groups:
         # what that said printed "OK — loaded cleanly" and then `pact waits`
         # showed a live thirty-minute human gate comparing a score to dollars.
         #
-        # The shape cannot be stated HERE, because it is the shape of an argument
-        # declared in another document — the tool's `takes:`. So the schema is
-        # permissive and `crates/pact-loader/src/money.rs` holds the figure
-        # against what the argument actually is, which is the only place that
-        # knows both.
-        type: text
+        # The shape cannot be stated HERE, because it is the shape of what the
+        # line looks at, declared in another document — the tool's `takes:`, or
+        # the answer of the stage a binding reads. So the type is a `comparand`
+        # and `crates/pact-loader/src/conditions.rs` holds the figure against
+        # what the value actually is, which is the only place that knows both.
+        # `needs-also: [arg]` moved there too: on a `value:` line there is no
+        # `arg:` to need.
+        type: comparand
         # The type became permissive so a score could be gated by a score. The
         # OTHER thing `type: money` was doing — telling `currency.rs` to hold
         # this against what the price list can price — is said here on its own,
         # because losing it silently reopened `more-than: 200 JPY` gating at
         # about 1.30 USD on a desk whose refunds run to hundreds.
         may-be-money: yes
-        needs-also: [arg]
         surface: S-EXEC
         tier: core
         help: >
-          the figure above which a person is asked — `200 USD` for an amount of
-          money, `80` for a score. Written the way that argument is declared in
-          the tool's `takes:`, and written with `arg:`, never on its own.
+          above this — `200 USD` for an amount of money, `80` for a score,
+          `{value: steps.po.total}` for another field, or `{now-plus: 14 days}`
+          for a date. Written the way the value it is compared with is declared.
+      less-than:
+        type: comparand
+        may-be-money: yes
+        surface: S-EXEC
+        tier: core
+        help: >
+          below this — `5000 USD`, `85%`, `{value: steps.po.total}` or
+          `{now-plus: 14 days}`. Compared in the value's own shape; a date
+          against money is refused.
       is:
         # A3. The comparison an approval gate could not make. A tier, a country,
         # a reason code: none of them is a number, and until `needs-one-of:`
         # existed none of them could be written at all.
-        type: text
-        needs-also: [arg]
+        type: comparand
         surface: S-EXEC
         tier: core
         help: >
-          the one value that makes this rule apply — for example
-          `is: enterprise` on a customer tier. For several values write
-          `is-one-of:` instead. Written with `arg:`, never on its own.
+          the one value that makes this hold — for example `is: enterprise` on a
+          customer tier, or `{value: <binding>}` for another field. For several
+          values write `is-one-of:` instead.
       is-one-of:
         type: list of text
-        needs-also: [arg]
         surface: S-EXEC
         tier: core
         help: >
-          the values that make this rule apply, any one of them — for example
-          `is-one-of: [enterprise, government]`. Written with `arg:`, never on
-          its own.
+          the values that make this hold, any one of them — for example
+          `is-one-of: [enterprise, government]`.
+      contains-any-of:
+        type: list of text
+        surface: S-EXEC
+        tier: core
+        help: >
+          on text or a list: holds when any of these appears — the eval shape
+          `must-contain:`, turned round. Words, not patterns.
+      is-empty:
+        type: yes-no
+        surface: S-EXEC
+        tier: core
+        help: >
+          `yes` holds when the value is missing, blank, or an empty list; `no`
+          holds when it is not.
+
+  # The right-hand side of a comparison when it is not a figure (02W §2.0):
+  # another value, or a time counted from now. Exactly one of the three is
+  # written (`schema/not-a-comparand`). The `now` is the run's — journaled, so a
+  # replay compares against the moment the first pass did.
+  comparand:
+    describe: something a comparison can be made against
+    fields:
+      value:
+        type: text
+        surface: S-EXEC
+        tier: core
+        help: >
+          another value, as a binding — `{value: steps.po.total}`
+      now-plus:
+        type: duration
+        surface: S-EXEC
+        tier: core
+        help: >
+          this long after now — `{now-plus: 14 days}`. Days are counted on the
+          calendar in the value's zone, so one day is the same time tomorrow
+          there; hours and minutes are counted on the clock.
+      now-minus:
+        type: duration
+        surface: S-EXEC
+        tier: core
+        help: >
+          this long before now — `{now-minus: 30 days}`
 
   # ── QUESTIONS ───────────────────────────────────────────────────────────────
   # Something a person is asked, carrying the SHAPE of the answer it expects.
@@ -4060,6 +4135,18 @@ groups:
           the labels this decision can pick, each with the stage it leads to —
           `{invoice: read, other: done}`. A label that leads to `done` is shown
           to people as "only if".
+      by:
+        # 02W §2.5 (N32: it lands with `rung`). Written rules only for now; the
+        # agent and person rungs (`agent`, `if-unsure-below`, `if-it-disagrees`,
+        # `asks`) arrive with deciding by models and people. WF-16 holds the
+        # last rung to deciding every case (`conditions.rs`).
+        type: list of group:rung
+        surface: S-CTRL
+        tier: core
+        help: >
+          who decides, tried in order: written rules, then agents (cheapest
+          first), then a person. A rung that cannot decide passes the decision
+          on to the next one.
       over:
         type: text
         surface: S-CTRL
@@ -4166,6 +4253,48 @@ groups:
         help: >
           ceilings and a deadline for this stage and everything inside it. On
           `each`, `items-at-most:` is required here.
+
+  # One way a `decide` stage decides (02W §2.5). Written rules are the first
+  # rung, and for now the only one: the rungs that ask an agent or a person
+  # come with deciding by models and people.
+  rung:
+    describe: something a way of deciding can have
+    fields:
+      rules:
+        type: list of group:route-rule
+        required: yes
+        surface: S-EXEC
+        tier: core
+        help: >
+          written rules, tried in order; the first whose conditions all hold
+          picks its label. None holding passes the decision to the next rung.
+
+  # One written rule of a rules rung. Its conditions are `when-this` lines, the
+  # grammar every condition in PACT is written in.
+  route-rule:
+    describe: something a routing rule can have
+    fields:
+      when:
+        type: list of group:when-this
+        surface: S-EXEC
+        tier: core
+        help: >
+          the conditions, every one of which must hold. Leave it out on the last
+          rule for "otherwise".
+      choose:
+        # Held to the stage's `chooses-between:` by `conditions.rs` (WF-15,
+        # `loader/a-label-with-nowhere-to-go`): the labels are two levels up,
+        # in the stage the rule decides for.
+        type: text
+        required: yes
+        surface: S-EXEC
+        tier: core
+        help: which label this rule picks
+      because:
+        type: text
+        surface: S-GEN
+        tier: core
+        help: one sentence shown in the run's "why this path"
 
   # The three ways a stage can end. A group rather than `map of text` so the
   # closed vocabulary in the help above is the vocabulary the validator holds.

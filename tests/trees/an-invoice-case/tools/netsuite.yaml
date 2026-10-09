@@ -1,0 +1,19 @@
+description: The company's purchase orders and bills.
+connect: finance-server
+actions:
+  match-po:
+    description: Match an invoice to its purchase order.
+    reads-only: yes
+    takes:
+      po: text
+    answers-with:
+      result: one of matched, price-variance, quantity-short, no-po
+  post-bill:
+    description: Post one invoice as a bill.
+    takes:
+      po: text
+      total: money
+    answers-with:
+      posted: yes or no
+    spends-money: yes
+    same-request-key: po

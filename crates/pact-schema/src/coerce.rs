@@ -279,6 +279,15 @@ pub fn check(node: &Node, ty: &crate::Ty) -> Option<Coerced> {
             _ => None,
         },
         Ty::Money => node.as_str().and_then(money),
+        // A comparand written as a figure or a word: any one value. Its map form
+        // is checked as the `comparand` group before this is reached.
+        Ty::Comparand => match &node.value {
+            Value::Str(s) => Some(Coerced::Text(s.clone())),
+            Value::Int(n) => Some(Coerced::Text(n.to_string())),
+            Value::Float(n) => Some(Coerced::Text(n.to_string())),
+            Value::Bool(b) => Some(Coerced::Text(b.to_string())),
+            _ => None,
+        },
         Ty::Percent => percent(node),
         Ty::Threshold => node.as_str().and_then(threshold),
         Ty::Size => size(node),

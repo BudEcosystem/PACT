@@ -44,13 +44,6 @@ SRC = Path(__file__).resolve().parents[1] / "src" / "pact_adapters"
 #: _gained_a_caller` deletes it again when one appears — a list of what must stay
 #: uncalled cannot notice a fix.
 HOST_API: dict[str, str] = {
-    # The specification travels with the package (`loader.shipped`), and what
-    # reads it is a host showing an author what a kind's fields are (budflow's
-    # reference). Nothing in `src/` reads the schema: the Rust loader does.
-    "loader.schema_path": (
-        "where `spec/schema.yaml` is, in a wheel or a checkout, for a host that "
-        "shows an author what fields a kind has; the adapters read no schema"
-    ),
     # D24: PACT declares a port and the runtime connects it. The reference
     # harness serves no port, so nothing in `src/` lists them; a runtime that
     # does (budflow-core's `budflow serve`) reads every port through this one.

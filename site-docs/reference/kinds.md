@@ -1,11 +1,11 @@
-# The 51 kinds
+# The 54 kinds
 
 Generated from `spec/schema.yaml`. Every kind, what it is for, and how
 many fields it has. You do not need to learn these — `pact check` names the
 right one when you need it.
 
 
-**51 kinds.** A kind is a *shape a document can take*, not a file you must
+**54 kinds.** A kind is a *shape a document can take*, not a file you must
 write: most workspaces use a dozen.
 
 
@@ -18,7 +18,7 @@ write: most workspaces use a dozen.
 | `loop` | 4 | `description`, `based-on` |
 | `knowledge` | 9 | `description`, `documents`, `passages-at-most`, `must-cite`, `use-when` |
 | `skill` | 11 | `name`, `description`, `use-when`, `do-not-use-when`, `if-unsure` |
-| `stage` | 25 | `does`, `says`, `asks`, `call`, `may-call` |
+| `stage` | 26 | `does`, `says`, `asks`, `call`, `may-call` |
 | `tool` | 7 | `description`, `connect`, `url`, `method`, `says` |
 | `program` | 7 | `description` |
 | `program-fuel` | 4 | — |
@@ -32,6 +32,8 @@ write: most workspaces use a dozen.
 |---|---:|---|
 | `workflow` | 17 | `description`, `accepts`, `answers-with`, `starts-at`, `steps` |
 | `moment` | 5 | `at`, `after`, `before`, `counted-in`, `in-time-zone` |
+| `rung` | 1 | `rules` |
+| `route-rule` | 3 | `when`, `choose`, `because` |
 | `ownership` | 3 | `owned-by`, `locked`, `locked-until` |
 | `release` | 1 | `asks` |
 
@@ -77,7 +79,8 @@ write: most workspaces use a dozen.
 | `port` | 10 | `description`, `kind`, `every`, `says`, `if-still-running` |
 | `resource` | 11 | `resource-kind`, `endpoint`, `auth`, `asks-to-connect`, `description` |
 | `teamwork` | 9 | `may-start`, `waits-for`, `enough-is`, `gives-up-after`, `starts` |
-| `when-this` | 5 | `tool`, `arg`, `more-than`, `is`, `is-one-of` |
+| `when-this` | 9 | `tool`, `value`, `arg`, `more-than`, `less-than` |
+| `comparand` | 3 | `value`, `now-plus`, `now-minus` |
 
 ## Measuring and learning
 
@@ -104,7 +107,7 @@ write: most workspaces use a dozen.
 
 ## How to read a kind
 
-Every kind follows the same shape, so 51 is not 51 things to learn:
+Every kind follows the same shape, so 54 is not 54 things to learn:
 
 ```yaml
 description: what this is, in one line     # every kind has this

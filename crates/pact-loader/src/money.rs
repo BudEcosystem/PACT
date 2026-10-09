@@ -78,8 +78,9 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
     // Before the shape check, because "this is not a figure" is the more
     // fundamental complaint and the shape check stays quiet about anything this
     // one has already spoken about. One mistake gets one message.
+    // The shape check beside it is `conditions::line`'s, the one reader of a
+    // condition, which stays quiet about a figure this has spoken about.
     a_threshold_that_is_not_a_figure(document, diags);
-    compared_in_the_shape_the_argument_has(document, diags);
 
     let Some(agents) = document.get("agents").and_then(Node::as_map) else {
         return;
@@ -376,6 +377,8 @@ fn figure_slot(written: &str) -> String {
     let cleaned: String = slot
         .trim()
         .trim_start_matches('$')
+        // A percentage is a figure (`85%`, `less-than:` on a share used).
+        .trim_end_matches('%')
         .chars()
         .filter(|c| !c.is_whitespace() && *c != ',' && *c != '_')
         .collect();
@@ -406,7 +409,7 @@ fn figure_slot(written: &str) -> String {
 /// The same test `compared_in_the_shape_the_argument_has` makes about the last
 /// word of a threshold, so a value that looks like money to one of them looks
 /// like money to the other.
-fn is_a_currency_code(word: &str) -> bool {
+pub(crate) fn is_a_currency_code(word: &str) -> bool {
     word.len() == 3 && word.chars().all(|c| c.is_ascii_alphabetic())
 }
 
@@ -475,44 +478,68 @@ fn is_a_currency_code(word: &str) -> bool {
 /// agreement.
 fn a_threshold_that_is_not_a_figure(document: &Node, diags: &mut Diagnostics) {
     every_gate(document, &mut |when| {
-        let Some(figure) = when.get("more-than") else {
-            return;
-        };
-        let Some(written) = figure.as_str() else {
-            return;
-        };
-        let written = written.trim();
-        let Some(says) = no_figure_in(written) else {
-            return;
-        };
-        // The tool is required by the schema, so it is normally there —
-        // but a rule missing it is already being told so, and this
-        // sentence must still read when it is.
-        let about = when
-            .get("tool")
-            .and_then(Node::as_str)
-            .map(|t| {
-                format!(
-                    "this rule asks a person when `{}` is called, and ",
-                    t.trim()
-                )
-            })
-            .unwrap_or_default();
-        diags.push(Diagnostic::error(
-            "loader/threshold-is-not-a-figure",
-            figure.span.clone(),
-            format!(
-                "{about}`more-than: {written}` {says} — so the rule has no figure \
-                 to hold a call against, and which calls it stops is nobody's \
-                 decision."
-            ),
-            "Write the figure a person should be asked above, the way that \
-             argument is declared in the tool's `takes:` — `more-than: 200 USD` \
-             for an amount of money, `more-than: 80` for a score."
-                .to_string(),
-        ));
+        for word in ORDERED {
+            let Some(figure) = when.get(word) else {
+                continue;
+            };
+            let Some(written) = figure.as_str() else {
+                continue;
+            };
+            let written = written.trim();
+            // A date is compared as a date (`less-than: 2026-12-31`).
+            if crate::conditions::looks_like_a_date(written) {
+                continue;
+            }
+            let Some(says) = no_figure_in(written) else {
+                continue;
+            };
+            // A rule missing its tool is already being told so, and this
+            // sentence must still read when it is; a `value:` line has none.
+            let about = when
+                .get("tool")
+                .and_then(Node::as_str)
+                .map(|t| {
+                    format!(
+                        "this rule asks a person when `{}` is called, and ",
+                        t.trim()
+                    )
+                })
+                .unwrap_or_default();
+            diags.push(Diagnostic::error(
+                "loader/threshold-is-not-a-figure",
+                figure.span.clone(),
+                if about.is_empty() {
+                    format!(
+                        "`{word}: {written}` {says} — so the condition has no figure to \
+                         compare with, and what it decides is nobody's decision."
+                    )
+                } else {
+                    format!(
+                        "{about}`{word}: {written}` {says} — so the rule has no figure \
+                         to hold a call against, and which calls it stops is nobody's \
+                         decision."
+                    )
+                },
+                if about.is_empty() {
+                    format!(
+                        "Write the figure the way the value it is compared with is declared — \
+                         `{word}: 200 USD` for an amount of money, `{word}: 80` for a score."
+                    )
+                } else {
+                    format!(
+                        "Write the figure a person should be asked {}, the way that argument \
+                         is declared in the tool's `takes:` — `{word}: 200 USD` for an amount \
+                         of money, `{word}: 80` for a score.",
+                        if word == "more-than" { "above" } else { "below" }
+                    )
+                },
+            ));
+        }
     });
 }
+
+/// The two comparisons whose figure must be one (`more-than:`, `less-than:`).
+const ORDERED: [&str; 2] = ["more-than", "less-than"];
 
 /// Every map in the document that carries a `more-than:`, wherever it is
 /// written.
@@ -556,7 +583,7 @@ fn every_gate(node: &Node, seen: &mut dyn FnMut(&Node)) {
         return;
     }
     if let Some(map) = node.as_map() {
-        if map.get("more-than").is_some() {
+        if ORDERED.iter().any(|w| map.get(*w).is_some()) {
             seen(node);
         }
         for (_, entry) in map {
@@ -567,106 +594,6 @@ fn every_gate(node: &Node, seen: &mut dyn FnMut(&Node)) {
             every_gate(item, seen);
         }
     }
-}
-
-/// A gate that compares an argument in a shape the argument does not have (A3).
-///
-/// `more-than:` used to be `type: money`, which was right while money was the
-/// only thing a gate could compare. MEASURED, before this: a lead score gated
-/// with `more-than: 80` was told *"'more-than' should be an amount of money …
-/// fix: Write it like `0.05 USD`"* — and doing exactly what that said printed
-/// "OK — loaded cleanly", after which `pact waits` showed a live thirty-minute
-/// human gate comparing a score to dollars.
-///
-/// The shape cannot be stated in the schema, because it is the shape of an
-/// argument declared in a DIFFERENT document — the tool's `takes:`. This is the
-/// only place that reads both, which is why the check is here and the schema is
-/// permissive rather than the other way round.
-fn compared_in_the_shape_the_argument_has(document: &Node, diags: &mut Diagnostics) {
-    let Some(tools) = document.get("tools").and_then(Node::as_map) else {
-        return;
-    };
-
-    every_gate(document, &mut |when| {
-        let Some(named) = when.get("tool").and_then(Node::as_str) else {
-            return;
-        };
-        let Some(argument) = when.get("arg").and_then(Node::as_str) else {
-            return;
-        };
-        let Some((tool, action)) = named.split_once('/') else {
-            return;
-        };
-        let Some(declared) = tools
-            .get(tool)
-            .and_then(|t| t.node.get("actions"))
-            .and_then(|a| a.get(action))
-            .and_then(|a| a.get("takes"))
-            .and_then(|t| t.get(argument.trim()))
-            .and_then(Node::as_str)
-            .map(str::trim)
-        else {
-            return;
-        };
-        // Only `more-than:` compares a magnitude; `is:` and `is-one-of:`
-        // compare a value, and any shape can be equal to something.
-        let Some(figure) = when.get("more-than") else {
-            return;
-        };
-        // A bare `200` parses as an integer, and that is exactly the
-        // half of the mismatch worth catching: a money argument gated by
-        // a number with no currency. Reading only strings would have
-        // caught the score-gated-by-dollars direction and silently
-        // missed its mirror.
-        let written = match &figure.value {
-            pact_doc::Value::Str(s) => s.trim().to_string(),
-            pact_doc::Value::Int(n) => n.to_string(),
-            pact_doc::Value::Float(n) => n.to_string(),
-            _ => return,
-        };
-        let written = written.as_str();
-        // `a_threshold_that_is_not_a_figure` has already spoken about
-        // this line, and "write the figure the way the argument is
-        // declared" is a dead end for somebody who wrote `NaN USD` on a
-        // score: the shape is not what is wrong with it.
-        if no_figure_in(written).is_some() {
-            return;
-        }
-        let looks_like_money = written
-            .split_whitespace()
-            .last()
-            .is_some_and(is_a_currency_code)
-            || written.starts_with('$');
-        let is_money = declared == "money";
-        if is_money == looks_like_money {
-            return;
-        }
-        let (says, fix) = if is_money {
-            (
-                format!("`{argument}` is an amount of money and `more-than: {written}` is not"),
-                add_a_currency_to(written),
-            )
-        } else {
-            (
-                format!(
-                    "`{argument}` is {declared} and `more-than: {written}` is an \
-                     amount of money"
-                ),
-                "Write the figure the way the argument is declared — a bare number \
-                 for a number, with no currency after it."
-                    .to_string(),
-            )
-        };
-        diags.push(Diagnostic::error(
-            "loader/compared-in-the-wrong-shape",
-            figure.span.clone(),
-            format!(
-                "this rule asks a person when `{named}` is called, and {says} — so \
-                 the gate compares two different kinds of thing."
-            ),
-            fix,
-        ));
-    });
 }
 
 /// The fix line for a money argument gated by a figure with no currency on it —
@@ -703,7 +630,7 @@ fn compared_in_the_shape_the_argument_has(document: &Node, diags: &mut Diagnosti
 ///
 /// Anything else gets the literal example, which is what the sibling diagnostic
 /// `loader/threshold-is-not-a-figure` has always given.
-fn add_a_currency_to(written: &str) -> String {
+pub(crate) fn add_a_currency_to(written: &str) -> String {
     let written = written.trim();
     // What the author wrote with only the separators taken out — so `1,000`
     // still gets its own figure back, and `USD 200` does not.
@@ -713,10 +640,10 @@ fn add_a_currency_to(written: &str) -> String {
         .collect();
     let candidate = format!("{written} USD");
     if no_figure_in(&candidate).is_none() && figure_slot(written) == bare {
-        format!("Write the figure the way the argument is declared, like `{candidate}`.")
+        format!("Write the figure as an amount of money, like `{candidate}`.")
     } else {
-        "Write the figure the way the argument is declared — an amount of money, \
-         with the currency after it, like `200 USD`."
+        "Write the figure as an amount of money, with the currency after it, like \
+         `200 USD`."
             .to_string()
     }
 }
