@@ -155,6 +155,33 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
         };
         let inputs = declared(RUN_INPUTS);
         let remembered: BTreeSet<String> = declared(REMEMBERS).union(&workspace).cloned().collect();
+        // A name means one thing: an agent's own entry named as the workspace's
+        // would make `remembers.<name>` two memories, and the agent's own
+        // `remember` would write the workspace's under the agent's terms.
+        for (name, own) in entry
+            .node
+            .get(REMEMBERS)
+            .and_then(Node::as_map)
+            .into_iter()
+            .flatten()
+        {
+            if workspace.contains(name) {
+                diags.push(Diagnostic::error(
+                    "loader/the-workspace-remembers-that-name",
+                    own.key_span.clone(),
+                    format!(
+                        "`{agent}` remembers '{name}' of its own, and the workspace remembers \
+                         '{name}' too, so `remembers.{name}` would name two memories and \
+                         `{agent}`'s own `remember` would write the workspace's under \
+                         `{agent}`'s terms, which only `bud/remember` and `bud/forget` may write."
+                    ),
+                    format!(
+                        "Rename `{agent}`'s own entry (for example `{agent}-{name}`), or delete it \
+                         and read the workspace's `remembers.{name}`."
+                    ),
+                ));
+            }
+        }
         // Each text that becomes this agent's words, with what to call it.
         let mut texts: Vec<(String, &str, &Span)> = Vec::new();
         for field in FIELDS {

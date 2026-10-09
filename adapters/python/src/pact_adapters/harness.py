@@ -588,7 +588,8 @@ async def run(
     run_program: "Callable[[str, dict[str, Any]], str] | None" = None,
     at_work: dict[str, int] | None = None,
     #: What this conversation already knows, by the names the agent's own
-    #: `remembers:` block declares — the value side of `bind: remembers.<n>`.
+    #: `remembers:` block or the workspace's declares — the value side of
+    #: `bind: remembers.<n>` and of a `{{remembers.<n>}}` hole.
     #:
     #: A host parameter and not a document one, because `lasts:
     #: one-conversation` outlives a single `run()` and where a conversation's
@@ -692,9 +693,12 @@ async def run(
     # What the conversation already knows, seeded into the one store `remember-as:`
     # writes to and `bind: remembers.<n>` reads from. Through `record` rather than
     # into `held` directly, so an undeclared name is dropped here exactly as it
-    # would be on the way out.
+    # would be on the way out. The workspace's `remembers:` is memory any agent
+    # here reads (`AgentSpec.workspace_remembers`), so a value of it is seeded
+    # beside the agent's own; `pact check` refuses a name both declare.
     for _known, _value in (remembered or {}).items():
         spec.facts.record(str(_known), _value)
+        spec.workspace_remembers.record(str(_known), _value)
     # 02P A1: `{{run-inputs.<n>}}` and `{{remembers.<n>}}` in the instructions
     # are filled here, once, before the model reads a word — from what this run
     # was handed and what the conversation already knows. Strict: a hole with no
@@ -706,7 +710,11 @@ async def run(
     # else in the words is a hole.
     spec = replace(
         spec,
-        instructions=fill(spec.instructions, run_inputs=supplied, remembers=spec.facts.held),
+        instructions=fill(
+            spec.instructions,
+            run_inputs=supplied,
+            remembers={**spec.workspace_remembers.held, **spec.facts.held},
+        ),
     )
     bus = bus or Bus()
     #: Agents this request may put to work because a VALUE named one — the
@@ -3058,8 +3066,9 @@ def _bind_value(spec: AgentSpec, written: str, supplied: Mapping[str, Any]) -> A
     that the identity never arrived.
     """
     namespace, name = _bind_source(written)
-    if namespace == REMEMBERS:
-        return spec.facts.value(name)
+    if namespace == REMEMBERS:  # the agent's own, else the workspace's
+        own = spec.facts.value(name)
+        return spec.workspace_remembers.value(name) if own is None else own
     return supplied.get(name)
 
 

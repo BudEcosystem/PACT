@@ -116,3 +116,24 @@ fn a_tools_answer_is_never_kept_in_the_workspace_memory() {
     assert!(said.contains("bud/remember"), "{said}");
     let _ = std::fs::remove_dir_all(&dst);
 }
+
+/// An agent's own entry may not take a name the workspace remembers: the two
+/// would share `remembers.<name>`, and the agent's own `remember` would write the
+/// workspace's memory under the agent's terms, past `bud/remember`.
+#[test]
+fn an_agents_own_memory_may_not_take_a_name_the_workspace_remembers() {
+    let dst = edited(
+        "shadow",
+        "agents/desk.yaml",
+        "  last-order-seen:\n",
+        "  house-style:\n    description: Mine.\n    lasts: forever\n  last-order-seen:\n",
+    );
+    let (code, said) = run(&["check", &dst]);
+    assert_eq!(code, Some(1), "{said}");
+    assert!(
+        said.contains("loader/the-workspace-remembers-that-name"),
+        "{said}"
+    );
+    assert!(said.contains("desk-house-style"), "{said}");
+    let _ = std::fs::remove_dir_all(&dst);
+}
