@@ -154,3 +154,48 @@ def test_an_approval_gate_reads_through_the_same_function() -> None:
     # A comparison relative to now has no journaled clock in a gate: it stops and asks.
     soon = {"tool": "orders/ship", "arg": "by", "less-than": {"now-plus": "2 days"}}
     assert questions._atom_stops(soon, {"by": "2026-10-25"}) is True
+
+
+def test_a_null_argument_stops_the_gate_and_only_a_missing_one_lets_it_by() -> None:
+    """A call that carries `amount: null` is not a call with no amount: a tool
+    may read null as "refund in full", so the gate cannot tell and asks. Only an
+    argument the call does not carry means "not this call"."""
+    for word in ("more-than", "less-than"):
+        atom = {"tool": "payments/refund", "arg": "amount", word: "200 USD"}
+        assert questions._atom_stops(atom, {"amount": None}) is True, word
+        assert questions._atom_stops(atom, {}) is False, word
+    assert holds({"is-empty": "yes"}, None) is True
+    for line in ({"is": "x"}, {"is-one-of": ["x"]}, {"more-than": 1}, {"contains-any-of": ["x"]}):
+        assert holds(line, None) is None, line
+
+
+def test_a_time_of_day_is_compared_as_a_time() -> None:
+    """Never by its hour: 14:50 is after 14:30, 09:05 before 09:30, against a
+    written time or another time (a `time` value as Python holds it)."""
+    assert holds({"more-than": "14:30"}, "14:50") is True
+    assert holds({"less-than": "09:30"}, "09:05") is True
+    assert holds({"less-than": "09:30"}, "9:45") is False
+    assert holds({"more-than": "14:30"}, dt.time(14, 30, 1)) is True
+    assert holds({"is": "14:30"}, "14:30:00") is True
+    cutoff = {"less-than": {"value": "input.cutoff"}}
+    assert holds(cutoff, "16:59", read=lambda _: dt.time(17, 0)) is True
+    assert holds(cutoff, "17:01", read=lambda _: "17:00") is False
+    # A time of day has no date: against one, or a number, it cannot be told.
+    assert holds({"more-than": "2026-10-09"}, "14:30") is None
+    assert holds({"more-than": 14}, "14:30") is None
+    assert holds({"more-than": "14:30"}, "25:00") is None
+
+
+def test_a_gate_reads_a_moment_with_no_offset_in_the_workspace_zone() -> None:
+    """Models write a date and time without its offset. The gate reads it in
+    the workspace's `time-zone:`, so it can be held against a date — and with
+    no zone it cannot be told and stops."""
+    atom = {"tool": "orders/ship", "arg": "by", "less-than": "2026-10-09"}
+    late = {"by": "2030-01-01T10:00:00"}
+    assert questions._atom_stops(atom, late, zone="America/Chicago") is False
+    assert questions._atom_stops(atom, {"by": "2026-10-08T23:30:00"}, zone="America/Chicago") is True
+    assert questions._atom_stops(atom, late) is True, "no zone: cannot be told, so it stops"
+    rule = questions.Rule(question=questions.Question.approval(), when=(atom,), gates=True)
+    gate = questions.Gate({"orders": (rule,)}, zone="America/Chicago")
+    assert gate.waits_for("orders", late) == ()
+    assert questions.Gate({"orders": (rule,)}).waits_for("orders", late) != ()

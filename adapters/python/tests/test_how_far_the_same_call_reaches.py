@@ -152,10 +152,11 @@ def test_a_call_carrying_none_of_the_value_is_not_the_call_the_rule_is_about() -
 
 
 def test_both_halves_of_the_gate_read_equality_the_same_way() -> None:
-    """`Rule.fires_on` chooses the wording a person reads and `Rule.stops_on`
-    decides whether the call is withheld. Two readings of one rule is how a
-    person gets asked about a call that was never stopped, so both read one
-    function."""
+    """`Rule.stops_on` both chooses the wording a person reads (`Gate.for_call`)
+    and decides whether the call is withheld (`Gate._stops`). Two readings of
+    one rule is how a person gets asked about a call that was never stopped, so
+    there is one, and a call that names its action reads as one that is told
+    which action it is."""
     atom = {"tool": "crm/write", "arg": "tier", "is": "enterprise"}
     rule = Rule(question=Question.approval(), when=(atom,))
     for args, want in [
@@ -163,5 +164,5 @@ def test_both_halves_of_the_gate_read_equality_the_same_way() -> None:
         ({"action": "write", "tier": "small"}, False),
         ({"action": "write"}, False),
     ]:
-        assert rule.fires_on(args) is want, args
+        assert rule.stops_on(args) is want, args
         assert rule.stops_on(args, as_action="write") is want, args

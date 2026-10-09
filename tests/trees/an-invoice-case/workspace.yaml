@@ -10,3 +10,5 @@ shapes:
     total: money
     lowest-confidence: number
     due-on: date
+    arrived-at: time
+    cutoff: time

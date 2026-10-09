@@ -486,8 +486,9 @@ fn a_threshold_that_is_not_a_figure(document: &Node, diags: &mut Diagnostics) {
                 continue;
             };
             let written = written.trim();
-            // A date is compared as a date (`less-than: 2026-12-31`).
-            if crate::conditions::looks_like_a_date(written) {
+            // A date is compared as a date (`less-than: 2026-12-31`), a time
+            // of day as a time (`more-than: 14:30`).
+            if crate::conditions::looks_like_a_date_or_time(written) {
                 continue;
             }
             let Some(says) = no_figure_in(written) else {

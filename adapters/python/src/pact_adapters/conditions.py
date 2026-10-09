@@ -33,9 +33,17 @@ What the caller supplies, and nothing else:
 
 Every answer is `True`, `False` or `None`. `None` means the line cannot be
 decided — a figure that is no figure, two currencies, a `now-plus:` with no
-`now` — and what that means is the caller's: a gate stops the call and asks
-(a mistake must never become a disabled gate), a rules rung stops deciding.
-A value that is not there holds nothing but `is-empty: yes`.
+`now`, a value that is there but null — and what that means is the caller's: a
+gate stops the call and asks (a mistake must never become a disabled gate), a
+rules rung stops deciding. A value that is not there ([`ABSENT`]: a call that
+does not carry the argument) holds nothing but `is-empty: yes`; one that is
+there as null is empty, and against every other word cannot be told, so a
+refund whose `amount` is null is asked about rather than let through.
+
+What is ordered: a figure (a number, a percentage, money; two currencies are
+not compared), a date, a date and time, and a time of day (`14:30`, read as a
+time, never by its hour). A date against a date and time compares dates in the
+zone; a time of day compares with a time of day only.
 
 `pact check` refuses the shapes that cannot compare where it can see both sides
 (`loader/compared-in-the-wrong-shape`, WF-18); this module answers what is left
@@ -49,6 +57,7 @@ import json
 import math
 import re
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any, Callable, Iterable, Mapping
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -65,7 +74,10 @@ __all__ = [
     "amount",
     "choose",
     "compares",
+    "currency",
+    "exact",
     "holds",
+    "ordered_as",
 ]
 
 #: The six condition words, in 03's order.
@@ -116,8 +128,10 @@ def holds(
         written = line[word]
         if word == "is-empty":
             return _empty(value) == said_yes(written)
-        if value is ABSENT or value is None:
+        if value is ABSENT:
             return False
+        if value is None:
+            return None
         if word == "contains-any-of":
             return _contains(value, written)
         if word == "is-one-of":
@@ -279,16 +293,31 @@ def _in_zone(moment: _dt.datetime, zone: str | None) -> _dt.datetime:
     return moment.astimezone(tz) if tz is not None else moment
 
 
-def _when(value: Any, zone: str | None) -> _dt.date | _dt.datetime | None:
-    """A date or a date and time, as an aware moment when it has a clock time.
-    A time written with no zone is read in `zone`, and is no moment without one."""
+#: A date as ISO 8601 begins (`2026-10-09`, `2026-10-09T14:30:00-05:00`).
+_DATE = re.compile(r"^\s*\d{4}-\d{2}-\d{2}")
+#: A time of day (`14:30`, `9:05`, `14:30:15`): the spelling the loader reads
+#: as one (`pact_loader::conditions::looks_like_a_time`), and the fractional
+#: seconds a value read through `Shape` may carry (`14:30:00.500000`).
+_TIME = re.compile(r"^\s*(\d{1,2})(:\d{2}(?::\d{2}(?:\.\d+)?)?)\s*$")
+
+
+def _when(value: Any, zone: str | None) -> _dt.date | _dt.datetime | _dt.time | None:
+    """A date, a date and time (an aware moment), or a time of day. A date and
+    time written with no zone is read in `zone`, and is no moment without one."""
     if isinstance(value, _Moment):
         return value.at
+    if isinstance(value, _dt.time):
+        return value.replace(tzinfo=None)
+    if isinstance(value, str) and (clock := _TIME.match(value)):
+        try:
+            return _dt.time.fromisoformat(clock.group(1).zfill(2) + clock.group(2))
+        except ValueError:
+            return None
     if isinstance(value, _dt.datetime):
         moment = value
     elif isinstance(value, _dt.date):
         return value
-    elif isinstance(value, str) and re.match(r"^\s*\d{4}-\d{2}-\d{2}", value):
+    elif isinstance(value, str) and _DATE.match(value):
         text = value.strip().replace("Z", "+00:00")
         try:
             if len(text) == 10:
@@ -306,25 +335,49 @@ def _when(value: Any, zone: str | None) -> _dt.date | _dt.datetime | None:
     return moment
 
 
+def ordered_as(value: Any, zone: str | None = None) -> tuple[str, Any] | None:
+    """What `value` is ordered as, and the thing to order it by: `("date", d)`,
+    `("moment", aware datetime)`, `("time", t)`, or `("<currency>", number)` for
+    a figure (`""` for a number or a percentage). `None` for a value with no
+    order: no figure, or a date or time that cannot be read here (a date and
+    time with no zone and no `zone`), which is never read by its year.
+
+    The one reading of order: `more-than:`/`less-than:` and `top <n> ... by`
+    (`combine`) both go through it."""
+    when = _when(value, zone)
+    if isinstance(when, _dt.datetime):
+        return ("moment", when)
+    if isinstance(when, _dt.date):
+        return ("date", when)
+    if isinstance(when, _dt.time):
+        return ("time", when)
+    if isinstance(value, str) and (_DATE.match(value) or _TIME.match(value)):
+        return None
+    figure = _figure(value)
+    return None if figure is None else (figure[1], figure[0])
+
+
 def _order(value: Any, against: Any, zone: str | None) -> int | None:
     """-1, 0 or 1 for `value` against `against`, in the value's own shape."""
     if against is ABSENT or against is None:
         return None
-    left, right = _when(value, zone), _when(against, zone)
-    if left is not None or right is not None:
-        if left is None or right is None:
-            return None
-        if isinstance(left, _dt.datetime) != isinstance(right, _dt.datetime):
-            # A date against a moment: compared by the date, in the zone.
-            left = _in_zone(left, zone).date() if isinstance(left, _dt.datetime) else left
-            right = _in_zone(right, zone).date() if isinstance(right, _dt.datetime) else right
-        return (left > right) - (left < right)
-    have, want = _figure(value), _figure(against)
-    if have is None or want is None:
+    left, right = ordered_as(value, zone), ordered_as(against, zone)
+    if left is None or right is None:
         return None
-    if have[1] and want[1] and have[1] != want[1]:
+    (lk, lv), (rk, rv) = left, right
+    if {lk, rk} == {"date", "moment"}:
+        # A date against a moment: compared by the date, in the zone.
+        lv = _in_zone(lv, zone).date() if lk == "moment" else lv
+        rv = _in_zone(rv, zone).date() if rk == "moment" else rv
+    elif _TEMPORAL & {lk, rk} and lk != rk:
+        return None  # a time of day against a date, a figure against either
+    elif lk and rk and lk != rk:
         return None  # two currencies: nothing here converts one into the other
-    return (have[0] > want[0]) - (have[0] < want[0])
+    return (lv > rv) - (lv < rv)
+
+
+#: The kinds [`ordered_as`] gives a date or a time; every other kind is a figure.
+_TEMPORAL = frozenset({"date", "moment", "time"})
 
 
 def _equal(value: Any, against: Any, zone: str | None) -> bool | None:
@@ -333,7 +386,8 @@ def _equal(value: Any, against: Any, zone: str | None) -> bool | None:
     if isinstance(value, bool) or isinstance(against, bool):
         return said_yes(value) == said_yes(against)
     if _when(value, zone) is not None and _when(against, zone) is not None:
-        return _order(value, against, zone) == 0
+        order = _order(value, against, zone)
+        return None if order is None else order == 0
     have, want = _strict_figure(value), _strict_figure(against)
     if have is not None and want is not None:
         if have[1] and want[1] and have[1] != want[1]:
@@ -434,15 +488,26 @@ def amount(value: Any) -> float | None:
     VALUE, not on a reader"*): both spellings return `None`, and `None` is the
     case every caller already handles by stopping.
     """
+    figure = exact(value)
+    return None if figure is None else float(figure)
+
+
+def exact(value: Any) -> Decimal | None:
+    """The figure [`amount`] reads, exactly as written: `0.004 USD` is
+    `Decimal('0.004')`, not the float nearest it, and `40.00 USD` keeps its two
+    places. What `add up` sums, so a total is the sum of what was written."""
     if isinstance(value, bool) or value is None:
         return None
-    if isinstance(value, (int, float)):
-        return float(value) if math.isfinite(value) else None
+    if isinstance(value, int):
+        return Decimal(value)
+    if isinstance(value, float):
+        return Decimal(repr(value)) if math.isfinite(value) else None
     m = _NUMBER.search(str(value).translate(_GROUPING))
-    return float(m.group()) if m else None
+    return Decimal(m.group()) if m else None
 
 
-def _currency(value: Any) -> str:
+def currency(value: Any) -> str:
+    """The currency written beside a figure (`USD` for `$`), or `""`."""
     if not isinstance(value, str):
         return ""
     if value.strip().startswith("$"):
@@ -454,7 +519,7 @@ def _currency(value: Any) -> str:
 def _figure(value: Any) -> tuple[float, str] | None:
     """A figure and its currency (empty for a number or a percentage)."""
     figure = amount(value)
-    return None if figure is None else (figure, _currency(value))
+    return None if figure is None else (figure, currency(value))
 
 
 def _strict_figure(value: Any) -> tuple[float, str] | None:

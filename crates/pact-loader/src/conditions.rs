@@ -83,7 +83,7 @@ impl Kind {
     fn is_a_figure(self) -> bool {
         matches!(
             self,
-            Kind::Money | Kind::Percent | Kind::Number | Kind::Date
+            Kind::Money | Kind::Percent | Kind::Number | Kind::Date | Kind::Time
         )
     }
 }
@@ -107,7 +107,7 @@ pub(crate) fn of_shape(shape: &Shape) -> Option<Kind> {
 }
 
 /// Whether `written` begins as an ISO 8601 date does (`2026-10-09`).
-pub(crate) fn looks_like_a_date(written: &str) -> bool {
+fn looks_like_a_date(written: &str) -> bool {
     let b = written.trim().as_bytes();
     b.len() >= 10
         && b[..4].iter().all(u8::is_ascii_digit)
@@ -117,8 +117,30 @@ pub(crate) fn looks_like_a_date(written: &str) -> bool {
         && b[8..10].iter().all(u8::is_ascii_digit)
 }
 
+/// Whether `written` is a time of day (`14:30`, `9:05`, `14:30:15`): the
+/// spelling `pact_adapters.conditions` reads as one, so a time is compared
+/// with a time, never by its hour as a number.
+pub(crate) fn looks_like_a_time(written: &str) -> bool {
+    let parts: Vec<&str> = written.trim().split(':').collect();
+    let below = |p: &str, digits: std::ops::RangeInclusive<usize>, limit: u32| {
+        digits.contains(&p.len())
+            && p.bytes().all(|b| b.is_ascii_digit())
+            && p.parse::<u32>().is_ok_and(|n| n < limit)
+    };
+    (2..=3).contains(&parts.len())
+        && below(parts[0], 1..=2, 24)
+        && below(parts[1], 2..=2, 60)
+        && parts.get(2).is_none_or(|s| below(s, 2..=2, 60))
+}
+
+/// Whether `written` is compared as a moment rather than a figure: a date
+/// (with or without its clock time) or a time of day.
+pub(crate) fn looks_like_a_date_or_time(written: &str) -> bool {
+    looks_like_a_date(written) || looks_like_a_time(written)
+}
+
 /// The kind of a figure as written: `5000 USD`, `85%`, `0.85`, `2026-10-09`,
-/// `yes`. `None` for a word that is no figure (`enterprise`).
+/// `14:30`, `yes`. `None` for a word that is no figure (`enterprise`).
 fn of_written(node: &Node) -> Option<Kind> {
     let written = match &node.value {
         Value::Int(_) | Value::Float(_) => return Some(Kind::Number),
@@ -128,6 +150,9 @@ fn of_written(node: &Node) -> Option<Kind> {
     };
     if looks_like_a_date(written) {
         return Some(Kind::Date);
+    }
+    if looks_like_a_time(written) {
+        return Some(Kind::Time);
     }
     if matches!(
         written.to_ascii_lowercase().as_str(),
@@ -335,7 +360,7 @@ pub(crate) fn line(
         // A figure that is no figure is `money.rs`'s to tell, once.
         if matches!(word, "more-than" | "less-than")
             && f.as_str()
-                .is_some_and(|s| !looks_like_a_date(s) && no_figure_in(s).is_some())
+                .is_some_and(|s| !looks_like_a_date_or_time(s) && no_figure_in(s).is_some())
         {
             continue;
         }
@@ -513,6 +538,10 @@ mod tests {
             ("v: 0.85", Some(Kind::Number)),
             ("v: '1,000'", Some(Kind::Number)),
             ("v: 2026-10-09", Some(Kind::Date)),
+            ("v: 14:30", Some(Kind::Time)),
+            ("v: '9:05'", Some(Kind::Time)),
+            ("v: 14:30:15", Some(Kind::Time)),
+            ("v: 25:00", None),
             ("v: yes", Some(Kind::YesNo)),
             ("v: enterprise", None),
             ("v: USD 200", Some(Kind::Number)),

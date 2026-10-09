@@ -8,7 +8,7 @@ holds that did not; the commits are listed under it for whoever wants the detail
 Running PACT trees in production on Pydantic AI 2.54, through
 [Bud Agent Flow](https://github.com/BudEcosystem/Bud-Agent-Flow), drove these changes. Every
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
-runs offline: 3811 tests, 1263 Rust and 2548 adapter.
+runs offline: 3820 tests, 1263 Rust and 2557 adapter.
 
 ### Workflows: one condition grammar, decide by rules, combine rules (9 October)
 
@@ -40,6 +40,16 @@ runs offline: 3811 tests, 1263 Rust and 2548 adapter.
   associative `join`, so items combined inside a segment and segments combined by a parent come
   to the same result, ties included (the earliest item wins), held by a property test. The
   spellings are read from `spec/schema.yaml`'s one copy.
+- **Review fixes.** A gate stops a call that carries its argument as null (`amount: null`
+  cannot be told against `200 USD`; only a call that leaves the argument out is not the call
+  the rule is about), as it did before the one reader. A time of day is compared as a time
+  (`more-than: 14:30` loads, is held to a `time` value, and is read as a time, never by its
+  hour). The gate reads a date and time an argument carries with no offset in the workspace's
+  `time-zone:` (`Gate.zone`). `add up` sums money exactly, to the most decimal places written
+  (`0.004 USD` twice is `0.008 USD`, `1000 JPY + 1 JPY` is `1001 JPY`), and refuses money with
+  a bare number. `top <n> ... by <field>` ranks dates, moments and times as the condition
+  reader orders them (`conditions.ordered_as`), not by their year. `Rule.fires_on`, a twin of
+  `Rule.stops_on`, is gone.
 - Fixture `tests/trees/an-invoice-case/` (#48's routing and tiers); conformance tests
   `one_grammar_for_every_condition`, `compared_in_its_own_shape`, `or_is_two_rules` and
   `a_decide_cannot_run_out_of_rungs`; an `until:` of `tool:` lines is now refused (WF-18) and

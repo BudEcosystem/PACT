@@ -4,9 +4,10 @@
 //!
 //! A value is compared in its own shape: the shape is read where what the line
 //! looks at is declared — the workflow's `accepts:` (`invoice` is a named shape
-//! with `total: money`, `lowest-confidence: number`, `due-on: date`), the
+//! with `total: money`, `lowest-confidence: number`, `due-on: date`,
+//! `arrived-at: time`, `cutoff: time`), the
 //! answer of the stage a binding reads, an action's `takes:` — and the figure
-//! is read as written (`5000 USD`, `0.85`, `2026-01-01`, `{now-plus: 14 days}`,
+//! is read as written (`5000 USD`, `0.85`, `2026-01-01`, `14:30`, `{now-plus: 14 days}`,
 //! `{value: <binding>}`). Where the shape is not known before a run, nothing is
 //! refused.
 
@@ -100,6 +101,24 @@ fn a_mismatch_is_refused_in_a_routing_rule() {
             "`input.invoice.total` is an amount of money and `contains-any-of:` looks for words",
         ),
         (
+            "time-number",
+            TOTAL,
+            "{ value: input.invoice.arrived-at, more-than: 14 }",
+            "`input.invoice.arrived-at` is a time of day and `more-than: 14` is a number",
+        ),
+        (
+            "time-date",
+            TOTAL,
+            "{ value: input.invoice.arrived-at, more-than: 2026-01-01 }",
+            "`input.invoice.arrived-at` is a time of day and `more-than: 2026-01-01` is a date",
+        ),
+        (
+            "date-time",
+            TOTAL,
+            "{ value: input.invoice.due-on, less-than: 14:30 }",
+            "`input.invoice.due-on` is a date and `less-than: 14:30` is a time of day",
+        ),
+        (
             "a-choice-ordered",
             TOTAL,
             "{ value: steps.match.result, more-than: 3 }",
@@ -178,6 +197,21 @@ fn a_figure_in_the_values_own_shape_loads() {
             "money-binding",
             TOTAL,
             "{ value: input.invoice.total, more-than: { value: input.invoice.total } }",
+        ),
+        (
+            "time-time",
+            TOTAL,
+            "{ value: input.invoice.arrived-at, more-than: 14:30 }",
+        ),
+        (
+            "time-quoted",
+            TOTAL,
+            "{ value: input.invoice.arrived-at, less-than: '9:05' }",
+        ),
+        (
+            "time-binding",
+            TOTAL,
+            "{ value: input.invoice.arrived-at, more-than: { value: input.invoice.cutoff } }",
         ),
         ("empty", TOTAL, "{ value: input.invoice.po, is-empty: yes }"),
         (

@@ -1045,6 +1045,10 @@ class Gate(MappingABC):
     #: written a rule about every action it could be. Empty for a gate built by
     #: hand from `{thing: question}`, which describes no tool at all.
     actions_of: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    #: The workspace's `time-zone:`, the zone a date and time an argument
+    #: carries with no offset is read in, so it can be held against a date
+    #: (`conditions.holds`). `None`: such an argument cannot be told, and stops.
+    zone: str | None = None
 
     # -- the mapping face, for the things that have one rule ----------------
 
@@ -1078,9 +1082,10 @@ class Gate(MappingABC):
         lines mean read together: over 200 a person approves the figure, over
         500 a person sets it, and 600 is both.
 
-        An atom PACT cannot evaluate counts as satisfied. Failing to ask is the
-        dangerous direction, so an unrecognised condition widens the gate rather
-        than closing it.
+        A rule is satisfied exactly when it would stop the call
+        ([`Rule.stops_on`]), so a person is never asked a question about a call
+        the gate would not have stopped; an atom PACT cannot evaluate counts as
+        satisfied, as it stops the call.
 
         `reason` is why the run stopped, and it narrows before anything else
         does. One name can carry rules for two reasons — `payments` is guarded
@@ -1114,7 +1119,7 @@ class Gate(MappingABC):
         candidates = fitting or tuple(r for r in candidates if not r.for_reason) or candidates
         if not candidates:
             return None
-        fired = [r for r in candidates if r.fires_on(args)]
+        fired = [r for r in candidates if r.stops_on(args, zone=self.zone)]
         if not fired:
             # Nothing matched: the run is parked about this thing anyway (the
             # gate is what parked it), so it is asked the author's first rule
@@ -1151,7 +1156,7 @@ class Gate(MappingABC):
         its last caller could act on a reason.
         """
         if any(
-            r.gates and r.decidable(args) and r.stops_on(args)
+            r.gates and r.decidable(args) and r.stops_on(args, zone=self.zone)
             for r in self.rules.get(name) or ()
         ):
             return True
@@ -1181,7 +1186,7 @@ class Gate(MappingABC):
         if not declared or not gating:
             return False
         return all(
-            any(r.stops_on(args, as_action=action) for r in gating)
+            any(r.stops_on(args, as_action=action, zone=self.zone) for r in gating)
             for action in declared
         )
 
@@ -1311,10 +1316,8 @@ class Gate(MappingABC):
         would come back "did not answer" and the model under test would be blamed
         for a connection nobody had granted (§7.14 gap (1), measured).
         """
-        return Gate(
-            {k: tuple(replace(r, gates=False) for r in v) for k, v in self.rules.items()},
-            self.unenforced,
-            self.actions_of,
+        return replace(
+            self, rules={k: tuple(replace(r, gates=False) for r in v) for k, v in self.rules.items()}
         )
 
 
@@ -1420,20 +1423,20 @@ class Rule:
         """
         return max((_amount(a.get("more-than")) or 0.0 for a in self.when), default=0.0)
 
-    def fires_on(self, args: Mapping[str, Any]) -> bool:
-        return all(_atom_stops(a, args, "", self.may_read) for a in self.when)
-
-    def stops_on(self, args: Mapping[str, Any], as_action: str = "") -> bool:
+    def stops_on(
+        self, args: Mapping[str, Any], as_action: str = "", zone: str | None = None
+    ) -> bool:
         """Does this rule STOP the call — as opposed to merely being about it?
 
-        Read strictly, which is the one place this file reads a condition
-        strictly, and the difference is worth stating. [`fires_on`] chooses
-        between questions for a run that is *already* parked, so an atom it
-        cannot evaluate counts as holding: widening there costs nothing but a
-        better-worded question. This decides whether to park at all, and
-        widening here stops calls the author wrote no rule about — a
-        `more-than: 200 USD` rule on `amount` would park `payments` calls that
-        carry no amount, which are the read-only lookups.
+        Every line of its `when:` must hold for the call ([`_atom_stops`]).
+        [`Gate._stops`] asks it to decide whether to park at all, and
+        [`Gate.for_call`] asks it to choose the question for a run already
+        parked, so the question put is always one whose rule stopped the call.
+        A call that does not carry the argument a rule compares is not the call
+        it is about — a `more-than: 200 USD` rule on `amount` does not park the
+        `payments` calls that carry no amount, which are the read-only lookups.
+
+        `zone` is the workspace's `time-zone:` ([`Gate.zone`]).
 
         `as_action` reads the call as if it had said which action it is. Exactly
         one caller passes it — [`Gate._whatever_action_this_is`], asking "would
@@ -1441,7 +1444,7 @@ class Rule:
         — and it is a named argument rather than a second method because it
         changes one clause of one atom, not what strict means.
         """
-        return all(_atom_stops(a, args, as_action, self.may_read) for a in self.when)
+        return all(_atom_stops(a, args, as_action, self.may_read, zone) for a in self.when)
 
 
 #: The argument that says which of a tool's actions a call is. `ir._takes`
@@ -1498,18 +1501,21 @@ def _reads_something_it_may_not(
     return bool(offered) and arg not in offered
 
 
-def _compared(atom: Mapping[str, Any], args: Mapping[str, Any]) -> bool | None:
+def _compared(
+    atom: Mapping[str, Any], args: Mapping[str, Any], zone: str | None = None
+) -> bool | None:
     """The atom's comparison against the argument it names, read by PACT's one
     condition reader (`conditions.holds`): `None` when it cannot be told.
 
     The argument is read off the model's call, so a value the call does not
     carry holds nothing but `is-empty: yes` — it is not the call the rule is
-    about. A comparison with another value or with `now` cannot be told here —
+    about. One it carries as null is passed as null, which cannot be told, so
+    the call stops: a tool may read a null `amount` as "refund in full". A comparison with another value or with `now` cannot be told here —
     a gate has only the call — so it stops and asks; `pact check` refuses one
     written in an approval rule, and this is the answer for a document built in
     code."""
     named = str(atom.get("arg") or "")
-    return holds(atom, args[named] if named in args else ABSENT)
+    return holds(atom, args[named] if named in args else ABSENT, zone=zone)
 
 
 def _atom_stops(
@@ -1517,18 +1523,17 @@ def _atom_stops(
     args: Mapping[str, Any],
     as_action: str = "",
     may_read: Mapping[str, frozenset[str]] = {},
+    zone: str | None = None,
 ) -> bool:
     """Does one condition hold for this call — and so, read by
-    [`Rule.stops_on`], stop it? [`Rule.fires_on`] reads it too, to choose the
-    wording for a run already parked, so a person is never asked about a call
-    the gate would not have stopped.
+    [`Rule.stops_on`], stop it?
 
     A comparison PACT cannot read still stops — a malformed `more-than:` is a
     mistake, and refusing to ask because of one would turn a typo into a
     disabled gate; so does an argument that is there and is no figure (`inf`,
-    `NaN`, `"Infinity"`), which treated as absent let a refund of infinity past a
-    200 USD gate with nobody asked. An argument the call does not carry does
-    not stop: the rule is about a figure, and a call carrying no figure is not
+    `NaN`, `"Infinity"`, or null), which treated as absent let a refund of
+    infinity past a 200 USD gate with nobody asked. An argument the call does
+    not carry does not stop: the rule is about a figure, and a call carrying no figure is not
     the call it is about.
 
     A threshold PACT may not read stops for exactly the first of those reasons.
@@ -1555,7 +1560,7 @@ def _atom_stops(
         return False
     if _reads_something_it_may_not(atom, may_read):
         return True
-    return _compared(atom, args) is not False
+    return _compared(atom, args, zone) is not False
 
 
 #: The figure reader every comparison uses, kept under its old name here for the
@@ -1884,7 +1889,8 @@ def questions_for(
     # out per call through `Gate.undecided_on`; the field stays because a host
     # that assembles a gate itself may still have something to report before a
     # run starts, and because the run reads both through one channel.
-    return Gate({k: tuple(v) for k, v in out.items()}, (), _actions_of(doc))
+    zone = str(doc.get("time-zone") or "").strip() or None
+    return Gate({k: tuple(v) for k, v in out.items()}, (), _actions_of(doc), zone)
 
 
 def _actions_of(doc: Mapping[str, Any]) -> dict[str, tuple[str, ...]]:
