@@ -1,11 +1,11 @@
-# The 47 kinds
+# The 51 kinds
 
 Generated from `spec/schema.yaml`. Every kind, what it is for, and how
 many fields it has. You do not need to learn these — `pact check` names the
 right one when you need it.
 
 
-**47 kinds.** A kind is a *shape a document can take*, not a file you must
+**51 kinds.** A kind is a *shape a document can take*, not a file you must
 write: most workspaces use a dozen.
 
 
@@ -13,18 +13,27 @@ write: most workspaces use a dozen.
 
 | Kind | Fields | Core fields |
 |---|---:|---|
-| `action` | 9 | `description`, `takes`, `reads-only`, `needs-a-person`, `spends-money` |
-| `agent` | 23 | `name`, `description`, `instructions`, `team`, `teamwork` |
+| `action` | 13 | `description`, `takes`, `reads-only`, `needs-a-person`, `spends-money` |
+| `agent` | 25 | `name`, `description`, `instructions`, `team`, `teamwork` |
 | `loop` | 4 | `description`, `based-on` |
 | `knowledge` | 9 | `description`, `documents`, `passages-at-most`, `must-cite`, `use-when` |
 | `skill` | 11 | `name`, `description`, `use-when`, `do-not-use-when`, `if-unsure` |
-| `stage` | 6 | `says`, `asks` |
+| `stage` | 25 | `does`, `says`, `asks`, `call`, `may-call` |
 | `tool` | 7 | `description`, `connect`, `url`, `method`, `says` |
-| `program` | 7 | `description`, `engine`, `determinism`, `takes`, `answers-with` |
+| `program` | 7 | `description` |
 | `program-fuel` | 4 | — |
 | `value` | 3 | `description`, `value` |
 | `variant` | 5 | — |
-| `workspace` | 26 | `name`, `workspace-id`, `description`, `owner`, `profile` |
+| `workspace` | 34 | `name`, `workspace-id`, `description`, `owner`, `profile` |
+
+## Workflows
+
+| Kind | Fields | Core fields |
+|---|---:|---|
+| `workflow` | 17 | `description`, `accepts`, `answers-with`, `starts-at`, `steps` |
+| `moment` | 5 | `at`, `after`, `before`, `counted-in`, `in-time-zone` |
+| `ownership` | 3 | `owned-by`, `locked`, `locked-until` |
+| `release` | 1 | `asks` |
 
 ## People and permission
 
@@ -33,7 +42,7 @@ write: most workspaces use a dozen.
 | `credential-reference` | 1 | `by-reference` |
 | `interceptor` | 6 | `description`, `when`, `applies-to`, `may`, `rules` |
 | `policy` | 2 | `applies-to`, `ask-a-person` |
-| `question` | 8 | `description`, `says`, `answer`, `shows`, `asked-of` |
+| `question` | 9 | `description`, `says`, `answer`, `shows`, `asked-of` |
 | `question-rule` | 3 | `when`, `because`, `question` |
 | `redaction` | 2 | `description`, `hide` |
 
@@ -44,7 +53,7 @@ write: most workspaces use a dozen.
 | `call-order` | 2 | `call`, `first` |
 | `catalog` | 3 | — |
 | `figure` | 2 | — |
-| `limits` | 13 | `feel`, `finishes-within`, `cost-per-request-under`, `steps-at-most`, `tool-calls-at-most` |
+| `limits` | 16 | `feel`, `finishes-within`, `cost-per-request-under`, `steps-at-most`, `tool-calls-at-most` |
 | `model` | 8 | — |
 | `model-can` | 5 | — |
 | `model-cost` | 2 | — |
@@ -57,7 +66,7 @@ write: most workspaces use a dozen.
 | Kind | Fields | Core fields |
 |---|---:|---|
 | `context-policy` | 7 | `description`, `when-full`, `always-keep`, `if-it-still-does-not-fit`, `asks` |
-| `state` | 8 | `description`, `lasts`, `forget-after`, `never-from`, `survives-shortening` |
+| `state` | 9 | `description`, `lasts`, `forget-after`, `kept-for`, `never-from` |
 | `tidy-step` | 3 | — |
 
 ## Working together
@@ -66,15 +75,15 @@ write: most workspaces use a dozen.
 |---|---:|---|
 | `bundle` | 5 | `description`, `version`, `from`, `brings` |
 | `port` | 10 | `description`, `kind`, `every`, `says`, `if-still-running` |
-| `resource` | 6 | `resource-kind`, `endpoint`, `auth`, `asks-to-connect`, `description` |
-| `teamwork` | 8 | `waits-for`, `enough-is`, `gives-up-after`, `starts`, `divides-the-budget` |
-| `when-this` | 3 | `tool`, `arg`, `more-than` |
+| `resource` | 11 | `resource-kind`, `endpoint`, `auth`, `asks-to-connect`, `description` |
+| `teamwork` | 9 | `may-start`, `waits-for`, `enough-is`, `gives-up-after`, `starts` |
+| `when-this` | 5 | `tool`, `arg`, `more-than`, `is`, `is-one-of` |
 
 ## Measuring and learning
 
 | Kind | Fields | Core fields |
 |---|---:|---|
-| `case` | 6 | `when`, `with`, `expect`, `because`, `must-also` |
+| `case` | 7 | `when`, `with`, `expect`, `because`, `must-also` |
 | `cycle-limits` | 3 | `per-cycle`, `per-month`, `evals` |
 | `drift` | 1 | `at-most` |
 | `eval-rule` | 6 | `must-say-one-of`, `must-contain`, `must-not-contain`, `must-call-before`, `judged` |
@@ -82,7 +91,7 @@ write: most workspaces use a dozen.
 | `learning` | 8 | `enabled`, `may-improve-on-its-own`, `needs-a-person-to-approve`, `keep-only-if`, `review` |
 | `learning-model` | 2 | — |
 | `metric` | 3 | — |
-| `outcome` | 3 | — |
+| `outcome` | 8 | `declined`, `nobody-answered`, `heard` |
 
 ## Observing
 
@@ -95,7 +104,7 @@ write: most workspaces use a dozen.
 
 ## How to read a kind
 
-Every kind follows the same shape, so 47 is not 47 things to learn:
+Every kind follows the same shape, so 51 is not 51 things to learn:
 
 ```yaml
 description: what this is, in one line     # every kind has this

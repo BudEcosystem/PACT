@@ -80,8 +80,10 @@ class Fact:
     #: says; one built directly lasts `forever`, the widest, so nothing is
     #: forgotten that its author did not say to forget.
     lasts: str = "forever"
-    #: `forget-after:` as written (a duration such as `30d`), or `None`.
-    forget_after: Any = None
+    #: `kept-for:` as written (a duration such as `30d`, or a moment), or `None`.
+    #: `forget-after:`, its old name, is read the same way for one release
+    #: (`loader/forget-after-is-now-kept-for`).
+    kept_for: Any = None
     #: `starts-as:`: its value before anything has happened, or `None`.
     starts_as: Any = None
     #: `shaped-like:`: what a value must look like (the `takes:` vocabulary),
@@ -149,7 +151,7 @@ class Facts:
                 stale_when=tuple(_as_list(raw.get("stops-being-true-when"))),
                 survives=said_yes(raw.get("survives-shortening")),
                 lasts=str(raw.get("lasts") or "forever"),
-                forget_after=raw.get("forget-after"),
+                kept_for=raw.get("kept-for", raw.get("forget-after")),
                 starts_as=raw.get("starts-as"),
                 shaped_like=dict(shaped) if isinstance(shaped, Mapping) else None,
                 never_from=tuple(_as_list(raw.get("never-from"))),

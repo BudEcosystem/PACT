@@ -156,6 +156,7 @@ pub mod teamwork;
 pub mod templates;
 pub mod unnamed;
 pub mod values;
+pub mod workflows;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use pact_diag::{Diagnostic, Diagnostics, Span};

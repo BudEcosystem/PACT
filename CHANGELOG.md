@@ -8,7 +8,32 @@ holds that did not; the commits are listed under it for whoever wants the detail
 Running PACT trees in production on Pydantic AI 2.54, through
 [Bud Agent Flow](https://github.com/BudEcosystem/Bud-Agent-Flow), drove these changes. Every
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
-runs offline: 3636 tests, 1147 Rust and 2489 adapter.
+runs offline: 3672 tests, 1175 Rust and 2497 adapter.
+
+### Workflows: a `workflows/` collection and its structure (9 October)
+
+- **A workspace can hold workflows.** `workflows/<name>.yaml` is a collection like `agents/`: a
+  stage loop that belongs to no agent, with `accepts:`, `answers-with:`, `starts-at:`, named
+  `steps:` and the five new `does:` values `call`, `decide`, `each`, `repeat` and `together`
+  (design 02W §2.2, §2.3). A stage's `then:` gains `declined`, `nobody-answered` and `heard`. The
+  workspace gains `time-zone:`, `calendar:`, named `shapes:`, shared `remembers:`, `owners:` and
+  `release:`; a bundle may bring all of them. Two field types join the schema: `moment` (a length
+  of time, or `{at:, after:|before:, counted-in:, in-time-zone:}`) and `combine-rule` (`keep-all`,
+  `keep-the-latest`, `merge`, `add-up`, `vote`, `top <n> highest|lowest by <field>`).
+- **`pact check` holds a workflow's structure** (`crates/pact-loader/src/workflows.rs`): a workflow
+  with a mind of its own (WF-1), a stage that thinks (WF-2) and, the other way round, an agent's
+  loop that writes a workflow's stage; a line beside a `does:` it does not belong to (WF-3);
+  workflows that call each other in a circle (WF-8); an `each` with no ceiling (WF-10) or whose
+  items are told apart by position (WF-11); a `repeat` with no bottom (WF-12); a version of
+  something that has none (WF-35); a path that answers nothing (WF-38); a call to a name that is
+  not here; and a workflow sharing a name with an agent or a program. Reachability walks a
+  workflow and the inside of each `each`, `repeat` and `together`.
+- **`forget-after:` is now `kept-for:`.** The old name loads for one more release with the warning
+  `loader/forget-after-is-now-kept-for`; `Fact.kept_for` reads either.
+- **A `then:` names the stages beside its stage**, never the ones inside it: `names: ^steps`
+  resolves to the block the value is written in, then the nearest `steps:` it sits inside.
+- **Python reads a workflow as a typed spec**: `ir.WorkflowSpec.from_workflow`, `ir.StageSpec`, `ir.Moment`,
+  with the workspace lines a workflow is read under resolved once.
 
 ### A rewrite reaches an answer in a shape (9 October)
 

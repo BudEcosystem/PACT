@@ -129,7 +129,7 @@ error: 'loop' names 'carefull', and there is no such entry in `loops:`.
   rule: schema/no-such-name
 ```
 
-That is not a special case for loops. **33 fields** declare what they name, and
+That is not a special case for loops. **42 fields** declare what they name, and
 the same machinery produces the same shape of message for all of them.
 
 ---

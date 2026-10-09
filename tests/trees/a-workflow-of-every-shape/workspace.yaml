@@ -1,0 +1,24 @@
+name: a-workflow-of-every-shape
+workspace-id: 01JEQ8Z3M4N5P6Q7R8S9T0WF02
+description: One workflow that writes every stage a workflow has, and a second it calls.
+owner: platform
+allow-egress: []
+time-zone: America/Chicago
+shapes:
+  invoice-line:
+    sku: text
+    quantity: whole number
+remembers:
+  paused:
+    description: whether reading invoices is paused
+    lasts: forever
+    kept-for: 30 days
+owners:
+  workflows/invoices/steps/pay:
+    owned-by: finance
+    locked: here
+    locked-until:
+      at: input.received-on
+      after: 90 days
+release:
+  asks: may-we-publish

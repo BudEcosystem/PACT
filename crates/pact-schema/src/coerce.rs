@@ -285,7 +285,9 @@ pub fn check(node: &Node, ty: &crate::Ty) -> Option<Coerced> {
         // A plain file name and an answer shape are both text with one rule
         // about their spelling, so they coerce to the text they are and are
         // checked in `Schema::check_shape` where the field's name is known.
-        Ty::FileName | Ty::AnswerShape(_) => node.as_str().map(|s| Coerced::Text(s.to_string())),
+        Ty::FileName | Ty::AnswerShape(_) | Ty::CombineRule(_) => {
+            node.as_str().map(|s| Coerced::Text(s.to_string()))
+        }
         Ty::OneOf(allowed) => {
             let s = node.as_str()?;
             allowed
@@ -296,7 +298,12 @@ pub fn check(node: &Node, ty: &crate::Ty) -> Option<Coerced> {
         // Container, address and pass-through types are handled by the caller —
         // an address is checked position by position so the diagnostic can name
         // which of the three words is the wrong one.
-        Ty::ListOf(_) | Ty::MapOf(_) | Ty::Group(_) | Ty::EventAddress(..) | Ty::Anything => {
+        Ty::ListOf(_)
+        | Ty::MapOf(_)
+        | Ty::Group(_)
+        | Ty::Moment
+        | Ty::EventAddress(..)
+        | Ty::Anything => {
             Some(Coerced::Text(String::new()))
         }
     }

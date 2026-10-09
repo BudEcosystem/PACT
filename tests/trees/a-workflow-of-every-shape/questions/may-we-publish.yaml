@@ -1,0 +1,7 @@
+description: Whether a new version of a workflow may be published.
+says: May this version of the workflow be published?
+answer:
+  publish: yes or no
+asked-of: [the-requester]
+answer-within: 2 days
+if-nobody-answers: decline

@@ -1,0 +1,6 @@
+description: Reads the ledger once more.
+starts-at: read
+steps:
+  read:
+    does: call
+    call: ledger/read-invoice

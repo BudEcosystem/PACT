@@ -35,7 +35,7 @@ REMEMBERS = {
                 "size": {
                     "description": "the shoe size",
                     "lasts": "one-turn",
-                    "forget-after": "30d",
+                    "kept-for": "30d",
                     "starts-as": "unknown",
                     "shaped-like": {"size": "number"},
                     "never-from": ["tool output", "retrieval"],
@@ -55,17 +55,26 @@ REMEMBERS = {
 def test_a_fact_carries_every_term_its_entry_wrote() -> None:
     size = Facts.from_document(REMEMBERS, "a").declared["size"]
     assert size.lasts == "one-turn"
-    assert size.forget_after == "30d"
+    assert size.kept_for == "30d"
     assert size.starts_as == "unknown"
     assert size.shaped_like == {"size": "number"}
     assert size.never_from == ("tool output", "retrieval")
     approved = Facts.from_document(REMEMBERS, "a").declared["approved"]
-    assert (approved.lasts, approved.forget_after, approved.shaped_like, approved.never_from) == (
+    assert (approved.lasts, approved.kept_for, approved.shaped_like, approved.never_from) == (
         "one-conversation",
         None,
         None,
         (),
     )
+
+
+def test_the_old_name_forget_after_is_read_as_kept_for_for_one_release() -> None:
+    """`forget-after:` was renamed `kept-for:` (02W §1.3). `pact check` warns on
+    the old name (`loader/forget-after-is-now-kept-for`) and a run still keeps
+    the value for the time it says, so a tree written before the rename keeps
+    what it promised."""
+    old = {"agents": {"a": {"remembers": {"size": {"description": "d", "lasts": "forever", "forget-after": "1d"}}}}}
+    assert Facts.from_document(old, "a").declared["size"].kept_for == "1d"
 
 
 def test_a_source_written_without_a_dash_is_one_source_and_not_its_letters(tmp_path: Path) -> None:

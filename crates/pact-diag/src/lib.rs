@@ -308,6 +308,12 @@ impl Diagnostics {
         &self.items
     }
 
+    /// Keep only the diagnostics `keep` says yes to — for a check that says in
+    /// its own words what another check already said about the same line.
+    pub fn retain(&mut self, keep: impl FnMut(&Diagnostic) -> bool) {
+        self.items.retain(keep);
+    }
+
     pub fn has_errors(&self) -> bool {
         self.items.iter().any(|d| d.severity == Severity::Error)
     }

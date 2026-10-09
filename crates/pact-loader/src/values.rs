@@ -92,6 +92,8 @@ fn a_figure_can_stand_here(ty: &Ty) -> bool {
             | Ty::Size
             | Ty::FileName
             | Ty::AnswerShape(_)
+            | Ty::CombineRule(_)
+            | Ty::Moment
             | Ty::OneOf(_)
             | Ty::EventAddress(_, _)
     )

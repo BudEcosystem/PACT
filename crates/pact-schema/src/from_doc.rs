@@ -182,7 +182,26 @@ impl Schema {
                     })
                     .unwrap_or_default();
 
-                match parse_ty(&ty_node, &choices, &parts, &reaches, &shapes) {
+                // The closed combine-rule vocabulary, written exactly as
+                // `shapes:` is and for the same reason.
+                let combine_rules: Vec<(String, Vec<String>)> = f
+                    .get("combine-rules")
+                    .and_then(Node::as_map)
+                    .map(|m| {
+                        m.iter()
+                            .map(|(name, entry)| (name.clone(), words(&entry.node)))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                let vocabularies = Vocabularies {
+                    choices: &choices,
+                    parts: &parts,
+                    reaches: &reaches,
+                    shapes: &shapes,
+                    combine_rules: &combine_rules,
+                };
+                match parse_ty(&ty_node, &vocabularies) {
                     Some(ty) => {
                         // A constraint that can never fire is the "loads and
                         // does nothing" failure the rest of this file exists to
@@ -377,24 +396,29 @@ fn check_companions_can_be_quoted(group: &Group, fields: &pact_doc::Map, diags: 
 
 const TYPE_NAMES: &[&str] = &[
     "text", "yes-no", "number", "integer", "duration", "money", "percent", "threshold",
-    "size", "file-name", "answer-shape", "one-of", "event-address", "anything",
-    "list of <type>", "map of <type>", "group:<name>",
+    "size", "file-name", "answer-shape", "combine-rule", "moment", "one-of", "event-address",
+    "anything", "list of <type>", "map of <type>", "group:<name>",
 ];
 
+/// The closed lists a field may carry beside its `type:`, each read by the type
+/// that needs it.
+struct Vocabularies<'a> {
+    choices: &'a [String],
+    parts: &'a [(String, Vec<String>)],
+    reaches: &'a [String],
+    shapes: &'a [(String, Vec<String>)],
+    combine_rules: &'a [(String, Vec<String>)],
+}
+
 /// `text`, `list of text`, `map of text`, `group:agent`, `one-of`, `event-address`.
-fn parse_ty(
-    s: &str,
-    choices: &[String],
-    parts: &[(String, Vec<String>)],
-    reaches: &[String],
-    shapes: &[(String, Vec<String>)],
-) -> Option<Ty> {
+fn parse_ty(s: &str, v: &Vocabularies) -> Option<Ty> {
+    let (choices, parts, reaches, shapes) = (v.choices, v.parts, v.reaches, v.shapes);
     let s = s.trim();
     if let Some(inner) = s.strip_prefix("list of ") {
-        return Some(Ty::ListOf(Box::new(parse_ty(inner, choices, parts, reaches, shapes)?)));
+        return Some(Ty::ListOf(Box::new(parse_ty(inner, v)?)));
     }
     if let Some(inner) = s.strip_prefix("map of ") {
-        return Some(Ty::MapOf(Box::new(parse_ty(inner, choices, parts, reaches, shapes)?)));
+        return Some(Ty::MapOf(Box::new(parse_ty(inner, v)?)));
     }
     if let Some(name) = s.strip_prefix("group:") {
         return Some(Ty::Group(name.trim().to_string()));
@@ -419,6 +443,15 @@ fn parse_ty(
             }
             Ty::AnswerShape(shapes.to_vec())
         }
+        // Refused with no `combine-rules:`, as `answer-shape` is with no
+        // `shapes:`.
+        "combine-rule" => {
+            if v.combine_rules.is_empty() {
+                return None;
+            }
+            Ty::CombineRule(v.combine_rules.to_vec())
+        }
+        "moment" => Ty::Moment,
         "one-of" => {
             if choices.is_empty() {
                 return None;

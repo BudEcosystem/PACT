@@ -42,7 +42,7 @@ nav:
       - Gating an action on a person: guide/approvals.md
       - Evals and scoring: guide/evals.md
   - Reference:
-      - The 43 kinds: reference/kinds.md
+      - The 51 kinds: reference/kinds.md
       - Command line: reference/cli.md
       - Adapters and the lattice: reference/adapters.md
   - Status:

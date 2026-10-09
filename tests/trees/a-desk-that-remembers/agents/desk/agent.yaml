@@ -7,7 +7,7 @@ remembers:
   verified-account:
     description: The account this person proved they hold, earlier in the conversation.
     lasts: one-conversation
-    forget-after: 30d
+    kept-for: 30d
     # A tool must never write here: an account somebody proved they hold is not
     # something a tool result may quietly replace.
     never-from:
@@ -15,7 +15,7 @@ remembers:
   last-order-seen:
     description: The last order this conversation looked at.
     lasts: one-conversation
-    forget-after: 1d
+    kept-for: 1d
 limits:
   when-it-runs-out: stop-and-say-so
   steps-at-most: 4

@@ -81,6 +81,21 @@ SOMEBODY_ELSE_ACTS_ON_THE_WORD: dict[str, str] = {
         "`scores-higher-on-evals` is the host's, since only a run against a live "
         "model can clear that bar"
     ),
+    # 02W — a workflow's words that its runtime, not this port, acts on. The
+    # Python side reads each one into `ir.WorkflowSpec`; nothing here runs a
+    # workflow, so nothing here branches on the word.
+    "workflow.published-as": (
+        "the host publishes a flow as a tool, an MCP tool, an A2A agent or an API, built "
+        "from its `accepts:` and `answers-with:`; PACT records which ways in were asked for"
+    ),
+    "moment.counted-in": (
+        "the runtime that keeps a workflow's clock counts business days against the "
+        "workspace's `calendar:`; PACT records which count the author meant"
+    ),
+    "ownership.locked": (
+        "the release service holds a lock when a version is published (02W §2.14); "
+        "a run never reads it"
+    ),
     # A7 — PACT does not retrieve, embed, index or chunk.
     "knowledge.split-by": "the retrieval runtime breaks a document up",
     "knowledge.looked-up-by": "the retrieval runtime finds the passages",

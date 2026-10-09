@@ -116,6 +116,9 @@ use std::collections::BTreeSet;
 /// executing side; a stage may not be called this.
 const DONE: &str = "done";
 
+/// Where `nobody-answered:` may go besides a stage: stopping, which is no stage.
+const STOP: &str = "stop-and-say-so";
+
 /// The outcome that ends a run when it is not routed, and the one that happens
 /// only when a stage has run its `at-most:` times. Both are facts about how a
 /// run behaves rather than entries in a vocabulary — see `finishes`, which is
@@ -129,11 +132,57 @@ const TOO_MANY: &str = "too-many-times";
 /// Takes the loaded document and nothing else — no second pass over the
 /// filesystem, no author code — for the reason `LoadReport::of` gives.
 pub fn every_stage_is_reachable(document: &Node, diags: &mut Diagnostics) {
-    let Some(loops) = document.get("loops").and_then(Node::as_map) else {
-        return;
-    };
-    for (name, entry) in loops {
+    for (name, entry) in document.get("loops").and_then(Node::as_map).into_iter().flatten() {
         one_loop(name, &entry.node, diags);
+    }
+    // A workflow is a stage loop that belongs to no agent (02W §1), so the same
+    // walk holds it — and the inside of each of its `each`, `repeat` and
+    // `together` stages, which is a stage loop of its own.
+    for (name, entry) in document.get("workflows").and_then(Node::as_map).into_iter().flatten() {
+        let Some(steps) = entry.node.get("steps").and_then(Node::as_map) else { continue };
+        if let Some(start) = entry.node.get("starts-at").and_then(Node::as_str).map(str::trim) {
+            unreached(&format!("the workflow '{name}'"), "the run", start, steps, diags);
+        }
+        insides(steps, diags);
+    }
+}
+
+/// The inside of every `each`, `repeat` and `together` among `steps`.
+fn insides(steps: &pact_doc::Map, diags: &mut Diagnostics) {
+    for (stage, entry) in steps {
+        let does = entry.node.get("does").and_then(Node::as_str).map(str::trim);
+        let Some(does @ ("each" | "repeat" | "together")) = does else { continue };
+        let Some(inner) = entry.node.get("steps").and_then(Node::as_map) else {
+            diags.push(Diagnostic::error(
+                "loader/loop-with-nothing-in-it",
+                entry.key_span.clone(),
+                format!("'{stage}' does `{does}` and has no `steps:`, so there is nothing inside it to run."),
+                format!(
+                    "Add a `steps:` block under '{stage}' naming what happens inside it{}.",
+                    if does == "together" { "" } else { ", and a `starts-at:` saying which runs first" }
+                ),
+            ));
+            continue;
+        };
+        // Every inside stage of a `together` starts at once.
+        if does != "together" {
+            match entry.node.get("starts-at").and_then(Node::as_str).map(str::trim) {
+                Some(start) if !start.is_empty() => {
+                    unreached(&format!("'{stage}'"), "the run", start, inner, diags);
+                }
+                _ => diags.push(Diagnostic::error(
+                    "loader/loop-with-no-first-stage",
+                    entry.key_span.clone(),
+                    format!("'{stage}' does not say which of its own stages runs first."),
+                    format!(
+                        "Add a line `starts-at: {}` under '{stage}'. Its stages are: {}.",
+                        inner.keys().next().map(String::as_str).unwrap_or("work"),
+                        inner.keys().map(String::as_str).collect::<Vec<_>>().join(", ")
+                    ),
+                )),
+            }
+        }
+        insides(inner, diags);
     }
 }
 
@@ -179,8 +228,22 @@ fn one_loop(name: &str, shape: &Node, diags: &mut Diagnostics) {
         ));
         return;
     }
+    if unreached("this loop", "the agent", start, steps, diags) {
+        // Every stage runs. Now the other question, which the walk that just
+        // finished cannot answer by walking any further forward: is there a way
+        // out of here at all.
+        no_way_to_finish(name, steps, diags);
+    }
+}
+
+/// Report every stage of `steps` no path from `start` reaches, in one
+/// diagnostic. True when every stage is reached (and the walk meant something).
+///
+/// `what` names the stages' owner in the sentence (`this loop`, `the workflow
+/// 'trial-booking'`) and `who` what moves through them (`the agent`, `the run`).
+fn unreached(what: &str, who: &str, start: &str, steps: &pact_doc::Map, diags: &mut Diagnostics) -> bool {
     if !steps.contains_key(start) || !walkable(steps) {
-        return;
+        return false;
     }
 
     // `done` is seeded as already-reached so that it is never walked into and
@@ -190,10 +253,9 @@ fn one_loop(name: &str, shape: &Node, diags: &mut Diagnostics) {
     let mut frontier: Vec<&str> = vec![start];
     while let Some(name) = frontier.pop() {
         let Some(stage) = steps.get(name) else { continue };
-        let Some(then) = stage.node.get("then").and_then(Node::as_map) else { continue };
-        for outcome in then.values() {
-            // Every target is a real stage or `done` — `walkable` said so above.
-            let Some(target) = outcome.node.as_str().map(str::trim) else { continue };
+        // Every target is a real stage, `done` or `stop-and-say-so` —
+        // `walkable` said so above.
+        for target in crate::workflows::successors(&stage.node) {
             if reached.insert(target) {
                 frontier.push(target);
             }
@@ -206,11 +268,7 @@ fn one_loop(name: &str, shape: &Node, diags: &mut Diagnostics) {
         .map(|(name, entry)| (name, &entry.key_span))
         .collect();
     let Some(((first, first_at), rest)) = missed.split_first() else {
-        // Every stage runs. Now the other question, which the walk that just
-        // finished cannot answer by walking any further forward: is there a way
-        // out of here at all.
-        no_way_to_finish(name, steps, diags);
-        return;
+        return true;
     };
 
     // All of them in one diagnostic, anchored at the first, exactly as
@@ -222,7 +280,7 @@ fn one_loop(name: &str, shape: &Node, diags: &mut Diagnostics) {
         "loader/stage-nothing-reaches",
         (*first_at).clone(),
         format!(
-            "Nothing in this loop ever sends the agent to {}, so {}.",
+            "Nothing in {what} ever sends {who} to {}, so {}.",
             or_list(&missed),
             if one {
                 "that stage never runs and everything written in it is dead text"
@@ -235,7 +293,7 @@ fn one_loop(name: &str, shape: &Node, diags: &mut Diagnostics) {
         // have written the outcome being named and a fix that produces a
         // duplicate key is not a fix.
         format!(
-            "Write `starts-at: {first}` to begin there — or send the agent there from a \
+            "Write `starts-at: {first}` to begin there — or send {who} there from a \
              stage that does run, by pointing one of the lines under `{start}`'s `then:` \
              at it, like `answered: {first}`. {}",
             if one {
@@ -249,6 +307,7 @@ fn one_loop(name: &str, shape: &Node, diags: &mut Diagnostics) {
         d = d.with_related((*at).clone(), format!("'{name}' is never reached either"));
     }
     diags.push(d);
+    false
 }
 
 /// Report a loop whose stages all run and which none of them ever leaves.
@@ -404,12 +463,22 @@ fn answered_line(stage: &Node) -> Option<&Span> {
 fn walkable(steps: &pact_doc::Map) -> bool {
     for stage in steps.values() {
         let Some(fields) = stage.node.as_map() else { return false };
-        let Some(then) = fields.get("then") else { continue };
-        let Some(routes) = then.node.as_map() else { return false };
-        for outcome in routes.values() {
-            let Some(target) = outcome.node.as_str().map(str::trim) else { return false };
-            if target != DONE && !steps.contains_key(target) {
-                return false;
+        // A workflow's decision routes by label, and `heard:` by port, one
+        // level down (02W §2.3, §2.4).
+        for key in ["then", "chooses-between"] {
+            let Some(block) = fields.get(key) else { continue };
+            let Some(routes) = block.node.as_map() else { return false };
+            for outcome in routes.values() {
+                let targets: Vec<&Node> = match outcome.node.as_map() {
+                    Some(heard) if key == "then" => heard.values().map(|e| &e.node).collect(),
+                    _ => vec![&outcome.node],
+                };
+                for t in targets {
+                    let Some(target) = t.as_str().map(str::trim) else { return false };
+                    if target != DONE && target != STOP && !steps.contains_key(target) {
+                        return false;
+                    }
+                }
             }
         }
     }

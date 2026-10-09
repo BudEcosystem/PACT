@@ -1,0 +1,5 @@
+name: a-workflow-that-calls-and-answers
+workspace-id: 01JEQ8Z3M4N5P6Q7R8S9T0WF01
+description: The smallest workflow there is - one call to a tool's action, then the answer.
+owner: platform
+allow-egress: []

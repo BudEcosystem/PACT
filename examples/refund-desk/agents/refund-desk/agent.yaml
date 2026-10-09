@@ -49,7 +49,7 @@ remembers:
       Details the customer has already given about the item and the order, so
       they are not asked for the same thing twice in one conversation.
     lasts: one-conversation
-    forget-after: 30d
+    kept-for: 30d
     never-from:
       - tool output
 

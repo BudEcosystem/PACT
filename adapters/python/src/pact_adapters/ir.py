@@ -1503,3 +1503,234 @@ class PortSpec:
 def ports_of(doc: Mapping[str, Any]) -> tuple[PortSpec, ...]:
     """Every port the workspace declares, by name."""
     return tuple(PortSpec.read(doc, n) for n in sorted(doc.get("ports") or {}))
+
+
+# ──────────────────────────────────────────────────────────────── workflows
+
+
+@dataclass(frozen=True)
+class Moment:
+    """The one time expression (02W §2.0): `48h`, or `{at:, after:|before:,
+    counted-in:, in-time-zone:}`. Read as written; what it means against a
+    clock and a calendar is the runtime's."""
+
+    #: `at:` — the binding it counts from; empty for "when the stage starts".
+    at: str = ""
+    #: `after:` — or the whole of a moment written as a bare length of time.
+    after: str = ""
+    before: str = ""
+    #: `counted-in:` — `calendar-days` (the default) or `business-days`.
+    counted_in: str = "calendar-days"
+    in_time_zone: str = ""
+
+    @staticmethod
+    def from_written(written: Any) -> "Moment | None":
+        if written is None:
+            return None
+        if not isinstance(written, Mapping):
+            return Moment(after=str(written).strip())
+        return Moment(
+            at=_text(written.get("at", "")),
+            after=_text(written.get("after", "")),
+            before=_text(written.get("before", "")),
+            counted_in=_text(written.get("counted-in", "")) or "calendar-days",
+            in_time_zone=_text(written.get("in-time-zone", "")),
+        )
+
+
+@dataclass(frozen=True)
+class StageSpec:
+    """One stage of a workflow (02W §2.3), as `pact check` passed it.
+
+    The loader has already held every line to its `does:` (WF-3), so a field
+    here is either written for this kind of stage or empty. Groups the runtime
+    reads with PACT's own readers come typed (`limits`, `remembers`,
+    `checked-by`); `teamwork` and `until` are carried as written, for the
+    readers of `each` and `repeat`."""
+
+    name: str
+    does: str
+    says: str = ""
+    asks: str = ""
+    #: `then:` — outcome to stage; `heard:` is a map of port to stage.
+    then: Mapping[str, Any] = field(default_factory=dict)
+    at_most: int | None = None
+    call: str = ""
+    may_call: tuple[str, ...] = ()
+    bind: Mapping[str, str] = field(default_factory=dict)
+    #: `waits-for-result:` — `no` starts a called workflow and goes on at once.
+    waits_for_result: bool = True
+    version: str = ""
+    chooses_between: Mapping[str, str] = field(default_factory=dict)
+    over: str = ""
+    identified_by: tuple[str, ...] = ()
+    ordered_by: str = ""
+    #: `combines-by:` — answer field to combine rule, as written.
+    combines_by: Mapping[str, str] = field(default_factory=dict)
+    teamwork: Mapping[str, Any] = field(default_factory=dict)
+    #: The inside of an `each`, a `repeat` or a `together`, in written order.
+    steps: tuple["StageSpec", ...] = ()
+    starts_at: str = ""
+    until: tuple[Mapping[str, Any], ...] = ()
+    remembers: Facts = field(default_factory=Facts)
+    checked_by: tuple[Any, ...] = ()
+    checked_by_unenforced: tuple[str, ...] = ()
+    checks_at_most: int = 2
+    undone_by: str = ""
+    limits: Limits = Limits()
+    #: `limits.items-at-most:` — the ceiling every `each` carries (WF-10).
+    items_at_most: int | None = None
+
+    @property
+    def nobody_answered(self) -> str:
+        """Where silence goes (`then.nobody-answered:`); unwritten, the run
+        stops and says so, because silence never acts as an answer (02W §2.4)."""
+        return str(self.then.get("nobody-answered") or "stop-and-say-so").strip()
+
+    @staticmethod
+    def from_stage(name: str, raw: Mapping[str, Any], where: str) -> "StageSpec":
+        from .evals import _read_rules  # `evals` imports the harness, which imports this module
+
+        written_limits = raw.get("limits") or {}
+        checked_by, unenforced = _read_rules(raw.get("checked-by"), f"{where} (checked-by)")
+        return StageSpec(
+            name=name,
+            does=_text(raw.get("does", "")),
+            says=_text(raw.get("says", "")),
+            asks=_text(raw.get("asks", "")),
+            then=dict(raw.get("then") or {}),
+            at_most=whole(raw.get("at-most")),
+            call=_text(raw.get("call", "")),
+            may_call=tuple(_as_list(raw.get("may-call"))),
+            bind={str(k): str(v) for k, v in (raw.get("bind") or {}).items()},
+            waits_for_result=raw.get("waits-for-result") is None or said_yes(raw.get("waits-for-result")),
+            version=_text(raw.get("version", "")),
+            chooses_between={str(k): str(v) for k, v in (raw.get("chooses-between") or {}).items()},
+            over=_text(raw.get("over", "")),
+            identified_by=tuple(_as_list(raw.get("identified-by"))),
+            ordered_by=_text(raw.get("ordered-by", "")),
+            combines_by={str(k): str(v) for k, v in (raw.get("combines-by") or {}).items()},
+            teamwork=dict(raw.get("teamwork") or {}),
+            steps=_stages(raw.get("steps"), f"{where}/{name}"),
+            starts_at=_text(raw.get("starts-at", "")),
+            until=tuple(u for u in raw.get("until") or () if isinstance(u, Mapping)),
+            remembers=Facts.of(raw.get("remembers")),
+            checked_by=checked_by,
+            checked_by_unenforced=unenforced,
+            checks_at_most=whole(raw.get("checks-at-most")) or 2,
+            undone_by=_text(raw.get("undone-by", "")),
+            limits=Limits.from_mapping(written_limits),
+            items_at_most=whole(written_limits.get("items-at-most")),
+        )
+
+
+def _stages(written: Any, where: str) -> tuple[StageSpec, ...]:
+    """A `steps:` block, in the order it was written."""
+    block = written if isinstance(written, Mapping) else {}
+    return tuple(StageSpec.from_stage(str(n), s, where) for n, s in block.items() if isinstance(s, Mapping))
+
+
+@dataclass(frozen=True)
+class Owned:
+    """One entry of the workspace's `owners:` (02W §2.14): loaded, and held at
+    publish by the release service, never at run time."""
+
+    path: str
+    owned_by: str = ""
+    #: `no`, `here` or `here-and-below`.
+    locked: str = "no"
+    locked_until: Moment | None = None
+
+
+@dataclass(frozen=True)
+class WorkflowSpec:
+    """A workflow (02W §2.2), with the workspace lines it is read under.
+
+    A workflow belongs to no agent: it has no model, instructions, loop, team or
+    uses (WF-1 refuses them). What it takes from the workspace — the time zone,
+    the calendar, the named shapes, the shared memory, the release question and
+    the owned parts under `workflows/<name>/` — is resolved here, once, so a
+    runtime is handed one spec and never the document (P-1)."""
+
+    name: str
+    description: str
+    starts_at: str
+    steps: tuple[StageSpec, ...]
+    base: bool = False
+    accepts: Mapping[str, str] = field(default_factory=dict)
+    answers_with: Mapping[str, str] = field(default_factory=dict)
+    #: The workflow's own `questions:`, by name, looked up before the workspace's.
+    questions: Mapping[str, Any] = field(default_factory=dict)
+    policy: str = ""
+    limits: Limits = Limits()
+    evals: str = ""
+    remembers: Facts = field(default_factory=Facts)
+    #: `hides:` — binding to the readers that may never see it.
+    hides: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    data_stays_in: str = ""
+    kept_for: Moment | None = None
+    undone_by: str = ""
+    published_as: tuple[str, ...] = ()
+    #: `release.asks:` — the workflow's own, or else the workspace's, whole.
+    release_asks: str = ""
+    #: The workspace's `time-zone:` and `calendar:` (a table in `values/`).
+    time_zone: str = ""
+    calendar: str = ""
+    #: The workspace's named `shapes:`, each a map of part to answer shape.
+    shapes: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
+    #: The workspace's own `remembers:`, which every workflow may read.
+    workspace_remembers: Facts = field(default_factory=Facts)
+    #: The workspace's `owners:` entries under `workflows/<name>`.
+    owners: tuple[Owned, ...] = ()
+
+    def stage_named(self, name: str) -> StageSpec:
+        """A top-level stage by name. (Named apart from every other reader in this module: the
+        reachability walk keys a method by module and name.)"""
+        for s in self.steps:
+            if s.name == name:
+                return s
+        raise KeyError(f"workflow {self.name!r} has no stage {name!r}; it has: {[s.name for s in self.steps]}")
+
+    @staticmethod
+    def from_workflow(doc: Mapping[str, Any], key: str) -> "WorkflowSpec":
+        """The workflow `key` of a document `pact show` printed."""
+        workflows = doc.get("workflows") or {}
+        if key not in workflows:
+            raise KeyError(f"no workflow named {key!r}; this workspace has: {sorted(workflows)}")
+        w = workflows[key]
+        release = w.get("release") if w.get("release") is not None else doc.get("release")
+        owners = doc.get("owners") or {}
+        return WorkflowSpec(
+            name=key,
+            description=_text(w.get("description", "")),
+            starts_at=_text(w.get("starts-at", "")),
+            steps=_stages(w.get("steps"), f"workflows/{key}.yaml"),
+            base=said_yes(w.get("base")),
+            accepts=_shapes(w.get("accepts")),
+            answers_with=_shapes(w.get("answers-with")),
+            questions=dict(w.get("questions") or {}),
+            policy=_text(w.get("policy", "")),
+            limits=Limits.from_mapping(w.get("limits") or {}),
+            evals=_text(w.get("evals", "")),
+            remembers=Facts.of(w.get("remembers")),
+            hides={str(k): tuple(_as_list(v)) for k, v in (w.get("hides") or {}).items()},
+            data_stays_in=_text(w.get("data-stays-in", "")),
+            kept_for=Moment.from_written(w.get("kept-for")),
+            undone_by=_text(w.get("undone-by", "")),
+            published_as=tuple(_as_list(w.get("published-as"))),
+            release_asks=_text((release or {}).get("asks", "")),
+            time_zone=_text(doc.get("time-zone", "")),
+            calendar=_text(doc.get("calendar", "")),
+            shapes={str(n): _shapes(parts) for n, parts in (doc.get("shapes") or {}).items()},
+            workspace_remembers=Facts.of(doc.get("remembers")),
+            owners=tuple(
+                Owned(
+                    path=str(path),
+                    owned_by=_text(o.get("owned-by", "")),
+                    locked=_text(o.get("locked", "")) or "no",
+                    locked_until=Moment.from_written(o.get("locked-until")),
+                )
+                for path, o in owners.items()
+                if isinstance(o, Mapping) and str(path).startswith(f"workflows/{key}")
+            ),
+        )

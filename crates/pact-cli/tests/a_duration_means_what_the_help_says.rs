@@ -117,8 +117,9 @@ fn every_deadline_in_the_worked_example_has_the_same_floor() {
     // The floor belongs to the type, so it arrives on every duration field at
     // once rather than on the one somebody remembered. These are the other two
     // the worked example carries, and each is load-bearing in a different way:
-    // a question deadline parks a run waiting for a person, and `forget-after`
+    // a question deadline parks a run waiting for a person, and `kept-for`
     // is the only thing that ever discards what was remembered about them.
+    // It is a moment, and a moment written as a length of time is a duration.
     let cases: &[(&str, &str, &str, &str)] = &[
         (
             "answer",
@@ -129,8 +130,8 @@ fn every_deadline_in_the_worked_example_has_the_same_floor() {
         (
             "forget",
             "agents/refund-desk/agent.yaml",
-            "forget-after: 30d",
-            "forget-after: 0d",
+            "kept-for: 30d",
+            "kept-for: 0d",
         ),
     ];
     for (name, file, from, to) in cases {

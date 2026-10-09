@@ -217,6 +217,76 @@ groups:
         surface: S-TOPO
         tier: core
         help: the agents that make up this system
+      workflows:
+        # 02W §2.1. A workflow is a stage loop that belongs to no agent, one file
+        # each under `workflows/`. Checked by `crates/pact-loader/src/workflows.rs`.
+        type: map of group:workflow
+        surface: S-TOPO
+        tier: core
+        help: >
+          the flows this system runs, one file each under `workflows/`. A
+          workflow belongs to no agent: it calls agents, tools, programs and
+          other workflows, waits for people, events and the clock, and has no
+          model or instructions of its own.
+      shapes:
+        # The one copy of the answer-shape vocabulary every `answer-shape` field
+        # reads (`agent.accepts` explains why it is closed).
+        type: map of map of answer-shape
+        shapes: &the-answer-shapes
+          text: [text, some text, a sentence, a note]
+          yes-or-no: [yes-or-no, yes or no, yes-no, yes/no, boolean]
+          money: [money, an amount of money, an amount]
+          number: [number, a number]
+          whole-number: [whole-number, whole number, a whole number, integer]
+          images: [images, a picture, pictures, list of images, an image]
+          audio: [audio, a recording, a voice message, list of audio]
+          file: [file, a file, an attachment, list of files]
+          agent: [agent, an agent, which agent, the name of an agent]
+        surface: S-CAP
+        tier: core
+        help: >
+          named shapes with parts — `invoice-line: {sku: text, quantity: whole
+          number}` — so `lines: list of invoice-line` can be written anywhere
+          a shape is.
+      time-zone:
+        type: text
+        surface: S-GOV
+        tier: core
+        help: >
+          the zone every time here is read in unless a line says otherwise —
+          `America/Chicago`. A schedule, or a time read from a date, with no
+          zone anywhere is refused.
+      calendar:
+        # 02W writes `names: values`. A figure in `values/` is put in place by
+        # `{use:}` and the section removed before any check reads the tree, so a
+        # table read at run time is the value-table work that follows this.
+        type: text
+        surface: S-GOV
+        tier: core
+        help: which table in `values/` lists working days and holidays, for `business-days`
+      remembers:
+        type: map of group:state
+        surface: S-GOV
+        tier: core
+        help: >
+          named memory any agent or workflow here may read as
+          `remembers.<name>`, written only by the stock actions `bud/remember`
+          and `bud/forget`. What a model wrote or chose waits for review under
+          `learning:`; what a person wrote takes effect at once.
+      owners:
+        # 02W §2.14. Loaded and checked here; a publish that changes an owned
+        # part without its owner's yes is refused by the release service.
+        type: map of group:ownership
+        surface: S-GOV
+        tier: core
+        help: >
+          parts that need their owner's yes to change, or that may not be
+          removed, keyed by path — `workflows/one-invoice/steps/tiers`.
+      release:
+        type: group:release
+        surface: S-GOV
+        tier: core
+        help: how a new version of a workflow here is approved and tried before it takes over
       tools:
         type: map of group:tool
         surface: S-CAP
@@ -569,16 +639,9 @@ groups:
         # `clause: which part of the policy says so`. One vocabulary, held in one
         # place, on all four fields that use it.
         type: map of answer-shape
-        shapes: &the-answer-shapes
-          text: [text, some text, a sentence, a note]
-          yes-or-no: [yes-or-no, yes or no, yes-no, yes/no, boolean]
-          money: [money, an amount of money, an amount]
-          number: [number, a number]
-          whole-number: [whole-number, whole number, a whole number, integer]
-          images: [images, a picture, pictures, list of images, an image]
-          audio: [audio, a recording, a voice message, list of audio]
-          file: [file, a file, an attachment, list of files]
-          agent: [agent, an agent, which agent, the name of an agent]
+        # The vocabulary is written once, under `workspace.shapes` above, which
+        # comes first in this file (a YAML alias follows its anchor).
+        shapes: *the-answer-shapes
         surface: S-CAP
         tier: core
         help: >
@@ -1570,6 +1633,17 @@ groups:
           how many levels deep agents brought in may themselves bring in
           others; `1` means the ones this agent starts may start none. Bud's
           builder writes 2.
+      items-at-most:
+        # 02W §2.10. Here ahead of the rest of that section because WF-10
+        # (`loader/for-each-with-no-ceiling`) asks for it on every `each`.
+        type: integer
+        at-least: 1
+        needs-also: [when-it-runs-out]
+        surface: S-GOV
+        tier: core
+        help: >
+          on `each`, the most items it will take — required there. With
+          `carry-on` the first N run and the rest are listed as not done.
       when-it-runs-out:
         type: one-of
         choices: [stop-and-say-so, ask-a-person, answer-with-what-it-has]
@@ -1583,7 +1657,7 @@ groups:
           this is never implied: set a ceiling and you have to say this too.
       asks:
         type: text
-        names: questions
+        names: [^questions, questions]
         surface: S-EXEC
         tier: core
         # "the line above" is a direction to somebody READING this setting. The
@@ -3513,6 +3587,228 @@ groups:
         tier: expert
         help: what this port keeps between messages, such as where it last replied
 
+  # ── WORKFLOW ────────────────────────────────────────────────────────────────
+  # A stage loop that belongs to no agent (02W §2.2). It is built from the
+  # groups PACT already ships — `starts-at`, named `steps`, `does`, `then`,
+  # `at-most`, `question`, `limits`, `evals`, `remembers` — and has no mind of
+  # its own: `model:`, `instructions:`, `loop:`, `team:` and `uses:` are refused
+  # here with the fix "call an agent" (WF-1, `crates/pact-loader/src/workflows.rs`).
+  workflow:
+    describe: something a workflow can have
+    fields:
+      description:
+        type: text
+        required: yes
+        surface: S-GEN
+        tier: core
+        help: what this flow does, in one line a colleague would understand
+      base:
+        type: yes-no
+        surface: S-GOV
+        tier: expert
+        help: >
+          whether this exists only to be `based-on:` — a template. Exactly as
+          on an agent: it never runs, and every workflow based on it must fill
+          what it left open.
+      accepts:
+        type: map of answer-shape
+        shapes: *the-answer-shapes
+        surface: S-CAP
+        tier: core
+        help: >
+          what starts a run, one line per thing. Every port that `answers:`
+          this workflow fills it, so several ways in reach one input.
+      answers-with:
+        type: map of answer-shape
+        shapes: *the-answer-shapes
+        surface: S-CAP
+        tier: core
+        help: >
+          what a run hands back, given by its `does: answer` stage. Leave it out
+          for a flow nobody waits on.
+      starts-at:
+        type: text
+        required: yes
+        names: ^steps
+        surface: S-CTRL
+        tier: core
+        help: which stage runs first
+      steps:
+        type: map of group:stage
+        required: yes
+        surface: S-CTRL
+        tier: core
+        help: >
+          the named stages. A stage goes on to a sibling or to `done`; nothing
+          jumps into or out of a stage's own `steps:`.
+      questions:
+        type: map of group:question
+        surface: S-EXEC
+        tier: core
+        help: >
+          questions only this workflow asks, with the same fields as a file in
+          `questions/`. Every `asks:` in this workflow (a stage's, a limit's)
+          looks here first.
+      policy:
+        type: text
+        names: policies
+        surface: S-EXEC
+        tier: core
+        help: which policy says what needs a person's yes before it happens
+      limits:
+        type: group:limits
+        surface: S-GOV
+        tier: core
+        help: how long, how much and how many, for the whole run
+      evals:
+        type: text
+        names: pact:evals
+        surface: S-GOV
+        tier: core
+        help: which checks this workflow has to pass before a version is published
+      remembers:
+        type: map of group:state
+        surface: S-GOV
+        tier: core
+        help: memory that belongs to this flow, kept across its runs
+      hides:
+        type: map of list of text
+        surface: S-EXEC
+        tier: core
+        help: >
+          values some readers may never see, one line per binding —
+          `input.student-name: [logs]`. Readers are `the-ai`, `logs`, a role,
+          or a tool. The original is put back only at a write that needs it.
+      data-stays-in:
+        type: text
+        surface: S-GOV
+        tier: core
+        help: >
+          the region this run, its record and every model call it makes stay
+          in — a region your runtime names, or a binding (`input.region`). A
+          model not served there is refused.
+      kept-for:
+        type: moment
+        surface: S-GOV
+        tier: core
+        help: >
+          how long a run's record is kept after it ends — `90 days`, or
+          `{at: input.matter-closed-on, after: 7 years}`. Leave it out and the
+          workspace's retention applies.
+      undone-by:
+        # `<tool>/<action>` or a workflow: two names in one string, so it is
+        # resolved by `workflows.rs` and not by `names:` (as `approvals.rs`
+        # resolves a rule's tool).
+        type: text
+        surface: S-EXEC
+        tier: core
+        help: >
+          how to undo a finished run of this flow when a caller's undo reaches
+          it — a `<tool>/<action>` or another workflow. Leave it out and its own
+          completed writes are undone, newest first.
+      published-as:
+        type: list of one-of
+        choices: [tool, mcp-tool, a2a-agent, api]
+        surface: S-EXEC
+        tier: core
+        help: >
+          other ways to reach this flow, built from `accepts:` and
+          `answers-with:`. Who may call it is still each port's
+          `who-can-reach-it:`.
+      release:
+        type: group:release
+        surface: S-GOV
+        tier: core
+        help: >
+          replaces the workspace's `release:` for this flow, whole — written here,
+          nothing from the workspace's line is kept.
+
+  # The one time expression (02W §2.0), as a set of settings. Written instead as
+  # a bare length of time (`48h`) it means that long after the stage starts.
+  moment:
+    describe: something a point in time can have
+    fields:
+      at:
+        type: text
+        surface: S-CTRL
+        tier: core
+        help: >
+          the date or time this counts from, as a binding — `input.starts-at`,
+          `latest-update.due-on`. Leave it out and it counts from when the stage
+          (or, on a deadline, its `starts-from:`) begins. When the value it reads
+          changes, the time moves with it.
+      after:
+        type: duration
+        surface: S-CTRL
+        tier: core
+        help: how long after `at:` — `20 days`
+      before:
+        type: duration
+        needs-also: [at]
+        surface: S-CTRL
+        tier: core
+        help: >
+          how long before `at:` — `24h` before a lesson. A time that has already
+          passed when the stage starts arrives at once, never not at all.
+          Write `after:` or `before:`, not both.
+      counted-in:
+        type: one-of
+        choices: [calendar-days, business-days]
+        surface: S-GOV
+        tier: core
+        help: >
+          `business-days` skips weekends and the holidays in the workspace's
+          `calendar:`. Leave it out for calendar days.
+      in-time-zone:
+        type: text
+        surface: S-GOV
+        tier: core
+        help: >
+          the zone to read it in — `America/Chicago`, or a binding such as
+          `steps.tutor.zone`. Leave it out for the workspace's `time-zone:`.
+          Times stay right across clock changes.
+
+  # 02W §2.14. Loaded and checked here; held at publish by the release service.
+  ownership:
+    describe: something an owned part can have
+    fields:
+      owned-by:
+        type: text
+        surface: S-GOV
+        tier: core
+        help: the person or team whose yes a change to this part needs
+      locked:
+        type: one-of
+        choices: [no, here, here-and-below]
+        surface: S-GOV
+        tier: core
+        help: >
+          `here` means it may not be removed in this workspace; `here-and-below`
+          means not in any workspace based on this one either.
+      locked-until:
+        type: moment
+        needs-also: [locked]
+        surface: S-GOV
+        tier: core
+        help: >
+          when the lock ends — `{at: values.exam-series-ends}`. Leave it out
+          for a lock with no end. A Brain tier locked this way keeps its model.
+
+  release:
+    describe: something a release can have
+    fields:
+      asks:
+        type: text
+        names: questions
+        surface: S-GOV
+        tier: core
+        help: >
+          the question that approves publishing — the same Wait as any other,
+          so several approvers or a quorum is `answered-by:` on it. It is asked
+          only after the flow's `evals:` pass. Shadowing and a small group's
+          share of runs are the release service's state for each version, set
+          by the rollout control, never lines in the document.
+
   # ── LOOP ────────────────────────────────────────────────────────────────────
   # How the agent thinks, as something you can read and change.
   #
@@ -3578,17 +3874,34 @@ groups:
         # as the model's own prose already is, which is the standard that prose
         # is held to and not a lower one. AD-83's `meta-depth = 1` is the line,
         # and a snippet that computes a number is nowhere near it.
-        choices: [think, use-tools, check-its-work, ask-someone, answer, run-code]
+        #
+        # The last five are a workflow's (02W §2.3). `workflows.rs` refuses the
+        # four that think (`think`, `use-tools`, `check-its-work`, `run-code`)
+        # in a workflow (WF-2), and the five a workflow has in an agent's loop.
+        choices: [think, use-tools, check-its-work, ask-someone, answer, run-code,
+                  call, decide, each, repeat, together]
         required: yes
         needed-when:
           asks: ask-someone
+          call: call
+          chooses-between: decide
+          over: each
         surface: S-CTRL
-        tier: expert
+        # Was `expert`. A workflow's stage is drawn by a no-code author in the
+        # Outline (02W §2.3), so what it does is a core line.
+        tier: core
         help: >
           what happens in this stage. `ask-someone` needs an `asks:` line beside
           it naming the question, or the stage stops with wording and nothing
           else — nobody named to answer, no deadline, no answer shape, which
-          from the outside is a hang.
+          from the outside is a hang. In a workflow: `call` runs one thing once,
+          `decide` picks what happens next, `each` runs its own `steps:` once
+          per item, `repeat` runs them again until `until:` holds, `together`
+          runs its own `steps:` side by side and goes on when all of them have
+          ended, `ask-someone` waits for a person, an event or the clock, and
+          `answer` hands back the result. Thinking and using tools happen inside
+          an agent you call, so `think`, `use-tools`, `check-its-work` and
+          `run-code` are refused in a workflow.
       says:
         type: text
         surface: S-GEN
@@ -3597,10 +3910,13 @@ groups:
           the extra instruction for this stage only, in your own words — for
           example `Say what you plan to do. Do not do it yet.` Leave it out and
           the stage's built-in wording is used. This is the one field here a
-          non-technical author is expected to touch, so it is core tier.
+          non-technical author is expected to touch, so it is core tier. On a
+          call to an agent, the task for this stage in your own words.
       asks:
         type: text
-        names: questions
+        # `^questions` first, so a workflow's own questions are found before
+        # the workspace's (02W §2.3).
+        names: [^questions, questions]
         surface: S-EXEC
         tier: core
         # `does: ask-someone` with no `asks:` is refused, and the refusal quotes
@@ -3625,7 +3941,8 @@ groups:
           where to go next, by outcome. There are three outcomes and they are
           the only ones: `used-a-tool`, `answered`, and `too-many-times` (which
           only happens when `at-most` is reached). `done` is the finish line —
-          for example `used-a-tool: work`, `answered: done`.
+          for example `used-a-tool: work`, `answered: done`. A workflow's
+          `ask-someone` can also end `declined`, `nobody-answered` or `heard`.
           `answered` with nowhere to go finishes the run. `too-many-times` with
           nowhere to go goes wherever `answered:` goes, so a stage that has used
           up its turns hands on rather than stopping — write `too-many-times:`
@@ -3666,7 +3983,173 @@ groups:
           how many times this stage may run. Reaching it produces the
           `too-many-times` outcome, so you can send the agent somewhere sensible
           — and if you write no `too-many-times:` line it goes wherever
-          `answered:` goes.
+          `answered:` goes. On a `call`, how many attempts in all; the outline's
+          "Try 3 times" is `3`. On a `repeat`, how many rounds; required there.
+      # ── The workflow lines (02W §2.3). Which `does:` each belongs with is held
+      # by `workflows.rs` (WF-3): a line written beside another `does:` is never
+      # read, and saying so is the only honest thing to do with it.
+      call:
+        # `<tool>/<action>`, an agent, a program or a workflow: a tool's action
+        # is two names in one string, so `workflows.rs` resolves it rather than
+        # `names:`, as `approvals.rs` resolves a rule's tool.
+        type: text
+        surface: S-TOPO
+        tier: core
+        summary: what this stage runs
+        help: >
+          what this stage runs once: `<tool>/<action>`, an agent, a carried
+          program, or another workflow. A binding (`steps.pick.runbook`) is
+          allowed when `may-call:` lists everything it may turn out to be.
+      may-call:
+        type: list of text
+        needs-also: [call]
+        surface: S-EXEC
+        tier: core
+        help: >
+          every target a `call:` written as a binding may run. A value outside
+          this list stops the run rather than calling something nobody approved.
+      bind:
+        type: map of text
+        surface: S-EXEC
+        tier: core
+        help: >
+          the inputs, `<input>: <binding>` — `email: input.email`. Fixed wording
+          and figures come from `values.<name>`. A part of an input is written
+          with a dot: `fills.first-name`. The model never sees these lines and
+          cannot change them.
+      waits-for-result:
+        type: yes-no
+        surface: S-CTRL
+        tier: core
+        help: >
+          on a call to a workflow, `no` starts it and goes on at once. The stage
+          gets back the new run as `.run`, or `.outcome: already-done` when that
+          workflow's port skipped a repeat. Leave it out to wait for the answer.
+      version:
+        type: text
+        surface: S-GOV
+        tier: core
+        help: >
+          on a call to a workflow: `latest` (the default), a version number, or
+          a binding to a date (`input.applied-on`) for the version that was in
+          effect on that date.
+      chooses-between:
+        type: map of text
+        names: ^steps
+        or-one-of: [done]
+        surface: S-CTRL
+        tier: core
+        summary: which labels it can pick, and where each one leads
+        help: >
+          the labels this decision can pick, each with the stage it leads to —
+          `{invoice: read, other: done}`. A label that leads to `done` is shown
+          to people as "only if".
+      over:
+        type: text
+        surface: S-CTRL
+        tier: core
+        summary: which list to go through
+        help: >
+          the list to go through: a binding to a list (`input.attachments`).
+      identified-by:
+        type: list of text
+        surface: S-EXEC
+        tier: core
+        help: >
+          the fields of an item that make it that item — `[content-hash]`.
+          Retries and "the same call" are worked out from these, never from
+          where the item sits in the list.
+      ordered-by:
+        type: text
+        surface: S-CTRL
+        tier: core
+        help: >
+          a field of the item to work through highest first; add `, lowest
+          first` to reverse. Leave it out to keep the list's own order.
+      combines-by:
+        type: map of combine-rule
+        combine-rules: &the-combine-rules
+          keep-all: [keep-all, keep all]
+          keep-the-latest: [keep-the-latest, keep the latest]
+          merge: [merge]
+          add-up: [add-up, add up]
+          vote: [vote, "vote, everyone agreeing"]
+          top-n: ["top <n> highest by <field>", "top <n> lowest by <field>"]
+        surface: S-CTRL
+        tier: core
+        help: >
+          how each field of the items' answers becomes one, one line per field —
+          `codes: vote`, `confidence: top 1 lowest by confidence`. Unnamed
+          fields keep all. A failed item is kept, marked failed, never dropped.
+      teamwork:
+        type: group:teamwork
+        surface: S-TOPO
+        tier: core
+        help: >
+          on `each`, the shipped words for how the items are waited for:
+          `waits-for`, `gives-up-after`, `if-someone-fails` and
+          `divides-the-budget` (`evenly` or `as-needed`). `starts:`,
+          `shares:` and `may-start:` belong to a named team and are refused here.
+      steps:
+        type: map of group:stage
+        surface: S-CTRL
+        tier: core
+        help: >
+          the inside of an `each`, a `repeat` or a `together`. Its stages go to
+          each other or to `done`, which ends that item, that round or that branch.
+      starts-at:
+        type: text
+        names: ^steps
+        surface: S-CTRL
+        tier: core
+        help: which inside stage runs first (not on `together`, where every inside stage starts at once)
+      until:
+        type: list of group:when-this
+        surface: S-CTRL
+        tier: core
+        help: >
+          on `repeat`, what has to be true for it to stop, checked when each
+          round ends; every line must hold. Leave it out to always run
+          `at-most:` rounds.
+      remembers:
+        type: map of group:state
+        surface: S-GOV
+        tier: core
+        help: >
+          on `repeat`, what survives from one round to the next. Read inside as
+          `remembers.<name>` and afterwards as `steps.<this stage>.<name>`.
+      checked-by:
+        type: list of group:eval-rule
+        surface: S-GOV
+        tier: core
+        help: >
+          what this stage's answer must satisfy — the user's "The answer
+          must…". The same rule shapes as `evals:`, so each check is also a
+          test. A failed check asks again; still failing, the stage has failed.
+      checks-at-most:
+        type: integer
+        at-least: 1
+        needs-also: [checked-by]
+        surface: S-GOV
+        tier: core
+        help: >
+          how many attempts in all, asking again with the reason after each
+          failed check. Leave it out for 2; write `1` to fail at the first miss.
+      undone-by:
+        # Resolved by `workflows.rs`, as `call:` is.
+        type: text
+        surface: S-EXEC
+        tier: core
+        help: >
+          how to undo what this stage did — a `<tool>/<action>` or a workflow —
+          in place of its action's own `undone-by:`.
+      limits:
+        type: group:limits
+        surface: S-GOV
+        tier: core
+        help: >
+          ceilings and a deadline for this stage and everything inside it. On
+          `each`, `items-at-most:` is required here.
 
   # The three ways a stage can end. A group rather than `map of text` so the
   # closed vocabulary in the help above is the vocabulary the validator holds.
@@ -3694,6 +4177,38 @@ groups:
         surface: S-CTRL
         tier: expert
         help: where to go when the stage has run its `at-most:` times
+      declined:
+        # 02W §2.4: what a workflow's `ask-someone` can end in, besides
+        # `answered`.
+        type: text
+        names: ^steps
+        or-one-of: [done]
+        surface: S-CTRL
+        tier: core
+        help: >
+          where to go when the person's `yes or no` came back no. Leave it out
+          and the run stops and says so: a no is never quietly carried past.
+      nobody-answered:
+        type: text
+        names: ^steps
+        or-one-of: [done, stop-and-say-so]
+        surface: S-CTRL
+        tier: core
+        help: >
+          where to go when `answer-within:` arrives with no answer. On a
+          question asked only of the clock, this is the one exit, taken when
+          the time comes. Leave it out to stop and say so. A path from here may
+          tell someone; it may not do what a yes would have done.
+      heard:
+        type: map of text
+        key-names: ports
+        names: ^steps
+        or-one-of: [done]
+        surface: S-CTRL
+        tier: core
+        help: >
+          where to go when an event arrives, one line per port — `{fee-received:
+          gather}`. What it brought is `latest-update.<field>`.
       decided-by:
         # THE ESCAPE §5.5 LISTS AS `router`, realised with the `program` kind.
         #
@@ -4479,12 +4994,22 @@ groups:
         tier: expert
         help: its value before anything has happened
       forget-after:
+        # Replaced by `kept-for:` (02W §1.3, §2.11). It keeps loading for one
+        # release, with the warning `loader/forget-after-is-now-kept-for`
+        # (WF-37), and means what `kept-for:` means.
         type: duration
         surface: S-GOV
         tier: core
         help: >
-          when to discard it. Required in practice for anything remembered
-          about a person.
+          the old name of `kept-for:`, read the same way for one more release.
+          Rename it `kept-for:`; the value is unchanged.
+      kept-for:
+        type: moment
+        surface: S-GOV
+        tier: core
+        help: >
+          when to discard it; replaces `forget-after:`. Required in practice
+          for anything remembered about a person.
       never-from:
         # CLOSED, and it was open text in an S-EXEC field — the one hole in a
         # governance column that was never held against anything, so
@@ -4630,6 +5155,14 @@ groups:
           # tightly. What a bundle DECLARES is checked; mounting is unbuilt for
           # every kind alike.
           - programs
+          # 02W §2.14: flows and named shapes are collections like the rest —
+          # and so are the workspace's shared memory and its owned parts, which
+          # are maps of named entries too (WP-05 decision: every collection a
+          # workspace holds is one `brings:` can name, so none is a blind spot).
+          - workflows
+          - shapes
+          - remembers
+          - owners
         required: yes
         surface: S-EXEC
         tier: core
@@ -4780,7 +5313,7 @@ groups:
           keeping the answers that did arrive.
       asks:
         type: text
-        names: questions
+        names: [^questions, questions]
         surface: S-EXEC
         tier: core
         # Same setting, same sentence, same `summary:` — see `limits.asks`.

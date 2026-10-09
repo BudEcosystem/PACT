@@ -1,0 +1,100 @@
+description: Goes through an email's attachments and posts each invoice once.
+accepts:
+  attachments: text
+  received-on: text
+answers-with:
+  posted: yes or no
+kept-for:
+  at: input.received-on
+  after: 7 days
+hides:
+  input.attachments: [logs]
+published-as: [tool]
+undone-by: ledger/unpost
+questions:
+  go-ahead:
+    description: Whether to post this run's invoices.
+    says: Post these invoices?
+    answer:
+      go-ahead: yes or no
+    asked-of: [the-requester]
+    answer-within: 1 day
+    if-nobody-answers: decline
+starts-at: sort
+steps:
+  sort:
+    does: call
+    call: sorter
+    says: Is this an invoice?
+    then:
+      answered: what-is-it
+  what-is-it:
+    does: decide
+    chooses-between:
+      invoice: approve
+      other: reply
+  approve:
+    does: ask-someone
+    asks: go-ahead
+    then:
+      answered: each-attachment
+      declined: reply
+      nobody-answered: stop-and-say-so
+  each-attachment:
+    does: each
+    over: input.attachments
+    identified-by: [content-hash]
+    ordered-by: total
+    combines-by:
+      posted: vote
+      total: top 1 highest by total
+    teamwork:
+      waits-for: everyone
+    limits:
+      items-at-most: 20
+      when-it-runs-out: stop-and-say-so
+    starts-at: read
+    steps:
+      read:
+        does: call
+        call: ledger/read-invoice
+        bind:
+          invoice: item.content-hash
+        then:
+          answered: pay
+      pay:
+        does: call
+        call: ledger/post
+        at-most: 3
+        undone-by: ledger/unpost
+        bind:
+          invoice: item.content-hash
+    then:
+      answered: check-twice
+  check-twice:
+    does: repeat
+    at-most: 2
+    starts-at: recheck
+    steps:
+      recheck:
+        does: call
+        call: recheck
+        waits-for-result: no
+        version: latest
+    then:
+      answered: both
+  both:
+    does: together
+    combines-by:
+      posted: keep-all
+    steps:
+      left:
+        does: call
+        call: ledger/read-invoice
+      right:
+        does: call
+        call: ledger/read-invoice
+    then:
+      answered: reply
+  reply:
+    does: answer

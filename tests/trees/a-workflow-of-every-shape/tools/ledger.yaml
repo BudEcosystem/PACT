@@ -1,0 +1,23 @@
+description: The company ledger.
+connect: order-server
+actions:
+  read-invoice:
+    description: Read one invoice.
+    reads-only: yes
+    takes:
+      invoice: text
+    answers-with:
+      total: money
+      vendor: text
+  post:
+    description: Post one invoice to the ledger.
+    takes:
+      invoice: text
+    answers-with:
+      posted: yes or no
+    same-request-key: invoice
+  unpost:
+    description: Take a posted invoice back out of the ledger.
+    takes:
+      invoice: text
+    same-request-key: invoice

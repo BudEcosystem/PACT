@@ -455,7 +455,9 @@ mod tests {
         let collections: Vec<&str> = workspace
             .fields
             .iter()
-            .filter(|f| matches!(&f.ty, Ty::MapOf(inner) if matches!(inner.as_ref(), Ty::Group(_))))
+            // A map of named entries: documents (`map of group:<kind>`) or named
+            // shapes (`map of map of answer-shape`, 02W §2.1).
+            .filter(|f| matches!(&f.ty, Ty::MapOf(inner) if matches!(inner.as_ref(), Ty::Group(_) | Ty::MapOf(_))))
             .map(|f| f.name.as_str())
             .collect();
         let mut brings = contributable(&schema);

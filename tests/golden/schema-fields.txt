@@ -111,6 +111,7 @@ limits.cost-per-request-under	money | S-GOV | core | optional
 limits.feel	one-of | S-GOV | core | optional
 limits.finishes-within	duration | S-GOV | core | optional
 limits.first-reply-within	duration | S-GOV | expert | optional
+limits.items-at-most	integer | S-GOV | core | optional
 limits.measured-at	one-of | S-GOV | expert | optional
 limits.nests-at-most	integer | S-GOV | core | optional
 limits.per-word-under	duration | S-GOV | expert | optional
@@ -142,6 +143,11 @@ model.family	text | S-GEN | expert | optional
 model.reasoning	group:figure | S-CAP | expert | optional
 model.served-by	list of group:served-by | S-CAP | expert | optional
 model.tier	one-of | S-CAP | expert | optional
+moment.after	duration | S-CTRL | core | optional
+moment.at	text | S-CTRL | core | optional
+moment.before	duration | S-CTRL | core | optional
+moment.counted-in	one-of | S-GOV | core | optional
+moment.in-time-zone	text | S-GOV | core | optional
 needs.audio	yes-no | S-CAP | core | optional
 needs.because	text | S-GEN | core | required
 needs.computer-use	yes-no | S-CAP | core | optional
@@ -152,9 +158,15 @@ needs.scores	map of threshold | S-CAP | expert | optional
 needs.tool-calling	one-of | S-CAP | core | optional
 outcome.answered	text | S-CTRL | expert | optional
 outcome.decided-by	text | S-CTRL | expert | optional
+outcome.declined	text | S-CTRL | core | optional
+outcome.heard	map of text | S-CTRL | core | optional
 outcome.may-go-to	list of text | S-CTRL | expert | optional
+outcome.nobody-answered	text | S-CTRL | core | optional
 outcome.too-many-times	text | S-CTRL | expert | optional
 outcome.used-a-tool	text | S-CTRL | expert | optional
+ownership.locked	one-of | S-GOV | core | optional
+ownership.locked-until	moment | S-GOV | core | optional
+ownership.owned-by	text | S-GOV | core | optional
 policy.applies-to	one-of | S-EXEC | core | optional
 policy.ask-a-person	list of group:question-rule | S-EXEC | core | optional
 port.answers	text | S-TOPO | core | required
@@ -198,6 +210,7 @@ question.says	text | S-EXEC | core | required
 question.shows	list of text | S-EXEC | core | optional
 redaction.description	text | S-GEN | core | optional
 redaction.hide	list of text | S-EXEC | core | required
+release.asks	text | S-GOV | core | optional
 resource.asks-to-connect	text | S-EXEC | core | optional
 resource.asks-to-run	text | S-EXEC | expert | optional
 resource.auth	group:credential-reference | S-CAP | core | optional
@@ -236,12 +249,32 @@ skill.scripts	anything | S-GEN | expert | optional
 skill.use-when	text | S-ROUTE | core | optional
 stage.asks	text | S-EXEC | core | optional
 stage.at-most	integer | S-GOV | expert | optional
-stage.does	one-of | S-CTRL | expert | required
+stage.bind	map of text | S-EXEC | core | optional
+stage.call	text | S-TOPO | core | optional
+stage.checked-by	list of group:eval-rule | S-GOV | core | optional
+stage.checks-at-most	integer | S-GOV | core | optional
+stage.chooses-between	map of text | S-CTRL | core | optional
+stage.combines-by	map of combine-rule | S-CTRL | core | optional
+stage.does	one-of | S-CTRL | core | required
+stage.identified-by	list of text | S-EXEC | core | optional
+stage.limits	group:limits | S-GOV | core | optional
+stage.may-call	list of text | S-EXEC | core | optional
 stage.may-use	list of text | S-ROUTE | expert | optional
+stage.ordered-by	text | S-CTRL | core | optional
+stage.over	text | S-CTRL | core | optional
+stage.remembers	map of group:state | S-GOV | core | optional
 stage.says	text | S-GEN | core | optional
+stage.starts-at	text | S-CTRL | core | optional
+stage.steps	map of group:stage | S-CTRL | core | optional
+stage.teamwork	group:teamwork | S-TOPO | core | optional
 stage.then	group:outcome | S-CTRL | expert | optional
+stage.undone-by	text | S-EXEC | core | optional
+stage.until	list of group:when-this | S-CTRL | core | optional
+stage.version	text | S-GOV | core | optional
+stage.waits-for-result	yes-no | S-CTRL | core | optional
 state.description	text | S-GEN | core | required
 state.forget-after	duration | S-GOV | core | optional
+state.kept-for	moment | S-GOV | core | optional
 state.lasts	one-of | S-GOV | core | required
 state.never-from	list of one-of | S-EXEC | core | optional
 state.shaped-like	map of anything | S-CAP | expert | optional
@@ -283,9 +316,27 @@ when-this.is	text | S-EXEC | core | optional
 when-this.is-one-of	list of text | S-EXEC | core | optional
 when-this.more-than	text | S-EXEC | core | optional
 when-this.tool	text | S-EXEC | core | required
+workflow.accepts	map of answer-shape | S-CAP | core | optional
+workflow.answers-with	map of answer-shape | S-CAP | core | optional
+workflow.base	yes-no | S-GOV | expert | optional
+workflow.data-stays-in	text | S-GOV | core | optional
+workflow.description	text | S-GEN | core | required
+workflow.evals	text | S-GOV | core | optional
+workflow.hides	map of list of text | S-EXEC | core | optional
+workflow.kept-for	moment | S-GOV | core | optional
+workflow.limits	group:limits | S-GOV | core | optional
+workflow.policy	text | S-EXEC | core | optional
+workflow.published-as	list of one-of | S-EXEC | core | optional
+workflow.questions	map of group:question | S-EXEC | core | optional
+workflow.release	group:release | S-GOV | core | optional
+workflow.remembers	map of group:state | S-GOV | core | optional
+workflow.starts-at	text | S-CTRL | core | required
+workflow.steps	map of group:stage | S-CTRL | core | required
+workflow.undone-by	text | S-EXEC | core | optional
 workspace.agents	map of group:agent | S-TOPO | core | optional
 workspace.allow-egress	list of one-of | S-EXEC | core | optional
 workspace.bundles	map of group:bundle | S-CAP | expert | optional
+workspace.calendar	text | S-GOV | core | optional
 workspace.context-policies	map of group:context-policy | S-CTRL | core | optional
 workspace.description	text | S-GEN | core | optional
 workspace.durability	one-of | S-GOV | expert | optional
@@ -297,6 +348,7 @@ workspace.loops	map of group:loop | S-CTRL | expert | optional
 workspace.models	group:catalog | S-CAP | expert | optional
 workspace.name	text | S-GOV | core | required
 workspace.owner	text | S-GOV | core | optional
+workspace.owners	map of group:ownership | S-GOV | core | optional
 workspace.pact-version	text | S-GOV | expert | optional
 workspace.policies	map of group:policy | S-EXEC | core | optional
 workspace.ports	map of group:port | S-TOPO | core | optional
@@ -304,9 +356,14 @@ workspace.profile	text | S-GOV | core | optional
 workspace.programs	map of group:program | S-EXEC | expert | optional
 workspace.questions	map of group:question | S-EXEC | core | optional
 workspace.redaction	group:redaction | S-EXEC | core | optional
+workspace.release	group:release | S-GOV | core | optional
+workspace.remembers	map of group:state | S-GOV | core | optional
 workspace.resources	map of group:resource | S-CAP | core | optional
+workspace.shapes	map of map of answer-shape | S-CAP | core | optional
 workspace.skills	map of group:skill | S-GEN | core | optional
+workspace.time-zone	text | S-GOV | core | optional
 workspace.tools	map of group:tool | S-CAP | core | optional
 workspace.values	map of group:value | S-GOV | core | optional
 workspace.watch	map of group:watch | S-GOV | core | optional
+workspace.workflows	map of group:workflow | S-TOPO | core | optional
 workspace.workspace-id	text | S-GOV | core | optional

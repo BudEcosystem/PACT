@@ -89,6 +89,16 @@ pub enum Ty {
     /// `questions.Shape.parse` and by nothing at check time, which is why the
     /// worked example shipped four lines its own parser refuses.
     AnswerShape(Vec<(String, Vec<String>)>),
+    /// How the answers of several items or branches become one (02W §2.0):
+    /// `keep-all`, `vote`, `top 3 lowest by confidence`. A closed vocabulary
+    /// supplied by `combine-rules:` on the field, one entry per rule with every
+    /// spelling that means it. A spelling may hold `<n>` (a whole number of at
+    /// least 1) and `<field>` (one word) where the author writes their own.
+    CombineRule(Vec<(String, Vec<String>)>),
+    /// The one time expression (02W §2.0): a length of time after the stage
+    /// starts (`48h`), or a `moment` group (`{at: input.starts-at, before:
+    /// 24h}`). Every field that takes a time takes this, and only this.
+    Moment,
     /// One of a fixed set of words.
     OneOf(Vec<String>),
     /// A list of values of one type.
@@ -145,6 +155,17 @@ impl Ty {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
+            Ty::CombineRule(rules) => format!(
+                "a way of combining answers — {}",
+                rules
+                    .iter()
+                    .filter_map(|(_, spellings)| spellings.first().map(String::as_str))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Ty::Moment => "a length of time like `48h`, or a moment like \
+                           `{at: input.starts-at, before: 24h}`"
+                .into(),
             Ty::OneOf(v) => format!("one of: {}", v.join(", ")),
             Ty::ListOf(t) => format!("a list, where each item is {}", t.describe()),
             Ty::Group(name) => format!("a set of {name} settings"),
@@ -1469,6 +1490,12 @@ impl Schema {
     ) {
         match ty {
             Ty::Anything => {}
+            // A moment is a length of time or a set of `moment` settings, and
+            // each half is checked exactly as a field of that type would be.
+            Ty::Moment if node.as_map().is_some() => {
+                self.check_value(node, &Ty::Group("moment".into()), field, diags, at)
+            }
+            Ty::Moment => self.check_value(node, &Ty::Duration, field, diags, at),
             Ty::Group(name) => match self.groups.get(name) {
                 Some(g) => self.check_group(node, g, diags, &at.inside(node)),
                 None => diags.push(Diagnostic::error(
@@ -2426,16 +2453,32 @@ impl<'a> Where<'a> {
     /// The map `want` refers to, and whether it was found at the workspace root.
     fn resolve(&self, want: &str) -> (Option<&'a Map>, bool) {
         match want.strip_prefix('^') {
-            // The nearest enclosing block that has one. Innermost first, so a
-            // stage routing to `repl` is checked against its own loop's stages
-            // and not against some other loop that happens to have one.
-            Some(key) => (
-                self.enclosing
-                    .iter()
-                    .rev()
-                    .find_map(|n| n.get(key).and_then(Node::as_map)),
-                false,
-            ),
+            // Innermost first, so a stage routing to `repl` is checked against
+            // its own loop's stages and not against some other loop that happens
+            // to have one. Three places, in this order:
+            //
+            // 1. the block the value is written in, when it has one — a
+            //    `starts-at:` beside its own `steps:`;
+            // 2. the nearest such map the value sits INSIDE — a stage's `then:`
+            //    names its siblings, even when the stage has `steps:` of its own
+            //    (a workflow's `each`, whose outcome leads to a stage beside it,
+            //    never into its own body);
+            // 3. the nearest enclosing block that has one — a workflow stage's
+            //    `asks:` finds the workflow's own `questions:`.
+            Some(key) => {
+                let held = |n: &&'a Node| -> Option<&'a Map> {
+                    let n: &'a Node = n;
+                    n.get(key).and_then(Node::as_map)
+                };
+                let innermost = self.enclosing.last().and_then(held);
+                let around = self.enclosing.windows(2).rev().find_map(|pair| {
+                    let (outer, inner): (&'a Node, &'a Node) = (pair[0], pair[1]);
+                    let map = outer.get(key)?;
+                    std::ptr::eq(map, inner).then(|| map.as_map()).flatten()
+                });
+                let nearest = || self.enclosing.iter().rev().find_map(held);
+                (innermost.or(around).or_else(nearest), false)
+            }
             None => (self.root.get(want).and_then(Node::as_map), true),
         }
     }
@@ -2777,8 +2820,43 @@ fn spelling(node: &Node, field: &str, ty: &Ty, written: &str) -> Option<Diagnost
                 ),
             ))
         }
+        Ty::CombineRule(rules) => {
+            if rules.iter().any(|(_, spellings)| spellings.iter().any(|s| spelt_as(written, s))) {
+                return None;
+            }
+            Some(Diagnostic::error(
+                "schema/not-a-combine-rule",
+                node.span.clone(),
+                format!(
+                    "'{written}' is not a way of combining answers, so nothing could say what \
+                     '{field}' comes to."
+                ),
+                format!(
+                    "Change it to one of: {}.",
+                    rules
+                        .iter()
+                        .filter_map(|(_, s)| s.first().map(|s| format!("`{s}`")))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            ))
+        }
         _ => None,
     }
+}
+
+/// Whether `written` is `spelling`, word for word and ignoring case, where a
+/// `<n>` in the spelling stands for a whole number of at least 1 and any other
+/// `<...>` for one word of the author's own (`top <n> lowest by <field>`).
+fn spelt_as(written: &str, spelling: &str) -> bool {
+    let said: Vec<&str> = written.split_whitespace().collect();
+    let want: Vec<&str> = spelling.split_whitespace().collect();
+    said.len() == want.len()
+        && said.iter().zip(&want).all(|(s, w)| match *w {
+            "<n>" => s.parse::<u64>().is_ok_and(|n| n >= 1),
+            w if w.starts_with('<') && w.ends_with('>') => !s.is_empty(),
+            w => s.eq_ignore_ascii_case(w),
+        })
 }
 
 /// Names that take no indefinite article at all, because no spelling of one
@@ -3132,6 +3210,11 @@ fn placeholder(ty: &Ty) -> String {
         Ty::AnswerShape(shapes) => {
             shapes.first().map(|(n, _)| n.clone()).unwrap_or_else(|| "text".into())
         }
+        Ty::CombineRule(rules) => rules
+            .first()
+            .and_then(|(_, spellings)| spellings.first().cloned())
+            .unwrap_or_else(|| "keep-all".into()),
+        Ty::Moment => "3 days".into(),
         // A moment the field really REACHES, when it names any. Built out of
         // the first word of each position, the offer was
         // `session.message.requested` — three good words in the right order that

@@ -370,3 +370,39 @@ fn first_entry_of(kind: &str) -> String {
     });
     map.keys().next().expect("at least one entry").clone()
 }
+
+/// A workflow is called and run by name, as an agent and a program are (02W
+/// §2.3 `call:`), so a name two of them share is refused at the workflow:
+/// `call: sorter` and a run of `sorter` could not tell which one was meant.
+#[test]
+fn a_workflow_may_not_take_a_name_an_agent_already_has() {
+    let src = repo().join("tests/trees/a-workflow-of-every-shape");
+    let dst = std::env::temp_dir().join(format!("pact-name-clash-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dst);
+    copy_tree(&src, &dst);
+    std::fs::write(
+        dst.join("workflows/sorter.yaml"),
+        "description: Sorts.\nstarts-at: go\nsteps:\n  go:\n    does: call\n    call: ledger/read-invoice\n",
+    )
+    .unwrap();
+    let out = pact().args(["check", dst.to_str().unwrap()]).output().expect("runs");
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(!out.status.success(), "{text}");
+    assert!(text.contains("rule: loader/a-name-the-workspace-already-has"), "{text}");
+    assert!(text.contains("'sorter' is an agent and a workflow"), "{text}");
+    assert!(text.contains("the workflow to `sorter-flow`"), "{text}");
+    // Told once, at the workflow — not again at the stage that calls it.
+    assert_eq!(text.matches("a-name-the-workspace-already-has").count(), 1, "{text}");
+}
+
+fn copy_tree(src: &Path, dst: &Path) {
+    std::fs::create_dir_all(dst).unwrap();
+    for e in std::fs::read_dir(src).unwrap().flatten() {
+        let (s, d) = (e.path(), dst.join(e.file_name()));
+        if s.is_dir() {
+            copy_tree(&s, &d)
+        } else {
+            std::fs::copy(&s, &d).map(|_| ()).unwrap()
+        }
+    }
+}

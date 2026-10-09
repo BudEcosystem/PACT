@@ -1443,7 +1443,11 @@ fn durability_matches_what_this_tree_does(
 fn validate(
     path: &Utf8PathBuf,
     unsafe_spec: bool,
-) -> Result<(Option<pact_doc::Node>, Diagnostics, Vec<pact_loader::report::Substitution>)> {
+) -> Result<(
+    Option<pact_doc::Node>,
+    Diagnostics,
+    Vec<pact_loader::report::Substitution>,
+)> {
     let (mut node, mut diags) = load(path)?;
 
     // `based-on:` is resolved BEFORE the schema sees anything (G11). A derived
@@ -1820,6 +1824,11 @@ fn validate(
         // two files (`learning.yaml` and `ports/`), which no field attribute can
         // ask.
         pact_loader::review::check(root, &schema, &mut diags);
+        // And the workflows (02W §3): stage loops that belong to no agent, held
+        // to the rules no single value can state — and, beside them, an agent's
+        // loop that writes a workflow's stage.
+        pact_loader::workflows::check(root, &mut diags);
+        pact_loader::workflows::told_once(&mut diags);
         diags.sort();
     }
     Ok((node, diags, substituted))
@@ -2041,7 +2050,13 @@ fn nobody_here_to_run(path: &Utf8PathBuf, root: &pact_doc::Node, diags: &mut Dia
         None => true,
         Some(agents) => agents.as_map().is_none_or(|m| m.is_empty() || all_base(m)),
     };
-    if !empty {
+    // A workflow runs as an agent does (02W §1), so a tree of workflows alone
+    // has something to run.
+    let flows = root
+        .get("workflows")
+        .and_then(pact_doc::Node::as_map)
+        .is_some_and(|m| !m.is_empty() && !all_base(m));
+    if !empty || flows {
         return;
     }
     let folder = holding_folder(path);
@@ -2483,8 +2498,12 @@ fn described_with_a_hole(
     published: &str,
     diags: &mut Diagnostics,
 ) {
-    let Some(described) = entry.get("description") else { return };
-    let Some(words) = described.as_str() else { return };
+    let Some(described) = entry.get("description") else {
+        return;
+    };
+    let Some(words) = described.as_str() else {
+        return;
+    };
     let unfilled: Vec<String> = pact_loader::holes::holes_in(words)
         .into_iter()
         .filter(|h| h.written.starts_with("run-inputs.") || h.written.starts_with("remembers."))
@@ -2536,7 +2555,12 @@ fn discover_cmd(path: &Utf8PathBuf, unsafe_spec: bool) -> Result<i32> {
             continue;
         };
         // The inventory publishes each description as written, like a card.
-        for (key, entry) in document.get("agents").and_then(pact_doc::Node::as_map).into_iter().flatten() {
+        for (key, entry) in document
+            .get("agents")
+            .and_then(pact_doc::Node::as_map)
+            .into_iter()
+            .flatten()
+        {
             if !discover::is_base(&entry.node) {
                 described_with_a_hole(
                     key,

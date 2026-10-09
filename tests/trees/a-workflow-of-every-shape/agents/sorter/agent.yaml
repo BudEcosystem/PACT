@@ -1,0 +1,4 @@
+description: Says whether an attachment is an invoice.
+instructions: Say whether the attachment you are given is an invoice.
+answers-with:
+  kind: one of invoice, other
