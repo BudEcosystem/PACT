@@ -151,3 +151,17 @@ def test_a_question_in_a_named_shape_is_asked_the_same_in_another_process() -> N
     assert again.answer["by"].read("2026-10-09T09:00") == "2026-10-09T09:00:00-05:00"
     parked = Suspension(reason="needs-approval", asks=tuple(Expect(k, v) for k, v in asked.answer.items()))
     assert Suspension.from_json(parked.to_json()).asks == parked.asks
+
+
+def test_a_question_line_marked_optional_may_be_left_out_of_the_answer() -> None:
+    from pact_adapters.questions import Question
+
+    asked = Question(
+        name="q",
+        asks="Which lines?",
+        answer={"approved": Shape.parse("yes or no"),
+                "lines": Shape.parse("list of invoice-line, optional", SHAPES)},
+    )
+    assert asked.validate({"approved": "yes"}).values == {"approved": True}
+    with pytest.raises(Rejected, match="'approved' is missing"):
+        asked.validate({"lines": []})

@@ -268,6 +268,73 @@ fn a_binding_to_a_stage_that_runs_later_is_from_later() {
 }
 
 #[test]
+fn the_first_stage_reading_a_stage_that_comes_round_to_it_is_from_later() {
+    let root = edited(
+        CASE,
+        "start-reads-later",
+        &[
+            (
+                FLOW,
+                "bind: { application: input }\n    then: { answered: complete }",
+                "bind: { application: steps.withdraw.run }\n    then: { answered: complete }",
+            ),
+            (
+                FLOW,
+                "    bind: { application-id: input.application-id }\n\n  fee:",
+                "    bind: { application-id: input.application-id }\n    then: { answered: check }\n\n  fee:",
+            ),
+        ],
+    );
+    let (ok, text) = check(&root);
+    assert!(!ok, "{text}");
+    assert!(text.contains("rule: loader/a-binding-from-later"), "{text}");
+    assert!(
+        text.contains("'check' reads 'steps.withdraw.run', and 'withdraw' runs after it: 'check' is the first stage, so the first time it runs 'withdraw' has not, so there is nothing there yet."),
+        "{text}"
+    );
+    assert!(!text.contains("path through ''"), "{text}");
+}
+
+#[test]
+fn a_call_filled_part_by_part_is_held_to_the_named_shape() {
+    let root = edited(
+        CASE,
+        "parts",
+        &[
+            (
+                "workspace.yaml",
+                "shapes:\n",
+                "shapes:\n  form:\n    first-name: text\n    last-name: text\n",
+            ),
+            (
+                "tools/outlook.yaml",
+                "      to: text\n      reason: text, optional\n",
+                "      to: text\n      reason: text, optional\n      fills: form\n",
+            ),
+            (
+                FLOW,
+                "      reason: steps.check.missing\n",
+                "      reason: steps.check.missing\n      fills.frist-name: input.site\n",
+            ),
+        ],
+    );
+    let (ok, text) = check(&root);
+    assert!(!ok, "{text}");
+    assert!(
+        text.contains("fills `fills.frist-name:` of 'outlook/send-email', and `fills` is the shape 'form', which has no part 'frist-name'."),
+        "{text}"
+    );
+    assert!(
+        text.contains("fix: Change it to one of: `fills.first-name`"),
+        "{text}"
+    );
+    assert!(
+        text.contains("leaves its inputs 'fills.first-name', 'fills.last-name' empty"),
+        "{text}"
+    );
+}
+
+#[test]
 fn an_item_outside_an_each_is_refused() {
     let root = edited(
         CASE,

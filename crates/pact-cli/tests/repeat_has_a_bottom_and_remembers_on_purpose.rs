@@ -175,9 +175,12 @@ fn a_value_remembered_from_inside_the_round_loads_clean() {
 }
 
 #[test]
-fn an_until_that_reads_nothing_the_round_writes_is_refused() {
+fn an_until_of_tool_lines_only_loads_and_asks_its_tool_each_round() {
+    // WF-14 reads what an `until:` line's `value:` names. Until `value:` lines
+    // can be written (the condition grammar), a line that asks a tool each
+    // round may answer differently, so it is left to the tool.
     let root = edited(
-        "until-still",
+        "until-tool",
         &[(
             FLOW,
             ROUND,
@@ -186,16 +189,35 @@ fn an_until_that_reads_nothing_the_round_writes_is_refused() {
         &[],
     );
     let (ok, text) = check(&root);
+    assert!(ok, "{text}");
+}
+
+#[test]
+fn a_value_remembered_from_a_stage_a_round_can_end_without_is_refused() {
+    // 02W §2.0: `steps.<stage>` only where every path passes it, and
+    // `comes-from:` has no `, optional`. A decision can end the round first.
+    let root = edited(
+        "from-a-branch",
+        &[(
+            FLOW,
+            "    at-most: 2\n    starts-at: recheck\n    steps:\n      recheck:\n",
+            "    at-most: 2\n    remembers:\n      tries:\n        description: what each round found\n        lasts: one-run\n        comes-from: steps.recheck.run\n        combines-by: keep-all\n    starts-at: pick\n    steps:\n      pick:\n        does: decide\n        chooses-between:\n          again: recheck\n          enough: done\n      recheck:\n",
+        )],
+        &[],
+    );
+    let (ok, text) = check(&root);
     assert!(!ok, "{text}");
     assert!(
-        text.contains("rule: loader/until-that-cannot-change"),
+        text.contains("rule: loader/a-binding-to-a-stage-that-may-not-have-run"),
         "{text}"
     );
     assert!(
-        text.contains("its `until:` reads nothing the round writes"),
+        text.contains(
+            "'check-twice' reads 'steps.recheck.run' when a round ends, but a round can end on \
+             the path through 'enough' without running 'recheck'."
+        ),
         "{text}"
     );
-    assert!(text.contains("`value: steps.recheck.<field>`"), "{text}");
 }
 
 #[test]

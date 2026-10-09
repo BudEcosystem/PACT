@@ -722,10 +722,9 @@ class Question:
     ) -> "Answer":
         """Read an answer, or raise `Rejected` saying exactly what to type.
 
-        Every field the schema declares must be present. There is no optional
-        marker on purpose: a schema with a field the author did not want
-        answered is a schema with a field too many, and a hidden marker is one
-        more thing a non-technical author would have to know about.
+        Every field the schema declares must be present, unless its line says
+        `, optional` (02W §2.15), the one marker every shape reader honours:
+        such a field may be left out, and is then absent from the answer.
         """
         problems: list[str] = []
         values: dict[str, Any] = {}
@@ -738,6 +737,8 @@ class Question:
                 )
 
         for key, shape in self.answer.items():
+            if key not in raw and shape.optional:
+                continue  # left out: absent, so it sets no argument (`Answer.applied_to`)
             if key not in raw:
                 problems.append(
                     f"'{self.name}' has not been answered: '{key}' is missing. "

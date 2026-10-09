@@ -8,7 +8,7 @@ holds that did not; the commits are listed under it for whoever wants the detail
 Running PACT trees in production on Pydantic AI 2.54, through
 [Bud Agent Flow](https://github.com/BudEcosystem/Bud-Agent-Flow), drove these changes. Every
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
-runs offline: 3752 tests, 1226 Rust and 2526 adapter.
+runs offline: 3765 tests, 1238 Rust and 2527 adapter.
 
 ### Workflows: bindings and shapes (9 October)
 
@@ -32,6 +32,15 @@ runs offline: 3752 tests, 1226 Rust and 2526 adapter.
 - **Python**: `ir.AgentSpec` carries the workspace's `shapes` and `time_zone`; PACT's own Pydantic
   AI path shows a named shape as an object and leaves an optional line out of `required`; a
   question and a suspension carry the named shapes they use across a process boundary.
+- **Review fixes.** What a repeat reads when a round ends (`comes-from:`, `until:`) must have run
+  on every way the round can end — a decision can end it first — or WF-5 names the path. A first
+  stage that reads a stage coming round to it again reads from later (WF-6), never "the path
+  through ''". A `bind:` key written with dots (`fills.first-name`) is a part of the input's named
+  shape: an unknown part is refused with the nearest three, the part's shape is held, and the
+  input counts as filled only when every required part is (WF-39). A stage's `at:` and
+  `in-time-zone:` are read once, at any depth, and a `bind:` key called `at` is never a moment.
+  Until `value:` can be written in a condition, an `until:` of `tool:` lines only is not held by
+  WF-14. A question's answer line marked `, optional` may be left out (`Question.validate`).
 
 ### Workflows: a `workflows/` collection and its structure (9 October)
 

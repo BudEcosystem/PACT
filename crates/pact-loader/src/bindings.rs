@@ -8,13 +8,13 @@
 //! | Rule | 02W | Fires when |
 //! |---|---|---|
 //! | `loader/a-binding-to-nothing` | WF-4 | a binding names no stage, field, input, memory or start |
-//! | `loader/a-binding-to-a-stage-that-may-not-have-run` | WF-5 | some path reaches the reading stage without passing the named one, and the input it fills is not `, optional` |
+//! | `loader/a-binding-to-a-stage-that-may-not-have-run` | WF-5 | some path reaches the reading stage (or, for `comes-from:` and `until:`, the end of the round) without passing the named one, and the input it fills is not `, optional` |
 //! | `loader/a-binding-from-later` | WF-6 | the stage reads one that runs after it (in a repeat, later in the round) |
 //! | `loader/an-item-outside-for-each` | WF-7 | `item.` outside an `each` body |
 //! | `loader/a-target-picked-from-nowhere` | WF-9 | `call:` is a binding with no `may-call:` |
 //! | `loader/remembered-from-nowhere` | WF-13 | a repeat's `remembers:` entry has no `comes-from:`, or one that reads outside the round |
-//! | `loader/until-that-cannot-change` | WF-14 | `until:` reads nothing the round writes |
-//! | `loader/a-call-that-does-not-fit` | WF-39 | a call's `bind:` leaves a required input of its target empty, names one it does not take, or binds the wrong shape |
+//! | `loader/until-that-cannot-change` | WF-14 | `until:`'s `value:` lines read nothing the round writes (an `until:` of `tool:` lines only asks its tool each round) |
+//! | `loader/a-call-that-does-not-fit` | WF-39 | a call's `bind:` leaves a required input (or a required part of one filled part by part, `fills.first-name`) of its target empty, names one it does not take or a part its shape does not have, or binds the wrong shape |
 //! | `loader/a-shape-made-of-itself` | new | a shape under `workspace.shapes` is, through its parts, made of itself |
 //! | `loader/a-line-this-stage-never-reads` | WF-3 | `comes-from:`, `combines-by:` or `lasts: one-run` on memory that is not a repeat's, or `kept-per:` on an agent's or a port's |
 //!
@@ -338,6 +338,26 @@ enum Reading {
     NamesOnly,
 }
 
+/// What a `bind:` key fills on its target.
+enum Fill {
+    /// The input's (or its part's) line, read, and as written.
+    Line(Option<Line>, String),
+    /// The target takes no input by that name.
+    NotTaken,
+    /// `whole` (a named shape, or a shape with no parts) has no part `part`.
+    NoPart {
+        whole: String,
+        part: String,
+        shape: String,
+        parts: Vec<String>,
+    },
+}
+
+/// A `bind:` key with each dotted part trimmed.
+fn dotted(key: &str) -> String {
+    key.split('.').map(str::trim).collect::<Vec<_>>().join(".")
+}
+
 /// What a binding fills, for the `, optional` escape and WF-39.
 struct Filling<'b> {
     input: &'b str,
@@ -359,6 +379,20 @@ impl<'a> Flow<'a> {
             }
             if let Some(over) = fields.get("over") {
                 self.read(frames, stage, &over.node, None, Reading::At, diags);
+            }
+            let mut found = Vec::new();
+            for (key, e) in fields {
+                match key.as_str() {
+                    "bind" | "steps" => {}
+                    "at" | "in-time-zone" => found.push(&e.node),
+                    _ => moments(&e.node, &mut found),
+                }
+            }
+            for n in found
+                .into_iter()
+                .filter(|n| n.as_str().is_some_and(is_binding))
+            {
+                self.read(frames, stage, n, None, Reading::NamesOnly, diags);
             }
             let Some(body) = fields.get("steps").and_then(|e| e.node.as_map()) else {
                 continue;
@@ -415,13 +449,12 @@ impl<'a> Flow<'a> {
         let inputs = target.and_then(|t| self.inputs_of(t));
         let bind = fields.get("bind").and_then(|e| e.node.as_map());
         for (key, value) in bind.into_iter().flatten() {
-            let input = key.split('.').next().unwrap_or(key).trim();
-            let line = inputs
-                .as_ref()
-                .and_then(|i| i.iter().find(|(k, _, _)| k == input))
-                .map(|(_, l, w)| (l.clone(), w.clone()));
+            let line = match inputs.as_ref().map(|i| self.fill_of(i, key)) {
+                Some(Fill::Line(l, w)) => Some((l, w)),
+                _ => None,
+            };
             let filling = target.map(|t| Filling {
-                input,
+                input: key.trim(),
                 line: line.as_ref().and_then(|(l, _)| l.clone()),
                 written: line.as_ref().map(|(_, w)| w.clone()),
                 target: t,
@@ -452,42 +485,76 @@ impl<'a> Flow<'a> {
         bind: Option<&Map>,
         diags: &mut Diagnostics,
     ) {
-        let bound: BTreeMap<&str, &Entry> = bind
-            .into_iter()
-            .flatten()
-            .map(|(k, e)| (k.split('.').next().unwrap_or(k).trim(), e))
-            .collect();
+        let bound: BTreeSet<String> = bind.into_iter().flatten().map(|(k, _)| dotted(k)).collect();
         let names: Vec<&str> = inputs.iter().map(|(k, _, _)| k.as_str()).collect();
         for (key, entry) in bind.into_iter().flatten() {
             let input = key.split('.').next().unwrap_or(key).trim();
-            let Some((_, line, written)) = inputs.iter().find(|(k, _, _)| k == input) else {
-                let at = key_span(bind, key).unwrap_or_else(|| entry.node.span.clone());
-                diags.push(Diagnostic::error(
-                    "loader/a-call-that-does-not-fit",
-                    at,
-                    format!(
-                        "'{stage}' fills `{input}:` of '{target}', and '{target}' takes no input \
-                         by that name."
-                    ),
-                    if names.is_empty() {
-                        format!("Delete it: '{target}' takes no inputs.")
-                    } else {
+            let at = key_span(bind, key).unwrap_or_else(|| entry.node.span.clone());
+            let key = dotted(key);
+            let (line, written) = match self.fill_of(inputs, &key) {
+                Fill::Line(line, written) => (line, written),
+                Fill::NotTaken => {
+                    diags.push(Diagnostic::error(
+                        "loader/a-call-that-does-not-fit",
+                        at,
                         format!(
-                            "Change it to one of: {} — or delete it.",
-                            offered(input, &names)
-                        )
-                    },
-                ));
-                continue;
+                            "'{stage}' fills `{input}:` of '{target}', and '{target}' takes no \
+                             input by that name."
+                        ),
+                        if names.is_empty() {
+                            format!("Delete it: '{target}' takes no inputs.")
+                        } else {
+                            format!(
+                                "Change it to one of: {} — or delete it.",
+                                offered(input, &names)
+                            )
+                        },
+                    ));
+                    continue;
+                }
+                Fill::NoPart {
+                    whole,
+                    part,
+                    shape,
+                    parts,
+                } => {
+                    let parts: Vec<&str> = parts.iter().map(String::as_str).collect();
+                    diags.push(Diagnostic::error(
+                        "loader/a-call-that-does-not-fit",
+                        at,
+                        if parts.is_empty() {
+                            format!(
+                                "'{stage}' fills `{key}:` of '{target}', and `{whole}` is \
+                                 `{shape}`, which has no parts."
+                            )
+                        } else {
+                            format!(
+                                "'{stage}' fills `{key}:` of '{target}', and `{whole}` is the \
+                                 shape '{shape}', which has no part '{part}'."
+                            )
+                        },
+                        if parts.is_empty() {
+                            format!("Fill `{whole}:` whole — `{whole}: <binding>`.")
+                        } else {
+                            format!(
+                                "Change it to one of: {} — or delete it.",
+                                suggest::nearest(&part, &parts, 3)
+                                    .iter()
+                                    .map(|p| format!("`{whole}.{p}`"))
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            )
+                        },
+                    ));
+                    continue;
+                }
             };
-            if key.contains('.') {
-                continue;
-            }
             let (Some(want), Some((have, have_written))) =
                 (line, self.shape_of(frames, &entry.node))
             else {
                 continue;
             };
+            let input = key.as_str();
             if self.shapes.fits(&have.shape, &want.shape) {
                 continue;
             }
@@ -506,12 +573,9 @@ impl<'a> Flow<'a> {
                 ),
             ));
         }
-        let empty: Vec<&str> = inputs
+        let empty: Vec<String> = inputs
             .iter()
-            .filter(|(k, line, _)| {
-                !bound.contains_key(k.as_str()) && !line.as_ref().is_some_and(|l| l.optional)
-            })
-            .map(|(k, _, _)| k.as_str())
+            .flat_map(|(k, line, _)| self.unfilled(k.clone(), line.as_ref(), &bound))
             .collect();
         if empty.is_empty() {
             return;
@@ -528,7 +592,7 @@ impl<'a> Flow<'a> {
         let example = empty
             .iter()
             .map(|k| {
-                if accepts.is_some_and(|a| a.contains_key(*k)) {
+                if accepts.is_some_and(|a| a.contains_key(k.as_str())) {
                     format!("`{k}: input.{k}`")
                 } else {
                     format!("`{k}: <binding>`")
@@ -613,9 +677,10 @@ impl<'a> Flow<'a> {
         let Some(until) = fields.get("until") else {
             return;
         };
+        let values = values_in(&until.node);
         let mut changes = false;
         let hears = hears_in(body);
-        for value in values_in(&until.node) {
+        for value in values.iter().copied() {
             self.read(frames, stage, value, None, Reading::RoundEnd, diags);
             let said = value.as_str().unwrap_or("").trim();
             let (root, rest) = said.split_once('.').unwrap_or((said, ""));
@@ -627,7 +692,9 @@ impl<'a> Flow<'a> {
                 _ => false,
             };
         }
-        if !changes {
+        // An `until:` of `tool:` lines only asks a tool each round, which may
+        // answer differently; WF-14 reads what a line's `value:` names.
+        if !changes && !values.is_empty() {
             diags.push(Diagnostic::error(
                 "loader/until-that-cannot-change",
                 until.key_span.clone(),
@@ -667,6 +734,8 @@ impl<'a> Flow<'a> {
                         moments(&q.node, &mut found);
                     }
                 }
+                // A stage's moments are read by the stage walk, as the stage's.
+                "steps" => {}
                 _ => moments(&entry.node, &mut found),
             }
         }
@@ -1002,13 +1071,16 @@ impl<'a> Flow<'a> {
         }
         // Where the reader sits in the frame that holds the target.
         let innermost = frames.len() - 1;
+        let frame = &frames[depth];
+        if depth == innermost && reading == Reading::RoundEnd {
+            return self.at_round_end(frame, &who, written, target, node, diags);
+        }
         let here: Option<&str> = if depth == innermost {
-            (reading == Reading::At).then_some(stage)
+            Some(stage)
         } else {
             frames[depth + 1].holder.map(|(n, _)| n)
         };
         let Some(here) = here else { return };
-        let frame = &frames[depth];
         let in_round = frame.kind() == "repeat";
         let later = |extra: String| {
             Diagnostic::error(
@@ -1067,6 +1139,13 @@ impl<'a> Flow<'a> {
             };
             return diags.push(later(extra));
         }
+        if around.is_empty() {
+            // `here` is the first stage and `target` comes round to it again:
+            // the first time `here` runs, nothing has.
+            return diags.push(later(format!(
+                ": '{here}' is the first stage, so the first time it runs '{target}' has not"
+            )));
+        }
         if optional {
             return;
         }
@@ -1079,6 +1158,40 @@ impl<'a> Flow<'a> {
                  '{target}' never runs."
             ),
             self.optional_fix(filling, "read it from a stage every path passes"),
+        ));
+    }
+
+    /// WF-5 when a round ends (`until:`, `comes-from:`): every way a round can
+    /// end must have passed `target`. `comes-from:` and `until:` fill no input,
+    /// so there is no `, optional` escape.
+    fn at_round_end(
+        &self,
+        frame: &Frame<'a>,
+        who: &str,
+        written: &str,
+        target: &str,
+        node: &Node,
+        diags: &mut Diagnostics,
+    ) {
+        if frame.start.is_none() {
+            return;
+        }
+        let graph = Graph::of(frame);
+        let Some(around) = graph.path_avoiding(END, target) else {
+            return;
+        };
+        let through = graph.through(&around, target);
+        diags.push(Diagnostic::error(
+            "loader/a-binding-to-a-stage-that-may-not-have-run",
+            node.span.clone(),
+            format!(
+                "{who} reads '{written}' when a round ends, but a round can end on the path \
+                 through '{through}' without running '{target}'."
+            ),
+            format!(
+                "Read it from a stage every round passes, or send the path through '{through}' \
+                 by '{target}' before the round ends."
+            ),
         ));
     }
 
@@ -1166,6 +1279,71 @@ impl<'a> Flow<'a> {
     }
 
     // ───────────────────────────────────────────────────── what things hold
+
+    /// The line a `bind:` key fills: an input's, or, written with dots
+    /// (`fills.first-name`, 02W §2.3), a part of its named shape.
+    fn fill_of(&self, inputs: &[(String, Option<Line>, String)], key: &str) -> Fill {
+        let mut path = key.split('.').map(str::trim);
+        let input = path.next().unwrap_or("");
+        let Some((_, line, written)) = inputs.iter().find(|(k, _, _)| k == input) else {
+            return Fill::NotTaken;
+        };
+        let (mut line, mut written, mut whole) = (line.clone(), written.clone(), input.to_string());
+        for part in path {
+            let Some(l) = &line else {
+                return Fill::Line(None, String::new());
+            };
+            let Shape::Named(name) = &l.shape else {
+                return Fill::NoPart {
+                    whole,
+                    part: part.to_string(),
+                    shape: l.shape.written(),
+                    parts: Vec::new(),
+                };
+            };
+            let Some(parts) = self.shapes.parts.get(name.as_str()) else {
+                return Fill::Line(None, String::new());
+            };
+            let Some(entry) = parts.get(part) else {
+                return Fill::NoPart {
+                    whole,
+                    part: part.to_string(),
+                    shape: name.clone(),
+                    parts: parts.keys().cloned().collect(),
+                };
+            };
+            line = self.shapes.line(&entry.node);
+            written = entry.node.as_str().unwrap_or("").to_string();
+            whole = format!("{whole}.{part}");
+        }
+        Fill::Line(line, written)
+    }
+
+    /// What of `path` (an input, or a part of one) `bound` leaves empty: the
+    /// path itself, or, when keys with dots fill some of its parts, each
+    /// required part they leave out.
+    fn unfilled(&self, path: String, line: Option<&Line>, bound: &BTreeSet<String>) -> Vec<String> {
+        if bound.contains(&path) || line.is_some_and(|l| l.optional) {
+            return Vec::new();
+        }
+        let below = format!("{path}.");
+        if !bound.iter().any(|k| k.starts_with(&below)) {
+            return vec![path];
+        }
+        let Some(Line {
+            shape: Shape::Named(name),
+            ..
+        }) = line
+        else {
+            return Vec::new();
+        };
+        self.shapes
+            .parts_of(name)
+            .unwrap_or_default()
+            .iter()
+            .flat_map(|(part, l)| self.unfilled(format!("{path}.{part}"), Some(l), bound))
+            .collect()
+    }
 
     /// What a call target takes, each line read: `(input, its line, as written)`.
     /// `None` when the target says nothing about what it takes.
@@ -1308,7 +1486,12 @@ impl<'a> Flow<'a> {
 
 // ─────────────────────────────────────────────────────────────────── graphs
 
-/// One `steps:` as a graph: each stage, where it can go next, and by which word.
+/// Where a run of a `steps:` leaves it: an outcome to `done`, to nothing, or
+/// past the block. No stage can be called this (a stage's name is a word).
+const END: &str = "\u{0}end";
+
+/// One `steps:` as a graph: each stage, where it can go next, and by which
+/// word. A stage that can leave the block has an edge to [`END`].
 struct Graph<'a> {
     starts: Vec<&'a str>,
     next: BTreeMap<&'a str, Vec<(&'a str, &'a str)>>,
@@ -1323,10 +1506,18 @@ impl<'a> Graph<'a> {
             if workflows::does(&entry.node) == Some("decide") {
                 decides.insert(name.as_str());
             }
-            let to = workflows::next_stages(&entry.node, true)
-                .into_iter()
-                .filter(|(_, s)| frame.steps.contains_key(*s))
-                .collect();
+            let all = workflows::next_stages(&entry.node, true);
+            let mut to: Vec<(&str, &str)> = Vec::new();
+            for (word, s) in &all {
+                if frame.steps.contains_key(*s) {
+                    to.push((word, s));
+                } else {
+                    to.push((word, END));
+                }
+            }
+            if all.is_empty() {
+                to.push(("", END));
+            }
             next.insert(name.as_str(), to);
         }
         let starts = match frame.start {
@@ -1403,15 +1594,18 @@ impl<'a> Graph<'a> {
     fn through(&self, path: &[(&'a str, &'a str, &'a str)], missed: &str) -> String {
         for (from, word, to) in path {
             if self.reaches(from, missed) && !self.reaches(to, missed) {
-                return if self.decides.contains(from) {
+                return if self.decides.contains(from) || (*to == END && !word.is_empty()) {
                     (*word).to_string()
+                } else if *to == END {
+                    (*from).to_string()
                 } else {
                     (*to).to_string()
                 };
             }
         }
-        path.last()
-            .map_or(String::new(), |(_, _, to)| (*to).to_string())
+        path.last().map_or(String::new(), |(from, _, to)| {
+            if *to == END { *from } else { *to }.to_string()
+        })
     }
 }
 
@@ -1831,6 +2025,208 @@ workflows:
             "        call: input.id\n        may-call: [t/read]\n",
         );
         assert!(rules(&listed).is_empty(), "{:?}", rules(&listed));
+    }
+
+    #[test]
+    fn what_a_round_reads_at_its_end_every_way_out_of_the_round_has_run() {
+        let text = ROUND
+            .replace("UNTIL", "{ value: remembers.seen }")
+            .replace("BIND", "input.id")
+            .replace(
+                "            then: { answered: b }\n",
+                "            then: { answered: pick }\n          pick:\n            does: decide\n            chooses-between: { yes: b, no: done }\n",
+            );
+        let found = rules(&text);
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(
+            found[0].0,
+            "loader/a-binding-to-a-stage-that-may-not-have-run"
+        );
+        assert!(
+            found[0].1.contains(
+                "'r' reads 'steps.b.total' when a round ends, but a round can end on the path \
+                 through 'no' without running 'b'."
+            ),
+            "{}",
+            found[0].1
+        );
+        // The same round, read from a stage every way out passes, is left alone.
+        let fine = text.replace("comes-from: steps.b.total", "comes-from: steps.a.total");
+        assert!(rules(&fine).is_empty(), "{:?}", rules(&fine));
+    }
+
+    #[test]
+    fn an_until_of_tool_lines_only_is_left_to_the_tool() {
+        assert!(round("{ tool: t/read }", "input.id").is_empty());
+    }
+
+    #[test]
+    fn the_first_stage_reading_one_that_comes_round_to_it_reads_from_later() {
+        let text = FLOW
+            .replace(
+                "        bind: { id: input.id }\n        then: { answered: pick }",
+                "        bind: { id: steps.b.total }\n        then: { answered: pick }",
+            )
+            .replace(
+                "        then: { answered: c }\n",
+                "        then: { answered: a }\n",
+            )
+            .replace("total: money, when: date", "total: text, when: date");
+        let found = rules(&text);
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].0, "loader/a-binding-from-later");
+        assert!(
+            found[0].1.contains(
+                "'a' reads 'steps.b.total', and 'b' runs after it: 'a' is the first stage, so \
+                 the first time it runs 'b' has not"
+            ),
+            "{}",
+            found[0].1
+        );
+    }
+
+    const PARTS: &str = "\
+shapes:
+  form: { first-name: text, last-name: text, middle: 'text, optional' }
+tools:
+  t:
+    actions:
+      fill:
+        takes: { fills: form }
+workflows:
+  w:
+    description: d
+    accepts: { id: text, n: number }
+    starts-at: a
+    steps:
+      a:
+        does: call
+        call: t/fill
+        bind: BIND
+";
+
+    fn parts(bind: &str) -> Vec<(&'static str, String)> {
+        rules(&PARTS.replace("BIND", bind))
+    }
+
+    #[test]
+    fn a_call_may_fill_an_input_part_by_part() {
+        let fine = parts("{ fills.first-name: input.id, fills.last-name: input.id }");
+        assert!(fine.is_empty(), "{fine:?}");
+    }
+
+    #[test]
+    fn a_part_the_shape_does_not_have_is_refused_and_the_nearest_offered() {
+        let found = parts("{ fills.frist-name: input.id, fills.last-name: input.id }");
+        let fit: Vec<_> = found
+            .iter()
+            .filter(|(r, _)| *r == "loader/a-call-that-does-not-fit")
+            .collect();
+        assert_eq!(fit.len(), 2, "{found:?}");
+        assert!(
+            fit.iter().any(|(_, m)| m.contains(
+                "fills `fills.frist-name:` of 't/fill', and `fills` is the shape 'form', which \
+                 has no part 'frist-name'."
+            )),
+            "{fit:?}"
+        );
+        // The misspelt part leaves the real one empty.
+        assert!(
+            fit.iter()
+                .any(|(_, m)| m.contains("leaves its input 'fills.first-name' empty")),
+            "{fit:?}"
+        );
+    }
+
+    #[test]
+    fn filling_some_parts_leaves_the_others_empty() {
+        let found = parts("{ fills.first-name: input.id }");
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert!(
+            found[0]
+                .1
+                .contains("leaves its input 'fills.last-name' empty"),
+            "{}",
+            found[0].1
+        );
+    }
+
+    #[test]
+    fn a_part_is_filled_in_its_own_shape() {
+        let found = parts("{ fills.first-name: input.id, fills.last-name: input.n }");
+        assert_eq!(
+            found.len(),
+            0,
+            "a number fits text by the auto-map rung: {found:?}"
+        );
+        let text = PARTS
+            .replace("last-name: text", "last-name: number")
+            .replace(
+                "BIND",
+                "{ fills.first-name: input.id, fills.last-name: input.id }",
+            );
+        let found = rules(&text);
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert!(
+            found[0]
+                .1
+                .contains("fills `fills.last-name:` of 't/fill' from 'input.id', which is `text`"),
+            "{}",
+            found[0].1
+        );
+    }
+
+    #[test]
+    fn a_part_of_a_shape_with_no_parts_is_refused() {
+        let text = PARTS
+            .replace("takes: { fills: form }", "takes: { fills: text }")
+            .replace("BIND", "{ fills.first-name: input.id }");
+        let found = rules(&text);
+        assert!(
+            found
+                .iter()
+                .any(|(_, m)| m.contains("and `fills` is `text`, which has no parts")),
+            "{found:?}"
+        );
+    }
+
+    #[test]
+    fn an_input_called_at_is_a_binding_once_and_a_nested_moment_is_read() {
+        let text = PARTS
+            .replace("takes: { fills: form }", "takes: { id: text, at: text }")
+            .replace("BIND", "{ id: input.id, at: steps.zz.name }");
+        let found = rules(&text);
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert!(
+            found[0].1.starts_with("'a' reads 'steps.zz.name'"),
+            "{}",
+            found[0].1
+        );
+        let nested = "\
+workflows:
+  w:
+    description: d
+    accepts: { ids: list of text }
+    starts-at: e
+    steps:
+      e:
+        does: each
+        over: input.ids
+        starts-at: x
+        steps:
+          x:
+            does: ask-someone
+            asks: q
+            waits-for: { at: input.whenn }
+";
+        let found = rules(nested);
+        assert!(
+            found
+                .iter()
+                .any(|(r, m)| *r == "loader/a-binding-to-nothing"
+                    && m.starts_with("'x' reads 'input.whenn'")),
+            "{found:?}"
+        );
     }
 
     #[test]
