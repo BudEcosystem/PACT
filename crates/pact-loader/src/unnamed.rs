@@ -130,6 +130,16 @@ const OMITTED: &[(&str, &str)] = &[
     ),
     ("bundles", "mounted by `from:`, not named by a line elsewhere in the tree"),
     (
+        "workflows",
+        "the ordinary shape of a top-level flow, started by a port or a caller rather \
+         than by a line inside the workspace, as an agent is",
+    ),
+    (
+        "values",
+        "a figure nothing reads is told by `values.rs` (`loader/nothing-uses-this-value`), \
+         the one pass that sees it before it is put in place",
+    ),
+    (
         "watch",
         "workspace-scoped on purpose — the schema's own argument for keeping it there \
          is that nobody names a watch",

@@ -155,6 +155,10 @@ const SENTENCES: &[(&str, &str, &str)] = &[
     ("stage", "call", "what this stage runs"),
     ("stage", "chooses-between", "which labels it can pick, and where each one leads"),
     ("stage", "over", "which list to go through"),
+    // A wait answered by enough of those asked, and a table's rows (02W §2.8,
+    // §2.12).
+    ("question", "enough-is", "how many answers count as enough"),
+    ("value", "rows-are", "what each row is made of"),
 ];
 
 fn expected(pair: &Pair) -> Option<&'static str> {
@@ -256,10 +260,11 @@ fn the_settings_that_carry_a_summary_are_named_by_it_and_not_by_their_help() {
         .filter(|p| !field_strings(&p.group, &p.owed).0.is_empty())
         .count();
     assert_eq!(
-        with_summary, 10,
+        with_summary, 12,
         "seven of the ten pairings needed a `summary:` when this was written — `port.every`, \
          `teamwork.enough-is`, `teamwork.gives-up-after`, and the four `asks:` fields — and the \
-         three a workflow's stage added (`call`, `chooses-between`, `over`) need one each. If \
+         three a workflow's stage added (`call`, `chooses-between`, `over`) need one each, as do \
+         the two a wait and a table added (`question.enough-is`, `value.rows-are`). If \
          that count moved, the table above still holds; this line is here so a `summary:` \
          cannot be quietly deleted and replaced by a fallback that happens to read."
     );

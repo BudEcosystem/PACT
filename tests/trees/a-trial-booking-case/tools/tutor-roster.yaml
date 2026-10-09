@@ -1,0 +1,13 @@
+description: The roster of tutors, one row per location and subject.
+connect: roster-server
+actions:
+  find-tutor:
+    description: Find the tutor for a location and a subject.
+    reads-only: yes
+    takes:
+      location: text
+      subject: text
+    answers-with:
+      owner-id: text
+      address: text
+      zone: text

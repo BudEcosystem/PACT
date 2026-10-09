@@ -19,7 +19,6 @@ questions:
       go-ahead: yes or no
     asked-of: [the-requester]
     answer-within: 1 day
-    if-nobody-answers: decline
 starts-at: sort
 steps:
   sort:

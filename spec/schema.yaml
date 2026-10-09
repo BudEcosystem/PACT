@@ -270,10 +270,10 @@ groups:
           `America/Chicago`. A schedule, or a time read from a date, with no
           zone anywhere is refused.
       calendar:
-        # 02W writes `names: values`. A figure in `values/` is put in place by
-        # `{use:}` and the section removed before any check reads the tree, so a
-        # table read at run time is the value-table work that follows this.
+        # A table in `values/`, kept in the document because a run reads it by
+        # name (`values.rs`); its rows have a part in shape `date`.
         type: text
+        names: values
         surface: S-GOV
         tier: core
         help: which table in `values/` lists working days and holidays, for `business-days`
@@ -966,16 +966,33 @@ groups:
         # types a setting really has. Writing `shape: duration` against the
         # answer shapes was refused as not-a-shape, on the first fixture that
         # shared a deadline.
+        #
+        # `table` (02W §2.12): a list of rows, each in the named shape
+        # `rows-are:` gives — a calendar of holidays, an approval matrix, a
+        # roster. A table is read by name (`workspace.calendar:`,
+        # `port.per-row-of:`, a `values.<name>` binding), never put in place by
+        # `{use:}`, so it stays in the document for a run to read
+        # (`crates/pact-loader/src/values.rs`).
         type: one-of
-        choices: [text, yes-or-no, number, whole-number, duration, money, percent, size]
+        choices: [text, yes-or-no, number, whole-number, duration, money, percent,
+                  size, table]
+        needed-when:
+          rows-are: table
         surface: S-CAP
         tier: expert
         help: >
           what kind of figure this is — `money`, `duration`, `whole-number`,
-          `percent`, `size`, `number`, `text` or `yes-or-no`. Leave it out and
-          the figure is read as written. Write it and a figure that is not one
-          is refused here, at the line that is wrong, instead of at every line
-          that uses it.
+          `percent`, `size`, `number`, `text`, `yes-or-no`, or `table` for a
+          list of rows. Leave it out and the figure is read as written. Write it
+          and a figure that is not one is refused here, at the line that is
+          wrong, instead of at every line that uses it.
+      rows-are:
+        type: text
+        names: shapes
+        surface: S-CAP
+        tier: core
+        summary: what each row is made of
+        help: on a table, the named shape of each row — an approval matrix, a roster
       value:
         # `anything`, because the shape is the other field's job and this one
         # holds whatever the author is sharing. A value may itself be written
@@ -1534,7 +1551,10 @@ groups:
           write yourself wins. It stops nothing: a run is stopped by a line
           with a figure on it, `finishes-within:` or `runs-for-at-most:`.
       finishes-within:
-        type: duration
+        # Was `duration`. A bare length of time reads the same; the group form
+        # (`{after: 60 days, counted-in: business-days}`) is read only in a
+        # workflow (`loader/a-workflow-only-spelling`, `waits.rs`).
+        type: moment
         surface: S-GOV
         tier: core
         needs-also: [when-it-runs-out]
@@ -1542,6 +1562,28 @@ groups:
           how long the whole thing may take. This is the promise you are making
           to whoever waits, and it is also a ceiling: write no `runs-for-at-most`
           and the run is stopped here, so a promise is never left unenforced.
+          In a workflow it may be a moment — `{after: 60 days, counted-in:
+          business-days}`.
+      starts-from:
+        type: text
+        names: ^steps
+        surface: S-GOV
+        tier: core
+        help: >
+          the stage whose end starts the `finishes-within:` clock — a
+          regulatory clock that starts on payment. Leave it out to start with
+          the run (or the stage this group is on).
+      paused-during:
+        type: list of text
+        names: ^steps
+        surface: S-GOV
+        tier: core
+        help: waits whose time does not count against `finishes-within:`
+      milestones:
+        type: list of group:reminder
+        surface: S-GOV
+        tier: core
+        help: points on that clock that tell someone or start a flow, without changing the path
       cost-per-request-under:
         type: money
         surface: S-GOV
@@ -1660,9 +1702,23 @@ groups:
         help: >
           on `each`, the most items it will take — required there. With
           `carry-on` the first N run and the rest are listed as not done.
+      at-once-at-most:
+        type: integer
+        at-least: 1
+        surface: S-GOV
+        tier: core
+        help: >
+          how many may run at the same time: items on an `each`, or runs of
+          this flow. `1` is one at a time, in order. Leave it out to let the
+          runtime choose.
       when-it-runs-out:
+        # The first three are an agent's; the other five a workflow's (02W
+        # §2.10), and `answer-with-what-it-has` is written `carry-on` there
+        # (WF-40). `waits.rs` holds each to where it is read.
         type: one-of
-        choices: [stop-and-say-so, ask-a-person, answer-with-what-it-has]
+        choices: [stop-and-say-so, ask-a-person, answer-with-what-it-has,
+                  use-a-backup, carry-on, wait-for-a-new-version, undo,
+                  wait-its-turn]
         needed-when:
           asks: ask-a-person
         surface: S-GOV
@@ -1671,6 +1727,12 @@ groups:
           what to do on reaching any ceiling above. Stopping silently, asking a
           person, and answering as if finished are three different things, so
           this is never implied: set a ceiling and you have to say this too.
+          In a workflow, the same choices as a stage failing, plus
+          `wait-its-turn`, the default for `at-once-at-most:`: `use-a-backup`,
+          `wait-for-a-new-version` and `undo` take their companion line from the
+          stage's `if-it-fails:`, and `carry-on` records the overrun and goes on
+          with what is done. The agents' `answer-with-what-it-has` is written
+          `carry-on` in a workflow.
       asks:
         type: text
         names: [^questions, questions]
@@ -2730,6 +2792,15 @@ groups:
           which question to put to them, by name — one of the entries in
           `questions`. The question carries the wording and the shape of the
           answer, so two rules can share one without repeating either.
+      first-times:
+        type: integer
+        at-least: 1
+        surface: S-EXEC
+        tier: core
+        help: >
+          ask only for the first N times this rule matches, counted per
+          workspace — the user's "for the first N times". After that, no one is
+          asked.
 
   # One condition, wherever a condition is written (02W §2.6): an approval
   # rule's `when:`, a routing rule's `when:`, a repeat's `until:` and a port's
@@ -2917,8 +2988,11 @@ groups:
         # literal string `is-this-ok` before money moved. `says:` already means
         # "the words to use" on a stage and on a scheduled port, so this makes
         # one key mean one thing everywhere.
+        #
+        # `required: yes` moved to the loader (02W §2.8, WF-22): the words are
+        # required when `asked-of:` names a person or a group. The clock and an
+        # event source read no wording (`crates/pact-loader/src/waits.rs`).
         type: text
-        required: yes
         surface: S-EXEC
         tier: core
         help: >
@@ -2926,9 +3000,10 @@ groups:
           never a sentence the model builds, because this is the last hop into
           the only human control in the system.
       answer:
+        # Required by the loader, as `says:` is (WF-22): a question asked only of
+        # the clock or of events has no answer, and so no gate.
         type: map of answer-shape
         shapes: *the-answer-shapes
-        required: yes
         surface: S-EXEC
         tier: core
         help: >
@@ -2969,7 +3044,7 @@ groups:
           team could not answer: `who-could-not-answer`, `why-they-could-not`,
           `who-did-answer`. Waiting at a step of your loop: `the-stage`,
           `what-the-stage-said`. A name that does not fit where the run stopped
-          is simply not shown.
+          is simply not shown. In a workflow, any binding.
       asked-of:
         # Required. A question with nobody named produces a wait nobody can
         # answer — it ran the deadline down and then did whatever
@@ -2984,9 +3059,19 @@ groups:
         help: >
           who is asked. Naming nobody means nobody can answer, not that anybody
           can, so this line is never left out — write the team or the person who
-          really decides.
+          really decides. Besides a person, team or channel (a channel is
+          written with its `#`, quoted — `"#social-approvals"` — and anyone in
+          it may answer, and who did is recorded): `the-requester`; a binding to
+          a person or an outside contact (`steps.po.budget-owner`,
+          `input.phone`); and, in a question a workflow asks, a port of this
+          workspace, for an event, or `the-clock`, a time-only wait whose time
+          is `answer-within:` and whose exit is `nobody-answered`. A list mixing
+          them waits for the first.
       answer-within:
-        type: duration
+        # Was `duration`. A bare length of time reads the same; the group form
+        # (`{at: input.starts-at, before: 24h}`) is read only in a question a
+        # workflow asks (`loader/a-workflow-only-spelling`, `waits.rs`).
+        type: moment
         surface: S-GOV
         tier: core
         help: >
@@ -2994,11 +3079,91 @@ groups:
           applies — somebody has to be watching the clock for that to happen,
           and that is the job of whatever is running this agent, not of this
           file. Leave it out and the wait has no end: it lasts until somebody
-          answers.
+          answers. In a question a workflow asks it may be a moment —
+          `{at: input.starts-at, before: 24h}`.
+      answered-by:
+        type: one-of
+        choices: [anyone, everyone, enough-of-them]
+        needed-when:
+          enough-is: enough-of-them
+        surface: S-EXEC
+        tier: core
+        help: >
+          how many of `asked-of:` must answer. With `everyone`, all of them, in
+          any order, and any `no` is a no. Waits drawn side by side are separate
+          stages inside a `together`. Leave it out for the first answer.
+      enough-is:
+        type: integer
+        at-least: 1
+        surface: S-EXEC
+        tier: core
+        summary: how many answers count as enough
+        help: >
+          with `answered-by: enough-of-them`, how many
+      asked-in:
+        type: text
+        surface: S-EXEC
+        tier: core
+        help: >
+          where the question appears: a connection your runtime has set up
+          and a place in it — `slack #social-approvals`, `sms`, `phone`. Written
+          only when `asked-of:` is a channel, `the-requester` or an outside
+          contact (WF-36); everyone else is reached the way they chose, and a
+          team's place is set on the team. Like `port.through:`, the host
+          resolves this name.
+      urgency:
+        type: one-of
+        choices: [can-wait, normal, urgent]
+        surface: S-EXEC
+        tier: core
+        help: >
+          how soon the answerer is reached, through their own How to reach me.
+          Leave it out for `normal`.
+      not-the-same-as:
+        type: list of text
+        surface: S-EXEC
+        tier: core
+        help: >
+          who may not answer: a binding to a person (`steps.po.raised-by`), or a
+          stage, meaning whoever answered that stage. Separation of duties.
+      needs-signature:
+        type: yes-no
+        surface: S-EXEC
+        tier: core
+        help: whether the answer needs a fresh sign-in and is recorded as a signature
+      starts-with:
+        type: map of text
+        surface: S-EXEC
+        tier: core
+        help: >
+          answer lines that arrive filled in, for the person to accept or edit
+          — `codes: steps.code-it.codes`. What they send back is the answer.
+      ordered-by:
+        type: text
+        surface: S-CTRL
+        tier: core
+        help: how this question is sorted in the answerer's inbox, as `stage.ordered-by:`
+      counts-events-from:
+        type: one-of
+        choices: [whenever-they-arrived, this-wait]
+        surface: S-CTRL
+        tier: core
+        help: >
+          `this-wait` ignores events that arrived before this wait began. Left
+          out, an event no wait was listening for is kept for the next wait
+          that listens.
+      reminds-at:
+        type: list of group:reminder
+        surface: S-EXEC
+        tier: core
+        help: times, counted from when the wait began, to nudge, tell someone, hand over, or run a flow
       if-nobody-answers:
+        # `required: yes` moved to the loader (02W §2.8): still required on a
+        # question no workflow asks, and refused on one a workflow asks (WF-40),
+        # where the stage's `nobody-answered:` exit is the one place silence
+        # goes (`crates/pact-loader/src/waits.rs`).
         type: one-of
         choices: [decline, escalate, stop-and-say-so]
-        required: yes
         needed-when:
           escalates-to: escalate
         surface: S-EXEC
@@ -3006,6 +3171,8 @@ groups:
         help: >
           what to do when the time runs out. Never approve — silence is not a
           yes, and there is deliberately no wording here that would make it one.
+          Not written in a question a workflow asks: there the stage's
+          `nobody-answered:` exit says where silence goes.
           Saying `escalate` needs an `escalates-to:` line beside it, or the
           deadline arrives, nobody is named, and the wait dead-ends.
       escalates-to:
@@ -3040,6 +3207,42 @@ groups:
           says back is shown to the person while they are still standing there,
           which is the one moment a correction is free. Leave it out and the
           answer only has to be the right kind of thing.
+
+  # One nudge, note, hand-over or side flow on a wait's clock (02W §2.8), or a
+  # milestone on a deadline's (§2.10). Exactly one of the four actions is
+  # written (WF-21, `crates/pact-loader/src/waits.rs`).
+  reminder:
+    describe: something a reminder can have
+    fields:
+      at:
+        type: moment
+        required: yes
+        surface: S-GOV
+        tier: core
+        help: when, counted from when the wait began (or from a deadline's start, as a milestone)
+      nudges:
+        type: yes-no
+        surface: S-EXEC
+        tier: core
+        help: remind whoever is being asked
+      tells:
+        type: list of text
+        surface: S-EXEC
+        tier: core
+        help: people to tell, without asking them anything
+      hands-over-to:
+        type: list of text
+        surface: S-EXEC
+        tier: core
+        help: ask these people instead from now on; the question gets a new key (WAIT-5)
+      runs:
+        type: text
+        names: workflows
+        surface: S-EXEC
+        tier: core
+        help: >
+          start this workflow with the run's data and do not wait for it — the
+          one side action. It never changes this run's path.
 
   # How you know it works. This is the oracle for everything else — model
   # swapping, learning, and portability all resolve against these checks.
@@ -3628,15 +3831,20 @@ groups:
           by itself with nobody talking to it, so on any other port this is
           wording nothing will ever read and it is refused.
       if-still-running:
+        # R44 reopened (02W §4): every port can start a run about a case that is
+        # already open, and the run key (`same-conversation-when:`) says which
+        # overlap counts, so the six choices are read on every kind of port.
         type: one-of
-        choices: [skip, queue, cancel-previous]
+        choices: [start, queue, join, cancel-previous, skip, stop]
         surface: S-CTRL
         tier: core
         help: >
-          on a timer, what to do when the last run has not finished. Eve has no
-          answer to this at all, so a slow job quietly overlaps itself. Only a
-          timer can start again while it is still going, so on any other port
-          this is refused.
+          what an arrival does when a run with the same key is open, on any kind
+          of port. `start` begins another anyway; `queue` waits its turn; `join`
+          hands it to the open run (a listening wait hears it, or it becomes the
+          latest update); `cancel-previous` replaces the open run; `skip`
+          ignores it; `stop` ends the open run. Leave it out on a timer for
+          `skip`, elsewhere for `start`.
       through:
         type: text
         surface: S-CAP
@@ -3647,10 +3855,63 @@ groups:
       answers:
         type: text
         required: yes
-        names: agents
+        names: [agents, workflows]
         surface: S-TOPO
         tier: core
-        help: which agent handles what arrives here
+        help: which agent or workflow handles what arrives here
+      accepts:
+        type: map of answer-shape
+        shapes: *the-answer-shapes
+        surface: S-CAP
+        tier: core
+        help: >
+          the shape of what arrives, when it differs from the workflow's own
+          `accepts:`. Same-named fields fill the workflow's input; others need
+          `bind:`. A port that cannot fill every required input never starts a
+          run, and only joins one.
+      bind:
+        type: map of text
+        surface: S-EXEC
+        tier: core
+        help: >
+          workflow inputs filled from what arrived, when its names differ —
+          `invitee-uri: input.old-invitee-uri`
+      only-when:
+        type: list of group:when-this
+        surface: S-EXEC
+        tier: core
+        help: what has to hold of what arrived, or it is dropped and the drop recorded
+      signed-with:
+        type: group:credential-reference
+        surface: S-EXEC
+        tier: core
+        help: the secret an event must be signed with; anything unsigned is refused at the door
+      in-time-zone:
+        type: text
+        surface: S-GOV
+        tier: core
+        help: on a timer, the zone `every:` is read in, or a binding when there is one run per row
+      if-missed:
+        type: one-of
+        choices: [run-when-back, skip]
+        surface: S-CTRL
+        tier: core
+        help: on a timer, what to do about a time that passed while nothing was running
+      per-row-of:
+        type: text
+        names: values
+        surface: S-TOPO
+        tier: core
+        help: >
+          on a timer, one run per row of this table, each row being the run's
+          input — for clinics in three zones, `in-time-zone: input.zone`.
+      answer-within:
+        type: duration
+        surface: S-GOV
+        tier: core
+        help: >
+          on `inbound-call`, how long the caller waits for the answer. After
+          that it gets the run's id and a link where the answer will appear.
       same-conversation-when:
         type: list of text
         surface: S-TOPO
@@ -3658,7 +3919,34 @@ groups:
         help: >
           what makes two messages part of the same conversation — usually the
           thread they are in. Get this wrong and every message starts over, or
-          unrelated people share one memory.
+          unrelated people share one memory. Meaningful on every kind of port.
+          On a port that answers a workflow each entry names a field of what
+          arrives (WF-27), and a list (`[vendor-tax-id, invoice-number,
+          total]`) is the run key.
+      counts-as-the-same-for:
+        type: duration
+        surface: S-CTRL
+        tier: core
+        help: >
+          with `skip`, how long after the first run started a repeat is still
+          ignored, open or not. A workflow calling this port gets back
+          `already-done` with the first run's answer.
+      ordered-by:
+        type: text
+        surface: S-CTRL
+        tier: core
+        help: with `queue`, a field of what arrived to take the queue in, as `stage.ordered-by:`
+      undo:
+        type: yes-no
+        surface: S-EXEC
+        tier: core
+        help: with `stop`, undo what the open run did, newest first, before it ends
+      then-run:
+        type: text
+        names: workflows
+        surface: S-EXEC
+        tier: core
+        help: with `stop`, a workflow to start afterwards with the run's data, not waited for
       who-can-reach-it:
         type: list of text
         surface: S-EXEC

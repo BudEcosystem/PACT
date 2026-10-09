@@ -131,6 +131,7 @@
 //! its digest — is reproducible on any machine.
 
 pub mod approvals;
+pub mod arrivals;
 pub mod bindings;
 pub mod available;
 pub mod bundles;
@@ -158,6 +159,7 @@ pub mod teamwork;
 pub mod templates;
 pub mod unnamed;
 pub mod values;
+pub mod waits;
 pub mod workflows;
 
 use camino::{Utf8Path, Utf8PathBuf};

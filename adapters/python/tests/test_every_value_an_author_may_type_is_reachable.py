@@ -64,6 +64,12 @@ SOMEBODY_ELSE_ACTS_ON_THE_WORD: dict[str, str] = {
     # §4 — the host makes the call and schedules the work.
     "tool.method": "the host makes the HTTP call; PACT records which verb it is",
     "port.if-still-running": "the scheduler decides what to do with an overlapping run",
+    # 02W §2.8, §2.9: words a runtime acts on when it reaches a person, hears
+    # an event or keeps a timer; PACT records them and the loader holds where
+    # each may be written.
+    "port.if-missed": "the scheduler decides what to do about a time that passed while nothing ran",
+    "question.urgency": "the host reaches the answerer through their own way of being reached, this soon",
+    "question.counts-events-from": "the runtime's inbox of events decides which arrivals a wait hears",
     "learning.review": "the host schedules the review cycle",
     "learning.needs-a-person-to-approve": "the host routes each kind of change to a person",
     # HALF DELEGATED, and the row said "the host decides" of a field this port

@@ -26,12 +26,17 @@
 //! loud may, and `kind: schedule` beside `every:` agrees with the derivation and
 //! is left alone.
 //!
-//! # 2. Three settings that only work on a timer were accepted anywhere
+//! # 2. Settings that only work on a timer were accepted anywhere
 //!
-//! `every:`, `says:` and `if-still-running:` are the clock's three settings.
-//! Their own help text says *"for `kind: schedule`"* and nothing held them to
-//! it. On a port that is not a timer each one is a line the author wrote,
-//! reviewed and believes in, that nothing will ever read.
+//! `every:`, `says:`, `in-time-zone:`, `if-missed:` and `per-row-of:` are the
+//! clock's settings. Their own help text says *"on a timer"* and nothing held
+//! them to it. On a port that is not a timer each one is a line the author
+//! wrote, reviewed and believes in, that nothing will ever read.
+//!
+//! `if-still-running:` was one of them, and is not any more (02W §4, R44
+//! reopened): every port can start a run about a case that is already open, and
+//! its `same-conversation-when:` says which overlap counts, so the six choices
+//! are read on every kind of port (`arrivals.rs` holds the key it needs).
 //!
 //! # Why the schema cannot state it
 //!
@@ -53,12 +58,12 @@
 use pact_diag::{Diagnostic, Diagnostics, Span};
 use pact_doc::Node;
 
-/// The three settings only a timer can carry, in the order they read in a file
-/// and in the specification.
+/// The settings only a timer can carry, in the order they read in a file and in
+/// the specification.
 ///
 /// `every:` is first because it is the one that makes a port a timer, so it is
 /// the line the fix offers to delete and the line the caret lands on.
-const ONLY_A_TIMER: [&str; 3] = ["every", "says", "if-still-running"];
+const ONLY_A_TIMER: [&str; 5] = ["every", "says", "in-time-zone", "if-missed", "per-row-of"];
 
 /// The word `kind:` uses for the clock. One place, so the derivation, the
 /// comparison and the fix can never drift apart.
@@ -369,13 +374,29 @@ ports:
         // Three dead settings, one edit that fixes them. Three diagnostics would
         // be three things to read for one thing to do, and an author who deletes
         // only the line the caret is under gets told off again next run.
-        let d = check_text(&WORKSPACE.replace("kind: schedule", "kind: inbound-call"));
+        let text = WORKSPACE
+            .replace("kind: schedule", "kind: inbound-call")
+            .replace("    if-still-running: skip\n", "    if-still-running: skip\n    if-missed: skip\n");
+        let d = check_text(&text);
         let e = only(&d);
-        for field in ["every:", "says:", "if-still-running:"] {
+        for field in ["every:", "says:", "if-missed:"] {
             assert!(e.message.contains(field), "{field} is not named: {}", e.message);
         }
-        assert!(e.fix.contains("`says:` and `if-still-running:` only work on a timer too"), "{}", e.fix);
+        assert!(e.fix.contains("`says:` and `if-missed:` only work on a timer too"), "{}", e.fix);
         assert_eq!(e.related.len(), 1, "the `kind:` line is the other half of the story");
+    }
+
+    #[test]
+    fn what_an_arrival_does_while_a_run_is_open_is_read_on_every_kind_of_port() {
+        // R44 reopened (02W §4): `if-still-running:` on a port that is not a
+        // timer used to be one of the clock's dead lines. It is read on every
+        // kind now, so it is no part of a timer that cannot fire.
+        let text = WORKSPACE.replace(
+            "    through: slack\n",
+            "    through: slack\n    if-still-running: queue\n",
+        );
+        let d = check_text(&text);
+        assert!(d.is_empty(), "{}", d.render());
     }
 
     #[test]

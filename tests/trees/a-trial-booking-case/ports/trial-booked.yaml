@@ -1,0 +1,11 @@
+description: A parent books the Free Trial Lesson in Calendly.
+kind: event
+through: calendly
+answers: trial-booking
+signed-with: { by-reference: host/calendly-signing-secret }
+only-when:
+  - { value: input.event-type, is: Free Trial Lesson }
+same-conversation-when: [invitee-uri]
+# Calendly sends a webhook again when it is not acknowledged in time.
+if-still-running: skip
+who-can-reach-it: [calendly]

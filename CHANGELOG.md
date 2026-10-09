@@ -8,7 +8,57 @@ holds that did not; the commits are listed under it for whoever wants the detail
 Running PACT trees in production on Pydantic AI 2.54, through
 [Bud Agent Flow](https://github.com/BudEcosystem/Bud-Agent-Flow), drove these changes. Every
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
-runs offline: 3820 tests, 1263 Rust and 2557 adapter.
+runs offline: 3878 tests, 1304 Rust and 2574 adapter.
+
+### Workflows: waits, questions, reminders, time, ports and value tables (9 October)
+
+- **A wait is still a question, and the clock and events answer it** (02W §2.8, R12 reopened).
+  In a question a workflow asks, `asked-of:` may name `the-clock` (a time-only wait whose time
+  is `answer-within:` and whose one exit is `nobody-answered`) or a port (an event); `says:` and
+  `answer:` are required only where a person or a group is asked
+  (`loader/a-question-with-nothing-to-say`, WF-22). `answer-within:` is a `moment`. New lines:
+  `answered-by:`/`enough-is:`, `asked-in:` (only for a channel — written `"#name"` —,
+  `the-requester` or an outside contact: `loader/asked-in-for-someone-who-chooses`, WF-36),
+  `urgency:`, `not-the-same-as:`, `needs-signature:`, `starts-with:`, `ordered-by:`,
+  `counts-events-from:` and `reminds-at:` of the new `reminder` group (`at:` and exactly one of
+  `nudges`, `tells`, `hands-over-to`, `runs`). `question-rule.first-times:`.
+  `loader/nobody-can-answer` (WF-21) also covers a question a workflow asks naming nobody, the
+  clock with no time, a question only the clock or events answer that asks for an answer, and a
+  reminder or milestone with none or two actions. A question a workflow asks has no
+  `if-nobody-answers:` (`loader/an-agent-only-spelling`, WF-40, with `when-it-runs-out:
+  answer-with-what-it-has`); one no workflow asks still must. What only a workflow reads,
+  written where an agent reads it — the clock or a port as an answerer, a moment as a deadline,
+  a workflow's `when-it-runs-out:` choice, `join` on an agent's port — is
+  `loader/a-workflow-only-spelling`.
+- **Ports answer workflows** (02W §2.9, R23 and R44 reopened). `answers:` names an agent or a
+  workflow; new `accepts:`, `bind:`, `only-when:` (read by the one condition reader),
+  `signed-with:`, `in-time-zone:`, `if-missed:`, `per-row-of:` (timer lines, refused off a
+  timer), `answer-within:`, `counts-as-the-same-for:`, `ordered-by:`, `undo:`, `then-run:`.
+  `if-still-running:` has six choices on every kind of port and lost its "only a timer"
+  refusal. New rules: `loader/an-event-the-wait-will-never-hear` (WF-19),
+  `loader/a-key-that-is-not-a-field` (WF-27), `loader/overlap-with-no-key` (WF-28), the note
+  `loader/a-port-that-cannot-start-a-run` (WF-29).
+- **Time** (02W §2.10): `limits.finishes-within:` is a `moment`; `starts-from:`,
+  `paused-during:` (`loader/a-pause-for-something-that-does-not-wait`, WF-32), `milestones:`,
+  `at-once-at-most:`, and five workflow choices for `when-it-runs-out:` (`use-a-backup`,
+  `carry-on`, `wait-for-a-new-version`, `undo`, `wait-its-turn`). A moment read from a date or
+  counted in business days, or a workflow's timer at a time of day, with no zone on the line or
+  the workspace is `loader/a-time-with-no-zone` (WF-30).
+- **Value tables** (02W §2.12): `value.shape: table` with `rows-are:` a named shape; every row
+  is held to it, and `workspace.calendar:` and `per-row-of:` name tables
+  (`loader/a-table-that-is-not-one`; a calendar's rows have a `date` part). A value a run reads
+  by name (the calendar, `per-row-of:`, a `values.<name>` binding, now held to the values there
+  are) stays in the document under `values:`; every other figure is put in place and removed as
+  before.
+- **`pact waits` lists every workflow wait** with `waiting-for-a-person`, `waiting-for-a-time` or
+  `waiting-for-an-event`, its stage, where silence goes and a deadline written as a moment.
+- Python: `pact_adapters.moments` (`Moment`, typed, with `Reminder` and `RegionLimits`),
+  `ir.PortSpec`'s new lines, `ir.values_of`/`ValueSpec`, `Question`'s new lines and
+  `Question.asked_by` (a workflow's own question first), `Rule.first_times`, and the three
+  reasons in `suspension.REASONS`. Fixture `tests/trees/a-trial-booking-case` (#16); conformance
+  tests `the_clock_is_somebody_who_answers`, `an_event_finds_only_its_own_run`,
+  `overlap_is_said_once_per_port`, `a_question_appears_where_its_answerer_chose` and
+  `a_table_is_rows_in_one_shape`. 55 kinds.
 
 ### Workflows: one condition grammar, decide by rules, combine rules (9 October)
 

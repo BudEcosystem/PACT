@@ -1,0 +1,15 @@
+description: Writes a phone number in E.164 and splits a full name into first and last.
+engine: wasm
+determinism: pure
+takes:
+  phone: text
+  full-name: text
+answers-with:
+  phone: text
+  first-name: text
+  last-name: text
+fuel:
+  instructions-at-most: 10m
+  runs-for-at-most: 2s
+  memory-at-most: 64m
+  when-it-runs-out: stop-and-say-so

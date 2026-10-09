@@ -1,0 +1,3 @@
+description: The reminder text sent 24 hours before a trial lesson.
+shape: text
+value: "Hi {first-name}, a reminder that {student}'s {subject} trial lesson is at {starts-at}, at {address}."

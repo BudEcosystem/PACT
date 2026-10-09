@@ -110,16 +110,20 @@ learning.needs-a-person-to-approve	list of one-of | S-GOV | core | optional
 learning.review	one-of | S-GOV | core | optional
 limits.asks	text | S-EXEC | core | optional
 limits.asks-itself-at-most	integer | S-GOV | expert | optional
+limits.at-once-at-most	integer | S-GOV | core | optional
 limits.cost-per-request-under	money | S-GOV | core | optional
 limits.feel	one-of | S-GOV | core | optional
-limits.finishes-within	duration | S-GOV | core | optional
+limits.finishes-within	moment | S-GOV | core | optional
 limits.first-reply-within	duration | S-GOV | expert | optional
 limits.items-at-most	integer | S-GOV | core | optional
 limits.measured-at	one-of | S-GOV | expert | optional
+limits.milestones	list of group:reminder | S-GOV | core | optional
 limits.nests-at-most	integer | S-GOV | core | optional
+limits.paused-during	list of text | S-GOV | core | optional
 limits.per-word-under	duration | S-GOV | expert | optional
 limits.runs-for-at-most	duration | S-GOV | core | optional
 limits.starts-at-most	integer | S-GOV | core | optional
+limits.starts-from	text | S-GOV | core | optional
 limits.steps-at-most	integer | S-GOV | core | optional
 limits.tokens-at-most	integer | S-GOV | core | optional
 limits.tool-calls-at-most	integer | S-GOV | core | optional
@@ -172,15 +176,27 @@ ownership.locked-until	moment | S-GOV | core | optional
 ownership.owned-by	text | S-GOV | core | optional
 policy.applies-to	one-of | S-EXEC | core | optional
 policy.ask-a-person	list of group:question-rule | S-EXEC | core | optional
+port.accepts	map of answer-shape | S-CAP | core | optional
+port.answer-within	duration | S-GOV | core | optional
 port.answers	text | S-TOPO | core | required
+port.bind	map of text | S-EXEC | core | optional
+port.counts-as-the-same-for	duration | S-CTRL | core | optional
 port.description	text | S-GEN | core | required
 port.every	text | S-TOPO | core | optional
+port.if-missed	one-of | S-CTRL | core | optional
 port.if-still-running	one-of | S-CTRL | core | optional
+port.in-time-zone	text | S-GOV | core | optional
 port.kind	one-of | S-TOPO | core | optional
+port.only-when	list of group:when-this | S-EXEC | core | optional
+port.ordered-by	text | S-CTRL | core | optional
+port.per-row-of	text | S-TOPO | core | optional
 port.remembers	map of group:state | S-GOV | expert | optional
 port.same-conversation-when	list of text | S-TOPO | core | optional
 port.says	text | S-GEN | core | optional
+port.signed-with	group:credential-reference | S-EXEC | core | optional
+port.then-run	text | S-EXEC | core | optional
 port.through	text | S-CAP | core | optional
+port.undo	yes-no | S-EXEC | core | optional
 port.who-can-reach-it	list of text | S-EXEC | core | optional
 program-fuel.instructions-at-most	size | S-GOV | expert | optional
 program-fuel.memory-at-most	size | S-GOV | expert | optional
@@ -200,20 +216,36 @@ provenance.harness	text | S-GOV | expert | optional
 provenance.recorded-by	text | S-GOV | expert | optional
 provenance.source	text | S-GOV | expert | required
 question-rule.because	text | S-GEN | core | required
+question-rule.first-times	integer | S-EXEC | core | optional
 question-rule.question	text | S-EXEC | core | required
 question-rule.when	list of group:when-this | S-EXEC | core | required
-question.answer	map of answer-shape | S-EXEC | core | required
-question.answer-within	duration | S-GOV | core | optional
+question.answer	map of answer-shape | S-EXEC | core | optional
+question.answer-within	moment | S-GOV | core | optional
+question.answered-by	one-of | S-EXEC | core | optional
+question.asked-in	text | S-EXEC | core | optional
 question.asked-of	list of text | S-EXEC | core | required
 question.checked-by	text | S-EXEC | expert | optional
+question.counts-events-from	one-of | S-CTRL | core | optional
 question.description	text | S-GEN | core | required
+question.enough-is	integer | S-EXEC | core | optional
 question.escalates-to	list of text | S-EXEC | core | optional
-question.if-nobody-answers	one-of | S-EXEC | core | required
-question.says	text | S-EXEC | core | required
+question.if-nobody-answers	one-of | S-EXEC | core | optional
+question.needs-signature	yes-no | S-EXEC | core | optional
+question.not-the-same-as	list of text | S-EXEC | core | optional
+question.ordered-by	text | S-CTRL | core | optional
+question.reminds-at	list of group:reminder | S-EXEC | core | optional
+question.says	text | S-EXEC | core | optional
 question.shows	list of text | S-EXEC | core | optional
+question.starts-with	map of text | S-EXEC | core | optional
+question.urgency	one-of | S-EXEC | core | optional
 redaction.description	text | S-GEN | core | optional
 redaction.hide	list of text | S-EXEC | core | required
 release.asks	text | S-GOV | core | optional
+reminder.at	moment | S-GOV | core | required
+reminder.hands-over-to	list of text | S-EXEC | core | optional
+reminder.nudges	yes-no | S-EXEC | core | optional
+reminder.runs	text | S-EXEC | core | optional
+reminder.tells	list of text | S-EXEC | core | optional
 resource.asks-to-connect	text | S-EXEC | core | optional
 resource.asks-to-run	text | S-EXEC | expert | optional
 resource.auth	group:credential-reference | S-CAP | core | optional
@@ -312,6 +344,7 @@ tool.method	one-of | S-CAP | core | optional
 tool.says	text | S-GEN | core | optional
 tool.url	text | S-CAP | core | optional
 value.description	text | S-GEN | core | optional
+value.rows-are	text | S-CAP | core | optional
 value.shape	one-of | S-CAP | expert | optional
 value.value	anything | S-GOV | core | required
 variant.instructions	text | S-GEN | expert | optional

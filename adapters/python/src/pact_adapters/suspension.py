@@ -82,6 +82,13 @@ CONTEXT_TOO_LONG = "context-too-long"
 #: happen: "a run that stops with nothing to ask is a run that hangs."
 ASKED_A_PERSON = "x-asked-a-person"
 
+#: A workflow's three waits (02W §2.8, WAIT-1 gains the last two): a person or
+#: a group asked, only the clock, or an event (`asked-of:` names a port). The
+#: strings `pact waits` lists them under (`crates/pact-loader/src/report.rs`).
+WAITING_FOR_A_PERSON = "waiting-for-a-person"
+WAITING_FOR_A_TIME = "waiting-for-a-time"
+WAITING_FOR_AN_EVENT = "waiting-for-an-event"
+
 #: Closed for the reasons PACT itself knows how to park for, open by
 #: construction for anything else. The first four are Eve's five bespoke park
 #: kinds, and the whole point is that they now differ only by this string.
@@ -100,6 +107,9 @@ REASONS: tuple[str, ...] = (
     WAITING_FOR_ANOTHER_AGENT,  # eve: subagent wait, keyed by child turn
     OUT_OF_BUDGET,              # eve: session-limit continuation, keyed by session
     CONTEXT_TOO_LONG,           # eve: nothing — it truncates and carries on
+    WAITING_FOR_A_PERSON,       # a workflow's `ask-someone` of a person or a group
+    WAITING_FOR_A_TIME,         # ...of the clock alone
+    WAITING_FOR_AN_EVENT,       # ...of a port, for an event
 )
 
 #: What to do when nobody answers in time. `approve` is deliberately absent:

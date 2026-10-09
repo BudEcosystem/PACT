@@ -51,7 +51,7 @@ import re
 from collections.abc import Mapping as MappingABC
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Callable, Iterator, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Iterator, Mapping
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 #: One diagnostic shape for the whole adapter — see `diagnostics`. A rule this
@@ -60,6 +60,12 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from .conditions import ABSENT, amount, compares, holds
 from .diagnostics import locate
 from .yes_no import said_yes
+
+if TYPE_CHECKING:  # pragma: no cover - `moments` is read where a question is built
+    from .moments import Moment, Reminder
+
+#: The answerer that is the clock: a time-only wait (02W §2.8, R12 reopened).
+THE_CLOCK = "the-clock"
 
 
 class Rejected(ValueError):
@@ -660,6 +666,29 @@ class Question:
     #: (P8 wave 4) — the check a SHAPE cannot make. Empty for almost every
     #: question, which is why nothing about the ordinary path changes.
     checked_by: str = ""
+    # -- a wait's lines (02W §2.8), read as written for the runtime to keep ---
+    #: `answer-within:` written as a moment (a workflow's question); `None`
+    #: for a bare length of time, which `answer_within` carries.
+    within: "Moment | None" = None
+    #: `anyone` (the default), `everyone` or `enough-of-them`, and how many.
+    answered_by: str = "anyone"
+    enough_is: int | None = None
+    #: Where it appears, for a channel, the requester or an outside contact.
+    asked_in: str = ""
+    #: `can-wait`, `normal` (the default) or `urgent`.
+    urgency: str = "normal"
+    #: Who may not answer: bindings to people, or stages (whoever answered them).
+    not_the_same_as: tuple[str, ...] = ()
+    #: Whether the answer needs a fresh sign-in and is recorded as a signature.
+    needs_signature: bool = False
+    #: Answer lines that arrive filled in — line to the binding that fills it.
+    starts_with: Mapping[str, str] = field(default_factory=dict)
+    #: How it is sorted in the answerer's inbox.
+    ordered_by: str = ""
+    #: `whenever-they-arrived` (the default) or `this-wait`.
+    counts_events_from: str = "whenever-they-arrived"
+    #: Times on the wait's clock to nudge, tell, hand over or run a flow.
+    reminds_at: "tuple[Reminder, ...]" = ()
 
     # -- approval is one of these, not a kind of its own --------------------
 
@@ -904,7 +933,22 @@ class Question:
                 f"no question named '{name}'. This workspace has: {known}. "
                 f"Add a file `questions/{name}.yaml`, or correct the name."
             ])
-        q = questions[name] or {}
+        return Question.of(name, questions[name] or {}, doc)
+
+    @staticmethod
+    def asked_by(doc: Mapping[str, Any], workflow: str, name: str) -> "Question":
+        """The question a workflow's `asks: <name>` puts: its own first, then
+        the workspace's (02W §2.3)."""
+        own = ((doc.get("workflows") or {}).get(workflow) or {}).get("questions") or {}
+        if name in own:
+            return Question.of(name, own[name] or {}, doc)
+        return Question.from_document(doc, name)
+
+    @staticmethod
+    def of(name: str, q: Mapping[str, Any], doc: Mapping[str, Any]) -> "Question":
+        """One question as written, read in the workspace's shapes and zone."""
+        from .moments import Moment, reminders
+
         shapes: dict[str, Shape] = {}
         problems: list[str] = []
         for key, written in (q.get("answer") or {}).items():
@@ -912,7 +956,12 @@ class Question:
                 shapes[key] = Shape.parse(written, doc.get("shapes"), doc.get("time-zone"))
             except Rejected as e:
                 problems.append(f"question '{name}', answer line '{key}': {e.problems[0]}")
-        if not shapes and not problems:
+        asked_of = tuple(_as_list(q.get("asked-of")))
+        ports = doc.get("ports") or {}
+        # The clock and an event source read no wording and give no answer
+        # (02W §2.8): a question only they answer has nothing to ask for.
+        machines_only = bool(asked_of) and all(a == THE_CLOCK or a in ports for a in asked_of)
+        if not shapes and not problems and not machines_only:
             problems.append(
                 f"question '{name}' does not say what an answer looks like. Add an "
                 "`answer:` section, for example a line `approved: yes or no`."
@@ -930,16 +979,29 @@ class Question:
         if problems:
             raise Rejected(problems)
 
+        within = q.get("answer-within")
+        moment = within if isinstance(within, Mapping) else None
         return Question(
             name=name,
             asks=str(q.get("says", "")).strip(),
             answer=shapes,
             shows=tuple(_as_list(q.get("shows"))),
-            asked_of=tuple(_as_list(q.get("asked-of"))),
-            answer_within=str(q.get("answer-within", "")).strip(),
+            asked_of=asked_of,
+            answer_within="" if moment is not None or within is None else str(within).strip(),
             if_nobody_answers=str(q.get("if-nobody-answers", "decline")).strip(),
             escalates_to=escalates,
             checked_by=str(q.get("checked-by", "")).strip(),
+            within=Moment.from_written(moment),
+            answered_by=str(q.get("answered-by") or "anyone").strip(),
+            enough_is=int(q["enough-is"]) if isinstance(q.get("enough-is"), int) else None,
+            asked_in=str(q.get("asked-in") or "").strip(),
+            urgency=str(q.get("urgency") or "normal").strip(),
+            not_the_same_as=tuple(_as_list(q.get("not-the-same-as"))),
+            needs_signature=said_yes(q.get("needs-signature")),
+            starts_with={str(k): str(v).strip() for k, v in (q.get("starts-with") or {}).items()},
+            ordered_by=str(q.get("ordered-by") or "").strip(),
+            counts_events_from=str(q.get("counts-events-from") or "whenever-they-arrived").strip(),
+            reminds_at=reminders(q.get("reminds-at")),
         )
 
     @staticmethod
@@ -1378,6 +1440,10 @@ class Rule:
     #: free as it was — the check follows the author's line, and where there is no
     #: line there is nothing to enforce.
     may_read: Mapping[str, frozenset[str]] = field(default_factory=dict)
+    #: `first-times:` — ask only the first N times this rule matches, counted
+    #: per workspace. The count is the runtime's to keep (a store across runs);
+    #: a runtime that keeps none asks every time, which asks more, never less.
+    first_times: int | None = None
 
     def decidable(self, args: Mapping[str, Any]) -> bool:
         """Can PACT tell, from THIS call, whether this rule applies?
@@ -1774,6 +1840,7 @@ def questions_for(
               # goes back to being a help string with a check behind it and no
               # reader.
               may_read=_inspects_of(doc),
+              first_times=raw.get("first-times") if isinstance(raw.get("first-times"), int) else None,
           )
           for about in dict.fromkeys(_things_named(raw.get("when"))):
               add(about, rule)

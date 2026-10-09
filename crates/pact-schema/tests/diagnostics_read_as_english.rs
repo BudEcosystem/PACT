@@ -198,21 +198,20 @@ fn nothing_in_the_shipped_specification_puts_an_article_before_a_plural() {
 #[test]
 fn a_vowel_initial_field_name_gets_the_right_article_too() {
     // The half the architecture draft names and leaves open: *"A question needs
-    // a 'answer'."* Same sentence, same defect, second slot — and
-    // `if-nobody-answers` is both vowel-initial and plural, so it exercises both
-    // arms at once.
-    let said = messages("question");
-    for expected in [
-        "A question must have an 'answer'.",
+    // a 'answer'."* Same sentence, same defect, second slot. `answer:`, `says:`
+    // and `if-nobody-answers:` stopped being the schema's to require when a
+    // question could be asked of the clock (02W §2.8: the loader requires them
+    // where a person reads them), so the same two arms are walked on the
+    // vowel-initial fields that are still required.
+    for (group, expected) in [
+        ("question", "A question must have an 'asked-of'."),
+        ("reminder", "A reminder must have an 'at'."),
         // Vowel-initial *and* plural, so it takes no article at all.
-        "A question must have 'if-nobody-answers'.",
-        // `asks:` became `says:` — everywhere else in the schema `asks:` is the
-        // NAME of a question, and here it was the WORDING, so a name written
-        // here loaded clean and showed the person the literal string.
-        "A question must have 'says'.",
+        ("port", "A port must have 'answers'."),
         // And the ordinary case is untouched.
-        "A question must have a 'description'.",
+        ("question", "A question must have a 'description'."),
     ] {
+        let said = messages(group);
         assert!(said.contains(&expected.to_string()), "expected \"{expected}\", got {said:?}");
     }
 }

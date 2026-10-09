@@ -1,11 +1,11 @@
-# The 54 kinds
+# The 55 kinds
 
 Generated from `spec/schema.yaml`. Every kind, what it is for, and how
 many fields it has. You do not need to learn these — `pact check` names the
 right one when you need it.
 
 
-**54 kinds.** A kind is a *shape a document can take*, not a file you must
+**55 kinds.** A kind is a *shape a document can take*, not a file you must
 write: most workspaces use a dozen.
 
 
@@ -22,7 +22,7 @@ write: most workspaces use a dozen.
 | `tool` | 7 | `description`, `connect`, `url`, `method`, `says` |
 | `program` | 7 | `description` |
 | `program-fuel` | 4 | — |
-| `value` | 3 | `description`, `value` |
+| `value` | 4 | `description`, `rows-are`, `value` |
 | `variant` | 5 | — |
 | `workspace` | 34 | `name`, `workspace-id`, `description`, `owner`, `profile` |
 
@@ -31,6 +31,7 @@ write: most workspaces use a dozen.
 | Kind | Fields | Core fields |
 |---|---:|---|
 | `workflow` | 17 | `description`, `accepts`, `answers-with`, `starts-at`, `steps` |
+| `reminder` | 5 | `at`, `nudges`, `tells`, `hands-over-to`, `runs` |
 | `moment` | 5 | `at`, `after`, `before`, `counted-in`, `in-time-zone` |
 | `rung` | 1 | `rules` |
 | `route-rule` | 3 | `when`, `choose`, `because` |
@@ -44,8 +45,8 @@ write: most workspaces use a dozen.
 | `credential-reference` | 1 | `by-reference` |
 | `interceptor` | 6 | `description`, `when`, `applies-to`, `may`, `rules` |
 | `policy` | 2 | `applies-to`, `ask-a-person` |
-| `question` | 9 | `description`, `says`, `answer`, `shows`, `asked-of` |
-| `question-rule` | 3 | `when`, `because`, `question` |
+| `question` | 19 | `description`, `says`, `answer`, `shows`, `asked-of` |
+| `question-rule` | 4 | `when`, `because`, `question`, `first-times` |
 | `redaction` | 2 | `description`, `hide` |
 
 ## Limits and models
@@ -55,7 +56,7 @@ write: most workspaces use a dozen.
 | `call-order` | 2 | `call`, `first` |
 | `catalog` | 3 | — |
 | `figure` | 2 | — |
-| `limits` | 16 | `feel`, `finishes-within`, `cost-per-request-under`, `steps-at-most`, `tool-calls-at-most` |
+| `limits` | 20 | `feel`, `finishes-within`, `starts-from`, `paused-during`, `milestones` |
 | `model` | 8 | — |
 | `model-can` | 5 | — |
 | `model-cost` | 2 | — |
@@ -76,7 +77,7 @@ write: most workspaces use a dozen.
 | Kind | Fields | Core fields |
 |---|---:|---|
 | `bundle` | 5 | `description`, `version`, `from`, `brings` |
-| `port` | 10 | `description`, `kind`, `every`, `says`, `if-still-running` |
+| `port` | 22 | `description`, `kind`, `every`, `says`, `if-still-running` |
 | `resource` | 11 | `resource-kind`, `endpoint`, `auth`, `asks-to-connect`, `description` |
 | `teamwork` | 9 | `may-start`, `waits-for`, `enough-is`, `gives-up-after`, `starts` |
 | `when-this` | 9 | `tool`, `value`, `arg`, `more-than`, `less-than` |

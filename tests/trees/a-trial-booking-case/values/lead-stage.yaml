@@ -1,0 +1,3 @@
+description: The lifecycle stage a parent who booked a trial is filed under.
+shape: text
+value: lead

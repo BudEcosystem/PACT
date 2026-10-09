@@ -64,6 +64,12 @@ pub const CONTEXT_TOO_LONG: &str = "context-too-long";
 /// the `x-` escape rather than by widening the closed list, which is where the
 /// harness put it too.
 pub const ASKED_A_PERSON: &str = "x-asked-a-person";
+/// A workflow's wait (02W §2.8, WAIT-1's three reasons): one asked of a
+/// person or a group, one only the clock answers, and one an event answers
+/// (`asked-of:` names a port). A list mixing them is the first that applies.
+pub const WAITING_FOR_A_PERSON: &str = "waiting-for-a-person";
+pub const WAITING_FOR_A_TIME: &str = "waiting-for-a-time";
+pub const WAITING_FOR_AN_EVENT: &str = "waiting-for-an-event";
 
 /// One wait the tree can produce: what stops, why, and when a runtime must act.
 ///
@@ -75,8 +81,19 @@ pub const ASKED_A_PERSON: &str = "x-asked-a-person";
 pub struct Wait {
     /// §7.14 WAIT-1's reason. The same string the durable record parks under.
     pub reason: &'static str,
-    /// Whose run stops. A wait belongs to a run, and a run belongs to an agent.
+    /// Whose run stops: an agent's, or (with [`Wait::workflow`]) empty.
     pub agent: String,
+    /// The workflow whose run stops, for a workflow's wait; empty for an agent's.
+    pub workflow: String,
+    /// The `ask-someone` stage that waits, in a workflow.
+    pub stage: String,
+    /// Where a workflow's run goes when the time is up: the stage's
+    /// `then.nobody-answered:`, or `stop-and-say-so` when it says none.
+    pub nobody_answered: String,
+    /// `answer-within:` written as a moment (`{at: input.starts-at, before:
+    /// 24h}`), as written: when it comes is the runtime's to work out from the
+    /// value it reads. `None` for a bare length of time.
+    pub moment: Option<serde_json::Value>,
     /// The entry in `questions/` the author named.
     pub question: String,
     /// The line that can stop the run — `limits.asks`, `teamwork.asks`, a
@@ -109,7 +126,7 @@ impl Wait {
     /// write something for the timeout to do, which is what
     /// `loader/wait-with-no-deadline` reports.
     pub fn wakes(&self) -> bool {
-        self.deadline_ms.is_some()
+        self.deadline_ms.is_some() || self.moment.is_some()
     }
 }
 
@@ -176,11 +193,8 @@ impl LoadReport {
         let mut asked: std::collections::BTreeMap<String, Asked> =
             std::collections::BTreeMap::new();
 
-        let Some(agents) = document.get("agents").and_then(Node::as_map) else {
-            return LoadReport { waits, substitutions: Vec::new() };
-        };
-
-        for (agent_name, agent) in agents {
+        let agents = document.get("agents").and_then(Node::as_map);
+        for (agent_name, agent) in agents.into_iter().flatten() {
             // An agent naming a policy, loop or context policy that resolves to
             // nothing has parks this walk cannot see, so nothing may be concluded
             // from what is missing. The reference check reports the real mistake
@@ -259,6 +273,7 @@ impl LoadReport {
             }
         }
 
+        waits.extend(workflow_waits(document));
         LoadReport { waits, substitutions: Vec::new() }
     }
 
@@ -286,9 +301,9 @@ impl LoadReport {
                 "name": s.name,
                 "at": s.at,
             })).collect::<Vec<_>>(),
-            "waits": self.waits.iter().map(|w| serde_json::json!({
+            "waits": self.waits.iter().map(|w| {
+                let mut said = serde_json::json!({
                 "reason": w.reason,
-                "agent": w.agent,
                 "question": w.question,
                 "declared-at": w.declared_at.to_string(),
                 "answer-within": w.answer_within,
@@ -304,7 +319,22 @@ impl LoadReport {
                 // complying with §9.4 G14 had to reimplement the rule and could
                 // reimplement it differently.
                 "wakes": w.wakes(),
-            })).collect::<Vec<_>>(),
+                });
+                // An agent's wait names its agent; a workflow's names the
+                // workflow, the stage that waits, where silence goes, and a
+                // deadline written as a moment.
+                if w.workflow.is_empty() {
+                    said["agent"] = serde_json::json!(w.agent);
+                } else {
+                    said["workflow"] = serde_json::json!(w.workflow);
+                    said["stage"] = serde_json::json!(w.stage);
+                    said["nobody-answered"] = serde_json::json!(w.nobody_answered);
+                    if let Some(m) = &w.moment {
+                        said["moment"] = m.clone();
+                    }
+                }
+                said
+            }).collect::<Vec<_>>(),
             // And the filtered list itself, because G14's obligation is stated
             // over exactly this set: *"a runtime that walks it, times each entry
             // from the moment the run parked, and performs `if_nobody_answers`
@@ -968,6 +998,10 @@ fn read_wait(
     Wait {
         reason,
         agent: agent.to_string(),
+        workflow: String::new(),
+        stage: String::new(),
+        nobody_answered: String::new(),
+        moment: None,
         question: question.to_string(),
         declared_at,
         answer_within: answer_within.to_string(),
@@ -976,6 +1010,66 @@ fn read_wait(
         asked_of: strings(q.get("asked-of")),
         escalates_to: strings(q.get("escalates-to")),
     }
+}
+
+/// Every wait a workflow can produce (02W §2.8): one per `ask-someone` stage, at
+/// any depth, read off the question it asks (the workflow's own, then the
+/// workspace's), in document order. `pact waits` lists them with the agents'.
+fn workflow_waits(document: &Node) -> Vec<Wait> {
+    use crate::waits::{self, Answerer};
+    let mut out = Vec::new();
+    for (flow, entry) in document.get("workflows").and_then(Node::as_map).into_iter().flatten() {
+        for (stage, node) in waits::every_stage(&entry.node) {
+            if crate::workflows::does(node) != Some("ask-someone") {
+                continue;
+            }
+            let Some((question, declared_at)) = named(node, "asks") else { continue };
+            let Some(q) = waits::question_of(document, &entry.node, &question) else { continue };
+            let who: Vec<Answerer> =
+                waits::answerers(document, q).into_iter().map(|(_, a)| a).collect();
+            let reason = if who.iter().any(|a| a.reads()) {
+                WAITING_FOR_A_PERSON
+            } else if who.contains(&Answerer::Port) {
+                WAITING_FOR_AN_EVENT
+            } else {
+                WAITING_FOR_A_TIME
+            };
+            let within = q.get("answer-within");
+            let answer_within = within.and_then(Node::as_str).unwrap_or("").trim().to_string();
+            let moment = within.and_then(Node::as_map).map(|m| {
+                serde_json::Value::Object(
+                    m.iter()
+                        .filter_map(|(k, e)| {
+                            e.node.as_str().map(|v| (k.clone(), serde_json::json!(v.trim())))
+                        })
+                        .collect(),
+                )
+            });
+            let nobody_answered = node
+                .get("then")
+                .and_then(|t| t.get("nobody-answered"))
+                .and_then(Node::as_str)
+                .unwrap_or("stop-and-say-so")
+                .trim()
+                .to_string();
+            out.push(Wait {
+                reason,
+                agent: String::new(),
+                workflow: flow.clone(),
+                stage: stage.to_string(),
+                question,
+                declared_at,
+                deadline_ms: milliseconds(&answer_within),
+                answer_within,
+                if_nobody_answers: String::new(),
+                asked_of: strings(q.get("asked-of")),
+                escalates_to: strings(q.get("escalates-to")),
+                nobody_answered,
+                moment,
+            });
+        }
+    }
+    out
 }
 
 // ─────────────────────────────────────────────────────────────────────── reading

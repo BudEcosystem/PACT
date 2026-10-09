@@ -4,4 +4,3 @@ answer:
   approved: yes or no
 asked-of: [the-requester]
 answer-within: 2 days
-if-nobody-answers: decline

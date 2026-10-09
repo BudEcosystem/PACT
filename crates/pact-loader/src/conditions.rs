@@ -107,7 +107,7 @@ pub(crate) fn of_shape(shape: &Shape) -> Option<Kind> {
 }
 
 /// Whether `written` begins as an ISO 8601 date does (`2026-10-09`).
-fn looks_like_a_date(written: &str) -> bool {
+pub(crate) fn looks_like_a_date(written: &str) -> bool {
     let b = written.trim().as_bytes();
     b.len() >= 10
         && b[..4].iter().all(u8::is_ascii_digit)

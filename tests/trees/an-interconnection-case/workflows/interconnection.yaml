@@ -19,7 +19,6 @@ questions:
       because: text
     asked-of: [the-requester]
     answer-within: 10 days
-    if-nobody-answers: decline
 
 starts-at: check
 steps:

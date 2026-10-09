@@ -33,7 +33,7 @@ requires it, and deleting it leaves a working agent.
 
 - **[What do you write?](concepts/what.md)**
   Files. One rule — *a directory is a field; a field may be a directory* —
-  and 54 kinds you never have to memorise.
+  and 55 kinds you never have to memorise.
 
 </div>
 
@@ -48,7 +48,7 @@ so plainly rather than leaving it to be discovered.
 | | |
 |---|---|
 | Tests | **3,820** — 1263 Rust, 2557 adapter |
-| Schema kinds | **54** |
+| Schema kinds | **55** |
 | Framework targets | **7**, over 2 runtimes |
 | Eve capabilities accounted for | **101 of 101** |
 | Worked example | 43 files, 498 settings, 1 payload script |
@@ -68,7 +68,7 @@ so plainly rather than leaving it to be discovered.
   [Gaps and blockers](status/gaps.md), in that order
 - **Comparing with Vercel Eve?** [Compared to Eve](status/eve.md) — a measured
   comparison, including where Eve is better
-- **Building on it?** [The 54 kinds](reference/kinds.md) and
+- **Building on it?** [The 55 kinds](reference/kinds.md) and
   [Adapters](reference/adapters.md)
 
 ---

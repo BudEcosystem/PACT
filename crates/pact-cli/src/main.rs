@@ -1839,6 +1839,15 @@ fn validate(
         // WF-13, WF-14, WF-39): a path the schema holds to text, and only the
         // whole workflow can say whether it names something that has run.
         pact_loader::bindings::check(root, &schema, &mut diags);
+        // And what a workflow waits for (02W §2.8, §2.10, §3): a person, a group,
+        // an event or the clock, with reminders, deadlines and the zone a time
+        // is read in — and, the other way round, what only a workflow reads
+        // written where an agent reads it.
+        pact_loader::waits::check(root, &mut diags);
+        // And what arrives at a port and which run it reaches (02W §2.9, R23
+        // and R44 reopened): the key of a case, a wait that hears an event,
+        // the inputs an arrival fills.
+        pact_loader::arrivals::check(root, &schema, &mut diags);
         diags.sort();
     }
     Ok((node, diags, substituted))

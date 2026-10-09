@@ -24,6 +24,7 @@ from .limits import seconds as _seconds
 from .programs import ProgramFuel, body_entry
 from .slo import Slo
 from .loops import STANDARD, Loop
+from .moments import Moment, RegionLimits
 from .questions import Gate, Rejected, Shape, questions_for
 from .suspension import PauseRule
 from .watches import Watches
@@ -1464,12 +1465,38 @@ class PortSpec:
     #: The author's words (`Friday at 4pm`); `schedule` is them read.
     every: str = ""
     says: str = ""
-    #: `skip`, `queue` or `cancel-previous`, as written; `""` when unwritten.
+    #: One of the six (`start`, `queue`, `join`, `cancel-previous`, `skip`,
+    #: `stop`), as written; `""` when unwritten (a timer then skips, any other
+    #: port starts another run).
     if_still_running: str = ""
     through: str = ""
-    #: The agent that handles what arrives.
+    #: The agent or the workflow that handles what arrives.
     answers: str = ""
     same_conversation_when: tuple[str, ...] = ()
+    #: What arrives, when it differs from the workflow's own `accepts:`.
+    accepts: Mapping[str, str] = field(default_factory=dict)
+    #: Workflow inputs filled from what arrived — input to `input.<field>`.
+    bind: Mapping[str, str] = field(default_factory=dict)
+    #: What has to hold of what arrived (`conditions.all_hold`), or it is dropped.
+    only_when: tuple[Mapping[str, Any], ...] = ()
+    #: `signed-with.by-reference:` — the secret an event must be signed with.
+    signed_with: str = ""
+    #: On a timer: the zone `every:` is read in, or a binding to a row's field.
+    in_time_zone: str = ""
+    #: On a timer: `run-when-back` or `skip`, for a time missed while nothing ran.
+    if_missed: str = ""
+    #: On a timer: the table in `values/` with one run per row.
+    per_row_of: str = ""
+    #: On `inbound-call`: how long the caller waits for the answer.
+    answer_within: str = ""
+    #: With `skip`: how long a repeat is still the same case.
+    counts_as_the_same_for: str = ""
+    #: With `queue`: the field of what arrived the queue is taken in.
+    ordered_by: str = ""
+    #: With `stop`: undo what the open run did, newest first, before it ends.
+    undo: bool = False
+    #: With `stop`: the workflow started afterwards, not waited for.
+    then_run: str = ""
     #: Who may start work here. Empty means nobody (the schema's own words).
     who_can_reach_it: tuple[str, ...] = ()
     #: What the port keeps between messages: a `remembers:` block, read by the
@@ -1505,6 +1532,18 @@ class PortSpec:
             same_conversation_when=tuple(_as_list(raw.get("same-conversation-when"))),
             who_can_reach_it=tuple(_as_list(raw.get("who-can-reach-it"))),
             remembers=Facts.of(raw.get("remembers")),
+            accepts=_shapes(raw.get("accepts")),
+            bind={str(k): _text(v) for k, v in (raw.get("bind") or {}).items()},
+            only_when=tuple(w for w in raw.get("only-when") or () if isinstance(w, Mapping)),
+            signed_with=_text((raw.get("signed-with") or {}).get("by-reference", "")),
+            in_time_zone=_text(raw.get("in-time-zone", "")),
+            if_missed=_text(raw.get("if-missed", "")),
+            per_row_of=_text(raw.get("per-row-of", "")),
+            answer_within=_text(raw.get("answer-within", "")),
+            counts_as_the_same_for=_text(raw.get("counts-as-the-same-for", "")),
+            ordered_by=_text(raw.get("ordered-by", "")),
+            undo=said_yes(raw.get("undo")),
+            then_run=_text(raw.get("then-run", "")),
         )
 
 
@@ -1513,37 +1552,49 @@ def ports_of(doc: Mapping[str, Any]) -> tuple[PortSpec, ...]:
     return tuple(PortSpec.read(doc, n) for n in sorted(doc.get("ports") or {}))
 
 
-# ──────────────────────────────────────────────────────────────── workflows
+# ──────────────────────────────────────────────────────────────── values
 
 
 @dataclass(frozen=True)
-class Moment:
-    """The one time expression (02W §2.0): `48h`, or `{at:, after:|before:,
-    counted-in:, in-time-zone:}`. Read as written; what it means against a
-    clock and a calendar is the runtime's."""
+class ValueSpec:
+    """One entry of `values/` a run reads by name (02W §2.0, §2.12): a table a
+    calendar or a timer's `per-row-of:` names, or a figure a `values.<name>`
+    binding reads. Every other figure is put in place by `{use:}` and gone
+    before a runtime sees the document (`crates/pact-loader/src/values.rs`)."""
 
-    #: `at:` — the binding it counts from; empty for "when the stage starts".
-    at: str = ""
-    #: `after:` — or the whole of a moment written as a bare length of time.
-    after: str = ""
-    before: str = ""
-    #: `counted-in:` — `calendar-days` (the default) or `business-days`.
-    counted_in: str = "calendar-days"
-    in_time_zone: str = ""
+    name: str
+    description: str = ""
+    #: `text`, `money`, ..., or `table`.
+    shape: str = ""
+    #: The figure, as resolved; for a table, its rows.
+    value: Any = None
+    #: On a table: the named shape of each row (a key of `workspace.shapes`).
+    rows_are: str = ""
 
-    @staticmethod
-    def from_written(written: Any) -> "Moment | None":
-        if written is None:
-            return None
-        if not isinstance(written, Mapping):
-            return Moment(after=str(written).strip())
-        return Moment(
-            at=_text(written.get("at", "")),
-            after=_text(written.get("after", "")),
-            before=_text(written.get("before", "")),
-            counted_in=_text(written.get("counted-in", "")) or "calendar-days",
-            in_time_zone=_text(written.get("in-time-zone", "")),
+    @property
+    def rows(self) -> tuple[Mapping[str, Any], ...]:
+        """A table's rows, in written order; `()` for a figure."""
+        if self.shape != "table" or not isinstance(self.value, (list, tuple)):
+            return ()
+        return tuple(r for r in self.value if isinstance(r, Mapping))
+
+
+def values_of(doc: Mapping[str, Any]) -> dict[str, ValueSpec]:
+    """Every value the document kept for a run to read, by name."""
+    return {
+        str(name): ValueSpec(
+            name=str(name),
+            description=_text(v.get("description", "")),
+            shape=_text(v.get("shape", "")),
+            value=v.get("value"),
+            rows_are=_text(v.get("rows-are", "")),
         )
+        for name, v in (doc.get("values") or {}).items()
+        if isinstance(v, Mapping)
+    }
+
+
+# ──────────────────────────────────────────────────────────────── workflows
 
 
 @dataclass(frozen=True)
@@ -1589,6 +1640,9 @@ class StageSpec:
     checks_at_most: int = 2
     undone_by: str = ""
     limits: Limits = Limits()
+    #: The `limits:` lines only a workflow reads: a deadline that pauses,
+    #: starts late and has milestones, how many at once, the choice as written.
+    region_limits: RegionLimits = RegionLimits()
     #: `limits.items-at-most:` — the ceiling every `each` carries (WF-10).
     items_at_most: int | None = None
 
@@ -1632,6 +1686,7 @@ class StageSpec:
             checks_at_most=whole(raw.get("checks-at-most")) or 2,
             undone_by=_text(raw.get("undone-by", "")),
             limits=Limits.from_mapping(written_limits),
+            region_limits=RegionLimits.from_limits(written_limits),
             items_at_most=whole(written_limits.get("items-at-most")),
         )
 
@@ -1675,6 +1730,7 @@ class WorkflowSpec:
     questions: Mapping[str, Any] = field(default_factory=dict)
     policy: str = ""
     limits: Limits = Limits()
+    region_limits: RegionLimits = RegionLimits()
     evals: str = ""
     remembers: Facts = field(default_factory=Facts)
     #: `hides:` — binding to the readers that may never see it.
@@ -1694,6 +1750,8 @@ class WorkflowSpec:
     workspace_remembers: Facts = field(default_factory=Facts)
     #: The workspace's `owners:` entries under `workflows/<name>`.
     owners: tuple[Owned, ...] = ()
+    #: The values a run reads by name — the calendar table, `values.<name>`.
+    values: Mapping[str, ValueSpec] = field(default_factory=dict)
 
     def stage_named(self, name: str) -> StageSpec:
         """A top-level stage by name. (Named apart from every other reader in this module: the
@@ -1723,6 +1781,7 @@ class WorkflowSpec:
             questions=dict(w.get("questions") or {}),
             policy=_text(w.get("policy", "")),
             limits=Limits.from_mapping(w.get("limits") or {}),
+            region_limits=RegionLimits.from_limits(w.get("limits")),
             evals=_text(w.get("evals", "")),
             remembers=Facts.of(w.get("remembers")),
             hides={str(k): tuple(_as_list(v)) for k, v in (w.get("hides") or {}).items()},
@@ -1746,4 +1805,5 @@ class WorkflowSpec:
                 if isinstance(o, Mapping)
                 and (str(path) == f"workflows/{key}" or str(path).startswith(f"workflows/{key}/"))
             ),
+            values=values_of(doc),
         )

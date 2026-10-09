@@ -38,6 +38,17 @@
 //! consumer — ever learns that values exist. That is what makes this feature
 //! free at every layer except the one an author types into.
 //!
+//! # Except what a run reads by name
+//!
+//! A value read by its name rather than put in place — `workspace.calendar:`,
+//! a port's `per-row-of:`, a workflow's `values.<name>` binding (02W §2.0,
+//! §2.12) — is read when a stage starts, so it stays: those entries, and only
+//! those, are kept under `values:` for the schema to hold and a run to read.
+//! A tree that reads nothing by name is the same document it always was. A
+//! `shape: table` value is a list of rows in the named shape `rows-are:` gives,
+//! each row held to it here, and a name read as a table must be one
+//! (`loader/a-table-that-is-not-one`); a calendar's rows have a `date` part.
+//!
 //! # What it deliberately is not
 //!
 //! Not a variable. Nothing reads one back, nothing writes one during a run, and
@@ -108,14 +119,18 @@ pub fn resolve(
     recorded: &mut Vec<crate::report::Substitution>,
 ) {
     let Some(top) = root.as_map_mut() else { return };
+    let by_name = read_by_name(top);
     if top.get(COLLECTION).is_none() {
         // The overwhelmingly common case, and it must cost nothing: a tree that
         // writes no values is not walked at all, so P1 cannot change the meaning
-        // of a document that never opted in. \
+        // of a document that never opted in. A binding to a value is the one
+        // thing to say: there is none for it to name. \
+        no_such_value(&by_name, &BTreeMap::new(), diags);
         return;
     }
 
-    let figures = match figures_of(top, diags) {
+    let rows = Rows::of(top, schema);
+    let figures = match figures_of(top, &rows, diags) {
         Some(f) => f,
         None => {
             // The definitions could not be read. Every use site would then draw
@@ -155,6 +170,23 @@ pub fn resolve(
         }
     }
 
+    // What a run reads by name: a binding to nothing is refused, a name read as
+    // a table must be one, and every such value that holds is kept.
+    no_such_value(&by_name, &figures, diags);
+    let mut kept: BTreeSet<String> = BTreeSet::new();
+    if let Some(defs) = top.get(COLLECTION).and_then(|e| e.node.as_map()) {
+        for read in &by_name {
+            let (Some(entry), Some(_)) = (defs.get(&read.name), figures.get(&read.name)) else {
+                continue;
+            };
+            used.insert(read.name.clone());
+            if read.via != Via::Binding && !a_table_where_one_is_read(read, entry, &rows, diags) {
+                continue;
+            }
+            kept.insert(read.name.clone());
+        }
+    }
+
     // A figure nothing reads. The generic `nothing-points-at-it` check cannot
     // say this: by the time it runs every `{use:}` has become a figure and the
     // reference is gone, so the pass that did the substituting is the only thing
@@ -178,21 +210,404 @@ pub fn resolve(
         }
     }
 
-    top.shift_remove(COLLECTION);
+    match top.get_mut(COLLECTION).and_then(|e| e.node.as_map_mut()) {
+        Some(defs) if !kept.is_empty() => {
+            defs.retain(|name, _| kept.contains(name));
+            for (name, entry) in defs.iter_mut() {
+                // The figure as resolved, so a kept value read by a run is the
+                // same figure a `{use:}` of it would have put in place.
+                if let (Some(map), Some(figure)) = (entry.node.as_map_mut(), figures.get(name))
+                    && let Some(held) = map.get_mut("value")
+                {
+                    held.node = figure.clone();
+                }
+            }
+        }
+        _ => {
+            top.shift_remove(COLLECTION);
+        }
+    }
+}
+
+/// How a run reads a value by its name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Via {
+    /// `workspace.calendar:`, a table of days off.
+    Calendar,
+    /// A port's `per-row-of:`, a table with one run per row.
+    PerRow,
+    /// `values.<name>` in a workflow.
+    Binding,
+}
+
+/// One place a value is read by its name.
+struct ReadByName {
+    name: String,
+    at: pact_diag::Span,
+    via: Via,
+}
+
+/// Every place this tree reads a value by name rather than through `{use:}`.
+fn read_by_name(top: &pact_doc::Map) -> Vec<ReadByName> {
+    let mut out = Vec::new();
+    if let Some(e) = top.get("calendar")
+        && let Some(name) = e.node.as_str()
+    {
+        out.push(ReadByName {
+            name: name.trim().to_string(),
+            at: e.node.span.clone(),
+            via: Via::Calendar,
+        });
+    }
+    for (_, port) in top
+        .get("ports")
+        .and_then(|e| e.node.as_map())
+        .into_iter()
+        .flatten()
+    {
+        if let Some(n) = port.node.get("per-row-of")
+            && let Some(name) = n.as_str()
+        {
+            out.push(ReadByName {
+                name: name.trim().to_string(),
+                at: n.span.clone(),
+                via: Via::PerRow,
+            });
+        }
+    }
+    fn walk(node: &Node, out: &mut Vec<ReadByName>, depth: usize) {
+        if depth > 32 {
+            return;
+        }
+        match &node.value {
+            Value::Str(s) => {
+                let s = s.trim();
+                if let Some(rest) = s.strip_prefix("values.")
+                    && !s.contains(char::is_whitespace)
+                {
+                    let name = rest.split('.').next().unwrap_or("").to_string();
+                    out.push(ReadByName {
+                        name,
+                        at: node.span.clone(),
+                        via: Via::Binding,
+                    });
+                }
+            }
+            Value::Map(m) => m.values().for_each(|e| walk(&e.node, out, depth + 1)),
+            Value::List(items) => items.iter().for_each(|i| walk(i, out, depth + 1)),
+            _ => {}
+        }
+    }
+    if let Some(e) = top.get("workflows") {
+        walk(&e.node, &mut out, 0);
+    }
+    out
+}
+
+/// WF-4 for `values.<name>`: a binding to a value this workspace does not have.
+fn no_such_value(read: &[ReadByName], figures: &BTreeMap<String, Node>, diags: &mut Diagnostics) {
+    let names: Vec<&str> = figures.keys().map(String::as_str).collect();
+    for r in read
+        .iter()
+        .filter(|r| r.via == Via::Binding && !figures.contains_key(&r.name))
+    {
+        diags.push(Diagnostic::error(
+            "loader/a-binding-to-nothing",
+            r.at.clone(),
+            format!(
+                "`values.{}` names no value: this workspace has no figure called '{}'.",
+                r.name, r.name
+            ),
+            if names.is_empty() {
+                format!("Write it in `values/{}.yaml`.", r.name)
+            } else {
+                format!(
+                    "Use one of the names offered: {} — or write it in `values/{}.yaml`.",
+                    pact_schema::suggest::nearest(&r.name, &names, 3)
+                        .iter()
+                        .map(|n| format!("`values.{n}`"))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    r.name
+                )
+            },
+        ));
+    }
+}
+
+/// A name read as a table (`calendar:`, `per-row-of:`) names one, and a
+/// calendar's rows say which day each is.
+fn a_table_where_one_is_read(
+    read: &ReadByName,
+    entry: &pact_doc::Entry,
+    rows: &Rows,
+    diags: &mut Diagnostics,
+) -> bool {
+    let line = if read.via == Via::Calendar {
+        "calendar"
+    } else {
+        "per-row-of"
+    };
+    let name = &read.name;
+    if entry
+        .node
+        .get("shape")
+        .and_then(Node::as_str)
+        .map(str::trim)
+        != Some(TABLE)
+    {
+        diags.push(
+            Diagnostic::error(
+                "loader/a-table-that-is-not-one",
+                read.at.clone(),
+                format!("`{line}: {name}` reads a table, and '{name}' is not one: it has no `shape: table`."),
+                format!(
+                    "Make '{name}' a table — `shape: table`, `rows-are: <a shape>` and one row per                      line under `value:` — or name a table here."
+                ),
+            )
+            .with_related(entry.key_span.clone(), "this is the value it names"),
+        );
+        return false;
+    }
+    if read.via == Via::Calendar {
+        let shape = entry
+            .node
+            .get("rows-are")
+            .and_then(Node::as_str)
+            .map(str::trim)
+            .unwrap_or("");
+        let dated = rows
+            .parts
+            .get(shape)
+            .is_some_and(|parts| parts.iter().any(|(_, l)| rows.plain(l) == Some("date")));
+        if !dated {
+            diags.push(Diagnostic::error(
+                "loader/a-table-that-is-not-one",
+                read.at.clone(),
+                format!(
+                    "`calendar: {name}` lists the days off that `business-days` skips, and the                      rows of '{name}' ('{shape}') have no part that is a date, so no row says                      which day it is."
+                ),
+                format!("Give '{shape}' a part in shape `date` — `day: date`."),
+            ));
+            return false;
+        }
+    }
+    true
+}
+
+/// The named shapes a table's rows may be, read as `bindings.rs` reads them.
+struct Rows {
+    vocabulary: Vec<(String, Vec<String>)>,
+    /// Each named shape's parts, as written.
+    parts: BTreeMap<String, Vec<(String, String)>>,
+}
+
+impl Rows {
+    fn of(top: &pact_doc::Map, schema: &Schema) -> Rows {
+        let mut parts = BTreeMap::new();
+        for (name, e) in top
+            .get("shapes")
+            .and_then(|e| e.node.as_map())
+            .into_iter()
+            .flatten()
+        {
+            let lines = e
+                .node
+                .as_map()
+                .into_iter()
+                .flatten()
+                .filter_map(|(k, v)| v.node.as_str().map(|s| (k.clone(), s.to_string())))
+                .collect();
+            parts.insert(name.clone(), lines);
+        }
+        Rows {
+            vocabulary: pact_schema::shape::vocabulary(schema),
+            parts,
+        }
+    }
+
+    fn line(&self, written: &str) -> Option<pact_schema::shape::Line> {
+        let named: Vec<&str> = self.parts.keys().map(String::as_str).collect();
+        pact_schema::shape::parse(written, &self.vocabulary, &named).ok()
+    }
+
+    /// The vocabulary's name for a plain line (`date`, `money`), else `None`.
+    fn plain(&self, written: &str) -> Option<&'static str> {
+        match self.line(written)?.shape {
+            pact_schema::shape::Shape::Plain(n) => [
+                "text",
+                "yes-or-no",
+                "money",
+                "number",
+                "whole-number",
+                "date",
+                "time",
+                "date-and-time",
+            ]
+            .into_iter()
+            .find(|w| *w == n),
+            _ => None,
+        }
+    }
+
+    /// Why `cell` does not fit `written`, or `None` when it does (or when
+    /// nothing here can tell).
+    fn misfit(&self, cell: &Node, written: &str) -> Option<String> {
+        use pact_schema::shape::Shape;
+        let line = self.line(written)?;
+        let ty = match &line.shape {
+            Shape::OneOf(choices) => {
+                let said = match &cell.value {
+                    Value::Str(s) => s.trim().to_string(),
+                    _ => return Some(format!("is not one of {}", choices.join(", "))),
+                };
+                return (!choices.iter().any(|c| c.eq_ignore_ascii_case(&said)))
+                    .then(|| format!("is not one of {}", choices.join(", ")));
+            }
+            Shape::Plain(n) => n.as_str(),
+            _ => return None,
+        };
+        let text = cell.as_str().map(str::trim).unwrap_or("");
+        let fits = match ty {
+            "number" => pact_schema::coerce::check(cell, &Ty::Number).is_some(),
+            "whole-number" => pact_schema::coerce::check(cell, &Ty::Integer).is_some(),
+            "money" => pact_schema::coerce::check(cell, &Ty::Money).is_some(),
+            "yes-or-no" => pact_schema::coerce::check(cell, &Ty::YesNo).is_some(),
+            "date" => crate::conditions::looks_like_a_date(text) && text.len() == 10,
+            "time" => crate::conditions::looks_like_a_time(text),
+            "date-and-time" => crate::conditions::looks_like_a_date(text),
+            _ => true,
+        };
+        (!fits).then(|| {
+            format!(
+                "is not {}",
+                match ty {
+                    "number" => "a number",
+                    "whole-number" => "a whole number",
+                    "money" => "an amount of money, like `200 USD`",
+                    "yes-or-no" => "yes or no",
+                    "date" => "a date, like `2026-12-25`",
+                    "time" => "a time of day, like `14:30`",
+                    _ => "a date and time, like `2026-12-25T14:30:00-06:00`",
+                }
+            )
+        })
+    }
+}
+
+/// The word `value.shape` uses for a list of rows.
+const TABLE: &str = "table";
+
+/// A table's rows, each held to its `rows-are:` shape: every required part
+/// there, no part the shape lacks, each cell in its part's shape.
+fn table(name: &str, definition: &Node, held: &Node, rows: &Rows) -> Result<(), Box<Diagnostic>> {
+    let wrong = |at: pact_diag::Span, message: String, fix: String| {
+        Err(Box::new(Diagnostic::error(
+            "loader/a-table-that-is-not-one",
+            at,
+            message,
+            fix,
+        )))
+    };
+    let Some(shape) = definition
+        .get("rows-are")
+        .and_then(Node::as_str)
+        .map(str::trim)
+    else {
+        return wrong(
+            definition.span.start_of_block(),
+            format!("'{name}' is a table and does not say what its rows are."),
+            "Add a line: `rows-are: <a shape>` — one of the names under `shapes:` in              `workspace.yaml`."
+                .to_string(),
+        );
+    };
+    // A name `shapes:` lacks is the schema's `names: shapes` to refuse.
+    let Some(parts) = rows.parts.get(shape) else {
+        return Ok(());
+    };
+    let Some(items) = held.as_list() else {
+        return wrong(
+            held.span.clone(),
+            format!("'{name}' is a table, and its `value:` is not a list of rows."),
+            format!("Write one row per line under `value:`, each with the parts of '{shape}'."),
+        );
+    };
+    for row in items {
+        let Some(cells) = row.as_map() else {
+            return wrong(
+                row.span.clone(),
+                format!("A row of '{name}' is not a row: a row has the parts of '{shape}'."),
+                format!(
+                    "Write the row as its parts — `{{{}}}`.",
+                    parts
+                        .iter()
+                        .map(|(p, _)| format!("{p}: ..."))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            );
+        };
+        for (key, cell) in cells {
+            let Some((_, written)) = parts.iter().find(|(p, _)| p == key) else {
+                return wrong(
+                    cell.key_span.clone(),
+                    format!(
+                        "A row of '{name}' has `{key}:`, and '{shape}' has no part called that."
+                    ),
+                    format!(
+                        "Use the parts of '{shape}': {}.",
+                        parts
+                            .iter()
+                            .map(|(p, _)| format!("`{p}`"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                );
+            };
+            if let Some(why) = rows.misfit(&cell.node, written) {
+                return wrong(
+                    cell.node.span.clone(),
+                    format!(
+                        "In a row of '{name}', `{key}:` {why}, and '{shape}' says it is `{written}`."
+                    ),
+                    format!("Write `{key}:` as `{written}`, or change the part in '{shape}'."),
+                );
+            }
+        }
+        for (part, written) in parts {
+            let optional = rows.line(written).is_some_and(|l| l.optional);
+            if !optional && !cells.contains_key(part) {
+                return wrong(
+                    row.span.start_of_block(),
+                    format!(
+                        "A row of '{name}' has no `{part}:`, and every row of '{shape}' has one."
+                    ),
+                    format!(
+                        "Add `{part}:` to the row, or mark it `{written}, optional` in '{shape}'."
+                    ),
+                );
+            }
+        }
+    }
+    Ok(())
 }
 
 /// The figures, with each `{use:}` inside them already resolved.
 ///
 /// `None` means the definitions themselves are broken and every use site should
 /// be left alone rather than told about a value that was never the problem.
-fn figures_of(top: &pact_doc::Map, diags: &mut Diagnostics) -> Option<BTreeMap<String, Node>> {
+fn figures_of(
+    top: &pact_doc::Map,
+    rows: &Rows,
+    diags: &mut Diagnostics,
+) -> Option<BTreeMap<String, Node>> {
     let defs = top.get(COLLECTION)?.node.as_map()?;
     let mut out: BTreeMap<String, Node> = BTreeMap::new();
     let mut broken = false;
 
     for (name, entry) in defs {
         let mut seen: Vec<String> = Vec::new();
-        match figure(defs, name, &entry.key_span, &mut seen) {
+        match figure(defs, name, &entry.key_span, &mut seen, rows) {
             Ok(node) => {
                 out.insert(name.clone(), node);
             }
@@ -211,6 +626,7 @@ fn figure(
     name: &str,
     at: &pact_diag::Span,
     seen: &mut Vec<String>,
+    rows: &Rows,
 ) -> Result<Node, Box<Diagnostic>> {
     let Some(entry) = defs.get(name) else {
         // Reached when one figure is built from another that is not there. The
@@ -267,13 +683,25 @@ fn figure(
     seen.push(name.to_owned());
 
     let resolved = if let Some(target) = names_a_value(held) {
-        let inner = figure(defs, &target, &held.span, seen)?;
+        let inner = figure(defs, &target, &held.span, seen, rows)?;
         Node { value: inner.value, span: held.span.clone() }
     } else {
         held.clone()
     };
     seen.pop();
 
+    if definition.get("shape").and_then(Node::as_str).map(str::trim) == Some(TABLE) {
+        table(name, definition, &resolved, rows)?;
+        return Ok(resolved);
+    }
+    if let Some(rows_are) = definition.as_map().and_then(|m| m.get("rows-are")) {
+        return Err(Box::new(Diagnostic::error(
+            "loader/a-table-that-is-not-one",
+            rows_are.key_span.clone(),
+            format!("'{name}' says what its rows are, and it is not a table."),
+            format!("Add `shape: table` under `{name}:`, or delete `rows-are:`."),
+        )));
+    }
     // The declared shape, held against the figure. Optional to write; a claim
     // once written, and a claim nothing holds is decoration.
     // A word this format does not know turned the check OFF in silence, which
@@ -323,6 +751,7 @@ pub(crate) const SHAPES: &[&str] = &[
     "money",
     "percent",
     "size",
+    "table",
 ];
 
 pub(crate) fn ty_of(shape: &str) -> Option<Ty> {

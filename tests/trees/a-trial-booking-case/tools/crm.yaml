@@ -1,0 +1,29 @@
+description: The centre's CRM, where parents and trial deals are kept.
+connect: crm-server
+actions:
+  create-or-update-contact:
+    description: Create a contact, or update the one with this email address.
+    takes:
+      email: text
+      first-name: text
+      last-name: text
+      phone: text
+      lifecycle-stage: text
+    answers-with:
+      contact-id: text
+  set-contact-owner:
+    description: Make a tutor the owner of a contact.
+    takes:
+      contact-id: text
+      owner-id: text
+    answers-with:
+      done: yes or no
+  create-deal:
+    description: Open a trial deal for a contact.
+    takes:
+      contact-id: text
+      pipeline: text
+      student: text
+      subject: text
+    answers-with:
+      deal-id: text
