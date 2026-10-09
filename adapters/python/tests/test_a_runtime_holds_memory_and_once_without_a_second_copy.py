@@ -159,3 +159,22 @@ def test_a_call_without_its_key_cannot_be_claimed_and_says_so() -> None:
     ledger = Ledger(keys)
     assert ledger.hold("payments", {"action": "issue-refund"}) == ""
     assert ledger.unenforced() == (claim.cannot_tell(),)
+
+
+def test_a_repeats_memory_carries_where_each_round_adds_to_it() -> None:
+    """02W §2.11: a repeat's `remembers:` says what each round adds and how, and
+    a workflow's or the workspace's may keep one value per input field."""
+    facts = Facts.of(
+        {
+            "drafts": {
+                "description": "every draft so far",
+                "lasts": "one-run",
+                "comes-from": "steps.draft.text",
+                "combines-by": "keep-all",
+            },
+            "seen": {"description": "who was seen", "lasts": "forever", "kept-per": "specialty"},
+        }
+    ).declared
+    drafts, seen = facts["drafts"], facts["seen"]
+    assert (drafts.lasts, drafts.comes_from, drafts.combines_by) == ("one-run", "steps.draft.text", "keep-all")
+    assert (seen.kept_per, seen.comes_from, seen.combines_by) == ("specialty", "", "")

@@ -25,6 +25,7 @@
 //! of an `each`, a `repeat` or a `together`. Reachability (`loader/stage-nothing-
 //! reaches`) is `reachability.rs`'s, over the same stages.
 
+use crate::bindings::is_binding;
 use pact_diag::{Diagnostic, Diagnostics, Span};
 use pact_doc::{Map, Node, Value};
 use std::collections::{BTreeMap, BTreeSet};
@@ -35,19 +36,6 @@ const AGENT_ONLY: &[&str] = &["think", "use-tools", "check-its-work", "run-code"
 const WORKFLOW_ONLY: &[&str] = &["call", "decide", "each", "repeat", "together"];
 /// What a workflow may not write, because it has no mind of its own (WF-1).
 const A_MIND: &[&str] = &["model", "instructions", "loop", "team", "uses"];
-/// Where a binding starts (02W §2.0). A `call:` that starts with one of these is
-/// a binding, held by WF-9 with `may-call:`, never a name.
-const BINDING_ROOTS: &[&str] = &[
-    "input",
-    "steps",
-    "item",
-    "latest-update",
-    "remembers",
-    "run-inputs",
-    "values",
-    "used",
-];
-
 /// The lines a stage reads only beside particular `does:` values (WF-3), from
 /// 02W §2.3's help for each. A line not listed here is read whatever the stage
 /// does (`says:`, `limits:`, `then:`, ...).
@@ -713,24 +701,33 @@ fn routes(stage: &Node, in_workflow: bool) -> Vec<(&str, &Node)> {
 /// Every stage this one can go to next: the values under the `then:` lines it
 /// can end in (and `heard:`), and under a `decide`'s `chooses-between:`.
 pub(crate) fn successors(stage: &Node, in_workflow: bool) -> Vec<&str> {
-    let mut out = Vec::new();
-    let mut to: Vec<&Node> = routes(stage, in_workflow)
+    next_stages(stage, in_workflow)
         .into_iter()
-        .map(|(_, n)| n)
-        .collect();
+        .map(|(_, to)| to)
+        .collect()
+}
+
+/// [`successors`], each with the word that leads there: the outcome
+/// (`answered`), the port a `heard:` names, or the `decide`'s label.
+pub(crate) fn next_stages(stage: &Node, in_workflow: bool) -> Vec<(&str, &str)> {
+    let mut to: Vec<(&str, &Node)> = routes(stage, in_workflow);
     if does(stage).is_none_or(|d| d == "decide") {
         to.extend(
             stage
                 .get("chooses-between")
                 .and_then(Node::as_map)
                 .into_iter()
-                .flat_map(|m| m.values().map(|e| &e.node)),
+                .flat_map(|m| m.iter().map(|(k, e)| (k.as_str(), &e.node))),
         );
     }
-    for node in to {
+    let mut out = Vec::new();
+    for (word, node) in to {
         match &node.value {
-            Value::Str(s) => out.push(s.trim()),
-            Value::Map(m) => out.extend(m.values().filter_map(|e| e.node.as_str()).map(str::trim)),
+            Value::Str(s) => out.push((word, s.trim())),
+            Value::Map(m) => out.extend(
+                m.iter()
+                    .filter_map(|(k, e)| e.node.as_str().map(|s| (k.as_str(), s.trim()))),
+            ),
             _ => {}
         }
     }
@@ -926,7 +923,7 @@ fn forget_after_is_now_kept_for(node: &Node, diags: &mut Diagnostics) {
 
 /// What a `call:` target is.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Kind {
+pub(crate) enum Kind {
     Action,
     Agent,
     Program,
@@ -934,7 +931,7 @@ enum Kind {
 }
 
 impl Kind {
-    fn a(self) -> &'static str {
+    pub(crate) fn a(self) -> &'static str {
         match self {
             Kind::Action => "a tool's action",
             Kind::Agent => "an agent",
@@ -943,7 +940,7 @@ impl Kind {
         }
     }
 
-    fn collection(self) -> &'static str {
+    pub(crate) fn collection(self) -> &'static str {
         match self {
             Kind::Action => "tools",
             Kind::Agent => "agents",
@@ -953,7 +950,7 @@ impl Kind {
     }
 }
 
-enum Resolved {
+pub(crate) enum Resolved {
     One(Kind),
     Several(Vec<Kind>),
     /// The fix to give.
@@ -961,7 +958,7 @@ enum Resolved {
 }
 
 /// `<tool>/<action>`, an agent, a program or a workflow.
-fn resolve(document: &Node, target: &str) -> Resolved {
+pub(crate) fn resolve(document: &Node, target: &str) -> Resolved {
     if let Some((tool, action)) = target.split_once('/') {
         let Some(t) = entry_in(document, "tools", tool) else {
             return Resolved::Nothing(offer("tools", document, &format!("`tools/{tool}.yaml`")));
@@ -1037,22 +1034,16 @@ fn offer(only: &str, document: &Node, file: &str) -> String {
     }
 }
 
-fn entry_in<'a>(document: &'a Node, collection: &str, name: &str) -> Option<&'a Node> {
+pub(crate) fn entry_in<'a>(document: &'a Node, collection: &str, name: &str) -> Option<&'a Node> {
     document.get(collection)?.get(name)
 }
 
-fn is_binding(said: &str) -> bool {
-    said.split_once('.')
-        .is_some_and(|(root, _)| BINDING_ROOTS.contains(&root))
-        || BINDING_ROOTS.contains(&said)
-}
-
-fn does(stage: &Node) -> Option<&str> {
+pub(crate) fn does(stage: &Node) -> Option<&str> {
     stage.get("does").and_then(Node::as_str).map(str::trim)
 }
 
 /// A value written as one item or as a list of them.
-fn list(node: &Node) -> Vec<&Node> {
+pub(crate) fn list(node: &Node) -> Vec<&Node> {
     match node.as_list() {
         Some(items) => items.iter().collect(),
         None => vec![node],

@@ -1,0 +1,9 @@
+description: Email.
+connect: utility-apps
+actions:
+  send-email:
+    description: Send an email.
+    takes:
+      to: text
+      reason: text, optional
+    same-request-key: to

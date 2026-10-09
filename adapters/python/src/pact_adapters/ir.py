@@ -645,6 +645,11 @@ class AgentSpec:
     #: override layer exists for. Empty is normal: invariant P-1 says an adapter
     #: may only be given the loaded document, so the tree is an optional extra
     #: and every behaviour has to be correct without it.
+    #: The workspace's named `shapes:` (02W §2.15), so a line naming one is
+    #: read as that shape with its parts, and its `time-zone:`, which a date and
+    #: time written without a zone is read in.
+    shapes: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
+    time_zone: str = ""
     workspace: str = ""
     #: Other ways to run this same agent, from the author's own `variants:`
     #: block, in the order they wrote them. `resolve()` searches these; before
@@ -903,6 +908,8 @@ class AgentSpec:
         instructions = _text(a.get("instructions", ""))
         return AgentSpec(
             name=_text(a.get("name", agent_key)),
+            shapes={str(n): _shapes(parts) for n, parts in (doc.get("shapes") or {}).items()},
+            time_zone=_text(doc.get("time-zone", "")),
             description=description,
             instructions=instructions,
             holes=tuple(dict.fromkeys(holes_in(instructions) + holes_in(description))),

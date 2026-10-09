@@ -1,0 +1,11 @@
+name: an-interconnection-case
+workspace-id: 01JEQ8Z3M4N5P6Q7R8S9T0WF60
+description: A solar interconnection application reviewed from submission to the signed agreement (02W 5.5, the stages its bindings read).
+owner: interconnection
+allow-egress: []
+time-zone: America/Chicago
+shapes:
+  agreement-terms:
+    agreement: file
+    signers: list of text
+    upgrade: text, optional

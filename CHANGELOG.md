@@ -8,7 +8,30 @@ holds that did not; the commits are listed under it for whoever wants the detail
 Running PACT trees in production on Pydantic AI 2.54, through
 [Bud Agent Flow](https://github.com/BudEcosystem/Bud-Agent-Flow), drove these changes. Every
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
-runs offline: 3686 tests, 1184 Rust and 2502 adapter.
+runs offline: 3752 tests, 1226 Rust and 2526 adapter.
+
+### Workflows: bindings and shapes (9 October)
+
+- **A binding reaches only what ran** (`crates/pact-loader/src/bindings.rs`). `pact check` refuses
+  a binding that names nothing, offering the nearest three names (WF-4); one to a stage some path
+  reaches the reader without passing, naming that path — unless the input it fills is
+  `, optional` (WF-5); one to a stage that runs after the reader, or later in a repeat's round
+  (WF-6); `item.` outside an `each` (WF-7); a `call:` picked from a binding with no `may-call:`
+  (WF-9); a repeat's memory with no `comes-from:`, or one from outside the round (WF-13); an
+  `until:` that reads nothing the round writes (WF-14); and a call whose `bind:` leaves a required
+  input of its target empty, fills one it does not take, or binds a value of another shape (WF-39,
+  the direct and auto-map rungs). The third printed example of design 02W §3 prints as shown.
+- **Answer shapes gain `date`, `time` and `date-and-time`, and three ways to build on any shape**:
+  `list of <shape>`, a name from the workspace's `shapes:`, and `<shape>, optional`, read by one
+  Rust reader (`pact_schema::shape`, behind `schema/not-an-answer-shape`) and by
+  `questions.Shape.parse(written, shapes, zone)`. A date and time written without a zone is read
+  in the workspace's `time-zone:`, and refused when there is none. A shape made of itself is
+  refused (`loader/a-shape-made-of-itself`). `shaped-like:` is held to the same shapes.
+- **Memory between rounds** (02W §2.11): `lasts: one-run`, `comes-from:`, `combines-by:` (a
+  repeat's `remembers:` only) and `kept-per:` (a workflow's or the workspace's), read into `Fact`.
+- **Python**: `ir.AgentSpec` carries the workspace's `shapes` and `time_zone`; PACT's own Pydantic
+  AI path shows a named shape as an object and leaves an optional line out of `required`; a
+  question and a suspension carry the named shapes they use across a process boundary.
 
 ### Workflows: a `workflows/` collection and its structure (9 October)
 

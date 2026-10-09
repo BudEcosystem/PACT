@@ -1,0 +1,19 @@
+description: A supplemental review of an application that failed a screen badly.
+accepts:
+  application-id: text
+  screen: text
+  der-on-feeder: number
+answers-with:
+  upgrade-cost: money
+starts-at: study
+steps:
+  study:
+    does: call
+    call: screener
+    bind:
+      power-flow: input.screen
+      der-on-feeder: input.der-on-feeder
+    then:
+      answered: reply
+  reply:
+    does: answer

@@ -66,7 +66,7 @@ write: most workspaces use a dozen.
 | Kind | Fields | Core fields |
 |---|---:|---|
 | `context-policy` | 7 | `description`, `when-full`, `always-keep`, `if-it-still-does-not-fit`, `asks` |
-| `state` | 9 | `description`, `lasts`, `forget-after`, `kept-for`, `never-from` |
+| `state` | 12 | `description`, `lasts`, `forget-after`, `kept-for`, `kept-per` |
 | `tidy-step` | 3 | — |
 
 ## Working together

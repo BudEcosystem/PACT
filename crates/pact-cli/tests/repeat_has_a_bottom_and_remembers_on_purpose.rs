@@ -1,8 +1,11 @@
-//! A `repeat` has a bottom (02W §3 WF-12, §8).
+//! A `repeat` has a bottom and remembers on purpose (02W §3 WF-12, WF-13,
+//! WF-14, §8).
 //!
 //! "Forever" is a schedule plus memory, never a `repeat`: one with no
-//! `at-most:` is refused. WF-13 and WF-14 (`remembers:` and `until:` that read
-//! the round) join this file with the binding rules that hold them.
+//! `at-most:` is refused (WF-12). What it remembers between rounds says where
+//! each value comes from, a stage inside the round (WF-13), and its `until:`
+//! reads something the round writes (WF-14), or it could never change. That
+//! `.ended` and `.rounds` are set is the runtime's half.
 //!
 //! Over a copy of `tests/trees/a-workflow-of-every-shape/`.
 
@@ -103,4 +106,117 @@ fn repeat_with_no_bottom_is_refused_and_told_how_to_end() {
 fn a_repeat_with_a_bottom_loads_clean() {
     let (ok, text) = check(&tree());
     assert!(ok, "{text}");
+}
+
+const ROUND: &str = "    at-most: 2\n    starts-at: recheck\n";
+
+#[test]
+fn a_value_remembered_from_nowhere_is_refused() {
+    let root = edited(
+        "from-nowhere",
+        &[(
+            FLOW,
+            ROUND,
+            "    at-most: 2\n    remembers:\n      tries:\n        description: what each round found\n        lasts: one-run\n    starts-at: recheck\n",
+        )],
+        &[],
+    );
+    let (ok, text) = check(&root);
+    assert!(!ok, "{text}");
+    assert!(
+        text.contains("rule: loader/remembered-from-nowhere"),
+        "{text}"
+    );
+    assert!(
+        text.contains(
+            "'check-twice' remembers 'tries' between rounds and does not say where it comes from"
+        ),
+        "{text}"
+    );
+    assert!(text.contains("fix: Point `comes-from:` at a stage inside the round — `comes-from: steps.recheck.<field>`."), "{text}");
+}
+
+#[test]
+fn a_value_remembered_from_outside_the_round_is_refused() {
+    let root = edited(
+        "from-outside",
+        &[(
+            FLOW,
+            ROUND,
+            "    at-most: 2\n    remembers:\n      tries:\n        description: what each round found\n        lasts: one-run\n        comes-from: input.attachments\n        combines-by: keep-all\n    starts-at: recheck\n",
+        )],
+        &[],
+    );
+    let (ok, text) = check(&root);
+    assert!(!ok, "{text}");
+    assert!(
+        text.contains("rule: loader/remembered-from-nowhere"),
+        "{text}"
+    );
+    assert!(
+        text.contains("from 'input.attachments', which is not a stage inside the round"),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_value_remembered_from_inside_the_round_loads_clean() {
+    let root = edited(
+        "from-inside",
+        &[(
+            FLOW,
+            ROUND,
+            "    at-most: 2\n    remembers:\n      tries:\n        description: what each round found\n        lasts: one-run\n        comes-from: steps.recheck.run\n        combines-by: keep-all\n    starts-at: recheck\n",
+        )],
+        &[],
+    );
+    let (ok, text) = check(&root);
+    assert!(ok, "{text}");
+}
+
+#[test]
+fn an_until_that_reads_nothing_the_round_writes_is_refused() {
+    let root = edited(
+        "until-still",
+        &[(
+            FLOW,
+            ROUND,
+            "    at-most: 2\n    until:\n      - tool: ledger/read-invoice\n    starts-at: recheck\n",
+        )],
+        &[],
+    );
+    let (ok, text) = check(&root);
+    assert!(!ok, "{text}");
+    assert!(
+        text.contains("rule: loader/until-that-cannot-change"),
+        "{text}"
+    );
+    assert!(
+        text.contains("its `until:` reads nothing the round writes"),
+        "{text}"
+    );
+    assert!(text.contains("`value: steps.recheck.<field>`"), "{text}");
+}
+
+#[test]
+fn a_line_only_a_repeat_reads_is_refused_on_the_workspaces_memory() {
+    let root = edited(
+        "workspace-round",
+        &[(
+            "workspace.yaml",
+            "    kept-for: 30 days\n",
+            "    kept-for: 30 days\n    comes-from: steps.recheck.run\n",
+        )],
+        &[],
+    );
+    let (ok, text) = check(&root);
+    assert!(!ok, "{text}");
+    assert!(
+        text.contains("rule: loader/a-line-this-stage-never-reads"),
+        "{text}"
+    );
+    assert!(
+        text.contains("'paused', which the workspace remembers, writes `comes-from:`"),
+        "{text}"
+    );
 }

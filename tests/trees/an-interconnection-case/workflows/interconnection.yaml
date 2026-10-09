@@ -1,0 +1,119 @@
+description: >
+  Review a solar interconnection application from submission to the signed
+  agreement, and decide on the way how much review it needs.
+accepts:
+  application-id: text
+  customer-account: text
+  installer-email: text
+  site: text
+  size-kw-ac: number
+
+questions:
+  engineer-review:
+    description: A licensed engineer decides on a minor screen failure.
+    says: This application failed a screen. Choose an upgrade, or decline it.
+    shows: [steps.screen.summary, steps.gather.feeder]
+    answer:
+      approved: yes or no
+      upgrade: one of none, transformer-upgrade, reconductor, export-limit
+      because: text
+    asked-of: [the-requester]
+    answer-within: 10 days
+    if-nobody-answers: decline
+
+starts-at: check
+steps:
+  check:
+    does: call
+    call: completeness-checker
+    bind: { application: input }
+    then: { answered: complete }
+
+  complete:
+    does: decide
+    chooses-between: { complete: fee, missing: deficiencies }
+
+  deficiencies:
+    does: call
+    call: outlook/send-email
+    bind:
+      to: input.installer-email
+      reason: steps.check.missing
+    then: { answered: withdraw }
+
+  withdraw:
+    does: call
+    call: powerclerk/withdraw-application
+    bind: { application-id: input.application-id }
+
+  fee:
+    does: call
+    call: stripe/create-payment-link
+    bind: { customer: input.customer-account }
+    then: { answered: gather }
+
+  gather:
+    does: call
+    call: feeder-lookup
+    bind: { site: input.site }
+    then: { answered: power-flow }
+
+  power-flow:
+    does: call
+    call: cyme/run-power-flow
+    bind: { feeder: steps.gather.feeder, size-kw-ac: input.size-kw-ac }
+    then: { answered: screen }
+
+  screen:
+    does: call
+    call: screener
+    bind:
+      power-flow: steps.power-flow.results
+      der-on-feeder: steps.gather.existing-der
+    then: { answered: route }
+
+  route:
+    does: decide
+    chooses-between: { fast-track: reserve, minor: engineer, major: supplemental }
+
+  engineer:
+    does: ask-someone
+    asks: engineer-review
+    then: { answered: reserve, declined: tell-installer-denied }
+
+  supplemental:
+    does: call
+    call: supplemental-review
+    bind:
+      application-id: input.application-id
+      screen: steps.screen.summary
+      der-on-feeder: steps.gather.existing-der
+    then: { answered: reserve }
+
+  reserve:
+    does: call
+    call: reserve-feeder-capacity
+    bind:
+      feeder: steps.gather.feeder
+      application-id: input.application-id
+      size-kw-ac: input.size-kw-ac
+    then: { answered: contract }
+
+  contract:
+    does: call
+    call: contract-drafter
+    bind:
+      application: input
+      engineer-upgrade: steps.engineer.upgrade            # optional input: absent on fast-track
+      supplemental-cost: steps.supplemental.upgrade-cost  # optional input
+    then: { answered: envelope }
+
+  envelope:
+    does: call
+    call: docusign/send-envelope
+    bind: { agreement: steps.contract.terms }
+
+  tell-installer-denied:
+    does: call
+    call: outlook/send-email
+    bind: { to: input.installer-email, reason: steps.engineer.because }

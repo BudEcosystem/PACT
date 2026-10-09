@@ -50,6 +50,9 @@ def test_every_shape_the_spellings_accept_can_be_read(kind: str) -> None:
         "audio": "evals/attachments/call.wav",
         "file": "evals/attachments/policy.pdf",
         "agent": "refund-desk",
+        "date": "2026-10-09",
+        "time": "14:30",
+        "date-and-time": "2026-10-09T14:30:00-05:00",
     }[kind]
     assert shape_for(kind).read(value) is not None
 

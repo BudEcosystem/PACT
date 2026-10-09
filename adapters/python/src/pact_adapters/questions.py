@@ -45,12 +45,15 @@ Two properties here are structural rather than checked:
 
 from __future__ import annotations
 
+import datetime as _dt
+import json
 import math
 import re
 from collections.abc import Mapping as MappingABC
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 #: One diagnostic shape for the whole adapter — see `diagnostics`. A rule this
 #: vocabulary cannot decide names the real file and the real line, exactly as a
@@ -112,6 +115,11 @@ _SPELLINGS: Mapping[str, frozenset[str]] = {
     "audio": frozenset({"audio", "a recording", "a voice message", "list of audio"}),
     "file": frozenset({"file", "a file", "an attachment", "list of files"}),
     "agent": frozenset({"agent", "an agent", "which agent", "the name of an agent"}),
+    # 02W §2.15. A date and time carries its zone; one written without a zone
+    # is read in the workspace's `time-zone:` (`Shape.zone`).
+    "date": frozenset({"date", "a date"}),
+    "time": frozenset({"time", "a time of day"}),
+    "date-and-time": frozenset({"date-and-time", "date and time", "a date and time"}),
 }
 
 _DESCRIBED: Mapping[str, str] = {
@@ -124,6 +132,9 @@ _DESCRIBED: Mapping[str, str] = {
     "audio": "a recording",
     "file": "a file",
     "agent": "the name of one of this workspace's agents",
+    "date": "a date, like `2026-10-09`",
+    "time": "a time of day, like `14:30`",
+    "date-and-time": "a date and time, like `2026-10-09T14:30:00-05:00`",
 }
 
 #: The three shapes whose value is a path to a file in this workspace.
@@ -184,7 +195,14 @@ _EXAMPLE: Mapping[str, str] = {
     # look. An answer shape whose values are names from THIS tree cannot have a
     # correct literal here, so it does not pretend to.
     "agent": "the name of an agent in this workspace",
+    "date": "2026-10-09",
+    "time": "14:30",
+    "date-and-time": "2026-10-09T14:30:00+00:00",
 }
+
+#: `<shape>, optional` at the end of a line (02W §2.15).
+_OPTIONAL = re.compile(r",\s*optional\s*$")
+_LIST_OF = "list of "
 
 
 @dataclass(frozen=True)
@@ -194,16 +212,53 @@ class Shape:
     This is the whole of G7 in one class. Eve's equivalent is not a class at
     all: approval is two literal option objects, so there is no place a shape
     could be written down even if someone wanted to.
+
+    Three ways to build on any shape (02W §2.15), read by `parse` exactly as
+    `crates/pact-schema/src/shape.rs` reads them for `pact check`:
+
+        `list of <shape>`    kind `list`, each item `of`
+        `<named shape>`      kind `named`: a key of `workspace.shapes`, its `parts`
+        `<shape>, optional`  `optional`: the value may be missing
     """
 
     kind: str
     choices: tuple[str, ...] = ()
+    #: `list of <shape>`: the shape of each item.
+    of: "Shape | None" = None
+    #: A named shape: its name in `workspace.shapes`, and its parts, each read.
+    name: str = ""
+    parts: tuple[tuple[str, "Shape"], ...] = ()
+    #: `<shape>, optional`: the value may be missing, and is then `None`.
+    optional: bool = False
+    #: `date-and-time`: the zone a value written without one is read in (the
+    #: workspace's `time-zone:`). `None`, and such a value is refused.
+    zone: "str | None" = None
 
     @staticmethod
-    def parse(written: Any) -> "Shape":
+    def parse(
+        written: Any,
+        shapes: "Mapping[str, Any] | None" = None,
+        zone: "str | None" = None,
+    ) -> "Shape":
+        """Read one written line. `shapes` is the workspace's `shapes:` (a name
+        there is a shape with parts) and `zone` its `time-zone:`."""
         s = " ".join(str(written).strip().lower().split())
+        optional = bool(_OPTIONAL.search(s))
+        if optional:
+            s = _OPTIONAL.sub("", s).strip()
+        shape = Shape._read_line(s, written, shapes or {}, zone, ())
+        return replace(shape, optional=True) if optional else shape
+
+    @staticmethod
+    def _read_line(
+        s: str,
+        written: Any,
+        shapes: Mapping[str, Any],
+        zone: "str | None",
+        seen: tuple[str, ...],
+    ) -> "Shape":
         for prefix in ("one of ", "one-of ", "either "):
-            if s.startswith(prefix):
+            if s.startswith(prefix) or s == prefix.strip():
                 rest = s[len(prefix):].replace(" or ", ", ")
                 choices = tuple(c.strip() for c in rest.split(",") if c.strip())
                 if not choices:
@@ -214,7 +269,28 @@ class Shape:
                 return Shape("one-of", choices)
         for kind, spellings in _SPELLINGS.items():
             if s in spellings:
-                return Shape(kind)
+                return Shape(kind, zone=zone if kind == "date-and-time" else None)
+        named = next((str(k) for k in shapes if " ".join(str(k).lower().split()) == s), None)
+        if named is not None:
+            if named in seen:
+                raise Rejected([
+                    f"the shape '{named}' is made of itself, and a shape is a fixed set "
+                    "of parts. Give one of its parts a shape that does not lead back."
+                ])
+            declared = shapes[named]
+            # A map as written, or `[part, line]` pairs as `declared()` carries
+            # them through JSON, whose sorted keys would lose the written order.
+            pairs = declared.items() if isinstance(declared, MappingABC) else declared
+            if not isinstance(pairs, (list, tuple)) and not isinstance(declared, MappingABC):
+                raise Rejected([f"the shape '{named}' under `shapes:` has no parts."])
+            parts = tuple(
+                (str(part), Shape._part(line, shapes, zone, (*seen, named)))
+                for part, line in pairs
+            )
+            return Shape("named", name=named, parts=parts)
+        if s.startswith(_LIST_OF):
+            inner = Shape._read_line(s[len(_LIST_OF):].strip(), written, shapes, zone, seen)
+            return Shape("list", of=inner)
         # Every option named here is a spelling `parse` accepts, as the loader's
         # `schema/not-an-answer-shape` fix lists them. This used to join
         # `_DESCRIBED`, which reads well and does not parse: a model told to use
@@ -223,24 +299,79 @@ class Shape:
         # scenario 64).
         raise Rejected([
             f"'{written}' is not a shape an answer can have. Use one of: "
-            + ", ".join(_SPELLINGS)
-            + " — or `one of a, b, c` to choose between things you name. "
-            "An amount of money is `money`, and its answers are written like `25.00 USD`."
+            + ", ".join([*_SPELLINGS, *(str(k) for k in shapes)])
+            + " — or `one of a, b, c` to choose between things you name. Any of "
+            "them may be written `list of <shape>`, and followed by `, optional` "
+            "when it may be missing; a shape with parts is named under `shapes:` "
+            "in workspace.yaml. An amount of money is `money`, and its answers are "
+            "written like `25.00 USD`."
         ])
+
+    @staticmethod
+    def _part(line: Any, shapes: Mapping[str, Any], zone: "str | None", seen: tuple[str, ...]) -> "Shape":
+        s = " ".join(str(line).strip().lower().split())
+        optional = bool(_OPTIONAL.search(s))
+        shape = Shape._read_line(_OPTIONAL.sub("", s).strip(), line, shapes, zone, seen)
+        return replace(shape, optional=True) if optional else shape
 
     def written(self) -> str:
         """The spelling that parses back to this — what `to_json` writes."""
-        return "one of " + ", ".join(self.choices) if self.kind == "one-of" else self.kind
+        if self.kind == "one-of":
+            line = "one of " + ", ".join(self.choices)
+        elif self.kind == "list":
+            line = _LIST_OF + (self.of or ANYTHING).written()
+        elif self.kind == "named":
+            line = self.name
+        else:
+            line = self.kind
+        return line + ", optional" if self.optional else line
+
+    def declared(self) -> dict[str, list[list[str]]]:
+        """The named shapes this one is built on, each as `[part, line]` pairs
+        in the order written: with `written()` and `time_zone()`, everything
+        `parse` needs to read it back in another process."""
+        if self.kind == "list":
+            return (self.of or ANYTHING).declared()
+        if self.kind != "named":
+            return {}
+        out = {self.name: [[k, p.written()] for k, p in self.parts]}
+        for _, part in self.parts:
+            out.update(part.declared())
+        return out
+
+    def time_zone(self) -> "str | None":
+        """The zone a date and time in this shape is read in, if any."""
+        if self.zone:
+            return self.zone
+        inner = [self.of] if self.of else [p for _, p in self.parts]
+        return next((z for z in (i.time_zone() for i in inner if i) if z), None)
 
     def describe(self) -> str:
         if self.kind == "one-of":
-            return "one of: " + ", ".join(self.choices)
-        return _DESCRIBED[self.kind]
+            said = "one of: " + ", ".join(self.choices)
+        elif self.kind == "list":
+            said = "a list, each " + (self.of or ANYTHING).describe()
+        elif self.kind == "named":
+            said = f"{self.name} (" + "; ".join(f"{k}: {p.describe()}" for k, p in self.parts) + ")"
+        else:
+            said = _DESCRIBED[self.kind]
+        return said + ", or nothing" if self.optional else said
 
     def example(self) -> str:
+        """The line a person is told to type: a list or a shape with parts is
+        written as JSON."""
         if self.kind == "one-of":
             return self.choices[0]
+        if self.kind in ("list", "named"):
+            return json.dumps(self._example_value())
         return _EXAMPLE[self.kind]
+
+    def _example_value(self) -> Any:
+        if self.kind == "list":
+            return [(self.of or ANYTHING)._example_value()]
+        if self.kind == "named":
+            return {k: p._example_value() for k, p in self.parts if not p.optional}
+        return self.example()
 
     def read(self, value: Any) -> Any:
         """Coerce `value` into this shape, or raise `Rejected`.
@@ -248,7 +379,17 @@ class Shape:
         Accepts the spellings a person naturally types (`y`, `Yes`, `$25`,
         `approve`), because refusing them teaches nothing and costs a round
         trip — the bargain `pact-schema::coerce` already strikes for files.
+
+        An optional shape reads a missing value (`None`, or nothing written) as
+        `None`. A list and a shape with parts take the value itself or its JSON;
+        a part left out of a shape with parts is refused unless it is optional.
         """
+        if self.optional and (value is None or (isinstance(value, str) and not value.strip())):
+            return None
+        if self.kind in ("list", "named"):
+            return self._read_composite(value)
+        if self.kind in _WHEN:
+            return _WHEN[self.kind](self, value)
         if self.kind == "yes-or-no":
             if isinstance(value, bool):
                 return value
@@ -319,6 +460,98 @@ class Shape:
                 f"`refund-desk` — and `{value}` is not one"
             ])
         raise Rejected([f"should be {self.describe()}, but it is '{value}'"])
+
+
+    def _read_composite(self, value: Any) -> Any:
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except ValueError:
+                pass
+        if self.kind == "list":
+            if not isinstance(value, (list, tuple)):
+                raise Rejected([f"should be {self.describe()}, written as a list, but it is '{value}'"])
+            item = self.of or ANYTHING
+            out, problems = [], []
+            for i, v in enumerate(value):
+                try:
+                    out.append(item.read(v))
+                except Rejected as r:
+                    problems += [f"item {i + 1} {p}" for p in r.problems]
+            if problems:
+                raise Rejected(problems)
+            return out
+        if not isinstance(value, MappingABC):
+            raise Rejected([f"should be {self.describe()}, written as its parts, but it is '{value}'"])
+        known = dict(self.parts)
+        problems = [f"has '{k}', and {self.name} has no part by that name" for k in value if k not in known]
+        read: dict[str, Any] = {}
+        for k, part in self.parts:
+            if k not in value or value[k] is None:
+                if not part.optional:
+                    problems.append(f"leaves out '{k}', which should be {part.describe()}")
+                continue
+            try:
+                read[k] = part.read(value[k])
+            except Rejected as r:
+                problems += [f"'{k}' {p}" for p in r.problems]
+        if problems:
+            raise Rejected(problems)
+        return read
+
+
+def _read_date(shape: Shape, value: Any) -> str:
+    if isinstance(value, _dt.date) and not isinstance(value, _dt.datetime):
+        return value.isoformat()
+    try:
+        return _dt.date.fromisoformat(str(value).strip()).isoformat()
+    except ValueError:
+        raise Rejected([f"should be {shape.describe()}, but it is '{value}'"]) from None
+
+
+def _read_time(shape: Shape, value: Any) -> str:
+    if isinstance(value, _dt.time):
+        return value.isoformat()
+    try:
+        return _dt.time.fromisoformat(str(value).strip()).isoformat()
+    except ValueError:
+        raise Rejected([f"should be {shape.describe()}, but it is '{value}'"]) from None
+
+
+def _read_date_and_time(shape: Shape, value: Any) -> str:
+    """ISO 8601 with its offset. A value written with no zone is read in
+    `shape.zone`, and refused when there is none: a time with no zone is a
+    different moment in every place it is read."""
+    if isinstance(value, _dt.datetime):
+        moment = value
+    else:
+        try:
+            moment = _dt.datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+        except ValueError:
+            raise Rejected([f"should be {shape.describe()}, but it is '{value}'"]) from None
+    if moment.tzinfo is None:
+        if not shape.zone:
+            raise Rejected([
+                f"should be {shape.describe()}, and '{value}' says no zone while the "
+                "workspace names no `time-zone:`. Write it with its offset, like "
+                "`2026-10-09T14:30:00-05:00`, or add `time-zone:` to workspace.yaml."
+            ])
+        try:
+            moment = moment.replace(tzinfo=ZoneInfo(shape.zone))
+        except (ZoneInfoNotFoundError, ValueError):
+            raise Rejected([
+                f"is read in the zone '{shape.zone}', which is not a time zone. Write "
+                "`time-zone:` as a zone name, like `America/Chicago`."
+            ]) from None
+    return moment.isoformat()
+
+
+#: The three shapes of a moment, each read to its ISO 8601 wire form.
+_WHEN: Mapping[str, Callable[[Shape, Any], str]] = {
+    "date": _read_date,
+    "time": _read_time,
+    "date-and-time": _read_date_and_time,
+}
 
 
 #: Free text, for a wait that has no closed answer — a teammate's reply.
@@ -612,6 +845,10 @@ class Question:
             "name": self.name,
             "asks": self.asks,
             "answer": {k: s.written() for k, s in self.answer.items()},
+            # The named shapes those lines are built on, and the zone a date and
+            # time is read in, so the far side reads the same typed answer.
+            "shapes": {n: p for s in self.answer.values() for n, p in s.declared().items()},
+            "time-zone": next((z for z in (s.time_zone() for s in self.answer.values()) if z), None),
             "about": self.about,
             "because": self.because,
             "shows": list(self.shows),
@@ -628,7 +865,10 @@ class Question:
         return Question(
             name=str(d.get("name", "")),
             asks=str(d.get("asks", "")),
-            answer={k: Shape.parse(v) for k, v in (d.get("answer") or {}).items()},
+            answer={
+                k: Shape.parse(v, d.get("shapes"), d.get("time-zone"))
+                for k, v in (d.get("answer") or {}).items()
+            },
             about=str(d.get("about", "")),
             because=str(d.get("because", "")),
             shows=tuple(d.get("shows") or ()),
@@ -668,7 +908,7 @@ class Question:
         problems: list[str] = []
         for key, written in (q.get("answer") or {}).items():
             try:
-                shapes[key] = Shape.parse(written)
+                shapes[key] = Shape.parse(written, doc.get("shapes"), doc.get("time-zone"))
             except Rejected as e:
                 problems.append(f"question '{name}', answer line '{key}': {e.problems[0]}")
         if not shapes and not problems:

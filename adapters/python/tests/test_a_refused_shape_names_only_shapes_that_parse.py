@@ -28,7 +28,7 @@ def _refusal(written: str) -> str:
     return str(refused.value)
 
 
-@pytest.mark.parametrize("written", ["USD", "a price", "list of pictures"])
+@pytest.mark.parametrize("written", ["USD", "a price", "list of prices", "a price, optional"])
 def test_every_shape_the_refusal_offers_parses(written: str) -> None:
     said = _refusal(written)
     listed = said.split("Use one of: ", 1)[1].split(" — or ", 1)[0]

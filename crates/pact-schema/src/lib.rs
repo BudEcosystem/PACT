@@ -22,6 +22,7 @@ pub mod coerce;
 pub mod elsewhere;
 pub mod from_doc;
 pub mod sentences;
+pub mod shape;
 pub mod suggest;
 pub mod summary;
 
@@ -1661,7 +1662,7 @@ impl Schema {
             scalar => {
                 match coerce::check(node, scalar) {
                     None => diags.push(wrong_type(node, &field.name, ty)),
-                    Some(coerce::Coerced::Text(s)) => match spelling(node, &field.name, scalar, &s)
+                    Some(coerce::Coerced::Text(s)) => match spelling(node, &field.name, scalar, &s, at)
                     {
                         // A file name with a folder in it and an answer shape
                         // nothing can read are both text that fits the type and
@@ -2752,7 +2753,7 @@ fn is_all_prose(map: &Map) -> bool {
 /// the author's own tool said the file was fine and the refusal happened later,
 /// in another language, in a process they never start — which is the split this
 /// whole file exists to close.
-fn spelling(node: &Node, field: &str, ty: &Ty, written: &str) -> Option<Diagnostic> {
+fn spelling(node: &Node, field: &str, ty: &Ty, written: &str, at: &Where) -> Option<Diagnostic> {
     match ty {
         Ty::FileName => {
             let name = written.trim();
@@ -2788,37 +2789,46 @@ fn spelling(node: &Node, field: &str, ty: &Ty, written: &str) -> Option<Diagnost
             ))
         }
         Ty::AnswerShape(shapes) => {
-            let s = written.trim().to_ascii_lowercase();
-            let s = s.split_whitespace().collect::<Vec<_>>().join(" ");
-            // `one of a, b, c` — a choice between things the author names, so
-            // the vocabulary cannot list them and the prefix is the whole rule.
-            for prefix in ["one of ", "one-of ", "either "] {
-                if let Some(rest) = s.strip_prefix(prefix) {
-                    if rest.trim().is_empty() {
-                        return Some(Diagnostic::error(
-                            "schema/not-an-answer-shape",
-                            node.span.clone(),
-                            format!("'{written}' does not say what to choose between."),
-                            "Write the choices after it, like `one of yes, no, maybe`."
-                                .to_string(),
-                        ));
-                    }
-                    return None;
+            // Read by the one reader (`shape.rs`), with the names of the
+            // workspace's own `shapes:`, so `list of invoice-line` is a shape
+            // exactly where `invoice-line` is declared.
+            let named: Vec<&str> = at
+                .root
+                .get("shapes")
+                .and_then(Node::as_map)
+                .map(|m| m.keys().map(String::as_str).collect())
+                .unwrap_or_default();
+            match shape::parse(written, shapes, &named) {
+                Ok(_) => None,
+                Err(shape::Unread::NoChoices) => Some(Diagnostic::error(
+                    "schema/not-an-answer-shape",
+                    node.span.clone(),
+                    format!("'{written}' does not say what to choose between."),
+                    "Write the choices after it, like `one of yes, no, maybe`.".to_string(),
+                )),
+                Err(shape::Unread::NotAShape(part)) => {
+                    let whole = shape::normalised(written);
+                    let not = if whole.contains(&part) && whole != part {
+                        format!("'{written}' is not a shape an answer can have: '{part}' is none, so nothing could read it.")
+                    } else {
+                        format!("'{written}' is not a shape an answer can have, so nothing could read it.")
+                    };
+                    let mut known: Vec<&str> = shapes.iter().map(|(n, _)| n.as_str()).collect();
+                    known.extend(named.iter().copied());
+                    Some(Diagnostic::error(
+                        "schema/not-an-answer-shape",
+                        node.span.clone(),
+                        not,
+                        format!(
+                            "Change it to one of: {} — or `one of a, b, c` to choose between things \
+                             you name. Any of them may be written `list of <shape>`, and followed \
+                             by `, optional` when it may be missing; a shape with parts is named \
+                             under `shapes:` in workspace.yaml.",
+                            known.join(", ")
+                        ),
+                    ))
                 }
             }
-            if shapes.iter().any(|(_, words)| words.iter().any(|w| w == &s)) {
-                return None;
-            }
-            Some(Diagnostic::error(
-                "schema/not-an-answer-shape",
-                node.span.clone(),
-                format!("'{written}' is not a shape an answer can have, so nothing could read it."),
-                format!(
-                    "Change it to one of: {} — or `one of a, b, c` to choose between things \
-                     you name.",
-                    shapes.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join(", ")
-                ),
-            ))
         }
         Ty::CombineRule(rules) => {
             if rules.iter().any(|(_, spellings)| spellings.iter().any(|s| spelt_as(written, s))) {

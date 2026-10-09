@@ -1,0 +1,10 @@
+description: Payments.
+connect: utility-apps
+actions:
+  create-payment-link:
+    description: Make a link the customer pays the application fee through.
+    takes:
+      customer: text
+    answers-with:
+      payment-link-id: text
+    same-request-key: customer

@@ -272,12 +272,15 @@ stage.undone-by	text | S-EXEC | core | optional
 stage.until	list of group:when-this | S-CTRL | core | optional
 stage.version	text | S-GOV | core | optional
 stage.waits-for-result	yes-no | S-CTRL | core | optional
+state.combines-by	combine-rule | S-CTRL | core | optional
+state.comes-from	text | S-CTRL | core | optional
 state.description	text | S-GEN | core | required
 state.forget-after	duration | S-GOV | core | optional
 state.kept-for	moment | S-GOV | core | optional
+state.kept-per	text | S-GOV | core | optional
 state.lasts	one-of | S-GOV | core | required
 state.never-from	list of one-of | S-EXEC | core | optional
-state.shaped-like	map of anything | S-CAP | expert | optional
+state.shaped-like	map of answer-shape | S-CAP | expert | optional
 state.starts-as	anything | S-GEN | expert | optional
 state.stops-being-true-when	list of text | S-EXEC | core | optional
 state.survives-shortening	yes-no | S-EXEC | core | optional

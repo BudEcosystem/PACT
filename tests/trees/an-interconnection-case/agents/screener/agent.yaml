@@ -1,0 +1,8 @@
+description: Runs the interconnection screens over a power-flow study.
+instructions: Apply the penetration, loading and voltage-rise screens to the study you are given.
+accepts:
+  power-flow: text
+  der-on-feeder: number
+answers-with:
+  result: one of all-pass, minor-failure, major-failure
+  summary: text

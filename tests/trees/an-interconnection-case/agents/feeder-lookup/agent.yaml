@@ -1,0 +1,7 @@
+description: Finds the feeder a site connects to and the generation already on it.
+instructions: Say which feeder serves the site you are given and how many kilowatts already feed into it.
+accepts:
+  site: text
+answers-with:
+  feeder: text
+  existing-der: number

@@ -1,0 +1,6 @@
+description: Checks an application's documents and listings, and says what is missing.
+instructions: Read the application you are given and list every document or listing it is missing.
+accepts:
+  application: text
+answers-with:
+  missing: text

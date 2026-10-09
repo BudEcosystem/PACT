@@ -1,0 +1,8 @@
+description: Drafts the interconnection agreement.
+instructions: Draft the interconnection agreement for the application, with any upgrade the review chose.
+accepts:
+  application: text
+  engineer-upgrade: text, optional
+  supplemental-cost: money, optional
+answers-with:
+  terms: agreement-terms

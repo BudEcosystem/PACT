@@ -1829,6 +1829,10 @@ fn validate(
         // loop that writes a workflow's stage.
         pact_loader::workflows::check(root, &mut diags);
         pact_loader::workflows::told_once(&mut diags);
+        // And what a workflow's bindings read (02W §2.0, §3 WF-4 to WF-7, WF-9,
+        // WF-13, WF-14, WF-39): a path the schema holds to text, and only the
+        // whole workflow can say whether it names something that has run.
+        pact_loader::bindings::check(root, &schema, &mut diags);
         diags.sort();
     }
     Ok((node, diags, substituted))

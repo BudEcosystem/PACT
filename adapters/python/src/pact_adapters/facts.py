@@ -76,7 +76,7 @@ class Fact:
     #: says which it is.
     survives: bool = True
     #: `lasts:` as written (`one-step`, `one-turn`, `one-conversation`,
-    #: `forever`). Required by the schema, so a fact read off a document always
+    #: `one-run` — a repeat's, between its rounds — or `forever`). Required by the schema, so a fact read off a document always
     #: says; one built directly lasts `forever`, the widest, so nothing is
     #: forgotten that its author did not say to forget.
     lasts: str = "forever"
@@ -93,6 +93,14 @@ class Fact:
     #: `retrieval`, `the customer`, `a teammate`). PACT carries the line; the
     #: system keeping the store refuses the write (the schema's own help).
     never_from: tuple[str, ...] = ()
+    #: `kept-per:` (02W §2.11): one value kept per value of this field of a
+    #: workflow run's `input`, or `""` for one value in all.
+    kept_per: str = ""
+    #: `comes-from:` and `combines-by:` (02W §2.11), on a repeat's memory: the
+    #: binding added in at the end of each round, and how it joins what is kept.
+    #: `pact check` refuses both anywhere else (`bindings.rs`).
+    comes_from: str = ""
+    combines_by: str = ""
 
     def said(self, value: Any) -> str:
         """How the fact reads once the messages behind it are gone.
@@ -155,6 +163,9 @@ class Facts:
                 starts_as=raw.get("starts-as"),
                 shaped_like=dict(shaped) if isinstance(shaped, Mapping) else None,
                 never_from=tuple(_as_list(raw.get("never-from"))),
+                kept_per=str(raw.get("kept-per") or ""),
+                comes_from=str(raw.get("comes-from") or ""),
+                combines_by=str(raw.get("combines-by") or ""),
             )
         return Facts(declared=out)
 

@@ -213,7 +213,12 @@ class Expect:
             ) from None
 
     @staticmethod
-    def parse(name: str, described: str) -> "Expect":
+    def parse(
+        name: str,
+        described: str,
+        shapes: "Mapping[str, Any] | None" = None,
+        zone: "str | None" = None,
+    ) -> "Expect":
         """Read one line of a question's `answer:` block.
 
         The vocabulary is `questions.Shape`'s, which is the one the schema
@@ -228,7 +233,7 @@ class Expect:
         """
         text = (described or "").strip()
         try:
-            return Expect(name, Shape.parse(text), means=text)
+            return Expect(name, Shape.parse(text, shapes, zone), means=text)
         except Rejected:
             return Expect(name, ANYTHING, means=text)
 
@@ -307,11 +312,15 @@ class PauseRule:
     escalates_to: tuple[str, ...] = ()
 
     @staticmethod
-    def from_question(when: str, question: Mapping[str, Any]) -> "PauseRule":
-        """One rule, read off the question the author already wrote."""
+    def from_question(
+        when: str, question: Mapping[str, Any], doc: "Mapping[str, Any] | None" = None
+    ) -> "PauseRule":
+        """One rule, read off the question the author already wrote. `doc` gives
+        the workspace's named `shapes:` and `time-zone:`."""
         check_reason(when)
+        doc = doc or {}
         asks = tuple(
-            Expect.parse(name, str(text))
+            Expect.parse(name, str(text), doc.get("shapes"), doc.get("time-zone"))
             for name, text in sorted((question.get("answer") or {}).items())
         )
         action = str(question.get("if-nobody-answers") or "stop-and-say-so").strip()
@@ -354,7 +363,7 @@ class PauseRule:
         for reason, name in _named_questions(doc, agent_key):
             entry = questions.get(name)
             if isinstance(entry, dict):
-                rules.append(PauseRule.from_question(reason, entry))
+                rules.append(PauseRule.from_question(reason, entry, doc))
         return tuple(rules)
 
 
@@ -709,6 +718,7 @@ class Suspension:
                     # comes back in another process has to ask for the same
                     # typed thing it asked for before it died.
                     {"name": e.name, "shape": e.shape.written(),
+                     "shapes": e.shape.declared(), "zone": e.shape.time_zone(),
                      "required": e.required, "means": e.means}
                     for e in self.asks
                 ],
@@ -754,7 +764,8 @@ class Suspension:
         return Suspension(
             reason=str(d["reason"]),
             asks=tuple(
-                Expect(a["name"], Shape.parse(a.get("shape") or "text"),
+                Expect(a["name"],
+                       Shape.parse(a.get("shape") or "text", a.get("shapes"), a.get("zone")),
                        bool(a.get("required", True)),
                        str(a.get("means", "")))
                 for a in d.get("asks") or []

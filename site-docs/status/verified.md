@@ -12,8 +12,8 @@ from an earlier document.
 
 | Claim | Value | How to check |
 |---|---|---|
-| Rust tests | **1184** | `cargo test --workspace` |
-| Adapter tests | **2502** | `cd adapters/python && uv run pytest tests/ -q` |
+| Rust tests | **1226** | `cargo test --workspace` |
+| Adapter tests | **2526** | `cd adapters/python && uv run pytest tests/ -q` |
 | Total | **3,672** | both of the above |
 | TypeScript type-checks | clean | `cd adapters/typescript && npx tsc --noEmit` |
 | Lints | clean | `cargo clippy --all-targets` |

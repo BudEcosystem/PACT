@@ -242,12 +242,25 @@ groups:
           audio: [audio, a recording, a voice message, list of audio]
           file: [file, a file, an attachment, list of files]
           agent: [agent, an agent, which agent, the name of an agent]
+          # 02W §2.15. A date and time carries its zone; one written without a
+          # zone is read in the workspace's `time-zone:`.
+          date: [date, a date]
+          time: [time, a time of day]
+          date-and-time: [date-and-time, date and time, a date and time]
+        # Three ways to build on any shape, held by `crates/pact-schema/src/
+        # shape.rs` and `questions.Shape.parse` (grammar, not vocabulary, so
+        # they are not words in this list):
+        #   `list of <shape>`    — `lines: list of invoice-line`
+        #   `<named shape>`      — a key of this `shapes:` map
+        #   `<shape>, optional`  — may be missing; a binding to a stage that may
+        #                          not have run can only fill one of these (WF-5)
         surface: S-CAP
         tier: core
         help: >
           named shapes with parts — `invoice-line: {sku: text, quantity: whole
           number}` — so `lines: list of invoice-line` can be written anywhere
-          a shape is.
+          a shape is. A part may be `, optional`, and may name another shape
+          here, but never, through any number of others, itself.
       time-zone:
         type: text
         surface: S-GOV
@@ -648,8 +661,11 @@ groups:
           what you can send it, one line per thing — for example
           `message: text` or `photos: images`. The shapes are `text`,
           `yes or no`, `money`, `number`, `whole number`, `images`, `audio`,
-          `file` and `agent` — the name of one of this workspace's agents —
-          or `one of a, b, c` to choose between things you name.
+          `file`, `agent` — the name of one of this workspace's agents —
+          `date`, `time` and `date and time`, or `one of a, b, c` to choose
+          between things you name. Write `list of <shape>` for several, a
+          name from the workspace's `shapes:` for a shape with parts, and
+          `, optional` after a line that may be left out.
       answers-with:
         type: map of answer-shape
         shapes: *the-answer-shapes
@@ -4976,18 +4992,26 @@ groups:
         help: what is being remembered
       lasts:
         type: one-of
-        choices: [one-step, one-turn, one-conversation, forever]
+        # `one-run` (02W §2.11) is read only on a repeat's `remembers:`; held by
+        # `crates/pact-loader/src/bindings.rs`.
+        choices: [one-step, one-turn, one-conversation, one-run, forever]
         required: yes
         surface: S-GOV
         tier: core
         help: >
           how long it survives. `forever` means across conversations, which is
           the one thing that needs care: it is memory about a person.
+          `one-run` is a value a repeat carries between its rounds.
       shaped-like:
-        type: map of anything
+        # Was `map of anything`, the one place a shape was held to nothing, so a
+        # runtime read a grammar of its own there (02W §2.15 closes it).
+        type: map of answer-shape
+        shapes: *the-answer-shapes
         surface: S-CAP
         tier: expert
-        help: what it holds, so a change of shape is caught rather than corrupting
+        help: >
+          what it holds, one line per part in the shapes `accepts:` takes, so a
+          change of shape is caught rather than corrupting
       starts-as:
         type: anything
         surface: S-GEN
@@ -5010,6 +5034,29 @@ groups:
         help: >
           when to discard it; replaces `forget-after:`. Required in practice
           for anything remembered about a person.
+      kept-per:
+        # 02W §2.11. Read on a workflow's or the workspace's `remembers:`, where
+        # a run has an `input`; `bindings.rs` refuses it on an agent's or a
+        # port's.
+        type: text
+        surface: S-GOV
+        tier: core
+        help: >
+          keep one of these per value of this input field — `specialty`,
+          `customer-id`. A run reads the one for its own value.
+      comes-from:
+        # 02W §2.11, WF-13. Only a repeat's `remembers:` reads it.
+        type: text
+        surface: S-CTRL
+        tier: core
+        help: on a repeat, the binding whose value is added in at the end of each round
+      combines-by:
+        type: combine-rule
+        combine-rules: *the-combine-rules
+        needs-also: [comes-from]
+        surface: S-CTRL
+        tier: core
+        help: how each round's value joins what is already remembered
       never-from:
         # CLOSED, and it was open text in an S-EXEC field — the one hole in a
         # governance column that was never held against anything, so

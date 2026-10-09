@@ -303,6 +303,12 @@ def test_every_spec_field_that_holds_authored_state_is_filled_from_the_document(
         # filled by the harness before the model reads them is
         # `test_a_hole_in_the_words_is_filled_when_a_run_starts.py`.
         "holes",
+        # Authored at the workspace (02W §2.15, §2.1), and the worked example
+        # names no shape with parts and no `time-zone:` — its answers are flat
+        # lines and it keeps no dates. What proves both reach the spec and are
+        # read is `test_a_shape_is_built_on_by_list_name_and_optional.py`.
+        "shapes",
+        "time_zone",
     }
     empty: list[str] = []
     for f in dataclass_fields(spec):

@@ -1,0 +1,8 @@
+description: Signatures.
+connect: utility-apps
+actions:
+  send-envelope:
+    description: Send an agreement out for signature.
+    takes:
+      agreement: agreement-terms
+    same-request-key: agreement

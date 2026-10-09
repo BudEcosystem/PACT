@@ -131,6 +131,7 @@
 //! its digest — is reproducible on any machine.
 
 pub mod approvals;
+pub mod bindings;
 pub mod available;
 pub mod bundles;
 pub mod callable;

@@ -47,7 +47,7 @@ so plainly rather than leaving it to be discovered.
 
 | | |
 |---|---|
-| Tests | **3,686** — 1184 Rust, 2502 adapter |
+| Tests | **3,752** — 1226 Rust, 2526 adapter |
 | Schema kinds | **51** |
 | Framework targets | **7**, over 2 runtimes |
 | Eve capabilities accounted for | **101 of 101** |

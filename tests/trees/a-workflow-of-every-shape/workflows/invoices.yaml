@@ -79,6 +79,8 @@ steps:
       recheck:
         does: call
         call: recheck
+        bind:
+          invoice: input.attachments
         waits-for-result: no
         version: latest
     then:
@@ -91,9 +93,13 @@ steps:
       left:
         does: call
         call: ledger/read-invoice
+        bind:
+          invoice: input.attachments
       right:
         does: call
         call: ledger/read-invoice
+        bind:
+          invoice: input.received-on
     then:
       answered: reply
   reply:

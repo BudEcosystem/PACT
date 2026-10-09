@@ -1,0 +1,17 @@
+description: The interconnection queue.
+connect: utility-apps
+actions:
+  reserve-capacity:
+    description: Reserve capacity on a feeder for one application.
+    takes:
+      feeder: text
+      application-id: text
+      size-kw-ac: number
+    answers-with:
+      reservation-id: text
+    same-request-key: application-id
+  withdraw-application:
+    description: Withdraw an application.
+    takes:
+      application-id: text
+    same-request-key: application-id

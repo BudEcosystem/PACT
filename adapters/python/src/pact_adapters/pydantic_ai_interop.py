@@ -105,6 +105,10 @@ _SHAPE_SCHEMAS: dict[str, dict[str, Any]] = {
     "audio": {"type": "array", "items": {"type": "string"}, "description": "references to audio"},
     "file": {"type": "array", "items": {"type": "string"}, "description": "references to files"},
     "agent": {"type": "string", "description": "the name of one of this workspace's agents"},
+    # 02W §2.15. JSON Schema's own formats; `Shape.read` reads each to ISO 8601.
+    "date": {"type": "string", "format": "date"},
+    "time": {"type": "string", "format": "time"},
+    "date-and-time": {"type": "string", "format": "date-time"},
 }
 
 
@@ -118,7 +122,21 @@ def shape_as_json_schema(shape: Shape) -> dict[str, Any]:
     """
     if shape.kind == "one-of":
         return {"type": "string", "enum": list(shape.choices)}
+    if shape.kind == "list":
+        return {"type": "array", "items": shape_as_json_schema(shape.of or Shape("text"))}
+    if shape.kind == "named":
+        return _object_schema({k: p for k, p in shape.parts})
     return dict(_SHAPE_SCHEMAS[shape.kind])
+
+
+def _object_schema(parts: Mapping[str, Shape]) -> dict[str, Any]:
+    """Lines as one object: every line `required` unless it says `, optional`."""
+    return {
+        "type": "object",
+        "properties": {str(k): shape_as_json_schema(p) for k, p in parts.items()},
+        "required": sorted(str(k) for k, p in parts.items() if not p.optional),
+        "additionalProperties": False,
+    }
 
 
 def shape_from_json_schema(schema: Mapping[str, Any]) -> "Shape | None":
@@ -169,28 +187,25 @@ def shape_from_json_schema(schema: Mapping[str, Any]) -> "Shape | None":
     return None
 
 
-def _answers_with_schema(answers: Mapping[str, str]) -> "dict[str, Any] | None":
+def _answers_with_schema(
+    answers: Mapping[str, str], shapes: "Mapping[str, Any] | None" = None
+) -> "dict[str, Any] | None":
     """A PACT `answers-with:` block as one `output_schema` object.
 
-    Every property is `required`, and that is not a default anybody fell into:
-    PACT's answer shapes have no optionality marker at all, so a property left
-    out of `required` would be claiming an authored line was optional when the
-    document has no way to say it.
+    Every property is `required` unless its line says `, optional` (02W §2.15),
+    and that is not a default anybody fell into: a property left out of
+    `required` with no such word would be claiming an authored line was
+    optional when the document does not say so. `shapes` is the workspace's
+    `shapes:`, so a line naming one is an object with its parts.
     """
     if not answers:
         return None
-    properties: dict[str, Any] = {}
-    for name, written in answers.items():
-        properties[str(name)] = shape_as_json_schema(Shape.parse(written))
-    return {
-        "type": "object",
-        "properties": properties,
-        "required": sorted(properties),
-        "additionalProperties": False,
-    }
+    return _object_schema({str(k): Shape.parse(w, shapes) for k, w in answers.items()})
 
 
-def return_schema_for(tool: Any, action: str) -> "dict[str, Any] | None":
+def return_schema_for(
+    tool: Any, action: str, shapes: "Mapping[str, Any] | None" = None
+) -> "dict[str, Any] | None":
     """What one action hands back (02P A4), as a `ToolDefinition.return_schema`.
 
     `tool` is an `ir.ToolSpec`; `action` is one of its `actions:` names, which
@@ -207,7 +222,7 @@ def return_schema_for(tool: Any, action: str) -> "dict[str, Any] | None":
     against it. An MCP server's own `outputSchema` arrives in the same field
     (mcp.py:1322), so the two can be compared before a run.
     """
-    return _answers_with_schema(getattr(tool, "answers_with", {}).get(action) or {})
+    return _answers_with_schema(getattr(tool, "answers_with", {}).get(action) or {}, shapes)
 
 
 # ─────────────────────────────────────── Pydantic AI  →  PACT
@@ -1470,7 +1485,7 @@ def to_pydantic_ai_spec(
 
     if isinstance(block.get("answers-with"), Mapping) and block["answers-with"]:
         answers = {k: str(v) for k, v in block["answers-with"].items()}
-        schema = _answers_with_schema(answers)
+        schema = _answers_with_schema(answers, document.get("shapes"))
         if schema:
             spec["output_schema"] = schema
             report.carried["answers-with"] = "`output_schema`, as a JSON Schema object" + (
@@ -1478,7 +1493,9 @@ def to_pydantic_ai_spec(
             )
 
     if isinstance(block.get("run-inputs"), Mapping) and block["run-inputs"]:
-        schema = _answers_with_schema({k: str(v) for k, v in block["run-inputs"].items()})
+        schema = _answers_with_schema(
+            {k: str(v) for k, v in block["run-inputs"].items()}, document.get("shapes")
+        )
         if schema:
             spec["deps_schema"] = schema
             report.carried["run-inputs"] = "`deps_schema`"
@@ -1867,7 +1884,7 @@ def build_agent(
                         ToolDefinition(
                             name=t.name,
                             description=t.description,
-                            parameters_json_schema=_takes_as_schema(t.parameters),
+                            parameters_json_schema=_takes_as_schema(t.parameters, spec.shapes),
                         )
                         for t in spec.tools
                     ],
@@ -1882,7 +1899,7 @@ def build_agent(
                         _executor(call_tool, t.name),
                         name=t.name,
                         description=t.description,
-                        json_schema=_takes_as_schema(t.parameters),
+                        json_schema=_takes_as_schema(t.parameters, spec.shapes),
                     )
                 )
                 built[-1].requires_approval = t.name in needs_person
@@ -2080,7 +2097,7 @@ def _output_type_for(spec: PactAgentSpec) -> Any:
     """
     from pydantic_ai.output import NativeOutput, PromptedOutput, StructuredDict, ToolOutput
 
-    answers = _answers_with_schema(spec.answers_with)
+    answers = _answers_with_schema(spec.answers_with, spec.shapes)
     if not answers:
         # No declared shape is `str`, whatever the mode says. A mode is how a
         # shape is put to the model, and there is no shape.
@@ -2142,29 +2159,30 @@ def _tools_needing_approval(spec: PactAgentSpec) -> set[str]:
     }
 
 
-def _takes_as_schema(takes: Mapping[str, Any]) -> dict[str, Any]:
+def _takes_as_schema(
+    takes: Mapping[str, Any], shapes: "Mapping[str, Any] | None" = None
+) -> dict[str, Any]:
     """A PACT tool's `takes:` block as the JSON schema the model is shown.
 
-    Every argument required, for `_answers_with_schema`'s reason: PACT's shape
-    vocabulary has no optionality marker, so leaving one out of `required` would
-    invent a permission the document does not grant.
+    Every argument required unless its line says `, optional`, for
+    `_answers_with_schema`'s reason: leaving one out of `required` otherwise
+    would invent a permission the document does not grant.
     """
-    properties: dict[str, Any] = {}
+    parts: dict[str, Shape] = {}
+    loose: dict[str, Any] = {}
     for arg, written in (takes or {}).items():
         try:
-            properties[str(arg)] = shape_as_json_schema(Shape.parse(written))
+            parts[str(arg)] = Shape.parse(written, shapes)
         except Exception:
             # `action: one of refund, check` parses; a free-text shape an author
             # wrote loosely does not, and a tool argument is not the place to
             # fail a run — the model is shown a string and the tool's own
             # validation is what refuses a bad value.
-            properties[str(arg)] = {"type": "string", "description": str(written)}
-    return {
-        "type": "object",
-        "properties": properties,
-        "required": sorted(properties),
-        "additionalProperties": False,
-    }
+            loose[str(arg)] = {"type": "string", "description": str(written)}
+    schema = _object_schema(parts)
+    schema["properties"].update(loose)
+    schema["required"] = sorted([*schema["required"], *loose])
+    return schema
 
 
 def _executor(call_tool: Any, name: str) -> Any:

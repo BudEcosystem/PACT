@@ -57,10 +57,28 @@ fn shortened<'a>(input: &str, candidates: &[&'a str]) -> Option<&'a str> {
     only
 }
 
+/// The `n` candidates nearest to `input`, nearest first (ties by length, then
+/// by name), with no budget: for a list of names offered beside a refusal
+/// (02W WF-4's "the nearest three"), where the author picks, so a far one does
+/// no harm the way a lone wrong "Did you mean" does.
+pub fn nearest<'a>(input: &str, candidates: &[&'a str], n: usize) -> Vec<&'a str> {
+    let typed = input.to_lowercase();
+    let mut ranked: Vec<(usize, &'a str)> = candidates
+        .iter()
+        .map(|c| (distance(&typed, &c.to_lowercase()), *c))
+        .collect();
+    ranked.sort_by(|a, b| (a.0, a.1.len(), a.1).cmp(&(b.0, b.1.len(), b.1)));
+    ranked.dedup_by(|a, b| a.1 == b.1);
+    ranked.into_iter().take(n).map(|(_, c)| c).collect()
+}
+
 /// A name with its punctuation and case taken off, so `by-reference`,
 /// `by_reference` and `ByReference` are one word.
 fn plain(s: &str) -> String {
-    s.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect()
+    s.chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
 }
 
 /// Levenshtein distance, two-row variant.
@@ -90,7 +108,14 @@ fn distance(a: &str, b: &str) -> usize {
 mod tests {
     use super::*;
 
-    const FIELDS: &[&str] = &["name", "description", "instructions", "tools", "team", "uses"];
+    const FIELDS: &[&str] = &[
+        "name",
+        "description",
+        "instructions",
+        "tools",
+        "team",
+        "uses",
+    ];
 
     #[test]
     fn catches_realistic_typos() {
@@ -150,6 +175,16 @@ mod tests {
         // silence. `nam` is one edit from `name` and a prefix of `names`, and the
         // edit wins.
         assert_eq!(closest("nam", &["names", "name"]), Some("name"));
+    }
+
+    #[test]
+    fn the_nearest_three_are_offered_nearest_first() {
+        let names = ["engineer", "envelope", "fee", "gather", "screen"];
+        assert_eq!(
+            nearest("enginer", &names, 3),
+            vec!["engineer", "gather", "fee"]
+        );
+        assert_eq!(nearest("x", &["a"], 3), vec!["a"]);
     }
 
     #[test]

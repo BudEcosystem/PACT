@@ -1,6 +1,10 @@
 description: Reads the ledger once more.
+accepts:
+  invoice: text
 starts-at: read
 steps:
   read:
     does: call
     call: ledger/read-invoice
+    bind:
+      invoice: input.invoice

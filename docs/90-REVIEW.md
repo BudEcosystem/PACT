@@ -80,8 +80,8 @@ them and changes nothing.
 | | |
 |---|---|
 | Schema | **43 groups, 262 field entries, 207 distinct field names** (core 123, expert 69, both 15), 40 closed enums, 27 cross-reference constraints, **0 fields missing `tier:` or `surface:`** |
-| Rust | 5 crates, **1184 tests**, `unsafe_code = forbid`, clippy-deny, edition 2024 |
-| Python | **47 modules** (`find adapters/python/src -name "*.py" \| wc -l`), **2502 tests**, **nine transports** — seven model-bound (`anthropic`, `autogen`, `langchain`, `langgraph`, `ollama`, `openai_agents`, `pydantic_ai`), one bound to a remote *agent* (`a2a`), one deterministic mock; `_metering.py`, `_summarise.py` and `_tool_choice.py` are shared code the transports import, which is what the `_` says — offline by default |
+| Rust | 5 crates, **1226 tests**, `unsafe_code = forbid`, clippy-deny, edition 2024 |
+| Python | **47 modules** (`find adapters/python/src -name "*.py" \| wc -l`), **2526 tests**, **nine transports** — seven model-bound (`anthropic`, `autogen`, `langchain`, `langgraph`, `ollama`, `openai_agents`, `pydantic_ai`), one bound to a remote *agent* (`a2a`), one deterministic mock; `_metering.py`, `_summarise.py` and `_tool_choice.py` are shared code the transports import, which is what the `_` says — offline by default |
 | TypeScript | 5 modules, 2,305 lines, a second port of **the stepping, the ceilings and the stage path** (`harness.ts:15-21`: *"AC-5.3's bar is the stage path"*) — **not** of the loop entire: no interceptor chain, no durable suspension record, no ledger (`notDoneHere`; a park returns `halted: "suspended"` and writes nothing down). This row is load-bearing for the Phase 3 pricing below (E4) |
 | CLI | **6 verbs**: `check`, `show`, `waits`, `discover`, `card`, `help` |
 | Worked example | 42 files, 1128 lines, **132 distinct authored keys**, `pact check` → OK (498 settings) |
