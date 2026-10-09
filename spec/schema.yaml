@@ -2705,6 +2705,30 @@ groups:
           the arguments an approval rule is allowed to look at — an amount, a
           quantity. These are exactly the ones the model DOES choose, which is
           the point of asking a person about them.
+      undone-by:
+        # 02W §2.12. `<tool>/<action>` or a workflow: two names in one string,
+        # so it is resolved by `failures.rs` (as `call:` is), not by `names:`.
+        # WF-26 holds it to a write whose inputs this call's inputs and answer
+        # fill. The value read just before the write is not passed (D10).
+        type: text
+        surface: S-EXEC
+        tier: core
+        help: >
+          how to reverse this write once it has succeeded — `docusign/void-envelope`.
+          It is given this call's inputs and its answer, so each input it takes
+          must be one of those, by name. With it, this action is shown as
+          *Changes*; a write without it is *Can't be undone*, and so is any
+          action that says nothing about whether it only reads.
+      status-check:
+        # 02W §2.12, resolved by `failures.rs` as `undone-by:` is.
+        type: text
+        surface: S-EXEC
+        tier: expert
+        help: >
+          a `reads-only` action, written `<tool>/<action>`, asked "did this
+          already happen?" before a retry, for systems that time out after
+          doing the work. It is given this call's inputs, so each input it
+          takes must be one of them, by name.
 
   # A policy says WHEN a person is involved and WHAT must never leave. It no
   # longer says what the person is asked or what they may answer — that is a
@@ -4395,7 +4419,8 @@ groups:
           the inputs, `<input>: <binding>` — `email: input.email`. Fixed wording
           and figures come from `values.<name>`. A part of an input is written
           with a dot: `fills.first-name`. The model never sees these lines and
-          cannot change them.
+          cannot change them. On an `answer`, what it hands back, field by
+          field — `contact-id: steps.upsert.id`.
       waits-for-result:
         type: yes-no
         surface: S-CTRL
@@ -4541,6 +4566,16 @@ groups:
         help: >
           ceilings and a deadline for this stage and everything inside it. On
           `each`, `items-at-most:` is required here.
+      if-it-fails:
+        # 02W §2.7, F2's one failure record (N32: it lands with its group).
+        # Attempts are `at-most:`; there is no `retries:`. Held by `failures.rs`.
+        type: group:if-it-fails
+        surface: S-EXEC
+        tier: core
+        help: >
+          what happens once every attempt at this stage has failed — call a
+          backup, carry on with set values, ask a person, wait for a new
+          version, or undo what was done. Leave it out to stop and say so.
 
   # One way a `decide` stage decides (02W §2.5). Written rules are the first
   # rung, and for now the only one: the rungs that ask an agent or a person
@@ -4583,6 +4618,85 @@ groups:
         surface: S-GEN
         tier: core
         help: one sentence shown in the run's "why this path"
+
+  # What happens after a stage has failed every attempt (02W §2.7, F2): one
+  # record, and the same choices a workflow's `when-it-runs-out:` has, whose
+  # companion lines are taken from here (§2.10). `backup:` is resolved by
+  # `failures.rs` as `call:` is, since `<tool>/<action>` is two names in one.
+  if-it-fails:
+    describe: something a failure plan can have
+    fields:
+      after-that:
+        type: one-of
+        choices: [use-a-backup, carry-on, ask-a-person, wait-for-a-new-version,
+                  undo, stop-and-say-so]
+        required: yes
+        needed-when:
+          backup: use-a-backup
+          carry-on-with: carry-on
+          asks: ask-a-person
+          new-version-of: wait-for-a-new-version
+          undo: undo
+        surface: S-EXEC
+        tier: core
+        help: >
+          what happens once every attempt has failed. `use-a-backup` calls
+          `backup:` with the same inputs. `carry-on` goes on with the values in
+          `carry-on-with:`, and in an `each` keeps the item, marked failed.
+          `ask-a-person` parks until a person resumes here, retries, or stops
+          it. `wait-for-a-new-version` parks until `new-version-of:` is
+          published, then retries here. `undo` reverses what `undo:` did,
+          newest first, then stops and says so. Leave this group out to stop
+          and say so.
+      gives-up-after:
+        type: moment
+        surface: S-GOV
+        tier: core
+        help: keep trying until this time rather than for `at-most:` attempts
+      backup:
+        type: text
+        surface: S-TOPO
+        tier: core
+        help: >
+          what to call instead, with the same `bind:` — a `<tool>/<action>`, an
+          agent, a program or a workflow
+      carry-on-with:
+        type: map of text
+        surface: S-EXEC
+        tier: core
+        help: >
+          the stage's answer to go on with, field by field, from
+          `values.<name>` — each key one of the fields the stage answers with
+      asks:
+        type: text
+        names: [^questions, questions]
+        surface: S-EXEC
+        tier: core
+        summary: which question to put to them
+        help: which question to put to them when the line above says ask-a-person
+      new-version-of:
+        type: text
+        names: [tools, workflows]
+        surface: S-GOV
+        tier: core
+        help: the connection or workflow whose next published version resumes this run
+      undo:
+        type: text
+        names: ^steps
+        surface: S-EXEC
+        tier: core
+        # The help opens with the word the choice says ("undo"), and a refusal
+        # that quotes it would hand the author's own value back.
+        summary: the stage whose work is reversed
+        help: >
+          which stage's work to undo — that stage and everything inside it.
+          Undo stops and asks a person at a write that cannot be undone.
+      undo-where:
+        type: list of group:when-this
+        needs-also: [undo]
+        surface: S-EXEC
+        tier: core
+        help: on an `each`, undo only the items where these hold
 
   # The three ways a stage can end. A group rather than `map of text` so the
   # closed vocabulary in the help above is the vocabulary the validator holds.

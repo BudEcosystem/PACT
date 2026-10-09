@@ -1,0 +1,7 @@
+description: The record of runs.
+connect: bud-server
+actions:
+  label-run:
+    description: Label this run with an outcome, for evals.
+    takes:
+      outcome: text

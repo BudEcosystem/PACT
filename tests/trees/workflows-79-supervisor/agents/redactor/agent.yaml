@@ -1,0 +1,6 @@
+description: Takes names, photos, pronouns, legacy and donor flags out of an application.
+instructions: Remove names, photos, pronouns, legacy and donor flags from the materials, and keep everything else.
+accepts:
+  materials: file
+answers-with:
+  file: file

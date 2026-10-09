@@ -1,0 +1,3 @@
+description: The letter saying an application was declined at review.
+shape: text
+value: "Your application was declined: {reason}."

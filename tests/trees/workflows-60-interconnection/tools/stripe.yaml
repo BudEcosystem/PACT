@@ -1,0 +1,16 @@
+description: Stripe, where the application fee is paid.
+connect: utility-apps
+actions:
+  create-payment-link:
+    description: Make a link the customer pays the application fee through.
+    takes: { customer: text, amount: money }
+    answers-with: { payment-link-id: text }
+    spends-money: no                 # a link moves nothing; paying it is the customer's
+    same-request-key: customer
+    undone-by: stripe/refund-eligible-fee
+  refund-eligible-fee:
+    description: Refund the part of the fee that is refundable.
+    takes: { payment-link-id: text }
+    spends-money: yes
+    same-request-key: payment-link-id
+    needs-a-person: yes

@@ -159,6 +159,17 @@ const SENTENCES: &[(&str, &str, &str)] = &[
     // §2.12).
     ("question", "enough-is", "how many answers count as enough"),
     ("value", "rows-are", "what each row is made of"),
+    // A failure plan (02W §2.7): each choice and the line it cannot go without.
+    // `asks:` is the fifth spelling of the one setting above.
+    ("if-it-fails", "asks", "which question to put to them"),
+    ("if-it-fails", "backup", "what to call instead"),
+    ("if-it-fails", "carry-on-with", "the stage's answer to go on with"),
+    (
+        "if-it-fails",
+        "new-version-of",
+        "the connection or workflow whose next published version resumes this run",
+    ),
+    ("if-it-fails", "undo", "the stage whose work is reversed"),
 ];
 
 fn expected(pair: &Pair) -> Option<&'static str> {
@@ -260,12 +271,12 @@ fn the_settings_that_carry_a_summary_are_named_by_it_and_not_by_their_help() {
         .filter(|p| !field_strings(&p.group, &p.owed).0.is_empty())
         .count();
     assert_eq!(
-        with_summary, 12,
+        with_summary, 14,
         "seven of the ten pairings needed a `summary:` when this was written — `port.every`, \
          `teamwork.enough-is`, `teamwork.gives-up-after`, and the four `asks:` fields — and the \
          three a workflow's stage added (`call`, `chooses-between`, `over`) need one each, as do \
-         the two a wait and a table added (`question.enough-is`, `value.rows-are`). If \
-         that count moved, the table above still holds; this line is here so a `summary:` \
+         the two a wait and a table added (`question.enough-is`, `value.rows-are`) and the two \
+         a failure plan added (its `asks:` and `undo:`). If that count moved, the table above still holds; this line is here so a `summary:` \
          cannot be quietly deleted and replaced by a fallback that happens to read."
     );
 }

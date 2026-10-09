@@ -1,0 +1,9 @@
+description: An outpatient encounter is closed and signed in Epic.
+kind: event
+through: epic
+answers: code-encounter
+only-when:
+  - { value: input.specialty, is-one-of: [dermatology, cardiology, orthopaedics] }
+same-conversation-when: [encounter-id]
+if-still-running: skip
+who-can-reach-it: [epic]

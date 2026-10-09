@@ -1,0 +1,8 @@
+description: Writes a short lesson from a code set that failed its checks.
+instructions: Say what the code set got wrong and what to do differently next time.
+accepts:
+  codes: list of coded-line
+  conflicts: list of text
+  judge-notes: text
+answers-with:
+  lesson: text

@@ -4,7 +4,7 @@
 //! calling in and a timer. A port that is not a timer says what makes two
 //! arrivals the same case before any choice but `start` can mean anything. The
 //! loader half: every choice loads on every kind, over #16's ports
-//! (`tests/trees/a-trial-booking-case/`) and the worked example's own.
+//! (`tests/trees/workflows-16-trial-booking/`) and the worked example's own.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -64,7 +64,7 @@ fn edited(name: &str, tree: &str, file: &str, edits: &[(&str, &str)]) -> (bool, 
     )
 }
 
-const TRIAL: &str = "tests/trees/a-trial-booking-case";
+const TRIAL: &str = "tests/trees/workflows-16-trial-booking";
 const DESK: &str = "examples/refund-desk";
 
 #[test]

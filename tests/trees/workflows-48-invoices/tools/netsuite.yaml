@@ -1,0 +1,39 @@
+description: NetSuite, where vendors, purchase orders and bills are kept.
+connect: finance-server
+actions:
+  get-vendor:
+    description: Find the vendor with this tax id and name; fails when no vendor matches.
+    reads-only: yes
+    takes:
+      tax-id: text
+      name: text
+    answers-with:
+      id: text
+      payment-terms: text
+  find-po-and-receipts:
+    description: Find a purchase order and its receipts; answers found no when there is no PO.
+    reads-only: yes
+    takes:
+      po-number: text, optional
+    answers-with:
+      found: yes or no
+      order: text
+      receipts: list of text
+      budget-owner: text
+      budget-owner-delegate: text
+      raised-by: text
+  create-vendor-bill:
+    description: Post the vendor bill with its PDF.
+    takes:
+      vendor-id: text
+      invoice: invoice-data
+      attachment: file
+    answers-with:
+      bill-id: text
+    same-request-key: vendor-id
+    undone-by: netsuite/void-vendor-bill          # so: Changes
+  void-vendor-bill:
+    description: Void a vendor bill.
+    takes:
+      bill-id: text
+    same-request-key: bill-id

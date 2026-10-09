@@ -1,0 +1,80 @@
+description: Sort each attachment of an AP email and start one invoice run per invoice.
+accepts:
+  message-id: text
+  sender: text
+  attachments: list of attachment
+starts-at: each-attachment
+steps:
+  each-attachment:
+    does: each
+    over: input.attachments
+    identified-by: [content-hash]          # a re-sent email never reads a PDF twice
+    limits:
+      items-at-most: 20
+      at-once-at-most: 4
+      when-it-runs-out: ask-a-person
+      asks: too-many-attachments
+    teamwork:
+      if-someone-fails: carry-on           # one unreadable scan does not stop the rest
+    starts-at: sort
+    steps:
+      # 02W §5.2 decides here by an agent rung (`agent: attachment-sorter`,
+      # `if-unsure-below: 85%`), then a person rung (`asks:
+      # what-is-this-attachment`). Those rungs come with deciding by models and
+      # people; until then the sorter is called and its label decided by rules.
+      sort:
+        does: call
+        call: attachment-sorter
+        bind: { attachment: item.name }
+        then: { answered: is-it }
+      is-it:
+        does: decide
+        chooses-between: { invoice: read, other: done }
+        by:
+          - rules:
+              - when: [{ value: steps.sort.label, is: invoice }]
+                choose: invoice
+              - choose: other
+      read:
+        does: call
+        call: invoice-reader
+        bind: { file: item.file }
+        # 02W §5.2 checks this answer with the ready-made
+        # `library: numbers-come-from-the-source` (`checks-at-most: 2`), which
+        # comes with the ready-made checks of tests over recorded runs.
+        then: { answered: start }
+      start:
+        does: call
+        call: one-invoice
+        waits-for-result: no
+        bind:
+          invoice: steps.read.invoice
+          file: item.file
+          sender: input.sender
+        then: { answered: duplicate }
+      duplicate:
+        does: decide
+        chooses-between: { duplicate: tell-clerk, new: done }
+        by:
+          - rules:
+              - when: [{ value: steps.start.outcome, is: already-done }]
+                choose: duplicate
+                because: Same vendor, number and total within 180 days.
+              - choose: new
+      tell-clerk:
+        does: call
+        call: teams/post-message
+        bind:
+          channel: values.ap-clerks-channel
+          wording: values.duplicate-invoice-note
+          fills.invoice: steps.read.invoice.invoice-number
+          fills.vendor: steps.read.invoice.vendor-name
+
+questions:
+  # `what-is-this-attachment`, the person rung's question, returns with that rung.
+  too-many-attachments:
+    description: More than 20 attachments arrived in one email.
+    says: This email has more than 20 attachments. Process the first 20?
+    answer: { approved: yes or no }
+    asked-of: [ap-clerks]
+    answer-within: 1 day

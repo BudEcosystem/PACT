@@ -1,0 +1,7 @@
+description: The customer pays the application fee.
+kind: event
+through: stripe
+answers: interconnection
+same-conversation-when: [application-id]
+if-still-running: join               # heard by the waiting stage
+who-can-reach-it: [stripe]

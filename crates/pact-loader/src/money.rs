@@ -779,7 +779,7 @@ struct Ungated {
 /// policy this workspace has not got, which `names: policies` reports where the
 /// author typed it. An agent with **no** `policy:` line at all is a different
 /// answer and a real one — an empty set, because nothing guards anything.
-fn guarded_by(agent: &Node, policies: Option<&Map>) -> Option<BTreeSet<String>> {
+pub(crate) fn guarded_by(agent: &Node, policies: Option<&Map>) -> Option<BTreeSet<String>> {
     let mut guarded = BTreeSet::new();
     let named = agent
         .get("policy")

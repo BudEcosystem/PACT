@@ -1,0 +1,21 @@
+description: PowerClerk, where applications and the capacity queue are kept.
+connect: utility-apps
+actions:
+  reserve-capacity:
+    description: Reserve capacity on a feeder for an application.
+    takes: { feeder: text, application-id: text, size-kw-ac: number }
+    answers-with: { reservation-id: text }
+    same-request-key: application-id
+    undone-by: powerclerk/release-capacity
+  release-capacity:
+    description: Release a capacity reservation.
+    takes: { reservation-id: text }
+    same-request-key: reservation-id
+  withdraw-application:
+    description: Withdraw an application.
+    takes: { application-id: text }
+    same-request-key: application-id
+  issue-permission-to-operate:
+    description: Grant permission to operate.
+    takes: { application-id: text }
+    same-request-key: application-id

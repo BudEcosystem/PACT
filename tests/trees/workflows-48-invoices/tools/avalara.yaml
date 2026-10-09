@@ -1,0 +1,10 @@
+description: Avalara, which says what tax an invoice should carry.
+connect: finance-server
+actions:
+  validate-tax:
+    description: Compare the tax on an invoice with what it should be.
+    reads-only: yes
+    takes:
+      invoice: invoice-data
+    answers-with:
+      difference: money

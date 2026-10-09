@@ -231,29 +231,24 @@ fn an_until_that_looks_at_a_call_is_refused_because_a_round_calls_nothing_there(
 }
 
 #[test]
-fn a_value_remembered_from_a_stage_a_round_can_end_without_is_refused() {
-    // 02W §2.0: `steps.<stage>` only where every path passes it, and
-    // `comes-from:` has no `, optional`. A decision can end the round first.
+fn a_value_remembered_from_a_stage_some_rounds_skip_adds_nothing_from_those_rounds() {
+    // 02W §5.3 (#69): a lesson is written only when the verdict fails, so a
+    // round that ends without running the stage `comes-from:` names adds
+    // nothing to what is remembered. An `until:` still reads only a stage every
+    // way out of the round passes (the unit tests of `bindings.rs`).
     let root = edited(
         "from-a-branch",
         &[(
             FLOW,
             "    at-most: 2\n    starts-at: recheck\n    steps:\n      recheck:\n",
-            "    at-most: 2\n    remembers:\n      tries:\n        description: what each round found\n        lasts: one-run\n        comes-from: steps.recheck.run\n        combines-by: keep-all\n    starts-at: pick\n    steps:\n      pick:\n        does: decide\n        chooses-between:\n          again: recheck\n          enough: done\n      recheck:\n",
+            "    at-most: 2\n    remembers:\n      tries:\n        description: what each round found\n        lasts: one-run\n        comes-from: steps.recheck.run\n        combines-by: keep-all\n    starts-at: pick\n    steps:\n      pick:\n        does: decide\n        chooses-between:\n          again: recheck\n          enough: done\n        by:\n          - rules:\n              - choose: again\n      recheck:\n",
         )],
         &[],
     );
     let (ok, text) = check(&root);
-    assert!(!ok, "{text}");
+    assert!(ok, "{text}");
     assert!(
-        text.contains("rule: loader/a-binding-to-a-stage-that-may-not-have-run"),
-        "{text}"
-    );
-    assert!(
-        text.contains(
-            "'check-twice' reads 'steps.recheck.run' when a round ends, but a round can end on \
-             the path through 'enough' without running 'recheck'."
-        ),
+        !text.contains("loader/a-binding-to-a-stage-that-may-not-have-run"),
         "{text}"
     );
 }

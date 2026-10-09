@@ -1,0 +1,7 @@
+description: A new email with attachments in the ap@ mailbox.
+kind: event
+through: microsoft-365
+answers: ap-inbox
+same-conversation-when: [message-id]
+if-still-running: skip
+who-can-reach-it: [the ap@ shared mailbox]

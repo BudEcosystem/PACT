@@ -17,7 +17,7 @@
 //! | `loader/a-version-of-something-that-has-none` | WF-35 | `version:` on a call that is not to a workflow |
 //! | `loader/forget-after-is-now-kept-for` | WF-37 | `forget-after:` on remembered state (a warning, for one release) |
 //! | `loader/a-path-that-answers-nothing` | WF-38 | `answers-with:` is declared and a path ends with no `answer` stage |
-//! | `loader/no-such-name` | shipped | a `call:`, `may-call:` or `undone-by:` names nothing here |
+//! | `loader/no-such-name` | shipped | a `call:` or `may-call:` names nothing here (an undo or a backup: `failures.rs`) |
 //! | `loader/a-name-the-workspace-already-has` | new | a workflow shares its name with an agent or a program, or a `call:` could mean two of them |
 //!
 //! A stage reached through `steps:` is one stage whatever holds it, so the
@@ -42,7 +42,8 @@ const A_MIND: &[&str] = &["model", "instructions", "loop", "team", "uses"];
 const BELONGS_WITH: &[(&str, &[&str])] = &[
     ("call", &["call"]),
     ("may-call", &["call"]),
-    ("bind", &["call"]),
+    // An `answer` hands back its `bind:` (02W §5: `reply`, `give`).
+    ("bind", &["call", "answer"]),
     ("waits-for-result", &["call"]),
     ("version", &["call"]),
     ("chooses-between", &["decide"]),
@@ -60,7 +61,13 @@ const BELONGS_WITH: &[(&str, &[&str])] = &[
 /// The lines only a workflow's runtime reads, whatever its stage does. An
 /// agent's loop runs inside one model run, which reads none of them, so in a
 /// loop they would be a ceiling, a check or an undo nobody keeps.
-const WORKFLOW_LINES: &[&str] = &["limits", "checked-by", "checks-at-most", "undone-by"];
+const WORKFLOW_LINES: &[&str] = &[
+    "limits",
+    "checked-by",
+    "checks-at-most",
+    "undone-by",
+    "if-it-fails",
+];
 
 /// The outcomes an agent's loop has ended in since before workflows (the
 /// shipped `outcome` group), whatever its stage does.
@@ -117,9 +124,6 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
         if let Some(steps) = w.get("steps").and_then(Node::as_map) {
             stages(document, &Scope::Workflow, steps, diags);
             answers_on_every_path(document, name, w, steps, diags);
-        }
-        if let Some(undo) = w.as_map().and_then(|m| m.get("undone-by")) {
-            undo_names_something(document, name, undo, diags);
         }
     }
     calls_go_round(document, diags);
@@ -231,9 +235,6 @@ fn stages(document: &Node, scope: &Scope, steps: &Map, diags: &mut Diagnostics) 
                 &entry.node,
                 diags,
             );
-        }
-        if let Some(undo) = fields.get("undone-by") {
-            undo_names_something(document, stage, undo, diags);
         }
         match does {
             "call" => calls(document, stage, fields, diags),
@@ -520,34 +521,46 @@ fn each(document: &Node, stage: &str, fields: &Map, does: &Span, diags: &mut Dia
 /// The first stage in `steps` (or anything it calls) that writes: a call to a
 /// tool action that is not `reads-only: yes`, to an agent that uses one, or to a
 /// workflow that writes.
-fn first_write(document: &Node, steps: &Map, seen: &mut BTreeSet<String>) -> Option<String> {
-    for (stage, entry) in steps {
-        let fields = entry.node.as_map()?;
-        if let Some(inner) = fields.get("steps").and_then(|e| e.node.as_map())
-            && let Some(found) = first_write(document, inner, seen)
-        {
-            return Some(found);
-        }
-        let mut said: Vec<&str> = fields
-            .get("call")
-            .and_then(|e| e.node.as_str())
-            .into_iter()
-            .collect();
-        if let Some(may) = fields.get("may-call") {
-            said.extend(list(&may.node).into_iter().filter_map(Node::as_str));
-        }
-        if said.into_iter().any(|t| writes(document, t.trim(), seen)) {
-            return Some(stage.clone());
-        }
+pub(crate) fn first_write(
+    document: &Node,
+    steps: &Map,
+    seen: &mut BTreeSet<String>,
+) -> Option<String> {
+    steps
+        .iter()
+        .find(|(_, entry)| {
+            entry
+                .node
+                .as_map()
+                .is_some_and(|fields| stage_writes(document, fields, seen))
+        })
+        .map(|(stage, _)| stage.clone())
+}
+
+/// Whether one stage writes: what it calls (or may call) writes, or a stage
+/// inside it does.
+pub(crate) fn stage_writes(document: &Node, fields: &Map, seen: &mut BTreeSet<String>) -> bool {
+    if let Some(inner) = fields.get("steps").and_then(|e| e.node.as_map())
+        && first_write(document, inner, seen).is_some()
+    {
+        return true;
     }
-    None
+    let mut said: Vec<&str> = fields
+        .get("call")
+        .and_then(|e| e.node.as_str())
+        .into_iter()
+        .collect();
+    if let Some(may) = fields.get("may-call") {
+        said.extend(list(&may.node).into_iter().filter_map(Node::as_str));
+    }
+    said.into_iter().any(|t| writes(document, t.trim(), seen))
 }
 
 /// Whether calling `target` can write: a tool's action that is not `reads-only:
 /// yes`; a workflow whose stages write; an agent that uses a tool that writes,
 /// or uses or has on its `team:` an agent or a workflow that writes. `seen`
 /// holds every agent and workflow already followed, so a circle ends.
-fn writes(document: &Node, target: &str, seen: &mut BTreeSet<String>) -> bool {
+pub(crate) fn writes(document: &Node, target: &str, seen: &mut BTreeSet<String>) -> bool {
     if let Some((tool, action)) = target.split_once('/') {
         return action_writes(document, tool, action);
     }
@@ -585,7 +598,7 @@ fn writes(document: &Node, target: &str, seen: &mut BTreeSet<String>) -> bool {
     reached.iter().any(|n| writes(document, n, seen))
 }
 
-fn action_writes(document: &Node, tool: &str, action: &str) -> bool {
+pub(crate) fn action_writes(document: &Node, tool: &str, action: &str) -> bool {
     entry_in(document, "tools", tool)
         .and_then(|t| t.get("actions"))
         .and_then(|a| a.get(action))
@@ -853,7 +866,7 @@ fn one_name_one_thing(document: &Node, diags: &mut Diagnostics) {
     }
 }
 
-fn two_things(name: &str, found: &[Kind], at: Span) -> Diagnostic {
+pub(crate) fn two_things(name: &str, found: &[Kind], at: Span) -> Diagnostic {
     let things = found
         .iter()
         .map(|k| k.a())
@@ -870,39 +883,6 @@ fn two_things(name: &str, found: &[Kind], at: Span) -> Diagnostic {
             "Rename one of them — the workflow to `{name}-flow`, say — and change what names it."
         ),
     )
-}
-
-/// `undone-by:` on a workflow names a tool's action or a workflow.
-fn undo_names_something(
-    document: &Node,
-    name: &str,
-    undo: &pact_doc::Entry,
-    diags: &mut Diagnostics,
-) {
-    let Some(said) = undo.node.as_str().map(str::trim) else {
-        return;
-    };
-    match resolve(document, said) {
-        Resolved::One(Kind::Action | Kind::Workflow) => {}
-        Resolved::One(kind) => diags.push(Diagnostic::error(
-            "loader/no-such-name",
-            undo.node.span.clone(),
-            format!(
-                "'{name}' is undone by '{said}', which is {}, and an undo is a tool's action \
-                 or a workflow.",
-                kind.a()
-            ),
-            "Name a `<tool>/<action>` that undoes it, or a workflow.".to_string(),
-        )),
-        Resolved::Several(found) if found.contains(&Kind::Workflow) => {}
-        Resolved::Several(found) => diags.push(two_things(said, &found, undo.node.span.clone())),
-        Resolved::Nothing(fix) => diags.push(Diagnostic::error(
-            "loader/no-such-name",
-            undo.node.span.clone(),
-            format!("'{name}' is undone by '{said}', and this workspace has nothing by that name."),
-            fix,
-        )),
-    }
 }
 
 /// WF-37: `forget-after:` under any `remembers:` (an agent's, a port's, a
@@ -1065,7 +1045,7 @@ pub(crate) fn list(node: &Node) -> Vec<&Node> {
 }
 
 /// The key and its value: `does: each`, underlined whole.
-fn entry_span(entry: &pact_doc::Entry) -> Span {
+pub(crate) fn entry_span(entry: &pact_doc::Entry) -> Span {
     entry.key_span.clone().merge(&entry.node.span)
 }
 

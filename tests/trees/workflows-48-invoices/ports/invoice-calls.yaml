@@ -1,0 +1,8 @@
+description: Invoices handed over by the AP inbox flow.
+kind: inbound-call
+answers: one-invoice
+# The duplicate rule, said once: same vendor, number and total within 180 days.
+same-conversation-when: [invoice.vendor-tax-id, invoice.invoice-number, invoice.total]
+if-still-running: skip
+counts-as-the-same-for: 180 days
+who-can-reach-it: [workflows in this workspace]

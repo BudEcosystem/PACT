@@ -1,0 +1,16 @@
+description: Matches an invoice to its PO and receipts — price within 2%, quantity exact.
+engine: wasm
+determinism: pure
+takes:
+  invoice: invoice-data
+  po: text
+  receipts: list of text
+answers-with:
+  result: one of matched, price-variance, quantity-short, no-po
+  summary: text
+  resolver: text
+fuel:
+  instructions-at-most: 10m
+  runs-for-at-most: 2s
+  memory-at-most: 64m
+  when-it-runs-out: stop-and-say-so

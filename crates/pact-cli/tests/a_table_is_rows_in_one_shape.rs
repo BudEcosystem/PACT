@@ -3,7 +3,7 @@
 //! `workspace.calendar:`, a port's `per-row-of:`, a `values.<name>` binding —
 //! stays in the document for the run to read, while every other figure is put
 //! in place and removed as before. Over #16's tree
-//! (`tests/trees/a-trial-booking-case/`) with a calendar of holidays.
+//! (`tests/trees/workflows-16-trial-booking/`) with a calendar of holidays.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -16,7 +16,7 @@ fn repo() -> PathBuf {
     PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
 }
 
-const TREE: &str = "tests/trees/a-trial-booking-case";
+const TREE: &str = "tests/trees/workflows-16-trial-booking";
 const HOLIDAYS: &str = "values/holidays.yaml";
 const TABLE: &str = "description: The days the centre is closed.
 shape: table

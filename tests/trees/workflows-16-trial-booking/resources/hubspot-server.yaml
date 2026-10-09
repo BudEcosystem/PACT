@@ -1,0 +1,3 @@
+resource-kind: mcp-server
+endpoint: host/hubspot
+description: Where the centre's HubSpot connection is served.

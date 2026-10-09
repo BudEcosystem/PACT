@@ -1,0 +1,13 @@
+description: A supplemental review of an application that failed a major screen.
+accepts: { application-id: text, screen: text }
+answers-with: { upgrade-cost: money }
+starts-at: study
+steps:
+  study:
+    does: call
+    call: cyme/run-power-flow
+    bind: { feeder: input.application-id, size-kw-ac: values.study-size-kw }
+    then: { answered: reply }
+  reply:
+    does: answer
+    bind: { upgrade-cost: values.supplemental-upgrade-cost }

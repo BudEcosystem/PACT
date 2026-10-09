@@ -1,7 +1,7 @@
 """A workflow's waits, ports, deadlines and value tables are read once, typed,
 from the document `pact show` prints (02W §2.0, §2.8, §2.9, §2.10, §2.12).
 
-Over #16's tree (`tests/trees/a-trial-booking-case/`, 02W §5.1) loaded through
+Over #16's tree (`tests/trees/workflows-16-trial-booking/`, 02W §5.1) loaded through
 the real loader, and over the one `moment` reader every time field shares.
 """
 
@@ -26,7 +26,7 @@ from pact_adapters.suspension import (  # noqa: E402
 )
 from trees import REPO, shown  # noqa: E402
 
-TRIAL = REPO / "tests/trees/a-trial-booking-case"
+TRIAL = REPO / "tests/trees/workflows-16-trial-booking"
 
 
 @pytest.fixture(scope="module")

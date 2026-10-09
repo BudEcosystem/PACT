@@ -1,0 +1,20 @@
+# 02W §5.3 (#69): the excerpt the design shows, and who the workspace is.
+name: outpatient-coding
+workspace-id: 01JBF7Q3T9V2M8K4X6N1C5R069
+description: A signed encounter is coded by an agent that tries again with written lessons, then a coder signs off.
+owner: health-information-management
+allow-egress: [tools]
+remembers:
+  coding-lessons:
+    description: Lessons that led to a passing code set, by specialty, after HIM review.
+    lasts: forever
+    kept-per: specialty
+    kept-for: 730 days         # two years: a length of time is counted in days at most
+shapes:
+  # Written as a block: in a `{ }` map the comma inside `one of ICD-10-CM, CPT`
+  # would start a new key.
+  coded-line:
+    code: text
+    system: one of ICD-10-CM, CPT
+    modifiers: list of text
+    cites: text

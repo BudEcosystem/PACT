@@ -1,0 +1,28 @@
+description: Slate, where applications and reader cards are kept.
+connect: slate-server
+actions:
+  get-application-materials:
+    description: Read an application's materials.
+    reads-only: yes
+    takes:
+      application-id: text
+    answers-with:
+      materials: file
+  save-draft-reader-form:
+    description: Save the draft reader card on the application.
+    takes:
+      application-id: text
+      card: text
+    same-request-key: application-id
+    undone-by: slate/delete-draft-reader-form
+  delete-draft-reader-form:
+    description: Delete the draft reader card from the application.
+    takes:
+      application-id: text
+    same-request-key: application-id
+  flag-for-aid-office:
+    description: Flag an application for the aid office.
+    takes:
+      application-id: text
+      flags: list of text
+    same-request-key: application-id

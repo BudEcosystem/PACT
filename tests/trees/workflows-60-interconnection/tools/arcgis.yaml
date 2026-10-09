@@ -1,0 +1,7 @@
+description: ArcGIS, the map of the network.
+connect: utility-apps
+actions:
+  add-der-to-feeder:
+    description: Add new generation to a feeder's layer.
+    takes: { feeder: text, size-kw-ac: number }
+    same-request-key: feeder

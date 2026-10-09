@@ -1,0 +1,9 @@
+description: Email from the interconnection desk.
+connect: utility-apps
+actions:
+  send-email:
+    description: Send one email, its wording filled in.
+    takes:
+      to: text
+      wording: text
+      fills: letter-fills, optional

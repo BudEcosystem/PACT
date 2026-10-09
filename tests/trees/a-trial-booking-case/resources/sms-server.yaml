@@ -1,3 +1,0 @@
-resource-kind: mcp-server
-endpoint: host/sms
-description: Where the centre's sms connection is served.

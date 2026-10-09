@@ -1,0 +1,3 @@
+description: The letter that lists what an application is missing.
+shape: text
+value: "Your application is missing: {items}."

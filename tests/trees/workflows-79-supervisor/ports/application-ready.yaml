@@ -1,0 +1,9 @@
+description: A Slate application becomes Complete - Ready for Read.
+kind: event
+through: slate                       # the connector polls Slate; nobody draws the polling
+answers: first-read
+same-conversation-when: [application-id]
+# A material update re-reads the file and replaces the earlier draft card;
+# Slate keeps the card's history.
+if-still-running: cancel-previous
+who-can-reach-it: [slate]

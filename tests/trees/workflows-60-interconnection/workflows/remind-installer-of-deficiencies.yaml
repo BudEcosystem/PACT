@@ -1,0 +1,8 @@
+description: Remind the installer which deficiencies are still open.
+accepts: { application-id: text, installer-email: text }
+starts-at: tell
+steps:
+  tell:
+    does: call
+    call: outlook/send-email
+    bind: { to: input.installer-email, wording: values.deficiency-reminder }

@@ -1,0 +1,7 @@
+description: Writes the draft reader card from the notes.
+instructions: Write the reader card from the file and the notes.
+accepts:
+  file: file
+  notes: list of text
+answers-with:
+  card: text

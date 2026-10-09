@@ -1,0 +1,106 @@
+description: >
+  Put a parent who booked a free trial in HubSpot with the tutor for that
+  location and subject, open a trial deal, and text a reminder 24 hours
+  before the lesson.
+
+accepts:
+  event-type: text
+  invitee-uri: text
+  parent-name: text
+  email: text
+  phone: text
+  student-name: text
+  subject: text
+  location: one of Northside, Downtown, Eastgate
+  starts-at: date and time
+  sms-consent: yes or no
+
+# Students are minors: their names stay out of logs. The run's own record is
+# kept 90 days.
+hides:
+  input.student-name: [logs]
+kept-for: 90 days
+
+starts-at: tidy
+
+steps:
+  tidy:
+    does: call
+    call: tidy-booking               # a pure program: E.164 phone, first and last name
+    bind:
+      phone: input.phone
+      full-name: input.parent-name
+    then: { answered: contact }
+
+  contact:
+    does: call
+    call: parent-contact             # a workflow keyed by email, below
+    bind:
+      email: input.email
+      first-name: steps.tidy.first-name
+      last-name: steps.tidy.last-name
+      phone: steps.tidy.phone
+    then: { answered: tutor }
+
+  tutor:
+    does: call
+    call: tutor-roster/find-tutor    # one row of the roster sheet; reads only
+    bind:
+      location: input.location
+      subject: input.subject
+    then: { answered: owner }
+
+  owner:
+    does: call
+    call: hubspot/set-contact-owner
+    bind:
+      contact-id: steps.contact.contact-id
+      owner-id: steps.tutor.hubspot-owner-id
+    at-most: 3                       # HubSpot answers 429 when busy
+    then: { answered: deal }
+
+  deal:
+    does: call
+    call: hubspot/create-deal
+    bind:
+      contact-id: steps.contact.contact-id
+      pipeline: values.trial-pipeline
+      student: input.student-name
+      subject: input.subject
+    at-most: 3
+    then: { answered: day-before }
+
+  day-before:
+    does: ask-someone
+    asks: day-before-the-lesson
+    then: { nobody-answered: consent }   # a clock-only wait's one exit
+
+  consent:
+    does: decide
+    chooses-between: { send: remind, skip: done }     # shown as "only if they agreed to texts"
+    by:
+      - rules:
+          - when: [{ value: input.sms-consent, is: yes }]
+            choose: send
+          - choose: skip
+
+  remind:
+    does: call
+    call: twilio/send-sms            # no undone-by: Can't be undone (WF-25 notes it)
+    bind:
+      to: steps.tidy.phone
+      wording: values.trial-reminder-sms
+      fills.first-name: steps.tidy.first-name
+      fills.student: input.student-name
+      fills.subject: input.subject
+      fills.starts-at: input.starts-at
+      fills.address: steps.tutor.address
+
+questions:
+  day-before-the-lesson:
+    description: Hold the reminder until 24 hours before the lesson.
+    # The clock is the only answerer, so there is nothing to say and no gate.
+    # A lesson booked less than 24 hours ahead is already past this time, and
+    # the clock answers at once.
+    asked-of: [the-clock]
+    answer-within: { at: input.starts-at, before: 24h, in-time-zone: steps.tutor.zone }

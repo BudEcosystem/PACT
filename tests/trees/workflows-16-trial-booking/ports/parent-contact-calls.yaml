@@ -1,0 +1,9 @@
+description: Flows in this workspace asking for a parent's HubSpot contact.
+kind: inbound-call
+answers: parent-contact
+same-conversation-when: [email]
+# HubSpot's search lags by seconds, so two bookings close together would both
+# create a contact. One at a time per email address closes that (03 rule 2:
+# a second key goes on a sub-flow).
+if-still-running: queue
+who-can-reach-it: [workflows in this workspace]

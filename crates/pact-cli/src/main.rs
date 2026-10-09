@@ -1848,6 +1848,10 @@ fn validate(
         // and R44 reopened): the key of a case, a wait that hears an event,
         // the inputs an arrival fills.
         pact_loader::arrivals::check(root, &schema, &mut diags);
+        // And what happens after a failure (02W §2.7, §2.12, §3 WF-20, WF-25,
+        // WF-26, WF-34): a failure plan's backup and undo, what an undo and a
+        // status check are given, and where silence may never lead.
+        pact_loader::failures::check(root, &schema, &mut diags);
         diags.sort();
     }
     Ok((node, diags, substituted))

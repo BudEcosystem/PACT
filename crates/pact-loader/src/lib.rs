@@ -139,6 +139,7 @@ pub mod callable;
 pub mod conditions;
 pub mod currency;
 pub mod derive;
+pub mod failures;
 pub mod firstfile;
 pub mod handover;
 pub mod holes;

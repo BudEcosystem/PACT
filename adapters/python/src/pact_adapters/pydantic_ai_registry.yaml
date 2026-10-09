@@ -239,6 +239,14 @@ fields:
     construct: "nothing: the host fills the named argument with the call's effect key and withholds a second call carrying the same value (at_most_once.claim)"
     outcome: loss
     rows: [D2]
+  action.undone-by:
+    construct: "nothing: a workflow's undo calls it, newest first, after a later step fails (02W §2.12); one agent run undoes no tool call"
+    outcome: loss
+    rows: [D2]
+  action.status-check:
+    construct: "nothing: the host asks it before retrying a write whose outcome is not known (02W §2.12)"
+    outcome: loss
+    rows: [D2]
   action.same-request-key-across:
     construct: "nothing: how far the host's at-most-once claim reaches (this run, the team, the workspace)"
     outcome: loss

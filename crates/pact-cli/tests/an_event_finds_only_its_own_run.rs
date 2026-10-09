@@ -4,7 +4,7 @@
 //! hands what arrives to the open run (`if-still-running: join`) and tells its
 //! arrivals apart by the same `same-conversation-when:` as the ports that start
 //! the runs, and every key names a field of what arrives. Over #16's tree
-//! (`tests/trees/a-trial-booking-case/`) with a port the lesson-day wait hears.
+//! (`tests/trees/workflows-16-trial-booking/`) with a port the lesson-day wait hears.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -17,7 +17,7 @@ fn repo() -> PathBuf {
     PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
 }
 
-const TREE: &str = "tests/trees/a-trial-booking-case";
+const TREE: &str = "tests/trees/workflows-16-trial-booking";
 const FLOW: &str = "workflows/trial-booking.yaml";
 const MOVED: &str = "ports/lesson-moved.yaml";
 

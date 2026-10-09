@@ -1,0 +1,13 @@
+description: SAP, where meter work is ordered.
+connect: utility-apps
+actions:
+  create-meter-exchange-order:
+    description: Order the meter exchange for a site.
+    takes: { account: text, site: text }
+    answers-with: { order-id: text }
+    same-request-key: account
+    undone-by: sap/cancel-order
+  cancel-order:
+    description: Cancel a meter exchange order.
+    takes: { order-id: text }
+    same-request-key: order-id

@@ -1,0 +1,15 @@
+# 02W §5.1 (#16): the lines the design shows, and the shape the reminder's
+# wording is filled from.
+name: tutoring-centre
+workspace-id: 01JBF7Q3T9V2M8K4X6N1C5R0WA
+description: A parent books a free trial lesson; the flow files them in HubSpot and texts a reminder 24 hours before.
+owner: platform
+time-zone: America/Chicago
+allow-egress: [tools]          # Calendly, HubSpot and Twilio are outside; models are not
+shapes:
+  sms-fills:
+    first-name: text
+    student: text
+    subject: text
+    starts-at: date and time
+    address: text

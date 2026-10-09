@@ -1,0 +1,6 @@
+description: Reads one invoice PDF into its fields.
+instructions: Read the invoice you are given and give each of its fields, with how sure you are of the least certain one.
+accepts:
+  file: file
+answers-with:
+  invoice: invoice-data

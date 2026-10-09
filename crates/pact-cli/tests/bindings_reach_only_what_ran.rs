@@ -71,13 +71,16 @@ fn check(root: &Path) -> (bool, String) {
     )
 }
 
-/// Refused, by `rule`, and nothing else is.
+/// Refused, by `rule`, and nothing else is. A note (a write nobody is asked
+/// about, WF-25) says nothing is wrong, so only errors and warnings count.
 fn refused(root: &Path, rule: &str) -> String {
     let (ok, text) = check(root);
     assert!(!ok, "{text}");
     assert!(text.contains(&format!("rule: {rule}")), "{text}");
     assert_eq!(
-        text.matches("rule: ").count(),
+        text.lines()
+            .filter(|l| l.starts_with("error:") || l.starts_with("warning:"))
+            .count(),
         1,
         "one mistake, one message:\n{text}"
     );

@@ -1,0 +1,127 @@
+description: >
+  A supervisor plans which specialist readers to ask, they read in parallel,
+  the supervisor follows up where they disagree, and a draft reader card goes
+  to human Reader 1.
+accepts: { application-id: text, applied-for-aid: yes or no }
+
+data-stays-in: university-tenant-region       # FERPA
+kept-for: 365 days               # a year: a length of time is counted in days at most
+limits:
+  cost-per-request-under: 1.50 USD            # per file; the readers share it
+  when-it-runs-out: stop-and-say-so
+
+starts-at: paused
+steps:
+  # A switch is a memory value (03 §3.2). The weekly fairness flow turns it on.
+  paused:
+    does: decide
+    chooses-between: { reading: fetch, paused: done }
+    by:
+      - rules:
+          - when: [{ value: remembers.ai-reading-paused, is: yes }]
+            choose: paused
+            because: AI first reads are paused after a fairness alert; people read this file.
+          - choose: reading
+
+  fetch:
+    does: call
+    call: slate/get-application-materials
+    bind: { application-id: input.application-id }
+    then: { answered: redact }
+
+  redact:
+    does: call
+    call: redactor                   # names, photos, pronouns, legacy and donor flags
+    bind: { materials: steps.fetch.materials }
+    then: { answered: read }
+
+  read:
+    does: repeat
+    at-most: 3                       # the first read and up to two follow-up rounds
+    until:
+      - { value: steps.plan.tasks, is-empty: yes }
+    remembers:
+      notes:
+        description: every specialist's evidence notes so far, with page citations
+        lasts: one-run
+        comes-from: steps.specialists.notes
+        combines-by: keep-all
+    starts-at: plan
+    steps:
+      plan:
+        does: call
+        call: read-supervisor
+        says: >
+          Decide which specialists still need to read this file and what to
+          ask each. Ask nobody once the notes agree.
+        bind:
+          file: steps.redact.file
+          notes: remembers.notes
+        then: { answered: specialists }
+      specialists:
+        does: each
+        over: steps.plan.tasks
+        identified-by: [reader, question]
+        limits:
+          items-at-most: 5
+          at-once-at-most: 5
+          when-it-runs-out: stop-and-say-so
+        teamwork:
+          if-someone-fails: carry-on
+          divides-the-budget: as-needed
+        combines-by: { notes: keep-all }
+        starts-at: ask-reader
+        steps:
+          ask-reader:
+            does: call
+            call: item.reader
+            may-call: [academic-context, essay-and-recommendations, activities, transfer-credit]
+            bind:
+              file: steps.redact.file
+              question: item.question
+            then: { answered: give }
+          give:
+            does: answer
+            bind: { notes: steps.ask-reader.notes }
+    then: { answered: card }
+
+  card:
+    does: call
+    call: card-writer
+    says: >
+      Write the reader card: a rating from 1 to 5 for each dimension, each with
+      its evidence. Say that this is an advisory first read.
+    bind:
+      file: steps.redact.file
+      notes: steps.read.notes
+    then: { answered: save }
+
+  save:
+    does: call
+    call: slate/save-draft-reader-form   # undone-by: slate/delete-draft-reader-form
+    bind:
+      application-id: input.application-id
+      card: steps.card.card
+    then: { answered: aid }
+
+  aid:
+    does: decide
+    chooses-between: { applied: aid-fit, did-not-apply: done }
+    by:
+      - rules:
+          - when: [{ value: input.applied-for-aid, is: yes }]
+            choose: applied
+          - choose: did-not-apply
+
+  aid-fit:
+    does: call
+    call: aid-fit-checker
+    bind: { application-id: input.application-id }
+    then: { answered: flag }
+
+  flag:
+    does: call
+    call: slate/flag-for-aid-office
+    bind:
+      application-id: input.application-id
+      flags: steps.aid-fit.flags

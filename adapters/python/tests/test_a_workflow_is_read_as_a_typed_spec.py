@@ -41,7 +41,7 @@ def test_the_workflow_lines_are_read_as_written(flow: WorkflowSpec) -> None:
     assert flow.kept_for == Moment(at="input.received-on", after="7 days")
     assert flow.hides == {"input.attachments": ("logs",)}
     assert flow.published_as == ("tool",)
-    assert flow.undone_by == "ledger/unpost"
+    assert flow.undone_by == "ledger/unpost-all"
     assert set(flow.questions) == {"go-ahead"}
     assert flow.base is False
 

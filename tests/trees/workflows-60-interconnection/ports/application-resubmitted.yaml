@@ -1,0 +1,7 @@
+description: The installer resubmits after a deficiency letter.
+kind: event
+through: powerclerk                  # stripe / docusign / powerclerk for the others
+answers: interconnection
+same-conversation-when: [application-id]
+if-still-running: join               # heard by the waiting stage
+who-can-reach-it: [powerclerk]

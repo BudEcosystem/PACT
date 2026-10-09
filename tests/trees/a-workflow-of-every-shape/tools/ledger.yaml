@@ -21,3 +21,8 @@ actions:
     takes:
       invoice: text
     same-request-key: invoice
+  unpost-all:
+    description: Take every invoice a run posted from one email back out of the ledger.
+    takes:
+      attachments: text
+    same-request-key: attachments

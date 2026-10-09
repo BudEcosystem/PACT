@@ -10,7 +10,9 @@ action.remember-as	text | S-EXEC | expert | optional
 action.same-request-key	text | S-EXEC | core | optional
 action.same-request-key-across	one-of | S-EXEC | expert | optional
 action.spends-money	yes-no | S-EXEC | core | optional
+action.status-check	text | S-EXEC | expert | optional
 action.takes	map of answer-shape | S-CAP | core | optional
+action.undone-by	text | S-EXEC | core | optional
 agent.accepts	map of answer-shape | S-CAP | core | optional
 agent.answers-with	map of answer-shape | S-CAP | core | optional
 agent.answers-with-mode	one-of | S-CAP | expert | optional
@@ -83,6 +85,14 @@ evals.population	one-of | S-GOV | core | required
 evals.rules	list of group:eval-rule | S-GOV | core | optional
 figure.provenance	group:provenance | S-GOV | expert | optional
 figure.value	text | S-CAP | expert | required
+if-it-fails.after-that	one-of | S-EXEC | core | required
+if-it-fails.asks	text | S-EXEC | core | optional
+if-it-fails.backup	text | S-TOPO | core | optional
+if-it-fails.carry-on-with	map of text | S-EXEC | core | optional
+if-it-fails.gives-up-after	moment | S-GOV | core | optional
+if-it-fails.new-version-of	text | S-GOV | core | optional
+if-it-fails.undo	text | S-EXEC | core | optional
+if-it-fails.undo-where	list of group:when-this | S-EXEC | core | optional
 interceptor.applies-to	one-of | S-EXEC | core | optional
 interceptor.description	text | S-GEN | core | required
 interceptor.may	list of one-of | S-EXEC | core | required
@@ -297,6 +307,7 @@ stage.chooses-between	map of text | S-CTRL | core | optional
 stage.combines-by	map of combine-rule | S-CTRL | core | optional
 stage.does	one-of | S-CTRL | core | required
 stage.identified-by	list of text | S-EXEC | core | optional
+stage.if-it-fails	group:if-it-fails | S-EXEC | core | optional
 stage.limits	group:limits | S-GOV | core | optional
 stage.may-call	list of text | S-EXEC | core | optional
 stage.may-use	list of text | S-ROUTE | expert | optional

@@ -1,0 +1,26 @@
+# 02W §5.2 (#48): the two excerpts the design shows, and who the workspace is.
+name: accounts-payable
+workspace-id: 01JBF7Q3T9V2M8K4X6N1C5R048
+description: An email reaches the AP mailbox; each invoice in it is matched, approved for its amount, posted and paid.
+owner: finance
+allow-egress: [tools]
+shapes:
+  attachment: { name: text, file: file, content-hash: text }
+  invoice-line: { description: text, quantity: number, unit-price: money }
+  invoice-data:
+    vendor-name: text
+    vendor-tax-id: text
+    invoice-number: text
+    invoice-date: date
+    po-number: text, optional
+    lines: list of invoice-line
+    tax: money
+    total: money
+    lowest-confidence: number
+  note-fills:
+    invoice: text
+    vendor: text, optional
+# The matrix and the payment step are owned.
+owners:
+  workflows/one-invoice/steps/tiers: { owned-by: controller, locked: here }
+  workflows/one-invoice/steps/pay: { owned-by: controller }

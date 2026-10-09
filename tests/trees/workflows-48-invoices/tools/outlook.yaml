@@ -1,0 +1,9 @@
+description: Email from the AP mailbox.
+connect: office-server
+actions:
+  send-email:
+    description: Send one email, its wording filled in.
+    takes:
+      to: text
+      wording: text
+      fills: note-fills, optional

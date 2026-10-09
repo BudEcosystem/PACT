@@ -1,11 +1,11 @@
-# The 55 kinds
+# The 56 kinds
 
 Generated from `spec/schema.yaml`. Every kind, what it is for, and how
 many fields it has. You do not need to learn these — `pact check` names the
 right one when you need it.
 
 
-**55 kinds.** A kind is a *shape a document can take*, not a file you must
+**56 kinds.** A kind is a *shape a document can take*, not a file you must
 write: most workspaces use a dozen.
 
 
@@ -13,12 +13,12 @@ write: most workspaces use a dozen.
 
 | Kind | Fields | Core fields |
 |---|---:|---|
-| `action` | 13 | `description`, `takes`, `reads-only`, `needs-a-person`, `spends-money` |
+| `action` | 15 | `description`, `takes`, `reads-only`, `needs-a-person`, `spends-money` |
 | `agent` | 25 | `name`, `description`, `instructions`, `team`, `teamwork` |
 | `loop` | 4 | `description`, `based-on` |
 | `knowledge` | 9 | `description`, `documents`, `passages-at-most`, `must-cite`, `use-when` |
 | `skill` | 11 | `name`, `description`, `use-when`, `do-not-use-when`, `if-unsure` |
-| `stage` | 26 | `does`, `says`, `asks`, `call`, `may-call` |
+| `stage` | 27 | `does`, `says`, `asks`, `call`, `may-call` |
 | `tool` | 7 | `description`, `connect`, `url`, `method`, `says` |
 | `program` | 7 | `description` |
 | `program-fuel` | 4 | — |
@@ -31,6 +31,7 @@ write: most workspaces use a dozen.
 | Kind | Fields | Core fields |
 |---|---:|---|
 | `workflow` | 17 | `description`, `accepts`, `answers-with`, `starts-at`, `steps` |
+| `if-it-fails` | 8 | `after-that`, `gives-up-after`, `backup`, `carry-on-with`, `asks` |
 | `reminder` | 5 | `at`, `nudges`, `tells`, `hands-over-to`, `runs` |
 | `moment` | 5 | `at`, `after`, `before`, `counted-in`, `in-time-zone` |
 | `rung` | 1 | `rules` |

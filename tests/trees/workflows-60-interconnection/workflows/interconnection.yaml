@@ -1,0 +1,250 @@
+description: >
+  Review a solar interconnection application from submission to permission to
+  operate, inside the commission's timeline, and undo what was done if the
+  customer cancels.
+accepts:
+  application-id: text
+  customer-account: text
+  installer-email: text
+  site: text
+  inverter-model: text
+  size-kw-ac: number
+  has-battery: yes or no
+  single-line-diagram: file
+
+# The commission's clock: 60 business days from payment, not counting the
+# time spent waiting on the customer's signature or on construction.
+limits:
+  finishes-within: { after: 60 days, counted-in: business-days }
+  starts-from: fee-paid
+  paused-during: [signed, built]
+  milestones:
+    - { at: { after: 50 days, counted-in: business-days }, runs: tell-program-manager-at-risk }
+  when-it-runs-out: carry-on         # a missed deadline is reported, never a reason to stop
+
+starts-at: check
+steps:
+  check:
+    does: call
+    call: completeness-checker       # checks documents, UL 1741 SB listing, reads the diagram
+    bind: { application: input }
+    then: { answered: complete }
+
+  complete:
+    does: decide
+    chooses-between: { complete: fee, missing: deficiencies }
+    by:
+      - rules:
+          - when: [{ value: steps.check.missing, is-empty: yes }]
+            choose: complete
+          - choose: missing
+
+  deficiencies:
+    does: call
+    call: outlook/send-email
+    bind:
+      to: input.installer-email
+      wording: values.deficiency-letter
+      fills.items: steps.check.missing
+    then: { answered: resubmitted }
+
+  resubmitted:
+    does: ask-someone
+    asks: wait-for-resubmission
+    then:
+      heard: { application-resubmitted: recheck }
+      nobody-answered: withdraw
+
+  recheck:
+    does: call
+    call: completeness-checker
+    bind: { application: latest-update }
+    then: { answered: still-complete }
+
+  still-complete:
+    does: decide
+    chooses-between: { complete: fee, missing: withdraw }
+    by:
+      - rules:
+          - when: [{ value: steps.recheck.missing, is-empty: yes }]
+            choose: complete
+          - choose: missing
+
+  withdraw:
+    does: call
+    call: powerclerk/withdraw-application
+    bind: { application-id: input.application-id }
+
+  fee:
+    does: call
+    call: stripe/create-payment-link
+    bind: { customer: input.customer-account, amount: values.application-fee }
+    then: { answered: fee-paid }
+
+  fee-paid:
+    does: ask-someone
+    asks: wait-for-the-fee
+    then: { heard: { fee-received: gather }, nobody-answered: withdraw }
+
+  gather:
+    does: call
+    call: feeder-lookup              # agent: feeder and transformer from ArcGIS, DER from SAP
+    bind: { site: input.site }
+    then: { answered: power-flow }
+
+  power-flow:
+    does: call
+    call: cyme/run-power-flow        # reads only
+    bind: { feeder: steps.gather.feeder, size-kw-ac: input.size-kw-ac }
+    then: { answered: screen }
+
+  screen:
+    does: call
+    call: interconnection-screens    # pure program: 15% penetration, loading, voltage rise
+    bind:
+      power-flow: steps.power-flow.results
+      der-on-feeder: steps.gather.existing-der
+    then: { answered: route }
+
+  route:
+    does: decide
+    chooses-between: { fast-track: reserve, minor: engineer, major: supplemental }
+    by:
+      - rules:
+          - when: [{ value: steps.screen.result, is: all-pass }]
+            choose: fast-track
+          - when: [{ value: steps.screen.result, is: minor-failure }]
+            choose: minor
+          - choose: major
+
+  engineer:
+    does: ask-someone
+    asks: engineer-review
+    then: { answered: reserve, declined: tell-installer-denied }
+
+  supplemental:
+    does: call
+    call: supplemental-review        # a published workflow; this stage waits for it
+    bind: { application-id: input.application-id, screen: steps.screen.summary }
+    then: { answered: reserve }
+
+  reserve:
+    does: call
+    call: reserve-feeder-capacity    # keyed by feeder, below
+    bind:
+      feeder: steps.gather.feeder
+      application-id: input.application-id
+      size-kw-ac: input.size-kw-ac
+    then: { answered: contract }
+
+  contract:
+    does: call
+    call: contract-drafter
+    bind:
+      application: input
+      engineer-upgrade: steps.engineer.upgrade            # optional input: absent on fast-track
+      supplemental-cost: steps.supplemental.upgrade-cost  # optional input
+    then: { answered: envelope }
+
+  envelope:
+    does: call
+    call: docusign/send-envelope
+    bind: { agreement: steps.contract.agreement, signers: steps.contract.signers }
+    then: { answered: signed }
+
+  signed:
+    does: ask-someone
+    asks: wait-for-signatures
+    then: { heard: { envelope-completed: built }, nobody-answered: stop-and-say-so }
+
+  built:
+    does: ask-someone
+    asks: wait-for-construction
+    then: { heard: { construction-complete: meter } }
+
+  meter:
+    does: call
+    call: sap/create-meter-exchange-order
+    bind: { account: input.customer-account, site: input.site }
+    then: { answered: inspection }
+
+  inspection:
+    does: repeat                     # a failed inspection is booked again, up to 3 times
+    at-most: 3
+    until:
+      - { value: latest-update.inspection-result, is: pass }
+    starts-at: inspected
+    steps:
+      inspected:
+        does: ask-someone
+        asks: wait-for-inspection
+        then: { heard: { inspection-recorded: done } }
+    then: { answered: permission, too-many-times: tell-installer-failed }
+
+  permission:
+    does: call
+    call: powerclerk/issue-permission-to-operate
+    bind: { application-id: input.application-id }
+    then: { answered: der-layer }
+
+  der-layer:
+    does: call
+    call: arcgis/add-der-to-feeder
+    bind: { feeder: steps.gather.feeder, size-kw-ac: input.size-kw-ac }
+    then: { answered: tell-installer }
+
+  tell-installer:
+    does: call
+    call: outlook/send-email
+    bind: { to: input.installer-email, wording: values.permission-granted }
+
+  tell-installer-denied:
+    does: call
+    call: outlook/send-email
+    bind: { to: input.installer-email, wording: values.screen-denied, fills.reason: steps.engineer.because }
+
+  tell-installer-failed:
+    does: call
+    call: outlook/send-email
+    bind: { to: input.installer-email, wording: values.inspection-failed }
+
+questions:
+  wait-for-resubmission:
+    description: Wait up to 20 business days for the installer to fix the deficiencies.
+    asked-of: [application-resubmitted]
+    answer-within: { after: 20 days, counted-in: business-days }
+    reminds-at:
+      - { at: { after: 10 days, counted-in: business-days }, runs: remind-installer-of-deficiencies }
+  engineer-review:
+    description: A licensed engineer decides on a minor screen failure.
+    says: This application failed a screen. Choose an upgrade, or decline it.
+    shows: [steps.screen.summary, steps.gather.feeder]
+    answer:
+      approved: yes or no
+      upgrade: one of none, transformer-upgrade, reconductor, export-limit
+      because: text
+    asked-of: [licensed-interconnection-engineers]   # only members may answer
+    answer-within: { after: 10 days, counted-in: business-days }
+    reminds-at:
+      - { at: { after: 5 days, counted-in: business-days }, hands-over-to: [engineering-supervisor] }
+  wait-for-signatures:
+    description: Wait for the customer and the installer to sign; DocuSign completes the envelope when both have.
+    asked-of: [envelope-completed]
+    answer-within: 60 days
+    reminds-at:
+      - { at: 14 days, runs: chase-signatures }
+  # `wait-for-the-fee` (30 days), `wait-for-construction` (365 days) and
+  # `wait-for-inspection` (90 days) are one line of `asked-of:` and one of
+  # `answer-within:` each.
+  wait-for-the-fee:
+    description: Wait up to 30 days for the customer to pay the application fee.
+    asked-of: [fee-received]
+    answer-within: 30 days
+  wait-for-construction:
+    description: Wait up to a year for the installer to finish construction.
+    asked-of: [construction-complete]
+    answer-within: 365 days
+  wait-for-inspection:
+    description: Wait up to 90 days for the inspection to be recorded.
+    asked-of: [inspection-recorded]
+    answer-within: 90 days

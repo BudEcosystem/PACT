@@ -21,7 +21,7 @@ from __future__ import annotations
 import datetime as _dt
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from .limits import seconds, whole
@@ -173,4 +173,48 @@ class RegionLimits:
             milestones=reminders(m.get("milestones")),
             at_once_at_most=whole(m.get("at-once-at-most")),
             when_it_runs_out=_text(m.get("when-it-runs-out", "")),
+        )
+
+
+@dataclass(frozen=True)
+class FailurePlan:
+    """A stage's `if-it-fails:` (02W §2.7, F2's one failure record): what happens
+    once every attempt (`at-most:`) has failed, with the lines that choice needs.
+    A `when-it-runs-out:` of `use-a-backup`, `wait-for-a-new-version` or `undo`
+    on the same stage takes its companion from here (§2.10). The loader has held
+    each companion to its choice and each name to what it names."""
+
+    #: `use-a-backup`, `carry-on`, `ask-a-person`, `wait-for-a-new-version`,
+    #: `undo` or `stop-and-say-so`.
+    after_that: str = "stop-and-say-so"
+    #: `gives-up-after:` — keep trying until this time rather than `at-most:` times.
+    gives_up_after: Moment | None = None
+    #: `backup:` — what to call instead, with the stage's own `bind:`.
+    backup: str = ""
+    #: `carry-on-with:` — the stage's answer to go on with, field by binding.
+    carry_on_with: Mapping[str, str] = field(default_factory=dict)
+    #: `asks:` — the question put to a person.
+    asks: str = ""
+    #: `new-version-of:` — the connection or workflow whose next version resumes it.
+    new_version_of: str = ""
+    #: `undo:` — the stage whose work is undone, newest first.
+    undo: str = ""
+    #: `undo-where:` — on an `each`, the items to undo, as `when-this` lines.
+    undo_where: tuple[Mapping[str, Any], ...] = ()
+
+    @staticmethod
+    def from_written(written: Any) -> "FailurePlan | None":
+        """The plan as written, or `None` when the stage writes none (it then
+        stops and says so)."""
+        if not isinstance(written, Mapping):
+            return None
+        return FailurePlan(
+            after_that=_text(written.get("after-that", "")) or "stop-and-say-so",
+            gives_up_after=Moment.from_written(written.get("gives-up-after")),
+            backup=_text(written.get("backup", "")),
+            carry_on_with={str(k): _text(v) for k, v in (written.get("carry-on-with") or {}).items()},
+            asks=_text(written.get("asks", "")),
+            new_version_of=_text(written.get("new-version-of", "")),
+            undo=_text(written.get("undo", "")),
+            undo_where=tuple(u for u in written.get("undo-where") or () if isinstance(u, Mapping)),
         )

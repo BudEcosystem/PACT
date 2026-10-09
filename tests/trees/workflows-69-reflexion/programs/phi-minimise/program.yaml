@@ -1,0 +1,12 @@
+description: Keeps the clinical content of a note and drops what identifies the patient.
+engine: wasm
+determinism: pure
+takes:
+  note: text
+answers-with:
+  note: text
+fuel:
+  instructions-at-most: 10m
+  runs-for-at-most: 2s
+  memory-at-most: 64m
+  when-it-runs-out: stop-and-say-so

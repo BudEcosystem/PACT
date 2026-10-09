@@ -1,0 +1,9 @@
+description: Messages to the AP clerks' channel.
+connect: office-server
+actions:
+  post-message:
+    description: Post one message in a channel, its wording filled in.
+    takes:
+      channel: text
+      wording: text
+      fills: note-fills, optional

@@ -1,0 +1,12 @@
+# 02W §5.5 (#60): who the workspace is, and the zone its business days are
+# counted in.
+name: interconnection-desk
+workspace-id: 01JBF7Q3T9V2M8K4X6N1C5R060
+description: A solar interconnection application reviewed from submission to permission to operate, inside the commission's timeline.
+owner: interconnection
+time-zone: America/Chicago
+allow-egress: [tools]
+shapes:
+  letter-fills:
+    items: list of text, optional
+    reason: text, optional

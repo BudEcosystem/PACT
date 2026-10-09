@@ -1,0 +1,8 @@
+description: The workspace's own memory.
+connect: bud-server
+actions:
+  remember:
+    description: Propose values for a remembered fact; a model's lessons wait for review.
+    takes:
+      memory: text
+      value: list of text

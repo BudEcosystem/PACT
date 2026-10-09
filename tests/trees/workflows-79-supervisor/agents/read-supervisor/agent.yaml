@@ -1,0 +1,7 @@
+description: Plans which specialist readers still need to read a file, and what to ask each.
+instructions: Decide which specialists still need to read this file and what to ask each.
+accepts:
+  file: file
+  notes: list of text, optional
+answers-with:
+  tasks: list of reading-task

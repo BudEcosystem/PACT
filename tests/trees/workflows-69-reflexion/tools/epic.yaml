@@ -1,0 +1,21 @@
+description: Epic, where encounters are documented, coded and charged.
+connect: epic-server
+actions:
+  get-encounter-note:
+    description: Read an encounter's signed note.
+    reads-only: yes
+    takes:
+      encounter-id: text
+    answers-with:
+      note: text
+  send-to-manual-coding:
+    description: Put an encounter in the manual coding work queue.
+    takes:
+      encounter-id: text
+    same-request-key: encounter-id
+  send-to-charge-router:
+    description: Send an encounter's accepted codes to the charge router.
+    takes:
+      encounter-id: text
+      codes: list of coded-line
+    same-request-key: encounter-id

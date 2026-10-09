@@ -1,0 +1,8 @@
+description: Says whether the documentation supports a code set, on a different model from the coder.
+instructions: Say whether the note supports every code given, and note any that it does not.
+accepts:
+  note: text
+  codes: list of coded-line
+answers-with:
+  supported: yes or no
+  notes: text

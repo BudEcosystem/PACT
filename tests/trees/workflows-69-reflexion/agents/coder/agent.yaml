@@ -1,0 +1,8 @@
+description: Suggests ICD-10-CM and CPT codes for a minimised encounter note.
+instructions: Suggest the codes this note supports, each with the words it rests on. Use the lessons you are given.
+accepts:
+  note: text
+  this-run-lessons: list of text, optional
+  past-lessons: list of text, optional
+answers-with:
+  codes: list of coded-line

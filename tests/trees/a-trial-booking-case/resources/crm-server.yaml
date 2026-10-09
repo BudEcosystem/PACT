@@ -1,3 +1,0 @@
-resource-kind: mcp-server
-endpoint: host/crm
-description: Where the centre's crm connection is served.

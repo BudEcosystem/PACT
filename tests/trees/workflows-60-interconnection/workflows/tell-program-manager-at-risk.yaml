@@ -1,0 +1,8 @@
+description: Tell the program manager an application is close to its commission deadline.
+accepts: { application-id: text }
+starts-at: tell
+steps:
+  tell:
+    does: call
+    call: outlook/send-email
+    bind: { to: values.program-manager-email, wording: values.deadline-at-risk }

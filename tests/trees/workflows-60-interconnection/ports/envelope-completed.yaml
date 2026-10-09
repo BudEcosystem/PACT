@@ -1,0 +1,7 @@
+description: The customer and the installer have both signed the agreement.
+kind: event
+through: docusign
+answers: interconnection
+same-conversation-when: [application-id]
+if-still-running: join               # heard by the waiting stage
+who-can-reach-it: [docusign]

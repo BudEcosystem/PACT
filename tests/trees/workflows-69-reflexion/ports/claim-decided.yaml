@@ -1,0 +1,10 @@
+description: The payer decides the claim for an encounter (the Availity 835).
+kind: event
+through: availity
+answers: code-encounter
+accepts:
+  encounter-id: text
+  claim-status: one of paid, denied, partially-paid
+same-conversation-when: [encounter-id]
+if-still-running: join               # heard by the waiting stage
+who-can-reach-it: [availity]

@@ -1,0 +1,6 @@
+description: Flags what the aid office should look at for an applicant who applied for aid.
+instructions: Say what in this application the aid office should look at.
+accepts:
+  application-id: text
+answers-with:
+  flags: list of text

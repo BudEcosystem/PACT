@@ -1,0 +1,19 @@
+description: Bill.com, where payments are scheduled.
+connect: finance-server
+actions:
+  schedule-payment:
+    description: Schedule the payment on the bill's terms.
+    takes:
+      bill-id: text
+      amount: money
+      terms: text
+    answers-with:
+      payment-id: text
+    spends-money: yes
+    same-request-key: bill-id
+    undone-by: bill-com/cancel-payment
+  cancel-payment:
+    description: Cancel a scheduled payment before it is sent.
+    takes:
+      payment-id: text
+    same-request-key: payment-id

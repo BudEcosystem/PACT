@@ -24,7 +24,7 @@ from .limits import seconds as _seconds
 from .programs import ProgramFuel, body_entry
 from .slo import Slo
 from .loops import STANDARD, Loop
-from .moments import Moment, RegionLimits
+from .moments import FailurePlan, Moment, RegionLimits
 from .questions import Gate, Rejected, Shape, questions_for
 from .suspension import PauseRule
 from .watches import Watches
@@ -1645,6 +1645,9 @@ class StageSpec:
     region_limits: RegionLimits = RegionLimits()
     #: `limits.items-at-most:` — the ceiling every `each` carries (WF-10).
     items_at_most: int | None = None
+    #: `if-it-fails:` — what happens once every attempt has failed; `None`
+    #: stops and says so (02W §2.7).
+    if_it_fails: FailurePlan | None = None
 
     @property
     def nobody_answered(self) -> str:
@@ -1688,6 +1691,7 @@ class StageSpec:
             limits=Limits.from_mapping(written_limits),
             region_limits=RegionLimits.from_limits(written_limits),
             items_at_most=whole(written_limits.get("items-at-most")),
+            if_it_fails=FailurePlan.from_written(raw.get("if-it-fails")),
         )
 
 

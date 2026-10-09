@@ -1,0 +1,6 @@
+description: Checks an application's documents and UL 1741 SB listing, and reads its diagram.
+instructions: Say which required documents or listings are missing from the application you are given.
+accepts:
+  application: text
+answers-with:
+  missing: list of text

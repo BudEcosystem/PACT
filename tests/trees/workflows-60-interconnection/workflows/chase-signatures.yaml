@@ -1,0 +1,8 @@
+description: Remind the signers that the agreement waits for their signatures.
+accepts: { application-id: text }
+starts-at: chase
+steps:
+  chase:
+    does: call
+    call: docusign/remind-signers
+    bind: { application-id: input.application-id }

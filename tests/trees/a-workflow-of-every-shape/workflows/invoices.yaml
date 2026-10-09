@@ -10,7 +10,7 @@ kept-for:
 hides:
   input.attachments: [logs]
 published-as: [tool]
-undone-by: ledger/unpost
+undone-by: ledger/unpost-all
 questions:
   go-ahead:
     description: Whether to post this run's invoices.

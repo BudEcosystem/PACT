@@ -1,0 +1,3 @@
+description: What the sender is told when an invoice is declined.
+shape: text
+value: "Invoice {invoice} was not approved for payment."

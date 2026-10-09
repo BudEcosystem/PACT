@@ -321,7 +321,7 @@ fn a_combine_rule_is_one_of_the_six_and_a_moment_is_a_time_or_a_moment() {
 fn an_undo_names_a_tools_action_or_a_workflow() {
     let text = refused(
         "undo-agent",
-        &[(FLOW, "undone-by: ledger/unpost\n", "undone-by: sorter\n")],
+        &[(FLOW, "undone-by: ledger/unpost-all\n", "undone-by: sorter\n")],
         "loader/no-such-name",
     );
     assert!(

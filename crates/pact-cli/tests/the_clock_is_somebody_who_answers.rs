@@ -2,7 +2,7 @@
 //! the time `answer-within:` names (02W §2.8, §3 WF-21 and WF-22, §4 R12, §8).
 //! A question only the clock answers has no gate — no wording, no answer — and
 //! its one exit is `nobody-answered`; `pact waits` lists it with
-//! `waiting-for-a-time`. Over #16's tree (`tests/trees/a-trial-booking-case/`,
+//! `waiting-for-a-time`. Over #16's tree (`tests/trees/workflows-16-trial-booking/`,
 //! 02W §5.1) and mutations of it.
 
 use std::path::{Path, PathBuf};
@@ -16,7 +16,7 @@ fn repo() -> PathBuf {
     PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
 }
 
-const TREE: &str = "tests/trees/a-trial-booking-case";
+const TREE: &str = "tests/trees/workflows-16-trial-booking";
 const FLOW: &str = "workflows/trial-booking.yaml";
 const WAIT: &str = "    asked-of: [the-clock]\n";
 
@@ -319,9 +319,9 @@ fn a_clock_wait_before_the_answer_is_a_path_that_answers() {
             ),
             (
                 "workflows/parent-contact.yaml",
-                "    does: answer\n",
-                "    does: answer\nquestions:\n  a-moment:\n    description: x\n    \
-             asked-of: [the-clock]\n    answer-within: 1 minute\n",
+                "    bind: { contact-id: steps.upsert.id }\n",
+                "    bind: { contact-id: steps.upsert.id }\nquestions:\n  a-moment:\n    \
+             description: x\n    asked-of: [the-clock]\n    answer-within: 1 minute\n",
             ),
         ],
     );

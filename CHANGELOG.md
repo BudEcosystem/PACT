@@ -8,7 +8,48 @@ holds that did not; the commits are listed under it for whoever wants the detail
 Running PACT trees in production on Pydantic AI 2.54, through
 [Bud Agent Flow](https://github.com/BudEcosystem/Bud-Agent-Flow), drove these changes. Every
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
-runs offline: 3878 tests, 1304 Rust and 2574 adapter.
+runs offline: 3912 tests, 1335 Rust and 2577 adapter.
+
+### Workflows: failure plans, undo, silence, and the five worked trees (9 October)
+
+- **What happens after a failure is one record** (02W §2.7, F2). A workflow stage writes
+  `if-it-fails:` with `after-that:` (`use-a-backup`, `carry-on`, `ask-a-person`,
+  `wait-for-a-new-version`, `undo`, `stop-and-say-so`) and the line each choice needs:
+  `backup:` (called with the stage's own `bind:`; a backup that needs more is
+  `loader/a-call-that-does-not-fit`), `carry-on-with:` (fields the stage answers with, else
+  `loader/a-binding-to-nothing`), `asks:`, `new-version-of:`, `undo:` and `undo-where:` (only
+  when `undo:` names an `each`). `gives-up-after:` is a moment. A stage's `when-it-runs-out:`
+  of `use-a-backup`, `wait-for-a-new-version` or `undo` takes its companion from the same
+  record (`schema/missing-companion`), and a workflow's own ceiling cannot use a backup or a
+  version. An agent's loop may not write it.
+- **A write says how it is undone** (02W §2.12). `action.undone-by:` (a `<tool>/<action>` or a
+  workflow: then the action is *Changes*) and `action.status-check:` (a read asked before a
+  retry). An undo — an action's, a stage's or a workflow's — that only reads, or takes an input
+  the write's inputs and answer cannot fill by name and shape, is
+  `loader/an-undo-that-does-not-fit` (WF-26); a status check that writes, or that the call's
+  own inputs cannot fill, is `loader/a-status-check-that-does-not-fit`. A workflow stage
+  calling a write with no undo and no *Ask before* gets the note
+  `loader/cannot-be-undone-and-nobody-asked` (WF-25).
+- **Silence never approves, by structure** (02W §3 WF-20, WAIT-4, R13, R50). The
+  `nobody-answered` exit of a wait a person answers may not reach, before another wait, a stage
+  whose call needs a person's yes (`needs-a-person:` or a rule in the workflow's policy), or a
+  write the wait's `answered` exit leads to (`loader/silence-reaches-a-gated-step`, with a
+  quiet place to send it instead). A wait only the clock or events answer has no gate.
+- **A judged check has a judge** (WF-34): a workflow's `judged:` check with no `graded-by:` on
+  the checks it names is `loader/a-check-nothing-can-run`.
+- **The five worked trees of 02W §5 load clean** — `tests/trees/workflows-16-trial-booking`
+  (was `a-trial-booking-case`), `workflows-48-invoices`, `workflows-69-reflexion`,
+  `workflows-79-supervisor`, `workflows-60-interconnection` — with the agents, tools, programs
+  and values they name. Fixed on the way: an `answer` stage hands back its `bind:` (it was
+  refused as a call-only line); a port's `same-conversation-when:` may name a part of a named
+  shape (`invoice.vendor-tax-id`); a repeat's `comes-from:` may name a stage some rounds skip
+  (such a round adds nothing); and the trees write retention in days and `one of` choices
+  in block maps.
+- Conformance tests `every_example_loads_clean`, `silence_never_approves` (a mutation sweep of
+  every `nobody-answered` against a separate reading of the tree, and the first diagnostic
+  02W §3 prints), `a_failed_item_is_kept_not_dropped` and `undo_reverses_exactly_what_succeeded`
+  (loader halves), `a_judged_check_has_a_judge`. Python: `moments.FailurePlan` on
+  `ir.StageSpec.if_it_fails`. 56 kinds.
 
 ### Workflows: waits, questions, reminders, time, ports and value tables (9 October)
 

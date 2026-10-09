@@ -259,6 +259,11 @@ fn an_agents_loop_may_not_write_a_line_only_a_workflow_reads() {
             "`undone-by:`",
             "    undone-by: orders/look-up\n",
         ),
+        (
+            "if-it-fails",
+            "`if-it-fails:`",
+            "    if-it-fails:\n      after-that: stop-and-say-so\n",
+        ),
         ("over", "`over:`", "    over: input.x\n"),
         (
             "declined",

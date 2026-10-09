@@ -1,0 +1,142 @@
+description: >
+  Suggest ICD-10-CM and CPT codes for a signed encounter, check them against
+  NCCI edits and the documentation, try again with written lessons, then have
+  a coder accept or edit them.
+accepts:
+  encounter-id: text
+  specialty: text
+  patient-age: whole number
+  patient-sex: one of female, male, unknown
+
+data-stays-in: us-baa-region     # every model call stays on the BAA-covered endpoint
+kept-for: 3653 days              # ten years: payer and OIG audit trail
+
+starts-at: fetch
+steps:
+  fetch:
+    does: call
+    call: epic/get-encounter-note
+    bind: { encounter-id: input.encounter-id }
+    then: { answered: minimise }
+
+  minimise:
+    does: call
+    call: phi-minimise               # pure program: keeps clinical content only
+    bind: { note: steps.fetch.note }
+    then: { answered: code-it }
+
+  code-it:
+    does: repeat
+    at-most: 3
+    until:
+      - { value: steps.verdict.label, is: passed }
+    remembers:
+      lessons:
+        description: what went wrong in earlier rounds, in the coder agent's words
+        lasts: one-run
+        comes-from: steps.reflect.lesson
+        combines-by: keep-all
+      codes:
+        description: the latest proposed code set
+        lasts: one-run
+        comes-from: steps.attempt.codes
+        combines-by: keep-the-latest
+    starts-at: attempt
+    steps:
+      attempt:
+        does: call
+        call: coder
+        bind:
+          note: steps.minimise.note
+          this-run-lessons: remembers.lessons
+          past-lessons: remembers.coding-lessons      # the reviewed ones, for this specialty
+        then: { answered: edits }
+      edits:
+        does: call
+        call: ncci-edits             # pure program: PTP, MUE, age and sex conflicts
+        bind:
+          codes: steps.attempt.codes
+          age: input.patient-age
+          sex: input.patient-sex
+        then: { answered: judge }
+      judge:
+        does: call
+        call: documentation-judge    # an agent on a different model from `coder`
+        bind:
+          note: steps.minimise.note
+          codes: steps.attempt.codes
+        then: { answered: verdict }
+      verdict:
+        does: decide
+        chooses-between: { passed: done, failed: reflect }
+        by:
+          - rules:
+              - when:
+                  - { value: steps.edits.conflicts, is-empty: yes }
+                  - { value: steps.judge.supported, is: yes }
+                choose: passed
+              - choose: failed
+      reflect:
+        does: call
+        call: coding-reflector
+        says: >
+          Say in one or two sentences what the last code set got wrong and
+          what to do differently next time. Do not propose codes here.
+        bind:
+          codes: steps.attempt.codes
+          conflicts: steps.edits.conflicts
+          judge-notes: steps.judge.notes
+    # Ran out: the coder still gets the best set, marked as not passed.
+    then: { answered: keep-lessons, too-many-times: coder-review }
+
+  keep-lessons:
+    does: call
+    call: bud/remember               # a model wrote these, so they wait for review (F6)
+    bind:
+      memory: remembers.coding-lessons
+      value: steps.code-it.lessons
+    then: { answered: coder-review }
+
+  coder-review:
+    does: ask-someone
+    asks: coder-signs-off
+    then: { answered: charge, declined: manual }
+
+  manual:
+    does: call
+    call: epic/send-to-manual-coding
+    bind: { encounter-id: input.encounter-id }
+
+  charge:
+    does: call
+    call: epic/send-to-charge-router
+    bind:
+      encounter-id: input.encounter-id
+      codes: steps.coder-review.codes
+    then: { answered: claim-outcome }
+
+  claim-outcome:
+    does: ask-someone
+    asks: wait-for-the-claim
+    then: { heard: { claim-decided: label-run }, nobody-answered: done }
+
+  label-run:
+    does: call
+    call: bud-runs/label-run         # the outcome becomes an eval label for this run
+    bind: { outcome: latest-update.claim-status }
+
+questions:
+  coder-signs-off:
+    description: The coder of record accepts or edits the suggested codes.
+    says: Review the suggested codes and their evidence. Edit anything that is wrong.
+    shows: [steps.code-it.ended, steps.code-it.rounds, steps.code-it.lessons]
+    answer: { approved: yes or no, codes: list of coded-line, because: text }
+    starts-with: { codes: steps.code-it.codes }
+    asked-of: [coders-for-this-specialty]          # the team's place is its Epic work queue
+    answer-within: 5 days
+    reminds-at:
+      - { at: 3 days, hands-over-to: [coding-supervisor] }
+  wait-for-the-claim:
+    description: Wait for the payer's decision on the claim.
+    asked-of: [claim-decided]        # a port: the Availity 835 for this encounter
+    answer-within: 60 days

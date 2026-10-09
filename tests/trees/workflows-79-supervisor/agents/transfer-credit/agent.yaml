@@ -1,0 +1,7 @@
+description: A specialist reader for transfer-credit.
+instructions: Read the file for what you are asked, and give evidence notes with page citations.
+accepts:
+  file: file
+  question: text
+answers-with:
+  notes: list of text

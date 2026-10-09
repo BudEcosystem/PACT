@@ -1,0 +1,10 @@
+description: Tell the installer the customer cancelled and what was undone.
+accepts:
+  application-id: text
+  installer-email: text, optional
+starts-at: tell
+steps:
+  tell:
+    does: call
+    call: outlook/send-email
+    bind: { to: input.installer-email, wording: values.application-cancelled }

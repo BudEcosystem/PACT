@@ -1,0 +1,14 @@
+description: The interconnection screens — 15% penetration, loading, voltage rise.
+engine: wasm
+determinism: pure
+takes:
+  power-flow: text
+  der-on-feeder: number
+answers-with:
+  result: one of all-pass, minor-failure, major-failure
+  summary: text
+fuel:
+  instructions-at-most: 10m
+  runs-for-at-most: 2s
+  memory-at-most: 64m
+  when-it-runs-out: stop-and-say-so

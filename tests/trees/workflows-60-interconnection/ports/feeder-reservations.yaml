@@ -1,0 +1,6 @@
+description: Flows asking to reserve capacity on a feeder.
+kind: inbound-call
+answers: reserve-feeder-capacity
+same-conversation-when: [feeder]
+if-still-running: queue              # never two reservations on one feeder at once
+who-can-reach-it: [workflows in this workspace]

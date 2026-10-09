@@ -1,0 +1,8 @@
+description: CYME, which studies power flow on a feeder.
+connect: utility-apps
+actions:
+  run-power-flow:
+    description: Run a power-flow study for new generation on a feeder.
+    reads-only: yes
+    takes: { feeder: text, size-kw-ac: number }
+    answers-with: { results: text }

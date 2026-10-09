@@ -1,0 +1,15 @@
+description: DocuSign, where the agreement is signed.
+connect: utility-apps
+actions:
+  send-envelope:
+    description: Send the agreement to its signers.
+    takes: { agreement: file, signers: list of text }
+    answers-with: { envelope-id: text }
+    undone-by: docusign/void-envelope
+  void-envelope:
+    description: Void an envelope that has not been completed.
+    takes: { envelope-id: text }
+    same-request-key: envelope-id
+  remind-signers:
+    description: Remind the signers of an envelope that waits for them.
+    takes: { application-id: text }

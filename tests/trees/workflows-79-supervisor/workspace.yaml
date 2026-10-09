@@ -1,0 +1,15 @@
+# 02W §5.4 (#79): who the workspace is, the switch the weekly fairness flow
+# turns on, and what a specialist is asked.
+name: admissions-first-read
+workspace-id: 01JBF7Q3T9V2M8K4X6N1C5R079
+description: A supervisor plans which specialist readers to ask, they read in parallel, and a draft reader card goes to Reader 1.
+owner: admissions
+allow-egress: [tools]
+remembers:
+  ai-reading-paused:
+    description: Whether AI first reads are paused after a fairness alert.
+    lasts: forever
+shapes:
+  reading-task:
+    reader: one of academic-context, essay-and-recommendations, activities, transfer-credit
+    question: text

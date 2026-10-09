@@ -1,0 +1,3 @@
+resource-kind: mcp-server
+endpoint: host/twilio
+description: Where the centre's Twilio connection is served.

@@ -1,0 +1,3 @@
+description: What the clerks are told when an approval expires.
+shape: text
+value: "Nobody approved invoice {invoice} in time."

@@ -1,0 +1,13 @@
+description: Reserve capacity on one feeder, one application at a time per feeder.
+accepts: { feeder: text, application-id: text, size-kw-ac: number }
+answers-with: { reservation-id: text }
+starts-at: reserve
+steps:
+  reserve:
+    does: call
+    call: powerclerk/reserve-capacity
+    bind: { feeder: input.feeder, application-id: input.application-id, size-kw-ac: input.size-kw-ac }
+    then: { answered: reply }
+  reply:
+    does: answer
+    bind: { reservation-id: steps.reserve.reservation-id }

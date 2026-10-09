@@ -1,0 +1,14 @@
+description: Checks a code set against NCCI edits — PTP, MUE, age and sex conflicts.
+engine: wasm
+determinism: pure
+takes:
+  codes: list of coded-line
+  age: whole number
+  sex: one of female, male, unknown
+answers-with:
+  conflicts: list of text
+fuel:
+  instructions-at-most: 10m
+  runs-for-at-most: 2s
+  memory-at-most: 64m
+  when-it-runs-out: stop-and-say-so

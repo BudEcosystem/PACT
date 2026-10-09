@@ -1,0 +1,52 @@
+description: The centre's HubSpot, where parents and trial deals are kept.
+connect: hubspot-server
+actions:
+  create-or-update-contact:
+    description: Create a contact, or update the one with this email address.
+    takes:
+      email: text
+      first-name: text
+      last-name: text
+      phone: text
+      lifecycle-stage: text
+    answers-with:
+      id: text
+    same-request-key: email
+    undone-by: hubspot/delete-contact
+  set-contact-owner:
+    description: Make a tutor the owner of a contact.
+    takes:
+      contact-id: text
+      owner-id: text
+    answers-with:
+      done: yes or no
+    same-request-key: contact-id
+    undone-by: hubspot/clear-contact-owner
+  create-deal:
+    description: Open a trial deal for a contact.
+    takes:
+      contact-id: text
+      pipeline: text
+      student: text
+      subject: text
+    answers-with:
+      deal-id: text
+    same-request-key: contact-id
+    undone-by: hubspot/delete-deal
+  # The undos the trial-cancelled port could call (02W §5.1: "Stop without
+  # undo: the HubSpot contact and deal stay"), so these writes are Changes.
+  delete-contact:
+    description: Delete a contact.
+    takes:
+      id: text
+    same-request-key: id
+  clear-contact-owner:
+    description: Take the owner off a contact.
+    takes:
+      contact-id: text
+    same-request-key: contact-id
+  delete-deal:
+    description: Delete a deal.
+    takes:
+      deal-id: text
+    same-request-key: deal-id

@@ -1,0 +1,7 @@
+description: An installer submits an interconnection application in PowerClerk.
+kind: event
+through: powerclerk
+answers: interconnection
+same-conversation-when: [application-id]
+if-still-running: skip
+who-can-reach-it: [powerclerk]

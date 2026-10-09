@@ -8,7 +8,7 @@
 //! | Rule | 02W | Fires when |
 //! |---|---|---|
 //! | `loader/a-binding-to-nothing` | WF-4 | a binding names no stage, field, input, memory or start |
-//! | `loader/a-binding-to-a-stage-that-may-not-have-run` | WF-5 | some path reaches the reading stage (or, for `comes-from:` and `until:`, the end of the round) without passing the named one, and the input it fills is not `, optional` |
+//! | `loader/a-binding-to-a-stage-that-may-not-have-run` | WF-5 | some path reaches the reading stage (or, for `until:`, the end of the round) without passing the named one, and the input it fills is not `, optional` |
 //! | `loader/a-binding-from-later` | WF-6 | the stage reads one that runs after it (in a repeat, later in the round) |
 //! | `loader/an-item-outside-for-each` | WF-7 | `item.` outside an `each` body |
 //! | `loader/a-target-picked-from-nowhere` | WF-9 | `call:` is a binding with no `may-call:` |
@@ -151,7 +151,7 @@ impl<'a> Shapes<'a> {
         )
     }
 
-    fn fits(&self, have: &Shape, want: &Shape) -> bool {
+    pub(crate) fn fits(&self, have: &Shape, want: &Shape) -> bool {
         have.fits(want, &|n| self.parts_of(n))
     }
 
@@ -331,7 +331,7 @@ struct Flow<'a> {
 enum Reading {
     /// By the stage named, where it sits in the innermost frame.
     At,
-    /// When a round ends (`until:`, `comes-from:`): every stage of the round
+    /// When a round ends (`until:`): every stage of the round
     /// is there to read, and an outer one is judged from the repeat.
     RoundEnd,
     /// Somewhere a stage's position does not apply (a workflow's `hides:`, a
@@ -377,6 +377,12 @@ impl<'a> Flow<'a> {
             let does = workflows::does(&entry.node).unwrap_or("");
             if does == "call" {
                 self.call(frames, stage, fields, diags);
+            }
+            if does == "answer" {
+                let bind = fields.get("bind").and_then(|e| e.node.as_map());
+                for value in bind.into_iter().flatten().map(|(_, v)| &v.node) {
+                    self.read(frames, stage, value, None, Reading::At, diags);
+                }
             }
             if does == "decide" {
                 conditions::decides(stage, fields, &entry.node, diags);
@@ -685,7 +691,10 @@ impl<'a> Flow<'a> {
                 ));
                 continue;
             }
-            self.read(frames, stage, &from.node, None, Reading::RoundEnd, diags);
+            // A round that does not run the stage adds nothing to what is
+            // remembered (02W §5.3: a lesson is written only when the verdict
+            // fails), so the name is held and not every path to the round's end.
+            self.read(frames, stage, &from.node, None, Reading::NamesOnly, diags);
         }
         let Some(until) = fields.get("until") else {
             return;
@@ -1199,9 +1208,10 @@ impl<'a> Flow<'a> {
         ));
     }
 
-    /// WF-5 when a round ends (`until:`, `comes-from:`): every way a round can
-    /// end must have passed `target`. `comes-from:` and `until:` fill no input,
-    /// so there is no `, optional` escape.
+    /// WF-5 when a round ends (`until:`): every way a round can end must have
+    /// passed `target`. An `until:` fills no input, so there is no `, optional`
+    /// escape. (`comes-from:` is read by name only: a round that skips its
+    /// stage adds nothing to what is remembered.)
     fn at_round_end(
         &self,
         frame: &Frame<'a>,
@@ -1383,48 +1393,9 @@ impl<'a> Flow<'a> {
             .collect()
     }
 
-    /// What a call target takes, each line read: `(input, its line, as written)`.
-    /// `None` when the target says nothing about what it takes.
+    /// What a call target takes ([`inputs_of`]).
     fn inputs_of(&self, target: &str) -> Option<Vec<(String, Option<Line>, String)>> {
-        let (map, bound): (&Map, BTreeSet<&str>) = match workflows::resolve(self.document, target) {
-            Resolved::One(Called::Action) => {
-                let (tool, action) = target.split_once('/')?;
-                let a = workflows::entry_in(self.document, "tools", tool)?
-                    .get("actions")?
-                    .get(action)?;
-                let bound = a
-                    .get("bind")
-                    .and_then(Node::as_map)
-                    .map(|m| m.keys().map(String::as_str).collect())
-                    .unwrap_or_default();
-                (a.get("takes")?.as_map()?, bound)
-            }
-            Resolved::One(kind @ (Called::Agent | Called::Workflow)) => (
-                workflows::entry_in(self.document, kind.collection(), target)?
-                    .get("accepts")?
-                    .as_map()?,
-                BTreeSet::new(),
-            ),
-            Resolved::One(Called::Program) => (
-                workflows::entry_in(self.document, "programs", target)?
-                    .get("takes")?
-                    .as_map()?,
-                BTreeSet::new(),
-            ),
-            _ => return None,
-        };
-        Some(
-            map.iter()
-                .filter(|(k, _)| !bound.contains(k.as_str()))
-                .map(|(k, e)| {
-                    (
-                        k.clone(),
-                        self.shapes.line(&e.node),
-                        e.node.as_str().unwrap_or("").to_string(),
-                    )
-                })
-                .collect(),
-        )
+        inputs_of(self.document, self.shapes, target)
     }
 
     /// What a stage answers with, by field: `None` when that cannot be known
@@ -1436,24 +1407,11 @@ impl<'a> Flow<'a> {
                 .collect()
         };
         match workflows::does(stage)? {
-            "call" => {
-                let target = stage.get("call")?.as_str()?.trim();
-                let answers = match workflows::resolve(self.document, target) {
-                    Resolved::One(Called::Action) => {
-                        let (tool, action) = target.split_once('/')?;
-                        workflows::entry_in(self.document, "tools", tool)?
-                            .get("actions")?
-                            .get(action)?
-                            .get("answers-with")?
-                    }
-                    Resolved::One(kind) => {
-                        workflows::entry_in(self.document, kind.collection(), target)?
-                            .get("answers-with")?
-                    }
-                    _ => return None,
-                };
-                Some(read(answers.as_map()?))
-            }
+            "call" => answers_of(
+                self.document,
+                self.shapes,
+                stage.get("call")?.as_str()?.trim(),
+            ),
             "ask-someone" => {
                 let asks = stage.get("asks")?.as_str()?.trim();
                 let q = self
@@ -1650,6 +1608,83 @@ impl<'a> Graph<'a> {
 // ─────────────────────────────────────────────────────────────────── helpers
 
 /// Whether `stage` is anywhere inside `steps` (at any depth).
+/// What a call target takes, each line read: `(input, its line, as written)`.
+/// `None` when the target says nothing about what it takes. An action's own
+/// `bind:` lines are filled by the host, so they are not among them.
+pub(crate) fn inputs_of(
+    document: &Node,
+    shapes: &Shapes,
+    target: &str,
+) -> Option<Vec<(String, Option<Line>, String)>> {
+    let (map, bound): (&Map, BTreeSet<&str>) = match workflows::resolve(document, target) {
+        Resolved::One(Called::Action) => {
+            let (tool, action) = target.split_once('/')?;
+            let a = workflows::entry_in(document, "tools", tool)?
+                .get("actions")?
+                .get(action)?;
+            let bound = a
+                .get("bind")
+                .and_then(Node::as_map)
+                .map(|m| m.keys().map(String::as_str).collect())
+                .unwrap_or_default();
+            (a.get("takes")?.as_map()?, bound)
+        }
+        Resolved::One(kind @ (Called::Agent | Called::Workflow)) => (
+            workflows::entry_in(document, kind.collection(), target)?
+                .get("accepts")?
+                .as_map()?,
+            BTreeSet::new(),
+        ),
+        Resolved::One(Called::Program) => (
+            workflows::entry_in(document, "programs", target)?
+                .get("takes")?
+                .as_map()?,
+            BTreeSet::new(),
+        ),
+        _ => return None,
+    };
+    Some(
+        map.iter()
+            .filter(|(k, _)| !bound.contains(k.as_str()))
+            .map(|(k, e)| {
+                (
+                    k.clone(),
+                    shapes.line(&e.node),
+                    e.node.as_str().unwrap_or("").to_string(),
+                )
+            })
+            .collect(),
+    )
+}
+
+/// What a call target answers with, by field: `None` when it declares nothing.
+pub(crate) fn answers_of(
+    document: &Node,
+    shapes: &Shapes,
+    target: &str,
+) -> Option<Vec<(String, Option<Line>)>> {
+    let answers = match workflows::resolve(document, target) {
+        Resolved::One(Called::Action) => {
+            let (tool, action) = target.split_once('/')?;
+            workflows::entry_in(document, "tools", tool)?
+                .get("actions")?
+                .get(action)?
+                .get("answers-with")?
+        }
+        Resolved::One(kind) => {
+            workflows::entry_in(document, kind.collection(), target)?.get("answers-with")?
+        }
+        _ => return None,
+    };
+    Some(
+        answers
+            .as_map()?
+            .iter()
+            .map(|(k, e)| (k.clone(), shapes.line(&e.node)))
+            .collect(),
+    )
+}
+
 fn holds(steps: &Map, stage: &str) -> bool {
     steps.iter().any(|(name, e)| {
         name == stage
@@ -2069,7 +2104,7 @@ workflows:
     #[test]
     fn what_a_round_reads_at_its_end_every_way_out_of_the_round_has_run() {
         let text = ROUND
-            .replace("UNTIL", "{ value: remembers.seen }")
+            .replace("UNTIL", "{ value: steps.b.total, more-than: 3 }")
             .replace("BIND", "input.id")
             .replace(
                 "            then: { answered: b }\n",
@@ -2089,8 +2124,10 @@ workflows:
             "{}",
             found[0].1
         );
-        // The same round, read from a stage every way out passes, is left alone.
-        let fine = text.replace("comes-from: steps.b.total", "comes-from: steps.a.total");
+        // The same round, read from a stage every way out passes, is left alone;
+        // and what it remembers may come from a stage some rounds skip (02W
+        // §5.3): such a round adds nothing.
+        let fine = text.replace("value: steps.b.total", "value: steps.a.total");
         assert!(rules(&fine).is_empty(), "{:?}", rules(&fine));
     }
 

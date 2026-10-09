@@ -1,0 +1,197 @@
+description: >
+  Match one invoice to its PO and receipts, get the approvals its amount
+  needs, post it to NetSuite and schedule the payment.
+accepts:
+  invoice: invoice-data
+  file: file
+  sender: text
+limits:
+  finishes-within: 7 days
+  when-it-runs-out: ask-a-person
+  asks: invoice-is-stuck
+starts-at: vendor
+
+steps:
+  vendor:
+    does: call
+    call: netsuite/get-vendor        # fails when no vendor matches
+    bind:
+      tax-id: input.invoice.vendor-tax-id
+      name: input.invoice.vendor-name
+    if-it-fails:
+      after-that: ask-a-person       # the vendor-master queue creates it, then resumes here
+      asks: create-the-vendor
+    then: { answered: po }
+
+  po:
+    does: call
+    call: netsuite/find-po-and-receipts     # answers found: no when there is no PO
+    bind: { po-number: input.invoice.po-number }
+    then: { answered: match }
+
+  match:
+    does: call
+    call: three-way-match            # pure program: price within 2%, quantity exact
+    bind:
+      invoice: input.invoice
+      po: steps.po.order
+      receipts: steps.po.receipts
+    then: { answered: tax }
+
+  tax:
+    does: call
+    call: avalara/validate-tax
+    bind: { invoice: input.invoice }
+    then: { answered: route }
+
+  route:
+    does: decide
+    chooses-between: { clean: tiers, exception: resolve, tax: tax-review }
+    by:
+      - rules:
+          - when: [{ value: steps.match.result, is-one-of: [price-variance, quantity-short, no-po] }]
+            choose: exception
+          - when: [{ value: input.invoice.lowest-confidence, less-than: 0.85 }]
+            choose: exception
+            because: A field was read with low confidence.
+          - when: [{ value: steps.tax.difference, more-than: 5 USD }]
+            choose: tax
+          - choose: clean
+
+  resolve:
+    does: ask-someone
+    asks: resolve-the-exception
+    then: { answered: tiers, declined: tell-sender }
+
+  tax-review:
+    does: ask-someone
+    asks: check-the-tax
+    then: { answered: tiers, declined: tell-sender }
+
+  # The approval matrix, as rules a controller owns (see owners below).
+  tiers:
+    does: decide
+    chooses-between: { auto: post, owner: owner-approves, owner-then-controller: owner-first }
+    by:
+      - rules:
+          - when:
+              - { value: input.invoice.total, less-than: 5000 USD }
+              - { value: steps.match.result, is: matched }
+            choose: auto
+          - when: [{ value: input.invoice.total, less-than: 50000 USD }]
+            choose: owner
+          - choose: owner-then-controller
+
+  owner-approves:
+    does: ask-someone
+    asks: budget-owner-approves
+    then: { answered: post, declined: tell-sender, nobody-answered: tell-clerk }
+
+  owner-first:
+    does: ask-someone
+    asks: budget-owner-approves
+    then: { answered: controller-approves, declined: tell-sender, nobody-answered: tell-clerk }
+
+  controller-approves:
+    does: ask-someone
+    asks: controller-approves
+    then: { answered: post, declined: tell-sender, nobody-answered: tell-clerk }
+
+  post:
+    does: call
+    call: netsuite/create-vendor-bill
+    bind:
+      vendor-id: steps.vendor.id
+      invoice: input.invoice
+      attachment: input.file
+    at-most: 4                       # three tries again
+    if-it-fails:
+      after-that: ask-a-person       # the "post failed" queue; resuming retries from here
+      asks: posting-failed
+    then: { answered: pay }
+
+  pay:
+    does: call
+    call: bill-com/schedule-payment
+    bind:
+      bill-id: steps.post.bill-id
+      amount: input.invoice.total
+      terms: steps.vendor.payment-terms
+
+  tell-sender:
+    does: call
+    call: outlook/send-email
+    bind:
+      to: input.sender
+      wording: values.invoice-rejected
+      fills.invoice: input.invoice.invoice-number
+
+  tell-clerk:
+    does: call
+    call: teams/post-message
+    bind:
+      channel: values.ap-clerks-channel
+      wording: values.approval-expired
+      fills.invoice: input.invoice.invoice-number
+
+questions:
+  budget-owner-approves:
+    description: The budget owner approves an invoice for posting and payment.
+    says: Please approve this invoice for posting and payment.
+    shows: [input.invoice.vendor-name, input.invoice.invoice-number,
+            input.invoice.total, steps.match.summary]
+    answer: { approved: yes or no, because: text }
+    asked-of: [steps.po.budget-owner]
+    not-the-same-as: [steps.po.raised-by]          # separation of duties
+    answer-within: 48h                               # reached the way the owner chose
+    reminds-at:
+      - { at: 24h, nudges: yes }
+      - { at: 40h, hands-over-to: [steps.po.budget-owner-delegate] }
+  # `controller-approves`, `resolve-the-exception` (asked of
+  # `steps.match.resolver`: the buyer, the warehouse lead or the requester),
+  # `check-the-tax`, `create-the-vendor`, `posting-failed` and
+  # `invoice-is-stuck` follow the same pattern.
+  controller-approves:
+    description: The controller approves a large invoice after its budget owner.
+    says: Please approve this invoice for posting and payment.
+    shows: [input.invoice.vendor-name, input.invoice.invoice-number,
+            input.invoice.total, steps.match.summary]
+    answer: { approved: yes or no, because: text }
+    asked-of: [controllers]
+    not-the-same-as: [steps.po.raised-by]
+    answer-within: 48h
+  resolve-the-exception:
+    description: Whoever can resolve a matching exception does so.
+    says: This invoice does not match its PO and receipts. Resolve it, or decline it.
+    shows: [input.invoice.invoice-number, steps.match.summary]
+    answer: { approved: yes or no, because: text }
+    asked-of: [steps.match.resolver]
+    answer-within: 3 days
+  check-the-tax:
+    description: A tax analyst checks a tax difference over five dollars.
+    says: The tax on this invoice differs from what Avalara expects. Accept it, or decline it.
+    shows: [input.invoice.invoice-number, steps.tax.difference]
+    answer: { approved: yes or no, because: text }
+    asked-of: [tax-analysts]
+    answer-within: 2 days
+  create-the-vendor:
+    description: The vendor-master queue creates a vendor no record matches, then resumes the run.
+    says: No vendor matches this invoice. Create the vendor, then resume.
+    shows: [input.invoice.vendor-name, input.invoice.vendor-tax-id]
+    answer: { approved: yes or no }
+    asked-of: [vendor-master]
+    answer-within: 3 days
+  posting-failed:
+    description: The "post failed" queue looks at a bill NetSuite would not take.
+    says: NetSuite did not take this bill after four tries. Fix it and retry, or stop.
+    shows: [input.invoice.invoice-number]
+    answer: { approved: yes or no }
+    asked-of: [ap-clerks]
+    answer-within: 1 day
+  invoice-is-stuck:
+    description: An invoice has been open for seven days.
+    says: This invoice has not been posted within seven days. Keep going?
+    shows: [input.invoice.invoice-number]
+    answer: { approved: yes or no }
+    asked-of: [ap-clerks]
+    answer-within: 1 day

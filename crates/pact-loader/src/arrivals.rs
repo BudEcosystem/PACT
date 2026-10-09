@@ -195,6 +195,26 @@ fn arriving<'a>(document: &'a Node, port: &Port<'a>, flow: &'a Node) -> Option<&
     flow.get("accepts").and_then(Node::as_map)
 }
 
+/// Whether `said` is a field of what arrives: a field's name, or a path into
+/// the parts of a named shape it has (`invoice.vendor-tax-id`, 02W §5.2).
+fn a_field_of(document: &Node, came: &Map, said: &str) -> bool {
+    let mut parts = said.split('.');
+    let Some(mut at) = parts.next().and_then(|first| came.get(first)) else {
+        return false;
+    };
+    for part in parts {
+        let named = at.node.as_str().map(|s| s.trim().trim_end_matches(", optional").trim());
+        let Some(next) = named
+            .and_then(|n| document.get("shapes")?.get(n)?.as_map())
+            .and_then(|m| m.get(part))
+        else {
+            return false;
+        };
+        at = next;
+    }
+    true
+}
+
 /// The workflow's inputs a run cannot start without, in written order.
 fn required<'a>(shapes: &Shapes, flow: &'a Node) -> Vec<&'a str> {
     flow.get("accepts")
@@ -262,7 +282,7 @@ fn a_workflows_port(
             let Some(said) = entry.as_str().map(str::trim) else {
                 continue;
             };
-            if fields.contains(&said) {
+            if came.is_some_and(|m| a_field_of(document, m, said)) {
                 continue;
             }
             diags.push(Diagnostic::error(
