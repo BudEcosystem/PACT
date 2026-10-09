@@ -19,6 +19,7 @@
 //! | `loader/a-path-that-answers-nothing` | WF-38 | `answers-with:` is declared and a path ends with no `answer` stage |
 //! | `loader/no-such-name` | shipped | a `call:` or `may-call:` names nothing here (an undo or a backup: `failures.rs`) |
 //! | `loader/a-name-the-workspace-already-has` | new | a workflow shares its name with an agent or a program, or a `call:` could mean two of them |
+//! | `loader/a-workflow-nobody-published-as-a-tool` | N2 | an agent's `uses:` names a workflow whose `published-as:` does not list `tool`, or a name that is a workflow and something else an agent can use |
 //!
 //! A stage reached through `steps:` is one stage whatever holds it, so the
 //! walk below is the one walk for an agent's loop, a workflow, and the inside
@@ -128,6 +129,7 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
     }
     calls_go_round(document, diags);
     one_name_one_thing(document, diags);
+    used_as_tools(document, diags);
     forget_after_is_now_kept_for(document, diags);
 }
 
@@ -866,6 +868,68 @@ fn one_name_one_thing(document: &Node, diags: &mut Diagnostics) {
     }
 }
 
+/// N2: an agent's `uses:` may name a workflow only when the workflow's
+/// `published-as:` lists `tool` (the model is then offered it as one tool, built
+/// from its `accepts:` and `answers-with:`), and only a name that is nothing
+/// else `uses:` can mean.
+fn used_as_tools(document: &Node, diags: &mut Diagnostics) {
+    let Some(agents) = document.get("agents").and_then(Node::as_map) else {
+        return;
+    };
+    for (agent, entry) in agents {
+        let Some(uses) = entry.node.get("uses") else {
+            continue;
+        };
+        for item in list(uses) {
+            let Some(name) = item.as_str().map(str::trim) else {
+                continue;
+            };
+            let Some(flow) = entry_in(document, "workflows", name) else {
+                continue;
+            };
+            let also: Vec<&str> = ["tools", "skills", "knowledge", "programs"]
+                .into_iter()
+                .filter(|c| entry_in(document, c, name).is_some())
+                .collect();
+            if let Some(other) = also.first() {
+                diags.push(Diagnostic::error(
+                    "loader/a-name-the-workspace-already-has",
+                    item.span.clone(),
+                    format!(
+                        "'{agent}' uses '{name}', which is both a workflow and one of the \
+                         workspace's {other}, so nothing can tell which one the agent is given."
+                    ),
+                    format!(
+                        "Rename one of them — the workflow to `{name}-flow`, say — and change what \
+                         names it."
+                    ),
+                ));
+                continue;
+            }
+            let published = flow
+                .get("published-as")
+                .map(list)
+                .unwrap_or_default()
+                .iter()
+                .any(|p| p.as_str().map(str::trim) == Some("tool"));
+            if !published {
+                diags.push(Diagnostic::error(
+                    "loader/a-workflow-nobody-published-as-a-tool",
+                    item.span.clone(),
+                    format!(
+                        "'{agent}' uses the workflow '{name}', and '{name}' is not published as a \
+                         tool, so its model would be handed a flow nobody offered to agents."
+                    ),
+                    format!(
+                        "Add `published-as: [tool]` to `workflows/{name}.yaml`, or take '{name}' \
+                         off `uses:` and call it from a workflow's stage instead."
+                    ),
+                ));
+            }
+        }
+    }
+}
+
 pub(crate) fn two_things(name: &str, found: &[Kind], at: Span) -> Diagnostic {
     let things = found
         .iter()
@@ -1049,7 +1113,7 @@ pub(crate) fn entry_span(entry: &pact_doc::Entry) -> Span {
     entry.key_span.clone().merge(&entry.node.span)
 }
 
-fn said_yes(n: &Node) -> bool {
+pub(crate) fn said_yes(n: &Node) -> bool {
     match &n.value {
         Value::Bool(b) => *b,
         Value::Str(s) => matches!(s.trim(), "yes" | "true" | "on"),

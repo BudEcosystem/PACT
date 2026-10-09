@@ -1067,11 +1067,13 @@ def _variant(written: Mapping[str, Any]) -> Strategy:
             # kept the tool that writes.
             named = [named]
         if named is not None:
-            # Everything `variant.may-use:` names: tools, procedures, knowledge
-            # and the programs the agent's own `uses:` reaches. A kind it can
-            # name and this left alone would be a narrowing with a hole in it.
+            # Everything `variant.may-use:` names: tools, procedures, knowledge,
+            # the programs the agent's own `uses:` reaches and the workflows it
+            # names there (N2). A kind it can name and this left alone would be a
+            # narrowing with a hole in it.
             keep = {str(x) for x in named}
             changes["tools"] = tuple(t for t in s.tools if t.name in keep)
+            changes["workflows"] = tuple(w for w in s.workflows if w in keep)
             changes["skills"] = tuple(k for k in s.skills if k.name in keep)
             changes["knowledge"] = tuple(k for k in s.knowledge if k.name in keep)
             changes["programs"] = tuple(

@@ -755,6 +755,13 @@ class AgentSpec:
     #: same way `skills` is — off the agent's own `uses:` line — so a corpus
     #: nobody named reaches no run, exactly like a skill nobody named.
     knowledge: tuple[KnowledgeSpec, ...] = ()
+    #: The workflows this agent may start as tools (N2): the names on its own
+    #: `uses:` line that are workflows, sorted like `tools`. `pact check` lets a
+    #: workflow be named there only when its `published-as:` lists `tool`, so
+    #: each is offered to the model as one tool built from the workflow's
+    #: `accepts:` and `answers-with:`. Names only: the workflow itself is read
+    #: from the document by whoever runs it (`WorkflowSpec.from_workflow`).
+    workflows: tuple[str, ...] = ()
     #: Text somebody OUTSIDE this tree wrote, already fenced by
     #: `mcp_bridge.quarantined` — today an MCP server's own prose (AD-71).
     #:
@@ -923,6 +930,11 @@ class AgentSpec:
             tools=tools,
             skills=skills,
             knowledge=knowledge,
+            workflows=tuple(
+                n
+                for n in sorted((doc.get("workflows") or {}))
+                if n in set(_as_list(a.get("uses")))
+            ),
             team={k: _text(v) for k, v in sorted((a.get("team") or {}).items())},
             max_steps=steps_at_most(written, DEFAULT_STEPS),
             steps_written=whole(written.get("steps-at-most")) is not None,
@@ -1438,6 +1450,11 @@ def _text(v: Any) -> str:
     return ""
 
 
+def _figure_as_text(v: Any) -> Any:
+    """A number written where text is read (`version: 2`), as the author wrote it."""
+    return str(v) if isinstance(v, int | float) and not isinstance(v, bool) else v
+
+
 def _as_list(v: Any) -> list[str]:
     if v is None:
         return []
@@ -1678,7 +1695,8 @@ class StageSpec:
             may_call=tuple(_as_list(raw.get("may-call"))),
             bind={str(k): str(v) for k, v in (raw.get("bind") or {}).items()},
             waits_for_result=raw.get("waits-for-result") is None or said_yes(raw.get("waits-for-result")),
-            version=_text(raw.get("version", "")),
+            # `version: 2` arrives as a number; read as text, never dropped as "not text".
+            version=_text(_figure_as_text(raw.get("version", ""))),
             chooses_between={str(k): str(v) for k, v in (raw.get("chooses-between") or {}).items()},
             by=tuple(Rung.from_written(r) for r in raw.get("by") or () if isinstance(r, Mapping)),
             over=_text(raw.get("over", "")),

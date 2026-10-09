@@ -1,0 +1,19 @@
+description: Looks up an order and says where it is.
+published-as: [tool]
+accepts:
+  order-number: text
+answers-with:
+  status: text
+starts-at: look
+steps:
+  look:
+    does: call
+    call: orders/look-up
+    bind:
+      order-number: input.order-number
+    then:
+      answered: reply
+  reply:
+    does: answer
+    bind:
+      status: steps.look.status

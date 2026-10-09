@@ -1,0 +1,5 @@
+description: Answers questions about an order.
+instructions: >
+  Find out where the customer's order is with the order-status flow, and say so.
+uses:
+  - order-status

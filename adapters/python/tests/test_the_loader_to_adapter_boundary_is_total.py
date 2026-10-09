@@ -295,6 +295,12 @@ def test_every_spec_field_that_holds_authored_state_is_filled_from_the_document(
         # `test_a_program_a_run_cannot_start_is_said_out_loud.py`, which asserts
         # `False` for a withholding workspace and `True` for a granting one.
         "programs_may_reach_outside",
+        # Authored, and this example names no workflow on its `uses:` line: it is
+        # an agent's worked example and has no `workflows/`. What proves the names
+        # reach the spec is `test_an_agent_is_read_with_the_workflows_it_may_start.py`,
+        # whose agent names one published as a tool (N2), the same division
+        # `knowledge` makes above.
+        "workflows",
         # Authored (02P A1), and this example writes no `{{run-inputs.<n>}}` in
         # its words — deliberately. A hole is filled strictly, so every run of
         # the worked example in this suite would have to supply its value, and

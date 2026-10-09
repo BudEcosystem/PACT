@@ -1615,7 +1615,9 @@ impl<'a> Flow<'a> {
     }
 
     /// What a stage answers with, by field: `None` when that cannot be known
-    /// here (a call to a binding, an agent answering in words, an `each`).
+    /// here (a call to a binding, an agent answering in words, an `each`). A
+    /// call that does not wait for its workflow answers no field: what it
+    /// gives back is the run it started, `.run`, and `.outcome` (02W §2.3).
     fn answer_of(&self, stage: &Node) -> Option<Vec<(String, Option<Line>)>> {
         let read = |m: &Map| {
             m.iter()
@@ -1623,6 +1625,13 @@ impl<'a> Flow<'a> {
                 .collect()
         };
         match workflows::does(stage)? {
+            "call"
+                if stage
+                    .get("waits-for-result")
+                    .is_some_and(|w| !workflows::said_yes(w)) =>
+            {
+                Some(Vec::new())
+            }
             "call" => answers_of(
                 self.document,
                 self.shapes,

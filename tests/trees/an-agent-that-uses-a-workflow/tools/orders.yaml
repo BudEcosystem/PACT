@@ -1,0 +1,11 @@
+description: The shop's orders.
+connect: order-server
+actions:
+  look-up:
+    description: Read one order.
+    reads-only: yes
+    takes:
+      order-number: text
+    answers-with:
+      total: money
+      status: one of delivered, in-transit, lost
