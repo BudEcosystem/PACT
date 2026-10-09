@@ -135,6 +135,7 @@ they meant is asking the wrong person a question with one right answer.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from enum import Enum
@@ -1107,6 +1108,29 @@ def _quoted_words(written: str) -> list[str]:
     return [m.group(1).strip() for m in re.finditer(r'"([^"]*)"', written) if m.group(1).strip()]
 
 
+def _rewritten(run_program: Callable[[str, dict[str, Any]], Any], named: str, content: Any) -> Any:
+    """What the program `named` makes of `content`.
+
+    A program reads words and answers in words (`takes: content: text`), and
+    an answer need not be words: a runtime whose agent answers in a shape hands
+    the chain that answer's fields. Handed them as they are, the program's
+    `takes:` refused them and the rule left the answer as it was, every time —
+    a rewrite that loads and never runs on any agent with `answers-with:`. So a
+    structured answer goes to the program as its JSON and comes back read as
+    JSON; an answer that is not JSON any more is the program's failure, and the
+    caller leaves the answer exactly as it was and says so.
+    """
+    if isinstance(content, str):
+        return str(run_program(named, {"content": content}))
+    said = str(run_program(named, {"content": json.dumps(content, ensure_ascii=False)}))
+    try:
+        return json.loads(said)
+    except ValueError:
+        raise ValueError(
+            "it was handed a structured answer as JSON and did not answer with JSON"
+        ) from None
+
+
 def _mentions(words: "Sequence[str]", why: str) -> Callable[[dict[str, Any]], "Decision | None"]:
     """Stop the turn when the answer says one of the author's words.
 
@@ -1470,7 +1494,7 @@ def _compile_rules(
                 by: Power | None = None
                 for named, power in rewriters:
                     try:
-                        out["content"] = str(run_program(named, {"content": out["content"]}))
+                        out["content"] = _rewritten(run_program, named, out["content"])
                         by = power
                     except Exception as e:  # noqa: BLE001 — a program's failure is data
                         said = (

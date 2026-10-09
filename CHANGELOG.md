@@ -8,7 +8,16 @@ holds that did not; the commits are listed under it for whoever wants the detail
 Running PACT trees in production on Pydantic AI 2.54, through
 [Bud Agent Flow](https://github.com/BudEcosystem/Bud-Agent-Flow), drove these changes. Every
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
-runs offline: 3634 tests, 1147 Rust and 2487 adapter.
+runs offline: 3636 tests, 1147 Rust and 2489 adapter.
+
+### A rewrite reaches an answer in a shape (9 October)
+
+- **`replace the answer with what <a program> returns` rewrites a structured answer too.** A
+  runtime whose agent answers in a shape (`answers-with:`) hands the chain the answer's fields,
+  and the program's `takes: content: text` refused them, so the rule left every such answer as
+  it was. The chain now hands the program the answer's JSON and reads its reply back as JSON;
+  a reply that is not JSON leaves the answer exactly as it was and says so in `unenforced`, as
+  any program's failure does (`interceptors._rewritten`).
 
 ### The loader as a wheel (9 October)
 

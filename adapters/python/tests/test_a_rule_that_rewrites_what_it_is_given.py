@@ -388,3 +388,30 @@ def test_a_rewriter_cannot_slip_past_the_stop_rule_beside_it() -> None:
     plain = Chain.from_document(doc, "desk", run_program=lambda n, a: a["content"])
     _, on_its_own = plain.run("turn.message.after", {"content": "a diagnosis, probably"})
     assert on_its_own.stop == "not here", on_its_own
+
+
+# ──────────────────────────────────────────────────── an answer in a shape
+
+
+def test_a_structured_answer_reaches_the_program_as_json_and_comes_back_as_fields() -> None:
+    """A runtime whose agent answers in a shape hands the chain the answer's
+    fields; the program reads words, so it is given their JSON, and its JSON is
+    read back into fields."""
+    got: list[dict] = []
+
+    def louder(name: str, args: dict) -> str:
+        got.append(dict(args))
+        return args["content"].replace("quiet", "loud")
+
+    chain = Chain.from_document(REWRITES, "desk", run_program=louder)
+    seen, _ = chain.run("turn.message.after", {"content": {"note": "quiet", "count": 2}})
+    assert got == [{"content": '{"note": "quiet", "count": 2}'}]
+    assert seen["content"] == {"note": "loud", "count": 2}
+    assert not chain.unenforced
+
+
+def test_a_program_that_answers_a_structured_answer_in_plain_words_leaves_it_alone() -> None:
+    chain = Chain.from_document(REWRITES, "desk", run_program=lambda name, args: "just words")
+    seen, _ = chain.run("turn.message.after", {"content": {"note": "kept"}})
+    assert seen["content"] == {"note": "kept"}
+    assert "did not answer with JSON" in " ".join(chain.unenforced)
