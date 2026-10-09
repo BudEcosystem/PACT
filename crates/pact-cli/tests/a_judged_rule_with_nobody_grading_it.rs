@@ -33,8 +33,10 @@ fn without_the_grader(name: &str) -> std::path::PathBuf {
     copy(std::path::Path::new(&example()), &dst);
     let suite = dst.join("evals/suite.yaml");
     let written = std::fs::read_to_string(&suite).expect("the worked example has a suite");
-    let kept: Vec<&str> =
-        written.lines().filter(|l| !l.trim_start().starts_with("graded-by:")).collect();
+    let kept: Vec<&str> = written
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("graded-by:"))
+        .collect();
     assert!(
         kept.len() < written.lines().count(),
         "the worked example no longer writes `graded-by:` — this test asserts nothing"
@@ -56,8 +58,15 @@ fn copy(src: &std::path::Path, dst: &std::path::Path) {
 }
 
 fn check(root: &std::path::Path) -> String {
-    let out = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
-    format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr))
+    let out = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
+    format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    )
 }
 
 #[test]
@@ -87,7 +96,10 @@ fn the_fix_it_offers_is_the_line_the_worked_example_already_has() {
     let text = std::fs::read_to_string(&suite).unwrap();
     std::fs::write(&suite, format!("{text}graded-by: qwen2.5-14b-instruct\n")).unwrap();
 
-    let after = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
+    let after = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
     let seen = check(&root);
     assert!(
         after.status.success() && !seen.contains("evals/judged-with-nobody-grading"),
@@ -102,7 +114,11 @@ fn the_shipped_example_gains_no_diagnostic_from_this() {
     // be invisible to it — a new check that fires on the flagship is a new
     // defect, not a new guarantee.
     let out = pact().args(["check", &example()]).output().expect("runs");
-    let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
     assert!(out.status.success(), "{text}");
     assert!(!text.contains("evals/judged-with-nobody-grading"), "{text}");
 }
@@ -113,7 +129,10 @@ fn it_is_a_warning_because_a_suite_is_written_before_it_is_wired() {
     // the ordinary order of work. Failing the build on it teaches people to
     // reach for the flag that turns checking off.
     let root = without_the_grader("warns");
-    let out = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
+    let out = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
     assert!(
         out.status.success(),
         "a half-wired suite must still check:\n{}",
@@ -133,8 +152,11 @@ fn metric_without_its_provider(name: &str) -> std::path::PathBuf {
         written.contains("uri: pact:at_most_words"),
         "the worked example no longer writes a prefixed metric — this test asserts nothing"
     );
-    std::fs::write(&suite, written.replace("uri: pact:at_most_words", "uri: at_most_words"))
-        .unwrap();
+    std::fs::write(
+        &suite,
+        written.replace("uri: pact:at_most_words", "uri: at_most_words"),
+    )
+    .unwrap();
     dst
 }
 
@@ -243,8 +265,7 @@ fn whether_this_machine_has_the_provider_is_left_to_the_machine() {
     // installed differs per machine, and a portable folder that loads here and
     // is refused there is the thing the format exists to prevent. So a
     // well-formed uri naming a provider this build may not have must still pass.
-    let dst = std::env::temp_dir()
-        .join(format!("pact-provider-{}", std::process::id()));
+    let dst = std::env::temp_dir().join(format!("pact-provider-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dst);
     copy(std::path::Path::new(&example()), &dst);
     let suite = dst.join("evals/suite.yaml");
@@ -254,7 +275,10 @@ fn whether_this_machine_has_the_provider_is_left_to_the_machine() {
         written.replace("uri: pact:at_most_words", "uri: deepeval:faithfulness"),
     )
     .unwrap();
-    let out = pact().args(["check", dst.to_str().unwrap()]).output().expect("runs");
+    let out = pact()
+        .args(["check", dst.to_str().unwrap()])
+        .output()
+        .expect("runs");
     assert!(
         out.status.success(),
         "a provider this build may not have is not a fact about the folder:\n{}",

@@ -50,7 +50,10 @@ fn broken(name: &str, from_tree: &str, edits: &[(&str, &str, &str)]) -> String {
     for (file, from, to) in edits {
         let p = dst.join(file);
         let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-        assert!(text.contains(from), "fixture drifted: {from:?} not found in {file}");
+        assert!(
+            text.contains(from),
+            "fixture drifted: {from:?} not found in {file}"
+        );
         std::fs::write(&p, text.replace(from, to)).unwrap();
     }
     dst.to_string_lossy().into_owned()
@@ -88,7 +91,10 @@ fn a_value_reaches_every_line_that_uses_it() {
     let desk = &doc["agents"]["desk"]["limits"];
     assert_eq!(desk["cost-per-request-under"], "0.05 USD", "{shown}");
     assert_eq!(desk["finishes-within"], "30s", "{shown}");
-    assert_eq!(desk["steps-at-most"], 4, "a whole number stays a whole number:\n{shown}");
+    assert_eq!(
+        desk["steps-at-most"], 4,
+        "a whole number stays a whole number:\n{shown}"
+    );
 
     // The second reader of the same figure. This is the whole point: one line
     // written, two agents bound.
@@ -106,13 +112,23 @@ fn changing_the_one_line_changes_every_reader() {
     let dst = broken(
         "raise",
         "one-figure-in-three-places",
-        &[("values/spend-cap.yaml", "value: 0.05 USD", "value: 0.50 USD")],
+        &[(
+            "values/spend-cap.yaml",
+            "value: 0.05 USD",
+            "value: 0.50 USD",
+        )],
     );
     let (code, shown, err) = run(&["show", &dst]);
     assert_eq!(code, Some(0), "{shown}{err}");
     let doc: serde_json::Value = serde_json::from_str(&shown).expect("JSON");
-    assert_eq!(doc["agents"]["desk"]["limits"]["cost-per-request-under"], "0.50 USD");
-    assert_eq!(doc["agents"]["second-desk"]["limits"]["cost-per-request-under"], "0.50 USD");
+    assert_eq!(
+        doc["agents"]["desk"]["limits"]["cost-per-request-under"],
+        "0.50 USD"
+    );
+    assert_eq!(
+        doc["agents"]["second-desk"]["limits"]["cost-per-request-under"],
+        "0.50 USD"
+    );
     let _ = std::fs::remove_dir_all(&dst);
 }
 
@@ -145,22 +161,41 @@ fn a_use_of_a_name_that_is_not_there_is_refused() {
     let dst = broken(
         "typo",
         "one-figure-in-three-places",
-        &[("agents/desk/agent.yaml", "{use: spend-cap}", "{use: spend-capp}")],
+        &[(
+            "agents/desk/agent.yaml",
+            "{use: spend-cap}",
+            "{use: spend-capp}",
+        )],
     );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
-    assert_eq!(code, Some(1), "a name that is not there is a refusal:\n{said}");
+    assert_eq!(
+        code,
+        Some(1),
+        "a name that is not there is a refusal:\n{said}"
+    );
     assert!(said.contains("loader/no-such-value"), "{said}");
     assert!(said.contains("spend-capp"), "the name they typed:\n{said}");
-    assert!(said.contains("spend-cap"), "and the one that is there:\n{said}");
+    assert!(
+        said.contains("spend-cap"),
+        "and the one that is there:\n{said}"
+    );
     let _ = std::fs::remove_dir_all(&dst);
 }
 
 /// The positive control for the test above.
 #[test]
 fn the_same_tree_without_the_typo_loads_clean() {
-    let (code, out, err) = run(&["check", &tree("one-figure-in-three-places"), "--deny-warnings"]);
-    assert_eq!(code, Some(0), "the silence above proves nothing unless this passes:\n{out}{err}");
+    let (code, out, err) = run(&[
+        "check",
+        &tree("one-figure-in-three-places"),
+        "--deny-warnings",
+    ]);
+    assert_eq!(
+        code,
+        Some(0),
+        "the silence above proves nothing unless this passes:\n{out}{err}"
+    );
 }
 
 /// A figure that is not what the value says it is, refused where it is written.
@@ -173,7 +208,11 @@ fn a_value_that_is_not_the_shape_it_declares_is_refused_at_the_definition() {
     let dst = broken(
         "shape",
         "one-figure-in-three-places",
-        &[("values/spend-cap.yaml", "value: 0.05 USD", "value: sometime next week")],
+        &[(
+            "values/spend-cap.yaml",
+            "value: 0.05 USD",
+            "value: sometime next week",
+        )],
     );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
@@ -193,13 +232,23 @@ fn a_substituted_value_is_still_held_to_the_field_it_lands_in() {
     let dst = broken(
         "mismatch",
         "one-figure-in-three-places",
-        &[("agents/desk/agent.yaml", "steps-at-most: {use: patience}", "steps-at-most: {use: spend-cap}")],
+        &[(
+            "agents/desk/agent.yaml",
+            "steps-at-most: {use: patience}",
+            "steps-at-most: {use: spend-cap}",
+        )],
     );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
     assert_eq!(code, Some(1), "a money figure is not a step count:\n{said}");
-    assert!(said.contains("schema/wrong-type"), "the ordinary refusal, at the use site:\n{said}");
-    assert!(said.contains("agent.yaml"), "reported where the author wrote it:\n{said}");
+    assert!(
+        said.contains("schema/wrong-type"),
+        "the ordinary refusal, at the use site:\n{said}"
+    );
+    assert!(
+        said.contains("agent.yaml"),
+        "reported where the author wrote it:\n{said}"
+    );
     let _ = std::fs::remove_dir_all(&dst);
 }
 
@@ -215,16 +264,28 @@ fn a_value_nothing_uses_is_said_out_loud() {
     let dst = broken(
         "unused",
         "one-figure-in-three-places",
-        &[("agents/desk/agent.yaml", "  finishes-within: {use: deadline}\n", "")],
+        &[(
+            "agents/desk/agent.yaml",
+            "  finishes-within: {use: deadline}\n",
+            "",
+        )],
     );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
-    assert_eq!(code, Some(0), "an unused value is a warning, not a wall:\n{said}");
+    assert_eq!(
+        code,
+        Some(0),
+        "an unused value is a warning, not a wall:\n{said}"
+    );
     assert!(said.contains("loader/nothing-uses-this-value"), "{said}");
     assert!(said.contains("deadline"), "name it:\n{said}");
 
     let (strict, _, _) = run(&["check", &dst, "--deny-warnings"]);
-    assert_eq!(strict, Some(1), "and it has teeth for whoever asks for them");
+    assert_eq!(
+        strict,
+        Some(1),
+        "and it has teeth for whoever asks for them"
+    );
     let _ = std::fs::remove_dir_all(&dst);
 }
 
@@ -238,7 +299,11 @@ fn a_use_site_carries_nothing_but_the_name() {
     let dst = broken(
         "extra",
         "one-figure-in-three-places",
-        &[("agents/desk/agent.yaml", "{use: spend-cap}", "{use: spend-cap, because: tight}")],
+        &[(
+            "agents/desk/agent.yaml",
+            "{use: spend-cap}",
+            "{use: spend-cap, because: tight}",
+        )],
     );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
@@ -258,8 +323,16 @@ fn a_circle_of_values_is_refused_with_the_circle_written_out() {
         "circle",
         "one-figure-in-three-places",
         &[
-            ("values/spend-cap.yaml", "value: 0.05 USD", "value: {use: deadline}"),
-            ("values/deadline.yaml", "value: 30s", "value: {use: spend-cap}"),
+            (
+                "values/spend-cap.yaml",
+                "value: 0.05 USD",
+                "value: {use: deadline}",
+            ),
+            (
+                "values/deadline.yaml",
+                "value: 30s",
+                "value: {use: spend-cap}",
+            ),
         ],
     );
     let (code, out, err) = run(&["check", &dst]);
@@ -381,7 +454,10 @@ fn a_figure_cannot_reach_the_model_catalogue() {
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
     assert_eq!(code, Some(1), "{said}");
-    assert!(said.contains("loader/a-figure-cannot-reach-the-catalogue"), "{said}");
+    assert!(
+        said.contains("loader/a-figure-cannot-reach-the-catalogue"),
+        "{said}"
+    );
     assert!(said.contains("house-model"), "name the figure:\n{said}");
     let _ = std::fs::remove_dir_all(&dst);
 }
@@ -401,7 +477,10 @@ fn a_figure_cannot_reach_the_model_catalogue() {
 fn no_message_carries_the_indentation_of_the_file_it_was_written_in() {
     let mut mangled: Vec<String> = Vec::new();
     let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../pact-loader/src");
-    for entry in std::fs::read_dir(&src).expect("the loader's source").flatten() {
+    for entry in std::fs::read_dir(&src)
+        .expect("the loader's source")
+        .flatten()
+    {
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) != Some("rs") {
             continue;
@@ -467,14 +546,15 @@ fn a_figure_may_declare_exactly_the_shapes_the_specification_offers() {
         .and_then(|s| s.get("choices"))
         .and_then(pact_doc::Node::as_list)
         .expect("`value.shape` declares its choices");
-    let offered: Vec<String> =
-        choices.iter().filter_map(|c| c.as_str().map(str::to_owned)).collect();
+    let offered: Vec<String> = choices
+        .iter()
+        .filter_map(|c| c.as_str().map(str::to_owned))
+        .collect();
 
     // Every word the specification offers is one the loader can read, checked
     // through the real binary: a figure declaring it must load.
     for word in &offered {
-        let dst =
-            std::env::temp_dir().join(format!("pact-shape-{word}-{}", std::process::id()));
+        let dst = std::env::temp_dir().join(format!("pact-shape-{word}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dst);
         std::fs::create_dir_all(dst.join("agents/desk")).unwrap();
         std::fs::write(
@@ -585,17 +665,28 @@ fn a_figure_written_where_one_cannot_stand_is_said_out_loud() {
     );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
-    assert_eq!(code, Some(0), "a warning, not a wall — the data is still valid:\n{said}");
+    assert_eq!(
+        code,
+        Some(0),
+        "a warning, not a wall — the data is still valid:\n{said}"
+    );
     assert!(said.contains("loader/a-figure-cannot-stand-here"), "{said}");
     assert!(said.contains("spend-cap"), "name it:\n{said}");
 
     // And it was NOT substituted: the contract for a verbatim slot holds.
     let (_, shown, _) = run(&["show", &dst]);
     let doc: serde_json::Value = serde_json::from_str(&shown).expect("JSON");
-    assert_eq!(doc["evals"]["cases"]["one"]["expect"]["use"], "spend-cap", "{shown}");
+    assert_eq!(
+        doc["evals"]["cases"]["one"]["expect"]["use"], "spend-cap",
+        "{shown}"
+    );
 
     let (strict, _, _) = run(&["check", &dst, "--deny-warnings"]);
-    assert_eq!(strict, Some(1), "and it has teeth for whoever asks for them");
+    assert_eq!(
+        strict,
+        Some(1),
+        "and it has teeth for whoever asks for them"
+    );
     let _ = std::fs::remove_dir_all(&dst);
 }
 
@@ -641,7 +732,9 @@ fn what_was_substituted_is_on_the_report() {
     let (code, waits, err) = run(&["waits", &tree("one-figure-in-three-places")]);
     assert_eq!(code, Some(0), "{waits}{err}");
     let report: serde_json::Value = serde_json::from_str(&waits).expect("waits emits JSON");
-    let subs = report["substitutions"].as_array().expect("the report carries them");
+    let subs = report["substitutions"]
+        .as_array()
+        .expect("the report carries them");
 
     let capped: Vec<&serde_json::Value> = subs
         .iter()
@@ -651,7 +744,9 @@ fn what_was_substituted_is_on_the_report() {
     for one in capped {
         assert_eq!(one["kind"], "figure", "{waits}");
         assert!(
-            one["at"].as_str().is_some_and(|p| p.ends_with("agent.yaml")),
+            one["at"]
+                .as_str()
+                .is_some_and(|p| p.ends_with("agent.yaml")),
             "and each says where it landed: {one}"
         );
     }
@@ -673,17 +768,25 @@ fn a_document_built_from_a_pattern_says_which_one() {
     let (code, waits, err) = run(&["waits", &tree("two-desks-one-pattern")]);
     assert_eq!(code, Some(0), "{waits}{err}");
     let report: serde_json::Value = serde_json::from_str(&waits).expect("waits emits JSON");
-    let subs = report["substitutions"].as_array().expect("the report carries them");
+    let subs = report["substitutions"]
+        .as_array()
+        .expect("the report carries them");
 
     let built: Vec<&serde_json::Value> = subs
         .iter()
         .filter(|s| s["kind"].as_str() == Some("pattern"))
         .collect();
-    assert_eq!(built.len(), 2, "both desks came out of the pattern:\n{waits}");
+    assert_eq!(
+        built.len(),
+        2,
+        "both desks came out of the pattern:\n{waits}"
+    );
     for one in built {
         assert_eq!(one["name"], "desk-pattern", "name the pattern: {one}");
         assert!(
-            one["at"].as_str().is_some_and(|p| p.ends_with("agent.yaml")),
+            one["at"]
+                .as_str()
+                .is_some_and(|p| p.ends_with("agent.yaml")),
             "and where it landed: {one}"
         );
     }

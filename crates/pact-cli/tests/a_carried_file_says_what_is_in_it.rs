@@ -50,7 +50,10 @@ fn copy_dir(src: &std::path::Path, dst: &std::path::Path) {
 }
 
 fn shown(root: &std::path::Path) -> serde_json::Value {
-    let out = pact().args(["show", root.to_str().unwrap()]).output().expect("runs");
+    let out = pact()
+        .args(["show", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
     assert!(
         out.status.success(),
         "{}",
@@ -60,7 +63,10 @@ fn shown(root: &std::path::Path) -> serde_json::Value {
 }
 
 fn digest_of(root: &std::path::Path) -> String {
-    let out = pact().args(["discover", root.to_str().unwrap()]).output().expect("runs");
+    let out = pact()
+        .args(["discover", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
     let found: serde_json::Value =
         serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).expect("discover emits JSON");
     found[0]["digest"].as_str().expect("a digest").to_owned()
@@ -74,14 +80,22 @@ fn a_carried_file_carries_its_digest() {
     let root = copy_of("has-one");
     let doc = shown(&root);
     let scripts = &doc["skills"]["refund-policy"]["scripts"];
-    let files = scripts["files"].as_array().expect("a payload lists its files");
+    let files = scripts["files"]
+        .as_array()
+        .expect("a payload lists its files");
     let script = files
         .iter()
         .find(|f| f["$file"].as_str() == Some("check_window.py"))
         .expect("the shipped script is carried");
 
-    let digest = script["digest"].as_str().expect("every carried file says what is in it");
-    assert_eq!(digest.len(), 64, "a sha256 in hex is 64 characters: {digest}");
+    let digest = script["digest"]
+        .as_str()
+        .expect("every carried file says what is in it");
+    assert_eq!(
+        digest.len(),
+        64,
+        "a sha256 in hex is 64 characters: {digest}"
+    );
     assert!(digest.chars().all(|c| c.is_ascii_hexdigit()), "{digest}");
     // The other three stay exactly as they were — this is an addition.
     assert!(script["contentType"].is_string(), "{script}");
@@ -104,7 +118,11 @@ fn changing_the_bytes_changes_the_digest_even_at_the_same_size() {
     let p = a.join("skills/refund-policy/scripts/check_window.py");
     let text = std::fs::read_to_string(&p).unwrap();
     let swapped = text.replacen("inside", "INSIDE", 1);
-    assert_eq!(swapped.len(), text.len(), "the fixture must keep the size identical");
+    assert_eq!(
+        swapped.len(),
+        text.len(),
+        "the fixture must keep the size identical"
+    );
     assert_ne!(swapped, text, "and must actually change the bytes");
     std::fs::write(&p, &swapped).unwrap();
 
@@ -122,7 +140,11 @@ fn changing_the_bytes_changes_the_digest_even_at_the_same_size() {
             .unwrap()
             .to_owned()
     };
-    assert_ne!(pick(&before_file), pick(&after_file), "the file's fingerprint has to move");
+    assert_ne!(
+        pick(&before_file),
+        pick(&after_file),
+        "the file's fingerprint has to move"
+    );
     assert_ne!(
         before_workspace, after_workspace,
         "and so does the workspace's, or signing a tree says nothing about the bodies in it"
@@ -142,20 +164,33 @@ fn fingerprinting_a_body_is_not_executing_it() {
     let scripts = root.join("skills/refund-policy/scripts");
     std::fs::write(
         scripts.join("hostile.py"),
-        format!("open({:?}, 'w').write('executed')\n", canary.to_str().unwrap()),
+        format!(
+            "open({:?}, 'w').write('executed')\n",
+            canary.to_str().unwrap()
+        ),
     )
     .unwrap();
 
     for verb in ["check", "show", "waits", "discover"] {
-        let _ = pact().args([verb, root.to_str().unwrap()]).output().expect("runs");
-        assert!(!canary.exists(), "`pact {verb}` ran a body it was only supposed to fingerprint");
+        let _ = pact()
+            .args([verb, root.to_str().unwrap()])
+            .output()
+            .expect("runs");
+        assert!(
+            !canary.exists(),
+            "`pact {verb}` ran a body it was only supposed to fingerprint"
+        );
     }
     // And it was fingerprinted, so the test above is not passing by the file
     // having been skipped.
     let doc = shown(&root);
-    let files = doc["skills"]["refund-policy"]["scripts"]["files"].as_array().unwrap();
+    let files = doc["skills"]["refund-policy"]["scripts"]["files"]
+        .as_array()
+        .unwrap();
     assert!(
-        files.iter().any(|f| f["$file"].as_str() == Some("hostile.py") && f["digest"].is_string()),
+        files
+            .iter()
+            .any(|f| f["$file"].as_str() == Some("hostile.py") && f["digest"].is_string()),
         "the file was carried and fingerprinted: {files:?}"
     );
     let _ = std::fs::remove_dir_all(&root);
@@ -165,7 +200,11 @@ fn fingerprinting_a_body_is_not_executing_it() {
 #[test]
 fn the_fingerprint_is_the_same_on_every_run() {
     let root = copy_of("stable");
-    assert_eq!(shown(&root), shown(&root), "reproducible, or a lockfile means nothing");
+    assert_eq!(
+        shown(&root),
+        shown(&root),
+        "reproducible, or a lockfile means nothing"
+    );
     assert_eq!(digest_of(&root), digest_of(&root));
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -196,9 +235,15 @@ fn leaving_a_carried_file_out_moves_the_digest_and_is_said_out_loud() {
 
     std::fs::write(root.join(".pactignore"), "check_window.py\n").unwrap();
     let after = digest_of(&root);
-    assert_ne!(before, after, "a body taken out of the workspace is a different workspace");
+    assert_ne!(
+        before, after,
+        "a body taken out of the workspace is a different workspace"
+    );
 
-    let out = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
+    let out = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
     let said = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),
@@ -206,7 +251,10 @@ fn leaving_a_carried_file_out_moves_the_digest_and_is_said_out_loud() {
     );
     assert!(said.contains("loader/ignored-on-purpose"), "{said}");
     assert!(said.contains("check_window.py"), "name the file:\n{said}");
-    assert!(said.contains(".pactignore"), "and where the line is:\n{said}");
+    assert!(
+        said.contains(".pactignore"),
+        "and where the line is:\n{said}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -221,6 +269,10 @@ fn an_ignore_rule_that_matches_nothing_moves_nothing() {
     let root = copy_of("ignored-nothing");
     let before = digest_of(&root);
     std::fs::write(root.join(".pactignore"), "a-file-that-is-not-here.txt\n").unwrap();
-    assert_eq!(before, digest_of(&root), "nothing was left out, so nothing changed");
+    assert_eq!(
+        before,
+        digest_of(&root),
+        "nothing was left out, so nothing changed"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }

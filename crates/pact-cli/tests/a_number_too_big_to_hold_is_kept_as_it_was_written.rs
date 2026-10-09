@@ -289,7 +289,10 @@ fn digest(root: &std::path::Path) -> String {
         .output()
         .expect("runs");
     let text = String::from_utf8_lossy(&out.stdout).into_owned();
-    assert!(out.status.success(), "`pact discover` must succeed:\n{text}");
+    assert!(
+        out.status.success(),
+        "`pact discover` must succeed:\n{text}"
+    );
     let at = text
         .find("sha256:")
         .unwrap_or_else(|| panic!("a digest is published:\n{text}"));
@@ -491,7 +494,10 @@ fn the_fix_is_followed_rather_than_matched() {
     assert!(!ok, "the figure must be refused to begin with:\n{text}");
 
     let at = text.find("fix: Write `").expect("a fix is offered");
-    let offered: String = text[at + "fix: Write `".len()..].chars().take_while(|c| *c != '`').collect();
+    let offered: String = text[at + "fix: Write `".len()..]
+        .chars()
+        .take_while(|c| *c != '`')
+        .collect();
     assert_eq!(offered, "temperature: 10", "the fix names a line to type");
     let _ = std::fs::remove_dir_all(&root);
 
@@ -500,7 +506,10 @@ fn the_fix_is_followed_rather_than_matched() {
     // ends of the scale, because the sentence at the bottom end offers the same
     // set.
     for written in ["10", "999999999999999", "-999999999999999", "0.7"] {
-        let root = workspace("followed", &format!("settings:\n  temperature: {written}\n"));
+        let root = workspace(
+            "followed",
+            &format!("settings:\n  temperature: {written}\n"),
+        );
         let (ok, text) = checked(&root);
         assert!(
             ok,
@@ -511,12 +520,21 @@ fn the_fix_is_followed_rather_than_matched() {
 
     // And the promise is kept one type over, where the same sentence is used.
     for (block, written) in [
-        ("needs:\n  because: strong.\n  context-at-least: {}\n", "999999999999999"),
-        ("limits:\n  tokens-at-most: {}\n  when-it-runs-out: stop-and-say-so\n", "999999999999999"),
+        (
+            "needs:\n  because: strong.\n  context-at-least: {}\n",
+            "999999999999999",
+        ),
+        (
+            "limits:\n  tokens-at-most: {}\n  when-it-runs-out: stop-and-say-so\n",
+            "999999999999999",
+        ),
     ] {
         let root = workspace("followed-other", &block.replace("{}", written));
         let (ok, text) = checked(&root);
-        assert!(ok, "`{written}` is inside the set the fix promises:\n{text}");
+        assert!(
+            ok,
+            "`{written}` is inside the set the fix promises:\n{text}"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -536,7 +554,11 @@ fn the_fix_is_followed_rather_than_matched() {
     // does not hold, then type a member of the set it does promise and require
     // the workspace to load.
     for (block, refused, promised) in [
-        ("needs:\n  because: strong.\n  context-at-least: {}\n", "1e19", "999999999999999"),
+        (
+            "needs:\n  because: strong.\n  context-at-least: {}\n",
+            "1e19",
+            "999999999999999",
+        ),
         (
             "limits:\n  finishes-within: {}\n  when-it-runs-out: stop-and-say-so\n",
             "1e999s",
@@ -555,7 +577,10 @@ fn the_fix_is_followed_rather_than_matched() {
 
         let root = workspace("followed-set-ok", &block.replace("{}", promised));
         let (ok, text) = checked(&root);
-        assert!(ok, "`{promised}` is inside the set the fix now promises:\n{text}");
+        assert!(
+            ok,
+            "`{promised}` is inside the set the fix now promises:\n{text}"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 }
@@ -579,12 +604,18 @@ fn one_figure_gets_one_answer_however_it_is_spelled() {
     // cleanly as a requirement no model can meet.
     for (block, name) in [
         ("settings:\n  temperature: {}\n", "temperature"),
-        ("needs:\n  because: strong.\n  context-at-least: {}\n", "context-at-least"),
+        (
+            "needs:\n  because: strong.\n  context-at-least: {}\n",
+            "context-at-least",
+        ),
     ] {
         for written in ["1e19", "10000000000000000000"] {
             let root = workspace("spelling", &block.replace("{}", written));
             let (ok, text) = checked(&root);
-            assert!(!ok, "`{name}: {written}` is past counting whichever way it is written:\n{text}");
+            assert!(
+                !ok,
+                "`{name}: {written}` is past counting whichever way it is written:\n{text}"
+            );
             assert!(
                 text.contains("schema/too-big-to-count"),
                 "one figure, one rule, for `{name}: {written}`:\n{text}"
@@ -608,7 +639,10 @@ fn one_figure_gets_one_answer_however_it_is_spelled() {
         );
         let (ok, text) = checked(&root);
         assert!(!ok, "`{written}` is past counting either way:\n{text}");
-        assert!(text.contains("schema/too-big-to-count"), "one rule for `{written}`:\n{text}");
+        assert!(
+            text.contains("schema/too-big-to-count"),
+            "one rule for `{written}`:\n{text}"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -627,7 +661,10 @@ fn one_figure_gets_one_answer_however_it_is_spelled() {
             &format!("needs:\n  because: strong.\n  context-at-least: {written}\n"),
         );
         let (ok, text) = checked(&root);
-        assert!(!ok, "`{written}` is no tokens at all and must be said so:\n{text}");
+        assert!(
+            !ok,
+            "`{written}` is no tokens at all and must be said so:\n{text}"
+        );
         assert!(
             text.contains("schema/below-the-floor"),
             "quoted and unquoted are one rule for `{written}`:\n{text}"
@@ -635,7 +672,10 @@ fn one_figure_gets_one_answer_however_it_is_spelled() {
         let _ = std::fs::remove_dir_all(&root);
     }
     // And a zero somebody MEANT is still none of that arm's business.
-    let root = workspace("sizezero", "needs:\n  because: strong.\n  context-at-least: 0\n");
+    let root = workspace(
+        "sizezero",
+        "needs:\n  because: strong.\n  context-at-least: 0\n",
+    );
     let (ok, text) = checked(&root);
     assert!(ok, "an authored zero is a zero and says nothing:\n{text}");
     let _ = std::fs::remove_dir_all(&root);
@@ -647,7 +687,10 @@ fn one_figure_gets_one_answer_however_it_is_spelled() {
     for (written, want_ok) in [("9007199254740991", true), ("9007199254740992", false)] {
         let root = workspace("edge", &format!("settings:\n  temperature: {written}\n"));
         let (ok, text) = checked(&root);
-        assert_eq!(ok, want_ok, "`{written}` is on the wrong side of the line:\n{text}");
+        assert_eq!(
+            ok, want_ok,
+            "`{written}` is on the wrong side of the line:\n{text}"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 }
@@ -663,12 +706,13 @@ fn a_whole_number_field_takes_a_whole_number_however_it_is_punctuated() {
     for written in ["1e6", "1000000.0", "1000000"] {
         let root = workspace(
             "wholeexp",
-            &format!(
-                "limits:\n  tokens-at-most: {written}\n  when-it-runs-out: stop-and-say-so\n"
-            ),
+            &format!("limits:\n  tokens-at-most: {written}\n  when-it-runs-out: stop-and-say-so\n"),
         );
         let (ok, text) = checked(&root);
-        assert!(ok, "`{written}` is a million and is a whole number:\n{text}");
+        assert!(
+            ok,
+            "`{written}` is a million and is a whole number:\n{text}"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -677,12 +721,13 @@ fn a_whole_number_field_takes_a_whole_number_however_it_is_punctuated() {
     for written in ["1e19", "9223372036854775808.0"] {
         let root = workspace(
             "wholeexpbig",
-            &format!(
-                "limits:\n  tokens-at-most: {written}\n  when-it-runs-out: stop-and-say-so\n"
-            ),
+            &format!("limits:\n  tokens-at-most: {written}\n  when-it-runs-out: stop-and-say-so\n"),
         );
         let (ok, text) = checked(&root);
-        assert!(!ok, "`{written}` is past what a whole number here can hold:\n{text}");
+        assert!(
+            !ok,
+            "`{written}` is past what a whole number here can hold:\n{text}"
+        );
         assert!(
             text.contains("schema/too-big-to-count"),
             "wrong rule for `{written}`:\n{text}"
@@ -717,7 +762,10 @@ fn a_share_of_the_whole_reads_the_same_at_both_ends() {
         format!("description: Keeps it tidy.\nwhen-full: {v}\nalways-keep: [the last message]\n")
     };
     for (written, sentence) in [
-        ("1e999%", "'when-full' is 1e999%, which is more than this can keep track of."),
+        (
+            "1e999%",
+            "'when-full' is 1e999%, which is more than this can keep track of.",
+        ),
         (
             "-1e999%",
             "'when-full' is -1e999%, which is further below zero than this can keep track of.",
@@ -725,19 +773,30 @@ fn a_share_of_the_whole_reads_the_same_at_both_ends() {
     ] {
         let root = workspace("pct", "context-policy: long-threads\n");
         std::fs::create_dir_all(root.join("context-policies")).expect("makes the folder");
-        std::fs::write(root.join("context-policies/long-threads.yaml"), policy(written))
-            .expect("writes the policy");
+        std::fs::write(
+            root.join("context-policies/long-threads.yaml"),
+            policy(written),
+        )
+        .expect("writes the policy");
         let (ok, text) = checked(&root);
         assert!(!ok, "`{written}` must be refused:\n{text}");
-        assert!(text.contains("schema/too-big-to-count"), "wrong rule for `{written}`:\n{text}");
+        assert!(
+            text.contains("schema/too-big-to-count"),
+            "wrong rule for `{written}`:\n{text}"
+        );
         assert!(
             !text.contains("but it is some text"),
             "`{written}` is spelled exactly the way a share is spelled:\n{text}"
         );
-        assert!(text.contains(sentence), "the sentence must quote what was written:\n{text}");
         assert!(
-            text.contains("fix: Write `when-full: 90%`, or any share between `0%` and `100%`, \
-                           or remove the line."),
+            text.contains(sentence),
+            "the sentence must quote what was written:\n{text}"
+        );
+        assert!(
+            text.contains(
+                "fix: Write `when-full: 90%`, or any share between `0%` and `100%`, \
+                           or remove the line."
+            ),
             "and the fix must name the set a share lives in:\n{text}"
         );
         let _ = std::fs::remove_dir_all(&root);
@@ -749,8 +808,11 @@ fn a_share_of_the_whole_reads_the_same_at_both_ends() {
     for written in ["150%", "inf%"] {
         let root = workspace("pctrange", "context-policy: long-threads\n");
         std::fs::create_dir_all(root.join("context-policies")).expect("makes the folder");
-        std::fs::write(root.join("context-policies/long-threads.yaml"), policy(written))
-            .expect("writes the policy");
+        std::fs::write(
+            root.join("context-policies/long-threads.yaml"),
+            policy(written),
+        )
+        .expect("writes the policy");
         let (ok, text) = checked(&root);
         assert!(!ok, "`{written}` must be refused:\n{text}");
         assert!(
@@ -768,8 +830,11 @@ fn a_share_of_the_whole_reads_the_same_at_both_ends() {
     for written in ["85%", "0.8"] {
         let root = workspace("pctok", "context-policy: long-threads\n");
         std::fs::create_dir_all(root.join("context-policies")).expect("makes the folder");
-        std::fs::write(root.join("context-policies/long-threads.yaml"), policy(written))
-            .expect("writes the policy");
+        std::fs::write(
+            root.join("context-policies/long-threads.yaml"),
+            policy(written),
+        )
+        .expect("writes the policy");
         let (ok, text) = checked(&root);
         assert!(ok, "`{written}` is a share and must load:\n{text}");
         let _ = std::fs::remove_dir_all(&root);
@@ -814,7 +879,10 @@ fn a_number_field_given_a_whole_number_past_holding_is_refused_by_name() {
     // `OK — loaded cleanly (10 settings)`, exit 0, and `pact show` handing the
     // runtime `1e+20` — a figure nobody wrote, with no report. That is the
     // silent degradation T7 and FR-8.1.1 forbid.
-    let root = workspace("typedint", "settings:\n  temperature: 99999999999999999999\n");
+    let root = workspace(
+        "typedint",
+        "settings:\n  temperature: 99999999999999999999\n",
+    );
     let (ok, text) = checked(&root);
 
     assert!(
@@ -845,7 +913,10 @@ fn a_number_field_given_a_whole_number_past_holding_is_refused_by_name() {
     let _ = std::fs::remove_dir_all(&root);
 
     // The other end of the same spelling gets the other end's words.
-    let root = workspace("typedintneg", "settings:\n  temperature: -99999999999999999999\n");
+    let root = workspace(
+        "typedintneg",
+        "settings:\n  temperature: -99999999999999999999\n",
+    );
     let (ok, text) = checked(&root);
     assert!(!ok, "the bottom end must be refused too:\n{text}");
     assert!(
@@ -863,11 +934,20 @@ fn a_number_field_given_a_whole_number_past_holding_is_refused_by_name() {
     // and `pact show` printed `"temperature": 1e+20` — a figure nobody wrote,
     // handed to the runtime with no report, which is verbatim the harm the
     // paragraph above records. The markdown door did the same.
-    for written in ["99999999999999999999.0", "99999999999999999999.00", "999999999999999999990e-1"]
-    {
-        let root = workspace("typedintpt", &format!("settings:\n  temperature: {written}\n"));
+    for written in [
+        "99999999999999999999.0",
+        "99999999999999999999.00",
+        "999999999999999999990e-1",
+    ] {
+        let root = workspace(
+            "typedintpt",
+            &format!("settings:\n  temperature: {written}\n"),
+        );
         let (ok, text) = checked(&root);
-        assert!(!ok, "`{written}` is the same figure and must be refused:\n{text}");
+        assert!(
+            !ok,
+            "`{written}` is the same figure and must be refused:\n{text}"
+        );
         assert!(
             text.contains("schema/too-big-to-count"),
             "wrong rule for `{written}`:\n{text}"
@@ -903,7 +983,10 @@ fn a_whole_number_field_is_told_its_figure_is_too_big_not_that_it_is_a_typo() {
             ),
         );
         let (ok, text) = checked(&root);
-        assert!(!ok, "`{written}` is not a whole number this can hold:\n{text}");
+        assert!(
+            !ok,
+            "`{written}` is not a whole number this can hold:\n{text}"
+        );
         assert!(
             text.contains("schema/too-big-to-count"),
             "wrong rule for `{written}`:\n{text}"
@@ -929,7 +1012,10 @@ fn a_whole_number_field_is_told_its_figure_is_too_big_not_that_it_is_a_typo() {
          when-it-runs-out: stop-and-say-so\n",
     );
     let (ok, text) = checked(&root);
-    assert!(ok, "the largest whole number this CAN hold must load:\n{text}");
+    assert!(
+        ok,
+        "the largest whole number this CAN hold must load:\n{text}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 
     // And a word where a whole number goes is still a word.
@@ -969,8 +1055,10 @@ fn a_length_of_time_field_is_told_its_figure_is_too_long_not_that_it_is_a_typo()
         "`1e999` is a figure, not a typo:\n{text}"
     );
     assert!(
-        text.contains("'finishes-within' is 1e999, which is a longer time than this can keep \
-                       track of."),
+        text.contains(
+            "'finishes-within' is 1e999, which is a longer time than this can keep \
+                       track of."
+        ),
         "the sentence must quote what was written:\n{text}"
     );
     let _ = std::fs::remove_dir_all(&root);
@@ -988,10 +1076,15 @@ fn a_length_of_time_field_is_told_its_figure_is_too_long_not_that_it_is_a_typo()
     for written in ["1e999s", "1e300h", "1e999 seconds", "1e400 ms", "1e999ms"] {
         let root = workspace(
             "durunit",
-            &format!("limits:\n  finishes-within: {written}\n  when-it-runs-out: stop-and-say-so\n"),
+            &format!(
+                "limits:\n  finishes-within: {written}\n  when-it-runs-out: stop-and-say-so\n"
+            ),
         );
         let (ok, text) = checked(&root);
-        assert!(!ok, "`{written}` is longer than anything can count:\n{text}");
+        assert!(
+            !ok,
+            "`{written}` is longer than anything can count:\n{text}"
+        );
         assert!(
             text.contains("schema/too-long-to-count"),
             "wrong rule for `{written}`:\n{text}"
@@ -1024,11 +1117,19 @@ fn a_length_of_time_field_is_told_its_figure_is_too_long_not_that_it_is_a_typo()
         "limits:\n  finishes-within: 1e308\n  when-it-runs-out: stop-and-say-so\n",
     );
     let (ok, text) = checked(&root);
-    assert!(!ok, "`1e308` seconds is longer than anything can count:\n{text}");
-    assert!(text.contains("schema/too-long-to-count"), "wrong rule:\n{text}");
     assert!(
-        text.contains("'finishes-within' is 1e308, which is a longer time than this can keep \
-                       track of."),
+        !ok,
+        "`1e308` seconds is longer than anything can count:\n{text}"
+    );
+    assert!(
+        text.contains("schema/too-long-to-count"),
+        "wrong rule:\n{text}"
+    );
+    assert!(
+        text.contains(
+            "'finishes-within' is 1e308, which is a longer time than this can keep \
+                       track of."
+        ),
         "and the sentence names the figure rather than three hundred zeros:\n{text}"
     );
     let _ = std::fs::remove_dir_all(&root);
@@ -1040,7 +1141,9 @@ fn a_length_of_time_field_is_told_its_figure_is_too_long_not_that_it_is_a_typo()
     for written in ["90", "1e15"] {
         let root = workspace(
             "durnounit",
-            &format!("limits:\n  finishes-within: {written}\n  when-it-runs-out: stop-and-say-so\n"),
+            &format!(
+                "limits:\n  finishes-within: {written}\n  when-it-runs-out: stop-and-say-so\n"
+            ),
         );
         let (ok, text) = checked(&root);
         assert!(!ok, "`{written}` has no unit and must be refused:\n{text}");
@@ -1061,7 +1164,9 @@ fn a_length_of_time_field_is_told_its_figure_is_too_long_not_that_it_is_a_typo()
     for written in ["30s", "1m30s", "2 minutes", "500ms", "1e6s", "2.5e2 ms"] {
         let root = workspace(
             "durok",
-            &format!("limits:\n  finishes-within: {written}\n  when-it-runs-out: stop-and-say-so\n"),
+            &format!(
+                "limits:\n  finishes-within: {written}\n  when-it-runs-out: stop-and-say-so\n"
+            ),
         );
         let (ok, text) = checked(&root);
         assert!(ok, "`{written}` must still load:\n{text}");
@@ -1105,15 +1210,20 @@ fn the_bottom_end_of_a_length_of_time_and_a_size_is_not_called_text_either() {
             "limits:\n  finishes-within: {}\n  when-it-runs-out: stop-and-say-so\n",
             "a length of time",
         ),
-        ("context-at-least", "needs:\n  because: strong.\n  context-at-least: {}\n", "a size"),
+        (
+            "context-at-least",
+            "needs:\n  because: strong.\n  context-at-least: {}\n",
+            "a size",
+        ),
     ] {
         // `-1e999` is the exponent spelling and `-99999999999999999999` the
         // digit-run spelling; both are kept as the author's text by
         // `resolve_scalar`, and each has its own true noun — the one the value
         // kinds would have given had the tree been able to hold the figure.
-        for (written, want) in
-            [("-1e999", "a number"), ("-99999999999999999999", "a whole number")]
-        {
+        for (written, want) in [
+            ("-1e999", "a number"),
+            ("-99999999999999999999", "a whole number"),
+        ] {
             let root = workspace("bottomtext", &block.replace("{}", written));
             let (ok, text) = checked(&root);
             assert!(!ok, "`{field}: {written}` is not {noun}:\n{text}");

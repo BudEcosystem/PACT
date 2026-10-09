@@ -117,7 +117,10 @@ fn a_card_for_a_base_is_refused() {
         .find(|l| l.contains("Change it to one of:"))
         .unwrap_or_else(|| panic!("the refusal offers the agents that CAN be carded:\n{err}"));
     for runnable in ["refunds", "second-look", "drafter", "checker"] {
-        assert!(fix.contains(runnable), "'{runnable}' is missing from: {fix}");
+        assert!(
+            fix.contains(runnable),
+            "'{runnable}' is missing from: {fix}"
+        );
     }
     assert!(
         !fix.contains("desk-pattern"),
@@ -178,8 +181,13 @@ fn a_card_does_not_invent_a_host_nobody_can_reach() {
 /// And when the operator says where their agents answer, that is what it prints.
 #[test]
 fn a_card_publishes_the_address_the_operator_gave_it() {
-    let (code, out, err) =
-        run(&["card", "refunds", &tree(), "--base-url", "https://desks.acme.example"]);
+    let (code, out, err) = run(&[
+        "card",
+        "refunds",
+        &tree(),
+        "--base-url",
+        "https://desks.acme.example",
+    ]);
     assert_eq!(code, Some(0), "{out}{err}");
     let card: serde_json::Value = serde_json::from_str(&out).expect("a card is JSON");
     assert_eq!(

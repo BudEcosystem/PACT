@@ -41,14 +41,16 @@ fn example() -> std::path::PathBuf {
 /// Named per test so two of these can run at once — `cargo test` is threaded,
 /// and a shared directory would make the failures depend on the schedule.
 fn copy_with(name: &str, edits: &[(&str, &str, &str)]) -> std::path::PathBuf {
-    let dst = std::env::temp_dir()
-        .join(format!("pact-one-block-{name}-{}", std::process::id()));
+    let dst = std::env::temp_dir().join(format!("pact-one-block-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dst);
     copy_dir(&example(), &dst);
     for (file, from, to) in edits {
         let p = dst.join(file);
         let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-        assert!(text.contains(from), "fixture drifted: {from:?} is not in {file}");
+        assert!(
+            text.contains(from),
+            "fixture drifted: {from:?} is not in {file}"
+        );
         std::fs::write(&p, text.replacen(from, to, 1)).unwrap();
     }
     dst

@@ -104,7 +104,10 @@ pub fn find(
     if sections.is_empty() {
         return None;
     }
-    Some(Elsewhere { sections, named_on: named_on.into_iter().collect() })
+    Some(Elsewhere {
+        sections,
+        named_on: named_on.into_iter().collect(),
+    })
 }
 
 /// The sections of this document that hold named ENTRIES rather than settings.
@@ -119,10 +122,14 @@ pub fn find(
 /// Read off the type, so a section added to `spec/schema.yaml` is searched
 /// without anybody remembering to add it here.
 fn kinds<'a>(groups: &'a IndexMap<String, Group>, root_group: &str) -> Vec<&'a str> {
-    let Some(g) = groups.get(root_group) else { return Vec::new() };
+    let Some(g) = groups.get(root_group) else {
+        return Vec::new();
+    };
     g.fields
         .iter()
-        .filter(|f| matches!(&f.ty, Ty::MapOf(inner) if matches!(**inner, Ty::Group(_) | Ty::Anything)))
+        .filter(
+            |f| matches!(&f.ty, Ty::MapOf(inner) if matches!(**inner, Ty::Group(_) | Ty::Anything)),
+        )
         .map(|f| f.name.as_str())
         .collect()
 }
@@ -203,5 +210,9 @@ impl Elsewhere {
 
 /// `["skills"]` → ``skills:``; `["uses", "may-use"]` → ``uses:` or `may-use:``.
 fn phrase(items: &[String]) -> String {
-    items.iter().map(|s| format!("`{s}:`")).collect::<Vec<_>>().join(" or ")
+    items
+        .iter()
+        .map(|s| format!("`{s}:`"))
+        .collect::<Vec<_>>()
+        .join(" or ")
 }

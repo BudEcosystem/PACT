@@ -39,7 +39,11 @@ fn spec() -> pact_schema::Schema {
     const SPEC: &str = include_str!("../../../spec/schema.yaml");
     let mut d = Diagnostics::new();
     let s = pact_schema::from_doc::schema_from_yaml(SPEC, &mut d);
-    assert!(!d.has_errors(), "the shipped specification does not load:\n{}", d.render());
+    assert!(
+        !d.has_errors(),
+        "the shipped specification does not load:\n{}",
+        d.render()
+    );
     s
 }
 
@@ -58,7 +62,10 @@ fn refusal(d: &Diagnostics) -> &pact_diag::Diagnostic {
         .iter()
         .find(|e| e.rule == "schema/rule-with-nothing-above-it")
         .unwrap_or_else(|| {
-            panic!("a sentence with nothing above it must be refused here:\n{}", d.render())
+            panic!(
+                "a sentence with nothing above it must be refused here:\n{}",
+                d.render()
+            )
         })
 }
 
@@ -84,7 +91,11 @@ fn an_interceptor_whose_first_rule_carries_on_from_another_one_is_refused() {
         &format!("{AN_INTERCEPTOR}  - do the same for anything that looks like a card number\n"),
     );
     let e = refusal(&d);
-    assert_eq!(e.span.line, 6, "point at the rule, not the file: {:?}", e.span);
+    assert_eq!(
+        e.span.line, 6,
+        "point at the rule, not the file: {:?}",
+        e.span
+    );
     assert!(
         e.message.contains("no rule before it says what to do"),
         "say what is wrong in the author's words: {}",
@@ -126,12 +137,23 @@ fn the_repair_it_offers_is_a_sentence_that_is_accepted_on_its_own() {
         .lines()
         .map(str::trim)
         .filter(|l| l.starts_with("replace ") || l.starts_with("anything "))
-        .map(|l| l.replace("<a thing>", "a card number").replace("\"<text>\"", "\"[gone]\""))
+        .map(|l| {
+            l.replace("<a thing>", "a card number")
+                .replace("\"<text>\"", "\"[gone]\"")
+        })
         .collect();
-    assert!(!offered.is_empty(), "the refusal must offer something to type:\n{}", refusal(&d).fix);
+    assert!(
+        !offered.is_empty(),
+        "the refusal must offer something to type:\n{}",
+        refusal(&d).fix
+    );
 
     for sentence in &offered {
-        let d = checked("redaction", "redaction.yaml", &format!("{A_REDACTION}  - {sentence}\n"));
+        let d = checked(
+            "redaction",
+            "redaction.yaml",
+            &format!("{A_REDACTION}  - {sentence}\n"),
+        );
         assert!(
             !d.has_errors(),
             "'{sentence}' was offered as the repair and is itself refused:\n{}",

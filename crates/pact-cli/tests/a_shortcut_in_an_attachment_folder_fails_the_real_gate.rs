@@ -76,7 +76,10 @@ impl Ws {
         ));
         let _ = std::fs::remove_dir_all(&base);
         let t = Self(base);
-        t.file("workspace.yaml", "name: desk-ws\ndescription: A workspace.\n");
+        t.file(
+            "workspace.yaml",
+            "name: desk-ws\ndescription: A workspace.\n",
+        );
         t.file(
             "agents/keeper/agent.yaml",
             "name: Keeper\ndescription: Keeps things.\ninstructions: Keep things.\n",
@@ -123,7 +126,9 @@ impl Ws {
         match Command::new("mkfifo").arg(&p).status() {
             Ok(s) if s.success() => true,
             other => {
-                eprintln!("SKIPPED (no named pipe on this system, {rel}: {other:?}) — nothing proved");
+                eprintln!(
+                    "SKIPPED (no named pipe on this system, {rel}: {other:?}) — nothing proved"
+                );
                 false
             }
         }
@@ -228,7 +233,10 @@ fn a_named_pipe_never_reaches_the_package_or_the_digest() {
         digest(&b),
         "the pipe must make no difference to what this workspace IS"
     );
-    assert!(digest(&a).is_some(), "and there must be a digest to compare");
+    assert!(
+        digest(&a).is_some(),
+        "and there must be a digest to compare"
+    );
 }
 
 #[test]

@@ -32,7 +32,11 @@ fn spec() -> pact_schema::Schema {
     const SPEC: &str = include_str!("../../../spec/schema.yaml");
     let mut d = pact_diag::Diagnostics::new();
     let s = pact_schema::from_doc::schema_from_yaml(SPEC, &mut d);
-    assert!(!d.has_errors(), "the shipped specification does not load:\n{}", d.render());
+    assert!(
+        !d.has_errors(),
+        "the shipped specification does not load:\n{}",
+        d.render()
+    );
     s
 }
 
@@ -41,19 +45,31 @@ fn tree(name: &str, line: &str) -> std::path::PathBuf {
     let dst = std::env::temp_dir().join(format!("pact-folder-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dst);
     std::fs::create_dir_all(dst.join("agents/desk")).unwrap();
-    std::fs::write(dst.join("workspace.yaml"), "name: Probe\ndescription: A probe workspace.\n")
-        .unwrap();
+    std::fs::write(
+        dst.join("workspace.yaml"),
+        "name: Probe\ndescription: A probe workspace.\n",
+    )
+    .unwrap();
     std::fs::write(
         dst.join("agents/desk/agent.yaml"),
-        format!("name: Desk\ndescription: Answers questions.\ninstructions: Answer plainly.\n{line}\n"),
+        format!(
+            "name: Desk\ndescription: Answers questions.\ninstructions: Answer plainly.\n{line}\n"
+        ),
     )
     .unwrap();
     dst
 }
 
 fn check(root: &std::path::Path) -> String {
-    let out = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
-    format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr))
+    let out = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
+    format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    )
 }
 
 #[test]
@@ -130,7 +146,11 @@ fn the_three_fields_the_expansion_rule_exists_for_still_take_a_folder() {
     folders.sort();
     assert_eq!(
         folders,
-        vec!["agent.instructions", "skill.content", "variant.instructions"],
+        vec![
+            "agent.instructions",
+            "skill.content",
+            "variant.instructions"
+        ],
         "the fields that may be written as a folder have changed"
     );
 }
@@ -140,17 +160,31 @@ fn instructions_written_as_a_folder_of_files_still_loads() {
     let dst = std::env::temp_dir().join(format!("pact-folderform-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dst);
     std::fs::create_dir_all(dst.join("agents/desk/instructions")).unwrap();
-    std::fs::write(dst.join("workspace.yaml"), "name: Probe\ndescription: A probe workspace.\n")
-        .unwrap();
+    std::fs::write(
+        dst.join("workspace.yaml"),
+        "name: Probe\ndescription: A probe workspace.\n",
+    )
+    .unwrap();
     std::fs::write(
         dst.join("agents/desk/agent.yaml"),
         "name: Desk\ndescription: Answers questions.\n",
     )
     .unwrap();
-    std::fs::write(dst.join("agents/desk/instructions/01-tone.md"), "Answer plainly.\n").unwrap();
-    std::fs::write(dst.join("agents/desk/instructions/02-length.md"), "Be brief.\n").unwrap();
+    std::fs::write(
+        dst.join("agents/desk/instructions/01-tone.md"),
+        "Answer plainly.\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dst.join("agents/desk/instructions/02-length.md"),
+        "Be brief.\n",
+    )
+    .unwrap();
 
-    let out = pact().args(["check", dst.to_str().unwrap()]).output().expect("runs");
+    let out = pact()
+        .args(["check", dst.to_str().unwrap()])
+        .output()
+        .expect("runs");
     assert!(
         out.status.success(),
         "a folder of numbered files is one document in paragraphs:\n{}{}",

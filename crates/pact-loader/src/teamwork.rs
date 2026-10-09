@@ -70,7 +70,9 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
 /// in a workspace, plain in a single-agent tree — so no message below has to
 /// know which kind of tree it is in.
 fn check_one(agent_name: &str, agent: &Node, diags: &mut Diagnostics) {
-    let Some(teamwork) = agent.get("teamwork") else { return };
+    let Some(teamwork) = agent.get("teamwork") else {
+        return;
+    };
     enough_is_reachable(agent_name, agent, teamwork, diags);
     may_start_is_bounded(agent_name, agent, teamwork, diags);
     let Some(shares) = teamwork.get("shares") else {
@@ -80,7 +82,9 @@ fn check_one(agent_name: &str, agent: &Node, diags: &mut Diagnostics) {
         }
         return;
     };
-    let Some(written) = shares.as_map() else { return };
+    let Some(written) = shares.as_map() else {
+        return;
+    };
 
     if !divides_by_share(teamwork) {
         shares_nothing_divides(agent_name, teamwork, shares, diags);
@@ -127,10 +131,18 @@ fn check_one(agent_name: &str, agent: &Node, diags: &mut Diagnostics) {
 /// an agent whose teamwork has nobody to do it is a different mistake, and one
 /// mistake gets one message.
 fn enough_is_reachable(agent_name: &str, agent: &Node, teamwork: &Node, diags: &mut Diagnostics) {
-    if teamwork.get("waits-for").and_then(Node::as_str).map(str::trim) != Some("enough-of-them") {
+    if teamwork
+        .get("waits-for")
+        .and_then(Node::as_str)
+        .map(str::trim)
+        != Some("enough-of-them")
+    {
         return;
     }
-    let Some(wanted) = teamwork.get("enough-is").and_then(Node::as_str).and_then(|s| s.trim().parse::<i64>().ok())
+    let Some(wanted) = teamwork
+        .get("enough-is")
+        .and_then(Node::as_str)
+        .and_then(|s| s.trim().parse::<i64>().ok())
     else {
         return; // absent is the schema's `needed-when:`; not a number is its type check
     };
@@ -164,7 +176,9 @@ fn enough_is_reachable(agent_name: &str, agent: &Node, teamwork: &Node, diags: &
 /// so this is the half only the loader can do. Read after `based-on:` is
 /// resolved, so a ceiling an agent inherits counts as written.
 fn may_start_is_bounded(agent_name: &str, agent: &Node, teamwork: &Node, diags: &mut Diagnostics) {
-    let Some(written) = teamwork.get("may-start") else { return };
+    let Some(written) = teamwork.get("may-start") else {
+        return;
+    };
     if written.as_list().is_some_and(<[Node]>::is_empty) {
         return; // `may-start: []` brings nobody in
     }
@@ -176,7 +190,11 @@ fn may_start_is_bounded(agent_name: &str, agent: &Node, teamwork: &Node, diags: 
     if missing.is_empty() {
         return;
     }
-    let lines = missing.iter().map(|m| format!("`{m}:`")).collect::<Vec<_>>().join(" and ");
+    let lines = missing
+        .iter()
+        .map(|m| format!("`{m}:`"))
+        .collect::<Vec<_>>()
+        .join(" and ");
     diags.push(Diagnostic::error(
         "loader/may-start-without-its-bounds",
         key_span(teamwork, "may-start").unwrap_or_else(|| teamwork.span.clone()),
@@ -204,7 +222,10 @@ fn everyone_has_a_share(
     written: &Map,
     diags: &mut Diagnostics,
 ) {
-    let missing: Vec<&String> = members.iter().filter(|m| !written.contains_key(*m)).collect();
+    let missing: Vec<&String> = members
+        .iter()
+        .filter(|m| !written.contains_key(*m))
+        .collect();
     if missing.is_empty() {
         return;
     }
@@ -214,7 +235,11 @@ fn everyone_has_a_share(
     // the rule below would then refuse — a fix that creates the next error is
     // not a fix.
     let left = 1.0 - written_total(written).unwrap_or(0.0);
-    let each = if left > 0.0 { (left * 100.0 / missing.len() as f64).floor() } else { 0.0 };
+    let each = if left > 0.0 {
+        (left * 100.0 / missing.len() as f64).floor()
+    } else {
+        0.0
+    };
     let lines: Vec<String> = missing
         .iter()
         .map(|m| {
@@ -235,8 +260,16 @@ fn everyone_has_a_share(
         )
     };
 
-    let named = missing.iter().map(|m| format!("'{m}'")).collect::<Vec<_>>().join(" and ");
-    let are = if missing.len() == 1 { "is on" } else { "are on" };
+    let named = missing
+        .iter()
+        .map(|m| format!("'{m}'"))
+        .collect::<Vec<_>>()
+        .join(" and ");
+    let are = if missing.len() == 1 {
+        "is on"
+    } else {
+        "are on"
+    };
     diags.push(Diagnostic::error(
         "loader/teammate-with-no-share",
         block.clone(),
@@ -254,21 +287,26 @@ fn everyone_has_a_share(
 /// Split out from the rule above because the diagnostic has nowhere to point
 /// yet — there is no `shares:` line to underline, so it underlines the line that
 /// asked for one.
-fn missing_shares_block(
-    agent_name: &str,
-    agent: &Node,
-    teamwork: &Node,
-    diags: &mut Diagnostics,
-) {
+fn missing_shares_block(agent_name: &str, agent: &Node, teamwork: &Node, diags: &mut Diagnostics) {
     let members = team_of(agent);
-    let each = if members.is_empty() { 0.0 } else { (100.0 / members.len() as f64).floor() };
-    let lines: Vec<String> = members.iter().map(|m| format!("  {m}: {each:.0}%")).collect();
+    let each = if members.is_empty() {
+        0.0
+    } else {
+        (100.0 / members.len() as f64).floor()
+    };
+    let lines: Vec<String> = members
+        .iter()
+        .map(|m| format!("  {m}: {each:.0}%"))
+        .collect();
     let fix = if lines.is_empty() {
         "Write `divides-the-budget: evenly` instead, or add a `shares:` block giving \
          each teammate a percentage."
             .to_string()
     } else {
-        format!("Add these lines under `teamwork`:\n         shares:\n         {}", lines.join("\n         "))
+        format!(
+            "Add these lines under `teamwork`:\n         shares:\n         {}",
+            lines.join("\n         ")
+        )
     };
     diags.push(Diagnostic::error(
         "loader/teammate-with-no-share",
@@ -302,7 +340,11 @@ fn missing_shares_block(
 /// one of them in force. This one ships because it can name the team in the
 /// message and offer the folder in the fix.
 fn shares_name_the_team(members: &[String], written: &Map, diags: &mut Diagnostics) -> bool {
-    let team = members.iter().map(String::as_str).collect::<Vec<_>>().join(", ");
+    let team = members
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .join(", ");
     let mut found = false;
     for (name, entry) in written {
         if members.iter().any(|m| m == name) {
@@ -340,7 +382,9 @@ fn shares_add_up(agent_name: &str, block: &Span, written: &Map, diags: &mut Diag
     // schema, with the line to type (`Write it like `90%`.`). Adding "they add
     // up to 60%" on top would be a second message for one mistake, about a total
     // computed from a number the author has not finished writing.
-    let Some(total) = written_total(written) else { return };
+    let Some(total) = written_total(written) else {
+        return;
+    };
     if total <= 1.0 + EPS {
         return;
     }
@@ -426,7 +470,11 @@ fn shares_nothing_divides(
 // ──────────────────────────────────────────────────────────────────── reading
 
 fn divides_by_share(teamwork: &Node) -> bool {
-    teamwork.get("divides-the-budget").and_then(Node::as_str).map(str::trim) == Some(BY_SHARE)
+    teamwork
+        .get("divides-the-budget")
+        .and_then(Node::as_str)
+        .map(str::trim)
+        == Some(BY_SHARE)
 }
 
 /// The names under `team:`, in the order the author wrote them.
@@ -470,13 +518,19 @@ fn percent(node: &Node) -> Option<f64> {
 /// print a number that does not match their file.
 fn round(pct: f64) -> String {
     let whole = (pct * 10.0).round() / 10.0;
-    if (whole - whole.round()).abs() < 0.05 { format!("{:.0}", whole.round()) } else { format!("{whole:.1}") }
+    if (whole - whole.round()).abs() < 0.05 {
+        format!("{:.0}", whole.round())
+    } else {
+        format!("{whole:.1}")
+    }
 }
 
 /// The span of a key, so a diagnostic underlines the setting rather than the
 /// whole file.
 fn key_span(node: &Node, field: &str) -> Option<Span> {
-    node.as_map().and_then(|m: &Map| m.get(field)).map(|e: &Entry| e.key_span.clone())
+    node.as_map()
+        .and_then(|m: &Map| m.get(field))
+        .map(|e: &Entry| e.key_span.clone())
 }
 
 #[cfg(test)]
@@ -495,7 +549,12 @@ mod tests {
     }
 
     fn only(d: &Diagnostics, rule: &str) {
-        assert_eq!(d.items().len(), 1, "expected one message and got: {}", d.render());
+        assert_eq!(
+            d.items().len(),
+            1,
+            "expected one message and got: {}",
+            d.render()
+        );
         assert_eq!(d.items()[0].rule, rule, "{}", d.render());
     }
 
@@ -522,7 +581,11 @@ agents:
         let d = run(STARTS);
         only(&d, "loader/may-start-without-its-bounds");
         let e = &d.items()[0];
-        assert!(e.message.contains("`starts-at-most:` and `nests-at-most:`"), "{}", e.message);
+        assert!(
+            e.message.contains("`starts-at-most:` and `nests-at-most:`"),
+            "{}",
+            e.message
+        );
         assert!(e.fix.contains("starts-at-most: 20"), "{}", e.fix);
     }
 
@@ -531,13 +594,22 @@ agents:
         let d = run(&format!("{STARTS}    limits:\n      starts-at-most: 20\n"));
         only(&d, "loader/may-start-without-its-bounds");
         let e = &d.items()[0];
-        assert!(e.message.contains("`nests-at-most:` missing"), "{}", e.message);
-        assert!(!e.message.contains("`starts-at-most:` and"), "{}", e.message);
+        assert!(
+            e.message.contains("`nests-at-most:` missing"),
+            "{}",
+            e.message
+        );
+        assert!(
+            !e.message.contains("`starts-at-most:` and"),
+            "{}",
+            e.message
+        );
     }
 
     #[test]
     fn may_start_with_both_bounds_or_with_nobody_listed_is_left_alone() {
-        let bounded = format!("{STARTS}    limits:\n      starts-at-most: 20\n      nests-at-most: 2\n");
+        let bounded =
+            format!("{STARTS}    limits:\n      starts-at-most: 20\n      nests-at-most: 2\n");
         assert!(run(&bounded).is_empty(), "{}", run(&bounded).render());
         let nobody = "agents:\n  a:\n    teamwork:\n      may-start: []\n";
         assert!(run(nobody).is_empty(), "{}", run(nobody).render());
@@ -550,9 +622,17 @@ agents:
         ));
         only(&d, "loader/shares-add-up-to-more-than-the-pot");
         let e = &d.items()[0];
-        assert!(e.message.contains("150%"), "the total that was written: {}", e.message);
+        assert!(
+            e.message.contains("150%"),
+            "the total that was written: {}",
+            e.message
+        );
         assert!(e.message.contains("only 100%"), "{}", e.message);
-        assert!(e.fix.contains("`policy-checker: 40%`"), "scaled to fit: {}", e.fix);
+        assert!(
+            e.fix.contains("`policy-checker: 40%`"),
+            "scaled to fit: {}",
+            e.fix
+        );
         assert!(e.fix.contains("`fraud-checker: 60%`"), "{}", e.fix);
     }
 
@@ -562,7 +642,11 @@ agents:
         only(&d, "loader/teammate-with-no-share");
         let e = &d.items()[0];
         assert!(e.message.contains("'fraud-checker'"), "{}", e.message);
-        assert!(e.fix.contains("`fraud-checker: 40%`"), "the rest of the pot: {}", e.fix);
+        assert!(
+            e.fix.contains("`fraud-checker: 40%`"),
+            "the rest of the pot: {}",
+            e.fix
+        );
     }
 
     #[test]
@@ -583,7 +667,11 @@ agents:
         let d = run(&format!(
             "{TWO_MEMBERS}        policy-checker: 60%\n        fraud-checker: 90%\n"
         ));
-        assert!(d.items()[0].fix.contains("Less than 100% is allowed"), "{}", d.items()[0].fix);
+        assert!(
+            d.items()[0].fix.contains("Less than 100% is allowed"),
+            "{}",
+            d.items()[0].fix
+        );
     }
 
     #[test]
@@ -613,13 +701,16 @@ agents:
             "{TWO_MEMBERS}        polcy-checker: 60%\n        fraud-checker: 40%\n"
         ));
         only(&d, "loader/share-for-someone-not-on-the-team");
-        assert!(d.items()[0].message.contains("'polcy-checker'"), "{}", d.items()[0].message);
+        assert!(
+            d.items()[0].message.contains("'polcy-checker'"),
+            "{}",
+            d.items()[0].message
+        );
     }
 
     #[test]
     fn shares_written_where_nothing_divides_by_them_are_a_warning_not_a_refusal() {
-        let d = run(
-            "
+        let d = run("
 agents:
   refund-desk:
     team:
@@ -628,18 +719,24 @@ agents:
       divides-the-budget: evenly
       shares:
         policy-checker: 100%
-",
-        );
+");
         only(&d, "loader/shares-nothing-divides-by");
         assert!(!d.has_errors(), "the tree still runs: {}", d.render());
-        assert!(d.items()[0].fix.contains("divides-the-budget: by-share"), "{}", d.items()[0].fix);
-        assert_eq!(d.items()[0].related.len(), 1, "must point at the line that decides");
+        assert!(
+            d.items()[0].fix.contains("divides-the-budget: by-share"),
+            "{}",
+            d.items()[0].fix
+        );
+        assert_eq!(
+            d.items()[0].related.len(),
+            1,
+            "must point at the line that decides"
+        );
     }
 
     #[test]
     fn by_share_with_no_shares_at_all_offers_the_block_to_type() {
-        let d = run(
-            "
+        let d = run("
 agents:
   refund-desk:
     team:
@@ -647,8 +744,7 @@ agents:
       fraud-checker: Looks for fraud.
     teamwork:
       divides-the-budget: by-share
-",
-        );
+");
         only(&d, "loader/teammate-with-no-share");
         let fix = &d.items()[0].fix;
         assert!(fix.contains("shares:"), "{fix}");
@@ -665,7 +761,9 @@ agents:
             "{TWO_MEMBERS}        policy-checker: 60\n        fraud-checker: 90%\n"
         ));
         assert!(
-            !d.items().iter().any(|x| x.rule == "loader/shares-add-up-to-more-than-the-pot"),
+            !d.items()
+                .iter()
+                .any(|x| x.rule == "loader/shares-add-up-to-more-than-the-pot"),
             "{}",
             d.render()
         );
@@ -673,14 +771,12 @@ agents:
 
     #[test]
     fn a_team_with_no_teamwork_block_is_not_a_mistake() {
-        let d = run(
-            "
+        let d = run("
 agents:
   refund-desk:
     team:
       policy-checker: Checks the policy.
-",
-        );
+");
         assert!(d.is_empty(), "{}", d.render());
     }
 
@@ -688,8 +784,7 @@ agents:
     fn a_rounding_total_is_printed_as_the_author_would_recognise_it() {
         // Three thirds. Refusing 100.00000000000001% would be arithmetic noise
         // reported to a person as a policy breach.
-        let d = run(
-            "
+        let d = run("
 agents:
   desk:
     team:
@@ -702,8 +797,7 @@ agents:
         a: 33.34%
         b: 33.33%
         c: 33.33%
-",
-        );
+");
         assert!(d.is_empty(), "{}", d.render());
         assert_eq!(round(150.000000001), "150");
         assert_eq!(round(133.4), "133.4");
@@ -713,8 +807,7 @@ agents:
     fn a_single_agent_tree_is_checked_too() {
         // `pact check` treats a tree with no `agents:` as one agent, and a
         // teamwork mistake in it is the same mistake.
-        let d = run(
-            "
+        let d = run("
 team:
   policy-checker: Checks the policy.
   fraud-checker: Looks for fraud.
@@ -723,8 +816,7 @@ teamwork:
   shares:
     policy-checker: 70%
     fraud-checker: 70%
-",
-        );
+");
         only(&d, "loader/shares-add-up-to-more-than-the-pot");
     }
 
@@ -735,8 +827,7 @@ teamwork:
             "{TWO_MEMBERS}        policy-checker: 90%\n        fraud-checker: 90%\n"
         ));
         check(
-            &doc(
-                "
+            &doc("
 agents:
   desk:
     team:
@@ -745,21 +836,18 @@ agents:
       divides-the-budget: evenly
       shares:
         a: 100%
-",
-            ),
+"),
             &mut d,
         );
         check(
-            &doc(
-                "
+            &doc("
 agents:
   desk:
     team:
       a: one
     teamwork:
       divides-the-budget: by-share
-",
-            ),
+"),
             &mut d,
         );
         check(
@@ -771,9 +859,18 @@ agents:
         );
         assert_eq!(d.items().len(), 4, "{}", d.render());
         for item in d.items() {
-            assert!(!item.fix.trim().is_empty(), "rule {} gave no fix", item.rule);
+            assert!(
+                !item.fix.trim().is_empty(),
+                "rule {} gave no fix",
+                item.rule
+            );
             assert!(item.span.line >= 1, "rule {} points nowhere", item.rule);
-            assert!(item.fix.contains('`'), "rule {} offers nothing to type: {}", item.rule, item.fix);
+            assert!(
+                item.fix.contains('`'),
+                "rule {} offers nothing to type: {}",
+                item.rule,
+                item.fix
+            );
         }
     }
 }

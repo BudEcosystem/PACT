@@ -198,21 +198,37 @@ answers: parent-contact
 ";
     for (name, port, refused) in [
         ("no-zone", timer.to_string(), true),
-        ("zoned", format!("{timer}in-time-zone: America/Chicago\n"), false),
-        ("interval", timer.replace("weekday mornings at 9", "every 10 minutes"), false),
+        (
+            "zoned",
+            format!("{timer}in-time-zone: America/Chicago\n"),
+            false,
+        ),
+        (
+            "interval",
+            timer.replace("weekday mornings at 9", "every 10 minutes"),
+            false,
+        ),
     ] {
         static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let dst = std::env::temp_dir().join(format!("pact-overlap-zone-{n}-{}", std::process::id()));
+        let dst =
+            std::env::temp_dir().join(format!("pact-overlap-zone-{n}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dst);
         copy(&repo().join(TRIAL), &dst);
         let ws = dst.join("workspace.yaml");
         let text = std::fs::read_to_string(&ws).unwrap();
         std::fs::write(&ws, text.replacen("time-zone: America/Chicago\n", "", 1)).unwrap();
         std::fs::write(dst.join("ports/mornings.yaml"), port).unwrap();
-        let out = pact().args(["check", dst.to_str().unwrap()]).output().expect("runs");
+        let out = pact()
+            .args(["check", dst.to_str().unwrap()])
+            .output()
+            .expect("runs");
         let said = String::from_utf8_lossy(&out.stdout).into_owned();
         let _ = std::fs::remove_dir_all(&dst);
-        assert_eq!(said.contains("loader/a-time-with-no-zone"), refused, "[{name}] {said}");
+        assert_eq!(
+            said.contains("loader/a-time-with-no-zone"),
+            refused,
+            "[{name}] {said}"
+        );
     }
 }

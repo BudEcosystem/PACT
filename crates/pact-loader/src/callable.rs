@@ -67,8 +67,15 @@ const LONGEST: usize = 64;
 
 /// Refuse a tool or teammate name the model would be handed and could not call.
 pub fn check(document: &Node, diags: &mut Diagnostics) {
-    for (name, entry) in document.get("tools").and_then(Node::as_map).into_iter().flatten() {
-        let Some(wrong) = what_is_wrong_with(name) else { continue };
+    for (name, entry) in document
+        .get("tools")
+        .and_then(Node::as_map)
+        .into_iter()
+        .flatten()
+    {
+        let Some(wrong) = what_is_wrong_with(name) else {
+            continue;
+        };
         diags.push(a_tool(document, name, &entry.key_span, &wrong));
     }
 
@@ -81,7 +88,9 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
         None => vec![("", document)],
     };
     for (_, agent) in agents {
-        let Some(team) = agent.get("team").and_then(Node::as_map) else { continue };
+        let Some(team) = agent.get("team").and_then(Node::as_map) else {
+            continue;
+        };
         for (name, entry) in team {
             // A teammate with no agent behind it is already reported at this
             // exact line by `key-names: agents`, and one mistake gets one
@@ -89,7 +98,9 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
             if !names_an_agent(document, name) {
                 continue;
             }
-            let Some(wrong) = what_is_wrong_with(name) else { continue };
+            let Some(wrong) = what_is_wrong_with(name) else {
+                continue;
+            };
             diags.push(a_teammate(document, agent, name, &entry.key_span, &wrong));
         }
     }
@@ -103,7 +114,10 @@ fn a_tool(document: &Node, name: &str, at: &Span, wrong: &str) -> Diagnostic {
     // line they never wrote sends them looking for a file that has no such line.
     let users = uses_lines(document, name);
     if !users.is_empty() {
-        fix.push_str(&format!(" and change the `uses:` line to `- {}`", spelled(&good)));
+        fix.push_str(&format!(
+            " and change the `uses:` line to `- {}`",
+            spelled(&good)
+        ));
     }
     fix.push('.');
 
@@ -114,7 +128,10 @@ fn a_tool(document: &Node, name: &str, at: &Span, wrong: &str) -> Diagnostic {
         fix,
     );
     for (span, whose) in users {
-        d = d.with_related(span, format!("'{whose}' names it here too — change this line as well"));
+        d = d.with_related(
+            span,
+            format!("'{whose}' names it here too — change this line as well"),
+        );
     }
     d
 }
@@ -130,7 +147,10 @@ fn a_teammate(document: &Node, agent: &Node, name: &str, at: &Span, wrong: &str)
         Some(span) => format!("{} and change", rename_to("agents", name, &good, span)),
         None => "Change".to_string(),
     };
-    fix.push_str(&format!(" the `{name}:` line under `team:` to `{}:`.", spelled(&good)));
+    fix.push_str(&format!(
+        " the `{name}:` line under `team:` to `{}:`.",
+        spelled(&good)
+    ));
 
     let mut d = Diagnostic::error(
         "loader/name-a-model-cannot-call",
@@ -148,14 +168,16 @@ fn a_teammate(document: &Node, agent: &Node, name: &str, at: &Span, wrong: &str)
     // divided by name, so a `shares:` key left behind stops matching anybody and
     // `Pool.share_of` hands the renamed member 0.0.
     if let Some(span) = shares_key_span(agent, name) {
-        d = d.with_related(span, "this share is written against the same name — change it as well");
+        d = d.with_related(
+            span,
+            "this share is written against the same name — change it as well",
+        );
     }
     d
 }
 
 /// The sentence every one of these messages ends with.
-const WHY: &str =
-    "Every model refuses a name that is not made of lowercase letters, numbers, `-` and `_`, \
+const WHY: &str = "Every model refuses a name that is not made of lowercase letters, numbers, `-` and `_`, \
      so the first thing this agent tries to do fails before a word is written.";
 
 /// "Rename the file to `tools/get-weather.yaml`", in whichever form was written.
@@ -189,7 +211,9 @@ fn is_a_whole_file(at: &Span) -> bool {
 /// creates a second mistake — and the dot is exactly the kind of character that
 /// gets one of these documents reported in the first place.
 fn document_extension(at: &Span) -> Option<&str> {
-    at.file.extension().filter(|e| matches!(*e, "yaml" | "yml" | "json" | "md" | "markdown"))
+    at.file
+        .extension()
+        .filter(|e| matches!(*e, "yaml" | "yml" | "json" | "md" | "markdown"))
 }
 
 /// Why this name cannot be called, in the author's own terms.
@@ -233,7 +257,11 @@ fn what_is_wrong_with(name: &str) -> Option<String> {
         said.push(format!("it has a `{bad}` in it"));
     }
 
-    if said.is_empty() { None } else { Some(said.join(", and ")) }
+    if said.is_empty() {
+        None
+    } else {
+        Some(said.join(", and "))
+    }
 }
 
 /// A character a callable name may hold somewhere, capitals aside.
@@ -241,7 +269,11 @@ fn what_is_wrong_with(name: &str) -> Option<String> {
 /// A space is excluded here and reported by its own sentence: "it has a ` ` in
 /// it" is a pair of backticks around nothing.
 fn allowed_anywhere(c: char) -> bool {
-    c.is_ascii_lowercase() || c.is_ascii_uppercase() || c.is_ascii_digit() || c == '-' || c == '_'
+    c.is_ascii_lowercase()
+        || c.is_ascii_uppercase()
+        || c.is_ascii_digit()
+        || c == '-'
+        || c == '_'
         || c == ' '
 }
 
@@ -301,7 +333,10 @@ fn spelled_for_a_model(name: &str) -> String {
 
 /// Whether the workspace has an agent by this name.
 fn names_an_agent(document: &Node, name: &str) -> bool {
-    document.get("agents").and_then(Node::as_map).is_some_and(|m| m.contains_key(name))
+    document
+        .get("agents")
+        .and_then(Node::as_map)
+        .is_some_and(|m| m.contains_key(name))
 }
 
 /// Where the agent of this name was written.
@@ -331,7 +366,11 @@ fn uses_lines<'a>(document: &'a Node, name: &str) -> Vec<(Span, &'a str)> {
         None => vec![("this agent", document)],
     };
     for (who, agent) in agents {
-        for item in agent.get("uses").and_then(Node::as_list).unwrap_or_default() {
+        for item in agent
+            .get("uses")
+            .and_then(Node::as_list)
+            .unwrap_or_default()
+        {
             if item.as_str().map(str::trim) == Some(name) {
                 out.push((item.span.clone(), who));
             }
@@ -347,7 +386,11 @@ fn uses_lines<'a>(document: &'a Node, name: &str) -> Vec<(Span, &'a str)> {
 /// ``" is worse than no fix. One function so the empty case has one answer
 /// rather than one per place that writes the name out.
 fn spelled(good: &str) -> &str {
-    if good.is_empty() { "<a-name-you-choose>" } else { good }
+    if good.is_empty() {
+        "<a-name-you-choose>"
+    } else {
+        good
+    }
 }
 
 #[cfg(test)]
@@ -367,13 +410,36 @@ mod tests {
         let d = check_text(
             "agents:\n  desk:\n    uses:\n      - Get Weather\ntools:\n  Get Weather:\n    description: x\n",
         );
-        let e = d.items().first().expect("a name no model can call must be refused");
+        let e = d
+            .items()
+            .first()
+            .expect("a name no model can call must be refused");
         assert_eq!(e.rule, "loader/name-a-model-cannot-call");
-        assert_eq!(e.severity, pact_diag::Severity::Error, "the first model call fails");
-        assert!(e.message.contains("'Get Weather'"), "name what is wrong: {}", e.message);
-        assert!(e.message.contains("space"), "say why, in the author's terms: {}", e.message);
-        assert!(e.fix.contains("get-weather"), "spell the corrected name: {}", e.fix);
-        assert!(e.fix.contains("`uses:`"), "the other line to retype: {}", e.fix);
+        assert_eq!(
+            e.severity,
+            pact_diag::Severity::Error,
+            "the first model call fails"
+        );
+        assert!(
+            e.message.contains("'Get Weather'"),
+            "name what is wrong: {}",
+            e.message
+        );
+        assert!(
+            e.message.contains("space"),
+            "say why, in the author's terms: {}",
+            e.message
+        );
+        assert!(
+            e.fix.contains("get-weather"),
+            "spell the corrected name: {}",
+            e.fix
+        );
+        assert!(
+            e.fix.contains("`uses:`"),
+            "the other line to retype: {}",
+            e.fix
+        );
     }
 
     #[test]
@@ -397,7 +463,8 @@ mod tests {
         check(&node, &mut d);
         let e = d.items().first().expect("refused");
         assert!(
-            e.fix.contains("Rename the file to `tools/get-weather.yaml`"),
+            e.fix
+                .contains("Rename the file to `tools/get-weather.yaml`"),
             "name the file the author would rename: {}",
             e.fix
         );
@@ -407,8 +474,16 @@ mod tests {
     fn a_tool_written_inline_is_told_to_change_the_line_rather_than_rename_a_file() {
         let d = check_text("tools:\n  Get Weather:\n    description: x\n");
         let e = d.items().first().expect("refused");
-        assert!(e.fix.contains("Change the `Get Weather:` line"), "{}", e.fix);
-        assert!(!e.fix.contains("Rename"), "there is no file to rename here: {}", e.fix);
+        assert!(
+            e.fix.contains("Change the `Get Weather:` line"),
+            "{}",
+            e.fix
+        );
+        assert!(
+            !e.fix.contains("Rename"),
+            "there is no file to rename here: {}",
+            e.fix
+        );
     }
 
     #[test]
@@ -417,11 +492,22 @@ mod tests {
             "agents:\n  desk:\n    team:\n      Fraud Checker: looks for fraud\n\
              \n  Fraud Checker:\n    description: x\n",
         );
-        let e = d.items().first().expect("a teammate is offered to the model by this name");
+        let e = d
+            .items()
+            .first()
+            .expect("a teammate is offered to the model by this name");
         assert_eq!(e.rule, "loader/name-a-model-cannot-call");
         assert!(e.message.contains("capital letter"), "{}", e.message);
-        assert!(e.fix.contains("fraud-checker"), "spell the corrected name: {}", e.fix);
-        assert!(e.fix.contains("`team:`"), "the line the author retypes: {}", e.fix);
+        assert!(
+            e.fix.contains("fraud-checker"),
+            "spell the corrected name: {}",
+            e.fix
+        );
+        assert!(
+            e.fix.contains("`team:`"),
+            "the line the author retypes: {}",
+            e.fix
+        );
     }
 
     #[test]
@@ -436,8 +522,15 @@ mod tests {
     fn a_name_longer_than_a_provider_accepts_is_refused_and_the_fix_is_short_enough() {
         let long = "a".repeat(70);
         let d = check_text(&format!("tools:\n  {long}:\n    description: x\n"));
-        let e = d.items().first().expect("70 characters is a provider refusal");
-        assert!(e.message.contains("70 characters"), "count it for them: {}", e.message);
+        let e = d
+            .items()
+            .first()
+            .expect("70 characters is a provider refusal");
+        assert!(
+            e.message.contains("70 characters"),
+            "count it for them: {}",
+            e.message
+        );
         assert!(e.message.contains("64"), "say the ceiling: {}", e.message);
         // The offered spelling is cut to the ceiling, not handed back at full
         // length: a fix that reproduces the mistake is not a fix.
@@ -511,8 +604,16 @@ mod tests {
         // than no fix at all — it looks like the checker lost the answer.
         let d = check_text("tools:\n  \"!!!\":\n    description: x\n");
         let e = d.items().first().expect("refused");
-        assert!(e.fix.contains("<a-name-you-choose>"), "ask for a name: {}", e.fix);
-        assert!(!e.fix.contains("``"), "no empty spelling may reach the author: {}", e.fix);
+        assert!(
+            e.fix.contains("<a-name-you-choose>"),
+            "ask for a name: {}",
+            e.fix
+        );
+        assert!(
+            !e.fix.contains("``"),
+            "no empty spelling may reach the author: {}",
+            e.fix
+        );
     }
 
     #[test]
@@ -524,8 +625,14 @@ mod tests {
         // second mistake in place of the first.
         let mut node =
             parse_yaml("tools:\n  x: {}\n", camino::Utf8Path::new("w.yaml")).expect("parses");
-        let inner =
-            node.as_map_mut().unwrap().get_mut("tools").unwrap().node.as_map_mut().unwrap();
+        let inner = node
+            .as_map_mut()
+            .unwrap()
+            .get_mut("tools")
+            .unwrap()
+            .node
+            .as_map_mut()
+            .unwrap();
         let entry = inner.shift_remove("x").unwrap();
         inner.insert(
             "fraud.checker".to_string(),

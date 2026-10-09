@@ -165,7 +165,10 @@ fn the_spelling_the_help_prescribes_is_covered_too() {
         let out = pact().args(["check", &root]).output().expect("runs");
         let text = String::from_utf8_lossy(&out.stdout);
 
-        assert!(!out.status.success(), "`{written}` must be refused:\n{text}");
+        assert!(
+            !out.status.success(),
+            "`{written}` must be refused:\n{text}"
+        );
         assert!(
             text.contains("schema/too-big-to-count"),
             "wrong rule for `{written}`:\n{text}"

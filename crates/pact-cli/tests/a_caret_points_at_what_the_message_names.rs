@@ -35,7 +35,10 @@ fn broken(name: &str, edits: &[(&str, &str, &str)]) -> String {
     for (file, from, to) in edits {
         let p = dst.join(file);
         let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-        assert!(text.contains(from), "fixture drifted: {from:?} not found in {file}");
+        assert!(
+            text.contains(from),
+            "fixture drifted: {from:?} not found in {file}"
+        );
         std::fs::write(&p, text.replace(from, to)).unwrap();
     }
     dst.to_string_lossy().into_owned()
@@ -49,7 +52,10 @@ fn delete_line(root: &str, file: &str, prefix: &str) {
     let p = std::path::Path::new(root).join(file);
     let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
     let kept: Vec<&str> = text.lines().filter(|l| !l.starts_with(prefix)).collect();
-    assert!(kept.len() < text.lines().count(), "fixture drifted: no {prefix:?} line in {file}");
+    assert!(
+        kept.len() < text.lines().count(),
+        "fixture drifted: no {prefix:?} line in {file}"
+    );
     std::fs::write(&p, format!("{}\n", kept.join("\n"))).unwrap();
 }
 
@@ -132,9 +138,15 @@ fn copy_dir(src: &std::path::Path, dst: &std::path::Path) {
 }
 
 fn check(root: &str) -> String {
-    let out = pact().args(["check", root]).output().expect("the binary runs");
+    let out = pact()
+        .args(["check", root])
+        .output()
+        .expect("the binary runs");
     let text = String::from_utf8_lossy(&out.stdout).into_owned();
-    assert!(!out.status.success(), "these fixtures must be refused:\n{text}");
+    assert!(
+        !out.status.success(),
+        "these fixtures must be refused:\n{text}"
+    );
     text
 }
 
@@ -155,7 +167,10 @@ fn problems_about(rendered: &str, rule: &str) -> Vec<String> {
     let mut found = Vec::new();
     let mut block: Vec<&str> = Vec::new();
     for line in rendered.lines() {
-        if ["error: ", "warning: ", "note: "].iter().any(|k| line.starts_with(k)) {
+        if ["error: ", "warning: ", "note: "]
+            .iter()
+            .any(|k| line.starts_with(k))
+        {
             block.clear();
         }
         block.push(line);
@@ -227,8 +242,16 @@ fn a_caret_never_runs_past_the_end_of_the_line_it_underlines() {
     let root = broken(
         "overrun",
         &[
-            ("agents/refund-desk/needs.yaml", "reasoning: careful", "reasoning: brilliant"),
-            ("agents/refund-desk/limits.yaml", "finishes-within: 30s", "finishes-within: soon"),
+            (
+                "agents/refund-desk/needs.yaml",
+                "reasoning: careful",
+                "reasoning: brilliant",
+            ),
+            (
+                "agents/refund-desk/limits.yaml",
+                "finishes-within: 30s",
+                "finishes-within: soon",
+            ),
             // A `text` field written as a block whose entries are NOT all prose.
             // The all-prose case is now the "split it up when it gets long" form
             // both READMEs promise and is accepted, so the fixture that produces
@@ -244,7 +267,11 @@ fn a_caret_never_runs_past_the_end_of_the_line_it_underlines() {
     );
     let text = check(&root);
     let drawn = underlines(&text);
-    assert!(drawn.len() >= 3, "expected an underline per mistake, got {}:\n{text}", drawn.len());
+    assert!(
+        drawn.len() >= 3,
+        "expected an underline per mistake, got {}:\n{text}",
+        drawn.len()
+    );
 
     for u in &drawn {
         let len = u.source_line.chars().count();
@@ -261,7 +288,10 @@ fn a_caret_never_runs_past_the_end_of_the_line_it_underlines() {
             " ".repeat(u.indent),
             "^".repeat(u.carets),
         );
-        assert!(u.carets >= 1, "an empty underline points at nothing:\n{text}");
+        assert!(
+            u.carets >= 1,
+            "an empty underline points at nothing:\n{text}"
+        );
     }
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -277,7 +307,10 @@ fn a_missing_field_does_not_point_the_caret_at_an_unrelated_value() {
     let text = check(&root);
 
     let block = problem_about(&text, "schema/missing-field");
-    assert!(block.contains("'description'"), "it must name the line that is absent:\n{block}");
+    assert!(
+        block.contains("'description'"),
+        "it must name the line that is absent:\n{block}"
+    );
     assert!(
         !block.contains('^'),
         "a line that was never written has nothing to underline:\n{block}"
@@ -331,7 +364,11 @@ fn a_missing_line_is_reported_without_quoting_a_line_that_is_not_the_one_missing
     // anything: a wrong VALUE still has to be quoted and marked.
     let root = broken(
         "missing-quotes-nothing",
-        &[("agents/refund-desk/needs.yaml", "reasoning: careful", "reasoning: brilliant")],
+        &[(
+            "agents/refund-desk/needs.yaml",
+            "reasoning: careful",
+            "reasoning: brilliant",
+        )],
     );
     delete_line(&root, "agents/refund-desk/agent.yaml", "description:");
     write_file(
@@ -358,7 +395,8 @@ fn a_missing_line_is_reported_without_quoting_a_line_that_is_not_the_one_missing
     let in_a_folder = blocks
         .iter()
         .find(|b| {
-            b.lines().any(|l| l.trim_start().starts_with("--> ") && l.ends_with("tools/weather"))
+            b.lines()
+                .any(|l| l.trim_start().starts_with("--> ") && l.ends_with("tools/weather"))
         })
         .unwrap_or_else(|| panic!("(b) a folder with no description in it:\n{text}"));
 
@@ -368,14 +406,23 @@ fn a_missing_line_is_reported_without_quoting_a_line_that_is_not_the_one_missing
             "a line the author never wrote cannot be underlined, so no line of theirs \
              may be quoted under a sentence about it:\n{block}"
         );
-        assert!(!block.contains('^'), "and nothing may be marked either:\n{block}");
+        assert!(
+            !block.contains('^'),
+            "and nothing may be marked either:\n{block}"
+        );
         // What is left still has to be the four parts every diagnostic owes.
-        assert!(block.contains("'description'"), "it must name the line that is absent:\n{block}");
+        assert!(
+            block.contains("'description'"),
+            "it must name the line that is absent:\n{block}"
+        );
         let fix = block
             .lines()
             .find(|l| l.trim_start().starts_with("fix: "))
             .unwrap_or_else(|| panic!("O7.3: every diagnostic owes a fix:\n{block}"));
-        assert!(fix.contains("description:"), "and give the line to type:\n{fix}");
+        assert!(
+            fix.contains("description:"),
+            "and give the line to type:\n{fix}"
+        );
     }
     let (begins_at, already_right) = first_setting_line(&root, "agents/refund-desk/agent.yaml");
     assert!(
@@ -395,8 +442,16 @@ fn a_missing_line_is_reported_without_quoting_a_line_that_is_not_the_one_missing
         .into_iter()
         .find(|u| u.source_line.contains("brilliant"))
         .unwrap_or_else(|| panic!("a wrong value must still be quoted and marked:\n{text}"));
-    assert_eq!(wrong_value.indent, "reasoning: ".chars().count(), "under the value:\n{text}");
-    assert_eq!(wrong_value.carets, "brilliant".chars().count(), "as wide as it:\n{text}");
+    assert_eq!(
+        wrong_value.indent,
+        "reasoning: ".chars().count(),
+        "under the value:\n{text}"
+    );
+    assert_eq!(
+        wrong_value.carets,
+        "brilliant".chars().count(),
+        "as wide as it:\n{text}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -429,9 +484,15 @@ fn a_setting_whose_value_was_never_written_is_marked_on_its_own_line() {
         .find(|u| u.source_line.starts_with("description:"))
         .unwrap_or_else(|| panic!("the half-written line must be the one underlined:\n{text}"));
     assert_eq!(u.indent, 0, "the underline starts at the name");
-    assert_eq!(u.carets, "description".chars().count(), "and is as wide as it:\n{text}");
+    assert_eq!(
+        u.carets,
+        "description".chars().count(),
+        "and is as wide as it:\n{text}"
+    );
     assert!(
-        !underlines(&text).iter().any(|u| u.source_line.starts_with("kind:")),
+        !underlines(&text)
+            .iter()
+            .any(|u| u.source_line.starts_with("kind:")),
         "no correct line may be marked to report a different line's mistake:\n{text}"
     );
     let _ = std::fs::remove_dir_all(&root);
@@ -479,7 +540,15 @@ fn a_caret_under_an_accented_word_is_as_wide_as_the_word() {
         .find(|u| u.source_line.contains("café"))
         .unwrap_or_else(|| panic!("the bad word must be underlined:\n{text}"));
 
-    assert_eq!(u.indent, "reasoning: ".chars().count(), "the underline starts at the value");
-    assert_eq!(u.carets, "café".chars().count(), "four characters, not five bytes:\n{text}");
+    assert_eq!(
+        u.indent,
+        "reasoning: ".chars().count(),
+        "the underline starts at the value"
+    );
+    assert_eq!(
+        u.carets,
+        "café".chars().count(),
+        "four characters, not five bytes:\n{text}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }

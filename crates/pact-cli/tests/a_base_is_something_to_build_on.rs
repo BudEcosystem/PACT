@@ -26,7 +26,8 @@ fn workspace(name: &str, agents: &[(&str, &str)]) -> std::path::PathBuf {
     root
 }
 
-const PATTERN: &str = "base: yes\ndescription: The shape of a desk, for real desks to be based on.\n";
+const PATTERN: &str =
+    "base: yes\ndescription: The shape of a desk, for real desks to be based on.\n";
 const DESK: &str = "based-on: pattern\ninstructions: Answer the question in plain words.\n";
 const LONELY: &str =
     "description: Keeps to itself.\ninstructions: Do the work alone.\nteam:\n  pattern: helps\n";
@@ -37,7 +38,10 @@ fn naming_a_base_under_team_is_refused() {
         "team-door",
         &[("pattern", PATTERN), ("desk", DESK), ("lonely", LONELY)],
     );
-    let out = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
+    let out = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
     // `pact check` reports on stdout; both streams are read so a message that
     // moved would fail loudly rather than by absence.
     let said = format!(
@@ -45,7 +49,11 @@ fn naming_a_base_under_team_is_refused() {
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
-    assert_eq!(out.status.code(), Some(1), "a base on a team is an error:\n{said}");
+    assert_eq!(
+        out.status.code(),
+        Some(1),
+        "a base on a team is an error:\n{said}"
+    );
     assert!(
         said.contains("loader/a-teammate-that-is-only-a-base"),
         "the refusal must be the base one:\n{said}"
@@ -59,7 +67,10 @@ fn naming_a_base_under_team_is_refused() {
 #[test]
 fn a_workspace_of_only_bases_has_nothing_to_run() {
     let root = workspace("all-bases", &[("pattern", PATTERN)]);
-    let out = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
+    let out = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
     let said = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),
@@ -79,8 +90,15 @@ fn a_workspace_of_only_bases_has_nothing_to_run() {
     );
 
     // And discovery agrees: the workspace is found, and it offers no agents.
-    let out = pact().args(["discover", root.to_str().unwrap()]).output().expect("runs");
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let out = pact()
+        .args(["discover", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let inv: serde_json::Value = serde_json::from_slice(&out.stdout).expect("discover emits JSON");
     let ws = inv
         .as_array()
@@ -98,8 +116,15 @@ fn a_workspace_of_only_bases_has_nothing_to_run() {
 #[test]
 fn a_base_is_not_in_the_inventory() {
     let root = workspace("inventory-door", &[("pattern", PATTERN), ("desk", DESK)]);
-    let out = pact().args(["discover", root.to_str().unwrap()]).output().expect("runs");
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let out = pact()
+        .args(["discover", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let inv: serde_json::Value = serde_json::from_slice(&out.stdout).expect("discover emits JSON");
     let agents = inv
         .as_array()
@@ -111,8 +136,14 @@ fn a_base_is_not_in_the_inventory() {
         .expect("an agents array")
         .clone();
     let ids: Vec<&str> = agents.iter().map(|a| a["id"].as_str().unwrap()).collect();
-    assert!(ids.contains(&"pact:desk"), "the agent built ON the base runs: {ids:?}");
-    assert!(!ids.contains(&"pact:pattern"), "the base itself is left out: {ids:?}");
+    assert!(
+        ids.contains(&"pact:desk"),
+        "the agent built ON the base runs: {ids:?}"
+    );
+    assert!(
+        !ids.contains(&"pact:pattern"),
+        "the base itself is left out: {ids:?}"
+    );
     let desk = agents.iter().find(|a| a["id"] == "pact:desk").unwrap();
     assert_eq!(desk["runnable"], true, "the descendant is whole: {desk}");
 }

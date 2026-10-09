@@ -51,7 +51,11 @@ fn the_dropped_keys_are_named() {
     // `pact check` reports on stdout — the channel every other check test
     // reads — so that is where the author meets this sentence.
     let (code, out, err) = run(&["check", &tree()]);
-    assert_eq!(code, Some(0), "a narrowing is allowed, out loud:\n{out}{err}");
+    assert_eq!(
+        code,
+        Some(0),
+        "a narrowing is allowed, out loud:\n{out}{err}"
+    );
     assert!(
         out.contains("loader/restating-a-block-drops-the-rest"),
         "the warning reaches the author from disk, not only from a hand-built map:\n{out}{err}"
@@ -60,7 +64,10 @@ fn the_dropped_keys_are_named() {
         out.contains("`cost-per-request-under: 0.05 USD`"),
         "the dropped cap is named with its value:\n{out}"
     );
-    assert!(out.contains("finishes-within"), "and so is the deadline:\n{out}");
+    assert!(
+        out.contains("finishes-within"),
+        "and so is the deadline:\n{out}"
+    );
     assert!(
         !out.contains("`steps-at-most: 4`"),
         "a key the desk wrote itself is not something it dropped:\n{out}"

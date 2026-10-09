@@ -86,11 +86,15 @@ fn rows() -> Vec<Row> {
             area = numbered_heading(rest);
             continue;
         }
-        let Some(cells) = table_cells(line) else { continue };
+        let Some(cells) = table_cells(line) else {
+            continue;
+        };
         if cells.len() != 5 {
             continue;
         }
-        let Ok(number) = cells[0].parse::<u32>() else { continue };
+        let Ok(number) = cells[0].parse::<u32>() else {
+            continue;
+        };
         let area = area.clone().unwrap_or_else(|| {
             panic!(
                 "row {} ({}) is not under any `## <n>. <Area>` heading. Every row belongs to one \
@@ -168,7 +172,10 @@ fn every_capability_in_the_inventory_carries_exactly_one_of_the_three_letters() 
     // message has to name the row, because in ninety-eight rows "somewhere" is
     // not a finding.
     let rows = rows();
-    assert!(!rows.is_empty(), "no numbered rows parsed — the inventory table has changed shape");
+    assert!(
+        !rows.is_empty(),
+        "no numbered rows parsed — the inventory table has changed shape"
+    );
 
     for row in &rows {
         assert!(
@@ -215,7 +222,10 @@ fn every_row_names_the_eve_file_and_the_symbol_it_was_read_from() {
             )
         });
         assert!(
-            path.starts_with("packages/") || path.starts_with("apps/") || path.starts_with("docs/") || path.starts_with("skills/"),
+            path.starts_with("packages/")
+                || path.starts_with("apps/")
+                || path.starts_with("docs/")
+                || path.starts_with("skills/"),
             "row {} ({}) reads from {path:?}, which is not a path inside Eve's tree. Paths are \
              written relative to research/repos/frameworks/vercel-eve so they can be opened.",
             row.number,
@@ -270,16 +280,27 @@ fn every_refused_row_points_at_a_refusal_that_is_actually_written_down() {
     // EXISTS, which is silent about a ledger row nobody names. The other way is
     // `every_refusal_the_per_area_table_counts_is_one_an_inventory_row_points_at`.
     let ledger = ledger_ids();
-    assert!(ledger.len() >= 12, "only {} ledger rows found — §5 has gone stale", ledger.len());
+    assert!(
+        ledger.len() >= 12,
+        "only {} ledger rows found — §5 has gone stale",
+        ledger.len()
+    );
 
     let has_deferrals = refusals().contains("## 6. Deferred");
-    assert!(has_deferrals, "§6 must exist for a (c) row to be able to point at a deferral");
+    assert!(
+        has_deferrals,
+        "§6 must exist for a (c) row to be able to point at a deferral"
+    );
 
     for row in rows() {
         if row.letter != "c" {
             continue;
         }
-        let ledger_refs: Vec<String> = ledger.iter().filter(|id| names_ledger_row(&row.lands, id)).cloned().collect();
+        let ledger_refs: Vec<String> = ledger
+            .iter()
+            .filter(|id| names_ledger_row(&row.lands, id))
+            .cloned()
+            .collect();
         let deferred = row.lands.contains("§6");
         assert!(
             !ledger_refs.is_empty() || deferred,
@@ -309,7 +330,9 @@ fn every_refused_row_points_at_a_refusal_that_is_actually_written_down() {
 fn cited_fields(cell: &str) -> Vec<(String, String)> {
     let mut out = Vec::new();
     for span in code_spans(cell) {
-        let Some((group, field)) = span.split_once('.') else { continue };
+        let Some((group, field)) = span.split_once('.') else {
+            continue;
+        };
         let field = field.trim().trim_end_matches(':');
         if group.contains(' ') || field.contains(' ') || field.is_empty() {
             continue;
@@ -402,9 +425,10 @@ fn every_expressible_row_names_a_field_the_schema_actually_has() {
         // held by nobody. Measured: a fabricated row citing `nothing` passed.
         // The sibling (b) check already had this guard; (a) did not.
         let cited = cited_fields(&row.lands);
-        let names_a_command = code_spans(&row.lands)
-            .iter()
-            .any(|s| s.strip_prefix("pact ").is_some_and(|v| verbs.contains(&v.to_string())));
+        let names_a_command = code_spans(&row.lands).iter().any(|s| {
+            s.strip_prefix("pact ")
+                .is_some_and(|v| verbs.contains(&v.to_string()))
+        });
         assert!(
             !cited.is_empty() || names_a_command,
             "row {} ({}) is expressible and points at no field and no command: {:?}. \
@@ -450,7 +474,9 @@ fn every_expressible_row_that_names_a_command_names_one_that_exists() {
     );
     for row in rows() {
         for span in code_spans(&row.lands) {
-            let Some(verb) = span.strip_prefix("pact ") else { continue };
+            let Some(verb) = span.strip_prefix("pact ") else {
+                continue;
+            };
             let verb = verb.split_whitespace().next().unwrap_or("");
             assert!(
                 verbs.iter().any(|v| v == verb),
@@ -636,7 +662,9 @@ fn per_area_table() -> Vec<AreaRow> {
         if !inside {
             continue;
         }
-        let Some(cells) = table_cells(line) else { continue };
+        let Some(cells) = table_cells(line) else {
+            continue;
+        };
         if cells.len() != 5 {
             continue;
         }
@@ -646,11 +674,20 @@ fn per_area_table() -> Vec<AreaRow> {
         if area == "Area" || area.starts_with("---") {
             continue;
         }
-        let Some(rows) = leading_count(&cells[1]) else { continue };
+        let Some(rows) = leading_count(&cells[1]) else {
+            continue;
+        };
         let (Some(a), Some(b)) = (leading_count(&cells[2]), leading_count(&cells[3])) else {
             continue;
         };
-        out.push(AreaRow { area, line: n + 1, rows, a, b, c_cell: cells[4].clone() });
+        out.push(AreaRow {
+            area,
+            line: n + 1,
+            rows,
+            a,
+            b,
+            c_cell: cells[4].clone(),
+        });
     }
     assert!(
         out.len() >= 5,
@@ -728,7 +765,11 @@ fn the_file_cannot_drift_from_the_summary_it_states_about_itself() {
              The per-letter totals are what make 'no fourth category' a sum rather than a claim."
         );
     }
-    assert_eq!(a + b + c, total, "the three letters must add up to the total: {a} + {b} + {c} != {total}");
+    assert_eq!(
+        a + b + c,
+        total,
+        "the three letters must add up to the total: {a} + {b} + {c} != {total}"
+    );
 }
 
 #[test]
@@ -775,14 +816,18 @@ fn every_cell_of_the_per_area_table_is_recomputed_from_the_inventorys_own_rows()
         let mine: Vec<&Row> = if same_area(&area.area, "Total") {
             rows.iter().collect()
         } else {
-            rows.iter().filter(|r| same_area(&r.area, &area.area)).collect()
+            rows.iter()
+                .filter(|r| same_area(&r.area, &area.area))
+                .collect()
         };
         let count = |letter: &str| mine.iter().filter(|r| r.letter == letter).count();
         let (n, a, b, c) = (mine.len(), count("a"), count("b"), count("c"));
 
-        for (column, said, real) in
-            [("rows", area.rows, n), ("(a)", area.a, a), ("(b)", area.b, b)]
-        {
+        for (column, said, real) in [
+            ("rows", area.rows, n),
+            ("(a)", area.a, a),
+            ("(b)", area.b, b),
+        ] {
             assert_eq!(
                 said, real,
                 "docs/50-NOT-COPIED.md line {}: §8.2's `{}` row says {said} in the `{column}` \
@@ -833,7 +878,10 @@ fn every_refusal_the_per_area_table_counts_is_one_an_inventory_row_points_at() {
         }
         let stated = refusals_named(&area.c_cell);
         let mut found: Vec<String> = Vec::new();
-        for row in rows.iter().filter(|r| r.letter == "c" && same_area(&r.area, &area.area)) {
+        for row in rows
+            .iter()
+            .filter(|r| r.letter == "c" && same_area(&r.area, &area.area))
+        {
             for id in refusals_named(&row.lands) {
                 if !found.contains(&id) {
                     found.push(id);
@@ -863,7 +911,11 @@ fn every_refusal_the_per_area_table_counts_is_one_an_inventory_row_points_at() {
                 area.line,
                 area.area,
                 area.area,
-                if found.is_empty() { "nothing".to_string() } else { found.join(", ") }
+                if found.is_empty() {
+                    "nothing".to_string()
+                } else {
+                    found.join(", ")
+                }
             );
         }
         for id in &found {
@@ -939,7 +991,9 @@ fn the_totals_section_eight_quotes_in_prose_are_the_inventorys_own_totals() {
         if !inside {
             continue;
         }
-        let Some(cells) = table_cells(line) else { continue };
+        let Some(cells) = table_cells(line) else {
+            continue;
+        };
         if cells.len() != 4 {
             continue;
         }
@@ -951,15 +1005,22 @@ fn the_totals_section_eight_quotes_in_prose_are_the_inventorys_own_totals() {
             ("", "Total") => total,
             _ => continue,
         };
-        let Some(got) = leading_count(&cells[2]) else { continue };
+        let Some(got) = leading_count(&cells[2]) else {
+            continue;
+        };
         checked += 1;
         assert_eq!(
-            got, want,
+            got,
+            want,
             "docs/50-NOT-COPIED.md line {}: the §8 table says {got} for {}, and \
              research/notes/eve-capabilities.md has {want}. The four numbers are {total} rows — \
              {a} (a), {b} (b), {c} (c).",
             n + 1,
-            if label.is_empty() { said.as_str() } else { label.as_str() }
+            if label.is_empty() {
+                said.as_str()
+            } else {
+                label.as_str()
+            }
         );
     }
     assert_eq!(

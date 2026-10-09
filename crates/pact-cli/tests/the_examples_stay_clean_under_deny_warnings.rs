@@ -19,7 +19,10 @@ fn pact() -> Command {
 }
 
 fn repo() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().unwrap()
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .unwrap()
 }
 
 /// Every workspace this repository ships, found rather than listed.
@@ -35,7 +38,9 @@ fn shipped_trees() -> Vec<std::path::PathBuf> {
     let mut out = Vec::new();
     let mut stack = vec![repo().join("examples")];
     while let Some(dir) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         for e in entries.flatten() {
             let p = e.path();
             if !p.is_dir() || p.file_name().unwrap().to_string_lossy().starts_with('.') {
@@ -93,13 +98,21 @@ fn a_warning_fails_the_run_only_when_the_flag_is_given() {
     // flag exists to stop reaching a pipeline unnoticed.
     let p = dst.join("tools/payments.yaml");
     let text = std::fs::read_to_string(&p).unwrap();
-    let kept: Vec<&str> =
-        text.lines().filter(|l| !l.trim_start().starts_with("spends-money:")).collect();
+    let kept: Vec<&str> = text
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("spends-money:"))
+        .collect();
     assert!(kept.len() < text.lines().count(), "the fixture drifted");
     std::fs::write(&p, kept.join("\n") + "\n").unwrap();
 
-    let lax = pact().args(["check", dst.to_str().unwrap()]).output().expect("runs");
-    assert!(lax.status.success(), "a warning is not a failure by default");
+    let lax = pact()
+        .args(["check", dst.to_str().unwrap()])
+        .output()
+        .expect("runs");
+    assert!(
+        lax.status.success(),
+        "a warning is not a failure by default"
+    );
 
     let strict = pact()
         .args(["check", dst.to_str().unwrap(), "--deny-warnings"])
@@ -119,7 +132,11 @@ fn a_misspelt_flag_is_still_refused_by_name() {
     // silently did nothing when misspelt would be the defect this whole CLI
     // refuses everywhere else.
     let out = pact()
-        .args(["check", repo().join("examples/refund-desk").to_str().unwrap(), "--deny-warning"])
+        .args([
+            "check",
+            repo().join("examples/refund-desk").to_str().unwrap(),
+            "--deny-warning",
+        ])
         .output()
         .expect("runs");
     let text = format!(

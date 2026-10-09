@@ -40,7 +40,10 @@ fn edited(name: &str, file: &str, from: &str, to: &str) -> String {
     copy(std::path::Path::new(&example()), &dst);
     let p = dst.join(file);
     let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-    assert!(text.contains(from), "fixture drifted: {from:?} not in {file}");
+    assert!(
+        text.contains(from),
+        "fixture drifted: {from:?} not in {file}"
+    );
     std::fs::write(&p, text.replace(from, to)).unwrap();
     dst.to_string_lossy().into_owned()
 }
@@ -49,14 +52,24 @@ fn copy(src: &std::path::Path, dst: &std::path::Path) {
     std::fs::create_dir_all(dst).unwrap();
     for e in std::fs::read_dir(src).unwrap().flatten() {
         let (s, d) = (e.path(), dst.join(e.file_name()));
-        if s.is_dir() { copy(&s, &d) } else { std::fs::copy(&s, &d).map(|_| ()).unwrap() }
+        if s.is_dir() {
+            copy(&s, &d)
+        } else {
+            std::fs::copy(&s, &d).map(|_| ()).unwrap()
+        }
     }
 }
 
 /// Run `pact check` on a tree and give back what a reader would see.
 fn check(root: &str) -> (bool, String) {
-    let out = pact().args(["check", root]).output().expect("the binary runs");
-    (out.status.success(), String::from_utf8_lossy(&out.stdout).into_owned())
+    let out = pact()
+        .args(["check", root])
+        .output()
+        .expect("the binary runs");
+    (
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+    )
 }
 
 #[test]
@@ -72,12 +85,23 @@ fn changing_the_shipped_timers_kind_to_event_is_refused_and_names_the_line_to_ch
     // The measured defect, on the exact file and the exact edit that produced
     // it. `- kind: schedule` is spelled out rather than replaced everywhere,
     // because this file also carries the word `schedule` in its own comment.
-    let root = edited("event", "ports/weekly-review.yaml", "kind: schedule", "kind: event");
+    let root = edited(
+        "event",
+        "ports/weekly-review.yaml",
+        "kind: schedule",
+        "kind: event",
+    );
     let (ok, text) = check(&root);
 
     assert!(!ok, "a timer that can never fire must be refused:\n{text}");
-    assert!(text.contains("weekly-review.yaml:"), "no file and line:\n{text}");
-    assert!(text.contains("every:"), "the dead setting is not named:\n{text}");
+    assert!(
+        text.contains("weekly-review.yaml:"),
+        "no file and line:\n{text}"
+    );
+    assert!(
+        text.contains("every:"),
+        "the dead setting is not named:\n{text}"
+    );
     assert!(
         text.contains("Change `kind: event` to `kind: schedule`, or delete the `every:` line."),
         "the fix has to be two lines the author can type:\n{text}"
@@ -96,10 +120,18 @@ fn the_shipped_timer_still_loads_with_its_kind_line_deleted() {
     // and `pact check` said *"A port must have a 'kind'."* Delete the `every:`
     // arm of `ports::kind_of` and this fails again, because `says:` and
     // `if-still-running:` are then sitting on a port nothing calls a timer.
-    let root = edited("derived", "ports/weekly-review.yaml", "kind: schedule\n", "");
+    let root = edited(
+        "derived",
+        "ports/weekly-review.yaml",
+        "kind: schedule\n",
+        "",
+    );
     let (ok, text) = check(&root);
 
-    assert!(ok, "a port with an `every:` line IS a timer and needs no `kind:`:\n{text}");
+    assert!(
+        ok,
+        "a port with an `every:` line IS a timer and needs no `kind:`:\n{text}"
+    );
     assert!(text.contains("loaded cleanly"), "{text}");
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -110,12 +142,26 @@ fn a_timer_with_no_line_saying_when_and_no_line_saying_it_is_one_is_refused() {
     // `says:` is wording nobody will ever read and `if-still-running:` guards a
     // run that never starts. The fix cannot offer to change a `kind:` line,
     // because there is no longer one to change.
-    let root = edited("no-when", "ports/weekly-review.yaml", "kind: schedule\nevery: Friday at 4pm\n", "");
+    let root = edited(
+        "no-when",
+        "ports/weekly-review.yaml",
+        "kind: schedule\nevery: Friday at 4pm\n",
+        "",
+    );
     let (ok, text) = check(&root);
 
-    assert!(!ok, "wording with no clock behind it must be refused:\n{text}");
-    assert!(text.contains("weekly-review.yaml:"), "no file and line:\n{text}");
-    assert!(text.contains("`every: Friday at 4pm`"), "the fix must name the line to add:\n{text}");
+    assert!(
+        !ok,
+        "wording with no clock behind it must be refused:\n{text}"
+    );
+    assert!(
+        text.contains("weekly-review.yaml:"),
+        "no file and line:\n{text}"
+    );
+    assert!(
+        text.contains("`every: Friday at 4pm`"),
+        "the fix must name the line to add:\n{text}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -133,12 +179,26 @@ fn the_shipped_timer_with_only_its_when_line_deleted_is_refused_too() {
     // validator works and says nothing about whether the shipped
     // `ports/weekly-review.yaml` reaches it. This is that half. Take
     // `needed-when:` off `port.kind` and only this test notices.
-    let root = edited("no-every", "ports/weekly-review.yaml", "every: Friday at 4pm\n", "");
+    let root = edited(
+        "no-every",
+        "ports/weekly-review.yaml",
+        "every: Friday at 4pm\n",
+        "",
+    );
     let (ok, text) = check(&root);
 
-    assert!(!ok, "a port that says it is the clock and never says when must be refused:\n{text}");
-    assert!(text.contains("weekly-review.yaml:"), "no file and line:\n{text}");
-    assert!(text.contains("schedule"), "the sentence must quote what the port says it is:\n{text}");
+    assert!(
+        !ok,
+        "a port that says it is the clock and never says when must be refused:\n{text}"
+    );
+    assert!(
+        text.contains("weekly-review.yaml:"),
+        "no file and line:\n{text}"
+    );
+    assert!(
+        text.contains("schedule"),
+        "the sentence must quote what the port says it is:\n{text}"
+    );
     assert!(
         text.contains("`every: ...`"),
         "the fix has to be a line the author can type:\n{text}"
@@ -159,10 +219,15 @@ fn the_words_a_timer_uses_are_refused_on_the_port_customers_talk_to() {
     );
     let (ok, text) = check(&root);
 
-    assert!(!ok, "a timer's wording on a conversation must be refused:\n{text}");
+    assert!(
+        !ok,
+        "a timer's wording on a conversation must be refused:\n{text}"
+    );
     assert!(text.contains("slack.yaml:"), "no file and line:\n{text}");
     assert!(
-        text.contains("Change `kind: conversation` to `kind: schedule`, or delete the `says:` line."),
+        text.contains(
+            "Change `kind: conversation` to `kind: schedule`, or delete the `says:` line."
+        ),
         "the fix has to be two lines the author can type:\n{text}"
     );
     let _ = std::fs::remove_dir_all(&root);
@@ -180,7 +245,10 @@ fn a_port_that_says_nothing_about_how_work_arrives_is_still_refused_and_offered_
     assert!(!ok, "a port with no kind at all must be refused:\n{text}");
     assert!(text.contains("slack.yaml:"), "no file and line:\n{text}");
     for choice in ["conversation", "schedule", "inbound-call", "event"] {
-        assert!(text.contains(choice), "the fix must offer '{choice}':\n{text}");
+        assert!(
+            text.contains(choice),
+            "the fix must offer '{choice}':\n{text}"
+        );
     }
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -215,7 +283,10 @@ fn the_specification_no_longer_demands_a_kind_and_still_offers_the_four_words() 
         .and_then(pact_doc::Node::as_list)
         .map(|l| l.iter().filter_map(pact_doc::Node::as_str).collect())
         .expect("`kind:` still offers a closed set of words");
-    assert!(choices.contains(&"schedule"), "the word the clock derives to is gone: {choices:?}");
+    assert!(
+        choices.contains(&"schedule"),
+        "the word the clock derives to is gone: {choices:?}"
+    );
     for owed in ["help", "surface", "tier"] {
         assert!(kind.get(owed).is_some(), "`port.kind` lost its `{owed}:`");
     }
@@ -227,22 +298,54 @@ fn every_refusal_here_reads_without_programming_knowledge_and_ends_in_a_fix() {
     // person who writes a schedule is a support lead, and these are the three
     // sentences they will meet.
     let cases: &[(&str, &str, &str, &str)] = &[
-        ("jargon-event", "ports/weekly-review.yaml", "kind: schedule", "kind: event"),
-        ("jargon-nowhen", "ports/weekly-review.yaml", "kind: schedule\nevery: Friday at 4pm\n", ""),
-        ("jargon-nokind", "ports/slack.yaml", "kind: conversation\n", ""),
+        (
+            "jargon-event",
+            "ports/weekly-review.yaml",
+            "kind: schedule",
+            "kind: event",
+        ),
+        (
+            "jargon-nowhen",
+            "ports/weekly-review.yaml",
+            "kind: schedule\nevery: Friday at 4pm\n",
+            "",
+        ),
+        (
+            "jargon-nokind",
+            "ports/slack.yaml",
+            "kind: conversation\n",
+            "",
+        ),
     ];
     for (name, file, from, to) in cases {
         let root = edited(name, file, from, to);
         let (ok, text) = check(&root);
         assert!(!ok, "[{name}] must be refused:\n{text}");
         assert!(text.contains("  fix: "), "[{name}] no fix offered:\n{text}");
-        assert!(text.contains(".yaml:"), "[{name}] no file:line given:\n{text}");
+        assert!(
+            text.contains(".yaml:"),
+            "[{name}] no file:line given:\n{text}"
+        );
         let lower = text.to_lowercase();
         for word in [
-            "enum", "variant", "deserialize", "serde", "unwrap", "panic", "trait", "struct",
-            "vec<", "option<", "stack trace", "null pointer", "schema validation failed",
+            "enum",
+            "variant",
+            "deserialize",
+            "serde",
+            "unwrap",
+            "panic",
+            "trait",
+            "struct",
+            "vec<",
+            "option<",
+            "stack trace",
+            "null pointer",
+            "schema validation failed",
         ] {
-            assert!(!lower.contains(word), "[{name}] assumes programming knowledge ('{word}'):\n{text}");
+            assert!(
+                !lower.contains(word),
+                "[{name}] assumes programming knowledge ('{word}'):\n{text}"
+            );
         }
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -260,7 +363,11 @@ fn a_line_no_clock_can_keep_is_refused_on_the_shipped_timer() {
     // has its own tests, and its one call site in `main.rs` had none in this
     // workspace, so commenting the call out left `cargo test` green.
     for (name, written, says) in [
-        ("fortnight", "every fortnight", "is not a time PACT can read"),
+        (
+            "fortnight",
+            "every fortnight",
+            "is not a time PACT can read",
+        ),
         ("no-such-day", "'0 0 30 2 *'", "never comes round"),
         ("which-four", "Friday at 4", "4am or 4pm"),
     ] {
@@ -273,8 +380,14 @@ fn a_line_no_clock_can_keep_is_refused_on_the_shipped_timer() {
         let (ok, text) = check(&root);
         assert!(!ok, "`every: {written}` loaded:\n{text}");
         assert!(text.contains("rule: loader/every-is-not-a-time"), "{text}");
-        assert!(text.contains(says), "it says what is wrong with it:\n{text}");
-        assert!(text.contains("weekly-review.yaml:"), "at the port's own line:\n{text}");
+        assert!(
+            text.contains(says),
+            "it says what is wrong with it:\n{text}"
+        );
+        assert!(
+            text.contains("weekly-review.yaml:"),
+            "at the port's own line:\n{text}"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 }

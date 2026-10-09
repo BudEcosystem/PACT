@@ -42,7 +42,10 @@ fn check(label: &str, edits: &[(&str, &str, &str)], extra: &[(&str, &str)]) -> (
     for (file, from, to) in edits {
         let p = dst.join(file);
         let text = std::fs::read_to_string(&p).unwrap();
-        assert!(text.contains(from), "fixture drifted: {from:?} not in {file}");
+        assert!(
+            text.contains(from),
+            "fixture drifted: {from:?} not in {file}"
+        );
         std::fs::write(&p, text.replacen(from, to, 1)).unwrap();
     }
     for (file, text) in extra {
@@ -147,7 +150,9 @@ fn what_a_stage_carries_on_with_is_in_the_shape_of_its_answer() {
         &[(
             FLOW,
             READ,
-            &plan("          after-that: carry-on\n          carry-on-with: { invoice: values.unread-invoice }\n"),
+            &plan(
+                "          after-that: carry-on\n          carry-on-with: { invoice: values.unread-invoice }\n",
+            ),
         )],
         &[UNREAD],
     );
@@ -185,7 +190,9 @@ fn carrying_on_with_a_field_the_stage_never_answers_is_refused() {
         &[(
             FLOW,
             READ,
-            &plan("          after-that: carry-on\n          carry-on-with: { invoices: values.unread-invoice }\n"),
+            &plan(
+                "          after-that: carry-on\n          carry-on-with: { invoices: values.unread-invoice }\n",
+            ),
         )],
         &[UNREAD],
     );
@@ -197,7 +204,10 @@ fn carrying_on_with_a_field_the_stage_never_answers_is_refused() {
         ),
         "{text}"
     );
-    assert!(text.contains("Use one of the fields 'invoice-reader' answers with: `invoice`."), "{text}");
+    assert!(
+        text.contains("Use one of the fields 'invoice-reader' answers with: `invoice`."),
+        "{text}"
+    );
     assert!(text.contains("rule: loader/a-binding-to-nothing"), "{text}");
 }
 
@@ -242,7 +252,12 @@ fn a_backup_is_called_with_the_stages_own_bind() {
         ),
         "{text}"
     );
-    assert_eq!(text.matches("rule: loader/a-call-that-does-not-fit").count(), 2, "{text}");
+    assert_eq!(
+        text.matches("rule: loader/a-call-that-does-not-fit")
+            .count(),
+        2,
+        "{text}"
+    );
     let (ok, text) = check(
         "backup-missing",
         &[(

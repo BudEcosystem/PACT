@@ -36,7 +36,10 @@ fn pact() -> Command {
 }
 
 fn tree() -> String {
-    format!("{}/../../tests/trees/a-desk-that-remembers", env!("CARGO_MANIFEST_DIR"))
+    format!(
+        "{}/../../tests/trees/a-desk-that-remembers",
+        env!("CARGO_MANIFEST_DIR")
+    )
 }
 
 fn run(args: &[&str]) -> (Option<i32>, String, String) {
@@ -55,7 +58,10 @@ fn broken(name: &str, edits: &[(&str, &str, &str)]) -> String {
     for (file, from, to) in edits {
         let p = dst.join(file);
         let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-        assert!(text.contains(from), "fixture drifted: {from:?} not found in {file}");
+        assert!(
+            text.contains(from),
+            "fixture drifted: {from:?} not found in {file}"
+        );
         std::fs::write(&p, text.replace(from, to)).unwrap();
     }
     dst.to_string_lossy().into_owned()
@@ -77,7 +83,11 @@ fn copy_dir(src: &std::path::Path, dst: &std::path::Path) {
 #[test]
 fn a_desk_may_read_and_write_what_it_remembers() {
     let (code, out, err) = run(&["check", &tree(), "--deny-warnings"]);
-    assert_eq!(code, Some(0), "this is the shape the feature is FOR:\n{out}{err}");
+    assert_eq!(
+        code,
+        Some(0),
+        "this is the shape the feature is FOR:\n{out}{err}"
+    );
 }
 
 /// The old binding still works exactly as it did.
@@ -96,20 +106,34 @@ fn binding_from_a_run_input_is_untouched() {
 fn binding_from_a_fact_nothing_remembers_is_refused() {
     let dst = broken(
         "no-such-fact",
-        &[("tools/orders.yaml", "remembers.verified-account", "remembers.verified-acount")],
+        &[(
+            "tools/orders.yaml",
+            "remembers.verified-account",
+            "remembers.verified-acount",
+        )],
     );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
     assert_eq!(code, Some(1), "{said}");
     assert!(said.contains("loader/no-such-remembered-fact"), "{said}");
-    assert!(said.contains("verified-account"), "name the one that is there:\n{said}");
+    assert!(
+        said.contains("verified-account"),
+        "name the one that is there:\n{said}"
+    );
     let _ = std::fs::remove_dir_all(&dst);
 }
 
 /// A namespace that is neither is still refused by shape, and now offers both.
 #[test]
 fn a_binding_from_no_namespace_at_all_is_still_refused() {
-    let dst = broken("nonamespace", &[("tools/orders.yaml", "remembers.verified-account", "whatever.i.like")]);
+    let dst = broken(
+        "nonamespace",
+        &[(
+            "tools/orders.yaml",
+            "remembers.verified-account",
+            "whatever.i.like",
+        )],
+    );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
     assert_eq!(code, Some(1), "{said}");
@@ -135,14 +159,21 @@ fn a_binding_from_no_namespace_at_all_is_still_refused() {
 fn writing_a_tools_answer_where_tool_output_may_never_go_is_refused() {
     let dst = broken(
         "poisoned",
-        &[("tools/orders.yaml", "remember-as: last-order-seen", "remember-as: verified-account")],
+        &[(
+            "tools/orders.yaml",
+            "remember-as: last-order-seen",
+            "remember-as: verified-account",
+        )],
     );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
     assert_eq!(code, Some(1), "{said}");
     assert!(said.contains("loader/a-tool-may-not-write-there"), "{said}");
     assert!(said.contains("verified-account"), "name the fact:\n{said}");
-    assert!(said.contains("never-from"), "and the line that says so:\n{said}");
+    assert!(
+        said.contains("never-from"),
+        "and the line that says so:\n{said}"
+    );
     let _ = std::fs::remove_dir_all(&dst);
 }
 
@@ -155,8 +186,16 @@ fn taking_the_guard_off_is_one_line_and_then_it_is_allowed() {
     let dst = broken(
         "relaxed",
         &[
-            ("agents/desk/agent.yaml", "    never-from:\n      - tool output\n", ""),
-            ("tools/orders.yaml", "remember-as: last-order-seen", "remember-as: verified-account"),
+            (
+                "agents/desk/agent.yaml",
+                "    never-from:\n      - tool output\n",
+                "",
+            ),
+            (
+                "tools/orders.yaml",
+                "remember-as: last-order-seen",
+                "remember-as: verified-account",
+            ),
         ],
     );
     let (code, out, err) = run(&["check", &dst, "--deny-warnings"]);
@@ -167,7 +206,14 @@ fn taking_the_guard_off_is_one_line_and_then_it_is_allowed() {
 /// Keeping an answer under a name nothing declares is refused.
 #[test]
 fn remembering_something_under_a_name_nothing_declares_is_refused() {
-    let dst = broken("noname", &[("tools/orders.yaml", "remember-as: last-order-seen", "remember-as: last-order-scene")]);
+    let dst = broken(
+        "noname",
+        &[(
+            "tools/orders.yaml",
+            "remember-as: last-order-seen",
+            "remember-as: last-order-scene",
+        )],
+    );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
     assert_eq!(code, Some(1), "{said}");

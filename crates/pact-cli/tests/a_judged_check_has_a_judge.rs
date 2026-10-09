@@ -36,7 +36,10 @@ fn check(label: &str, edits: &[(&str, &str, &str)], extra: &[(&str, &str)]) -> (
     for (file, from, to) in edits {
         let p = dst.join(file);
         let text = std::fs::read_to_string(&p).unwrap();
-        assert!(text.contains(from), "fixture drifted: {from:?} not in {file}");
+        assert!(
+            text.contains(from),
+            "fixture drifted: {from:?} not in {file}"
+        );
         std::fs::write(&p, text.replacen(from, to, 1)).unwrap();
     }
     for (file, text) in extra {
@@ -71,7 +74,10 @@ fn a_judged_check_with_no_evals_is_refused() {
         ),
         "{text}"
     );
-    assert!(text.contains("rule: loader/a-check-nothing-can-run"), "{text}");
+    assert!(
+        text.contains("rule: loader/a-check-nothing-can-run"),
+        "{text}"
+    );
 }
 
 #[test]
@@ -101,7 +107,11 @@ fn a_judged_check_with_a_judge_loads() {
         &[
             (FLOW, CARD, JUDGED),
             (FLOW, "kept-for:", "evals: evals\nkept-for:"),
-            ("workspace.yaml", "allow-egress: [tools]", "allow-egress: [tools, llm]"),
+            (
+                "workspace.yaml",
+                "allow-egress: [tools]",
+                "allow-egress: [tools, llm]",
+            ),
         ],
         &[("evals/suite.yaml", SUITE)],
     );

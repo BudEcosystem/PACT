@@ -113,13 +113,29 @@ fn a_teammate_whose_name_has_no_agent_folder_is_refused_at_check_time() {
         .find(|x| x.rule == "schema/no-such-name" && x.message.contains("'team'"))
         .unwrap_or_else(|| panic!("a teammate with no agent must be refused:\n{}", d.render()));
 
-    assert!(e.message.contains("polcy-checker"), "name what is wrong: {}", e.message);
-    assert!(e.message.contains("`agents:`"), "name where it was looked for: {}", e.message);
+    assert!(
+        e.message.contains("polcy-checker"),
+        "name what is wrong: {}",
+        e.message
+    );
+    assert!(
+        e.message.contains("`agents:`"),
+        "name where it was looked for: {}",
+        e.message
+    );
     // The fix has to be typeable: the names that do exist, and the file to make
     // if this one is genuinely new. "No such agent" without the list is a dead
     // end for a reader who cannot grep the tree.
-    assert!(e.fix.contains("policy-checker"), "offer what does exist: {}", e.fix);
-    assert!(e.fix.contains("fraud-checker"), "offer all of them: {}", e.fix);
+    assert!(
+        e.fix.contains("policy-checker"),
+        "offer what does exist: {}",
+        e.fix
+    );
+    assert!(
+        e.fix.contains("fraud-checker"),
+        "offer all of them: {}",
+        e.fix
+    );
     // In the shape the kind really takes. `agents/<name>.yaml` was one answer and
     // `team:`'s own help ("Give each one a folder under `agents/`") was another.
     assert!(
@@ -134,7 +150,10 @@ fn a_share_written_against_a_misspelt_teammate_is_refused_at_check_time() {
     // The team is spelt right and only the share is wrong, which is the shape
     // that costs money: `Pool.share_of` looks the real member up, finds nothing,
     // and hands them 0.0 while the typo holds 60%.
-    let d = check(&desk(REAL_TEAM, "        polcy-checker: 60%\n        fraud-checker: 40%\n"));
+    let d = check(&desk(
+        REAL_TEAM,
+        "        polcy-checker: 60%\n        fraud-checker: 40%\n",
+    ));
     let e = d
         .items()
         .iter()
@@ -142,11 +161,23 @@ fn a_share_written_against_a_misspelt_teammate_is_refused_at_check_time() {
         .unwrap_or_else(|| panic!("a share for nobody must be refused:\n{}", d.render()));
 
     assert!(e.message.contains("polcy-checker"), "{}", e.message);
-    assert!(e.message.contains("`team:`"), "the team is where a share is looked up: {}", e.message);
-    assert!(e.fix.contains("policy-checker"), "offer what does exist: {}", e.fix);
+    assert!(
+        e.message.contains("`team:`"),
+        "the team is where a share is looked up: {}",
+        e.message
+    );
+    assert!(
+        e.fix.contains("policy-checker"),
+        "offer what does exist: {}",
+        e.fix
+    );
     // A `^` map is a block in the document already open, so the instruction is
     // to add a line to it rather than to create a file.
-    assert!(e.fix.contains("add a `polcy-checker:` entry under `team:`"), "{}", e.fix);
+    assert!(
+        e.fix.contains("add a `polcy-checker:` entry under `team:`"),
+        "{}",
+        e.fix
+    );
 }
 
 #[test]
@@ -154,13 +185,25 @@ fn a_share_for_an_agent_who_is_not_on_this_team_is_refused_too() {
     // Not a typo at all, and the same silent loss: `refund-desk` is a real agent
     // in the workspace, it is nobody's teammate here, and 40% of the pot would
     // be set aside for somebody who is never asked.
-    let d = check(&desk(REAL_TEAM, "        policy-checker: 60%\n        refund-desk: 40%\n"));
+    let d = check(&desk(
+        REAL_TEAM,
+        "        policy-checker: 60%\n        refund-desk: 40%\n",
+    ));
     let e = d
         .items()
         .iter()
         .find(|x| x.rule == "schema/no-such-name" && x.message.contains("refund-desk"))
-        .unwrap_or_else(|| panic!("a share for a non-teammate must be refused:\n{}", d.render()));
-    assert!(e.fix.contains("fraud-checker"), "offer who is actually on the team: {}", e.fix);
+        .unwrap_or_else(|| {
+            panic!(
+                "a share for a non-teammate must be refused:\n{}",
+                d.render()
+            )
+        });
+    assert!(
+        e.fix.contains("fraud-checker"),
+        "offer who is actually on the team: {}",
+        e.fix
+    );
 }
 
 #[test]
@@ -168,7 +211,10 @@ fn the_caret_lands_on_the_key_and_not_on_the_value_beside_it() {
     // The author wrote `polcy-checker: 60%`. The 60% is not what is wrong with
     // it, and underlining the value sends them to fix the wrong half of a line
     // they are already staring at.
-    let doc = desk(REAL_TEAM, "        polcy-checker: 60%\n        fraud-checker: 40%\n");
+    let doc = desk(
+        REAL_TEAM,
+        "        polcy-checker: 60%\n        fraud-checker: 40%\n",
+    );
     let d = check(&doc);
     let e = d
         .items()
@@ -176,11 +222,21 @@ fn the_caret_lands_on_the_key_and_not_on_the_value_beside_it() {
         .find(|x| x.rule == "schema/no-such-name" && x.message.contains("'shares'"))
         .expect("refused");
 
-    let line = doc.lines().nth(e.span.line - 1).expect("the span names a real line");
-    assert!(line.contains("polcy-checker"), "the caret is on line {}: {line:?}", e.span.line);
+    let line = doc
+        .lines()
+        .nth(e.span.line - 1)
+        .expect("the span names a real line");
+    assert!(
+        line.contains("polcy-checker"),
+        "the caret is on line {}: {line:?}",
+        e.span.line
+    );
     // And on the key's own column, not on the column the percentage starts at.
     let key_at = line.find("polcy-checker").expect("the key is on that line") + 1;
-    assert_eq!(e.span.col, key_at, "the caret must sit under the key: {line:?}");
+    assert_eq!(
+        e.span.col, key_at,
+        "the caret must sit under the key: {line:?}"
+    );
 }
 
 #[test]
@@ -188,10 +244,21 @@ fn every_line_the_author_has_to_edit_gets_its_own_message_and_no_line_gets_two()
     // Two wrong names, two lines, two messages — an author fixes them in one
     // pass rather than one per run. And never two messages on one line, which
     // is one mistake said twice.
-    let d = check(&desk(REAL_TEAM, "        polcy-checker: 60%\n        frad-checker: 40%\n"));
-    let refusals: Vec<_> =
-        d.items().iter().filter(|x| x.rule == "schema/no-such-name").collect();
-    assert_eq!(refusals.len(), 2, "both wrong names must be caught in one pass:\n{}", d.render());
+    let d = check(&desk(
+        REAL_TEAM,
+        "        polcy-checker: 60%\n        frad-checker: 40%\n",
+    ));
+    let refusals: Vec<_> = d
+        .items()
+        .iter()
+        .filter(|x| x.rule == "schema/no-such-name")
+        .collect();
+    assert_eq!(
+        refusals.len(),
+        2,
+        "both wrong names must be caught in one pass:\n{}",
+        d.render()
+    );
     let lines: Vec<usize> = refusals.iter().map(|x| x.span.line).collect();
     assert_ne!(lines[0], lines[1], "{}", d.render());
 }
@@ -212,11 +279,22 @@ fn a_share_is_held_against_the_team_that_was_written_so_one_slip_is_one_message(
          \x20     fraud-checker: Looks for signs the request is not genuine.\n",
         "        polcy-checker: 60%\n        fraud-checker: 40%\n",
     ));
-    let refusals: Vec<_> =
-        d.items().iter().filter(|x| x.rule == "schema/no-such-name").collect();
+    let refusals: Vec<_> = d
+        .items()
+        .iter()
+        .filter(|x| x.rule == "schema/no-such-name")
+        .collect();
     assert_eq!(refusals.len(), 1, "the root cause, once:\n{}", d.render());
-    assert!(refusals[0].message.contains("'team'"), "{}", refusals[0].message);
-    assert!(refusals[0].message.contains("`agents:`"), "{}", refusals[0].message);
+    assert!(
+        refusals[0].message.contains("'team'"),
+        "{}",
+        refusals[0].message
+    );
+    assert!(
+        refusals[0].message.contains("`agents:`"),
+        "{}",
+        refusals[0].message
+    );
 }
 
 #[test]
@@ -267,7 +345,11 @@ groups:
         .find(|x| x.rule == "schema/key-names-without-keys")
         .unwrap_or_else(|| panic!("an inert constraint must be reported:\n{}", d.render()));
     assert!(e.message.contains("'loop'"), "{}", e.message);
-    assert!(e.fix.contains("map of"), "the fix must say what would make it fire: {}", e.fix);
+    assert!(
+        e.fix.contains("map of"),
+        "the fix must say what would make it fire: {}",
+        e.fix
+    );
 }
 
 #[test]
@@ -280,8 +362,20 @@ fn the_names_a_key_may_take_read_without_programming_knowledge() {
     ));
     assert!(d.has_errors(), "{}", d.render());
     let text = d.render().to_lowercase();
-    for jargon in ["enum", "variant", "deserialize", "key-value", "hashmap", "vec<", "option<"] {
-        assert!(!text.contains(jargon), "diagnostic leaked '{jargon}':\n{}", d.render());
+    for jargon in [
+        "enum",
+        "variant",
+        "deserialize",
+        "key-value",
+        "hashmap",
+        "vec<",
+        "option<",
+    ] {
+        assert!(
+            !text.contains(jargon),
+            "diagnostic leaked '{jargon}':\n{}",
+            d.render()
+        );
     }
     for item in d.items() {
         assert!(!item.fix.trim().is_empty(), "{} had no fix", item.rule);

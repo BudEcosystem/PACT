@@ -39,7 +39,10 @@ fn edited(name: &str, edits: &[(&str, &str, &str)]) -> String {
     for (file, from, to) in edits {
         let p = dst.join(file);
         let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-        assert!(text.contains(from), "fixture drifted: {from:?} not found in {file}");
+        assert!(
+            text.contains(from),
+            "fixture drifted: {from:?} not found in {file}"
+        );
         std::fs::write(&p, text.replace(from, to)).unwrap();
     }
     dst.to_string_lossy().into_owned()
@@ -58,8 +61,14 @@ fn copy_dir(src: &std::path::Path, dst: &std::path::Path) {
 }
 
 fn check(root: &str) -> (bool, String) {
-    let out = pact().args(["check", root]).output().expect("the binary runs");
-    (out.status.success(), String::from_utf8_lossy(&out.stdout).into_owned())
+    let out = pact()
+        .args(["check", root])
+        .output()
+        .expect("the binary runs");
+    (
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+    )
 }
 
 #[test]
@@ -86,7 +95,10 @@ fn a_sentence_written_in_one_of_the_two_files_is_accepted_in_the_other() {
         ],
     );
     let (ok, text) = check(&root);
-    assert!(ok, "one vocabulary means each file takes the other's words:\n{text}");
+    assert!(
+        ok,
+        "one vocabulary means each file takes the other's words:\n{text}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -107,15 +119,24 @@ fn a_sentence_the_shared_list_has_but_a_redaction_cannot_perform_is_refused_wher
         )],
     );
     let (ok, text) = check(&root);
-    assert!(!ok, "a redaction that stops the run must be refused:\n{text}");
-    assert!(text.contains("redaction.yaml:"), "name the file and the line: {text}");
+    assert!(
+        !ok,
+        "a redaction that stops the run must be refused:\n{text}"
+    );
+    assert!(
+        text.contains("redaction.yaml:"),
+        "name the file and the line: {text}"
+    );
     assert!(
         text.contains("a redaction may only hide values"),
         "say what this kind can do, in words: {text}"
     );
     // And the fix must be typeable IN THAT FILE — which "add a line under `may:`"
     // is not, because a redaction has no `may:`.
-    assert!(!text.contains("Add a line under `may:`"), "untypeable fix offered: {text}");
+    assert!(
+        !text.contains("Add a line under `may:`"),
+        "untypeable fix offered: {text}"
+    );
     assert!(
         text.contains("anything that looks like <a thing>"),
         "offer the sentences this file CAN carry out: {text}"
@@ -217,7 +238,8 @@ fn the_two_fields_are_held_against_one_list_and_not_two_copies_of_it() {
         "`redaction.hide` must take the list by reference"
     );
     assert_eq!(
-        text.matches("say: anything that looks like <a thing>").count(),
+        text.matches("say: anything that looks like <a thing>")
+            .count(),
         1,
         "the bare hiding sentence must be written once, not once per kind"
     );
@@ -288,8 +310,14 @@ fn a_sentence_that_carries_on_from_another_one_is_refused_when_nothing_is_above_
         "  - do the same for anything that looks like a card number\n",
     );
     let (ok, text) = check(&root);
-    assert!(!ok, "a rule that hides nothing must not print 'loaded cleanly':\n{text}");
-    assert!(text.contains("interceptors/x.yaml:6"), "name the file and the line: {text}");
+    assert!(
+        !ok,
+        "a rule that hides nothing must not print 'loaded cleanly':\n{text}"
+    );
+    assert!(
+        text.contains("interceptors/x.yaml:6"),
+        "name the file and the line: {text}"
+    );
     assert!(
         text.contains("no rule before it says what to do"),
         "say what is wrong in the author's words: {text}"

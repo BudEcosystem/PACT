@@ -33,7 +33,10 @@ fn broken(name: &str, file: &str, from: &str, to: &str) -> String {
     copy(std::path::Path::new(&example()), &dst);
     let p = dst.join(file);
     let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-    assert!(text.contains(from), "fixture drifted: {from:?} not in {file}");
+    assert!(
+        text.contains(from),
+        "fixture drifted: {from:?} not in {file}"
+    );
     std::fs::write(&p, text.replace(from, to)).unwrap();
     dst.to_string_lossy().into_owned()
 }
@@ -42,7 +45,11 @@ fn copy(src: &std::path::Path, dst: &std::path::Path) {
     std::fs::create_dir_all(dst).unwrap();
     for e in std::fs::read_dir(src).unwrap().flatten() {
         let (s, d) = (e.path(), dst.join(e.file_name()));
-        if s.is_dir() { copy(&s, &d) } else { std::fs::copy(&s, &d).map(|_| ()).unwrap() }
+        if s.is_dir() {
+            copy(&s, &d)
+        } else {
+            std::fs::copy(&s, &d).map(|_| ()).unwrap()
+        }
     }
 }
 
@@ -70,8 +77,14 @@ fn the_no_code_bar_from_d14_stays_small() {
     for dir in CORE {
         files += count_specs(&std::path::Path::new(&root).join(dir));
     }
-    assert!(files <= 26, "the D14 core is {files} files — past what a non-coder holds in their head");
-    assert!(files >= 10, "the core must be a real multi-agent system, not a toy");
+    assert!(
+        files <= 26,
+        "the D14 core is {files} files — past what a non-coder holds in their head"
+    );
+    assert!(
+        files >= 10,
+        "the core must be a real multi-agent system, not a toy"
+    );
 }
 
 #[test]
@@ -93,7 +106,12 @@ fn the_showcase_directories_stay_optional_and_bounded() {
     // whole point of this ceiling is that adding a capability has to be visibly
     // paid for somewhere.
     const SHOWCASE: &[&str] = &[
-        "ports", "schedules", "context-policies", "interceptors", "policies", "questions",
+        "ports",
+        "schedules",
+        "context-policies",
+        "interceptors",
+        "policies",
+        "questions",
         "loops",
         // The observe half of the event lattice. Counted here and not in CORE
         // for the reason the others are: nobody writes down what a run did
@@ -144,12 +162,17 @@ fn the_showcase_directories_stay_optional_and_bounded() {
     // 16 -> 15 is the card-number refund above. The ceiling comes DOWN with it
     // rather than staying where it was: a ceiling left high after a file is
     // removed is a file's worth of room nobody argued for.
-    assert!(extra <= 15, "{extra} showcase files is more than one screen");
+    assert!(
+        extra <= 15,
+        "{extra} showcase files is more than one screen"
+    );
 }
 
 /// Count YAML/Markdown files under `dir`, recursively. Missing dir counts zero.
 fn count_specs(dir: &std::path::Path) -> usize {
-    let Ok(entries) = std::fs::read_dir(dir) else { return 0 };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return 0;
+    };
     let mut n = 0;
     for e in entries.flatten() {
         let p = e.path();
@@ -169,10 +192,30 @@ fn the_mistakes_a_non_coder_actually_makes_are_all_caught_with_a_fix() {
     // currency, an ambiguous percentage.
     let cases: &[(&str, &str, &str, &str)] = &[
         ("typo", "workspace.yaml", "description:", "descriptoin:"),
-        ("no-unit", "agents/refund-desk/limits.yaml", "finishes-within: 30s", "finishes-within: soon"),
-        ("wrong-word", "agents/refund-desk/needs.yaml", "reasoning: careful", "reasoning: brilliant"),
-        ("no-currency", "agents/refund-desk/limits.yaml", "cost-per-request-under: 0.05 USD", "cost-per-request-under: 0.05"),
-        ("bad-feel", "agents/refund-desk/limits.yaml", "feel: interactive", "feel: snappy"),
+        (
+            "no-unit",
+            "agents/refund-desk/limits.yaml",
+            "finishes-within: 30s",
+            "finishes-within: soon",
+        ),
+        (
+            "wrong-word",
+            "agents/refund-desk/needs.yaml",
+            "reasoning: careful",
+            "reasoning: brilliant",
+        ),
+        (
+            "no-currency",
+            "agents/refund-desk/limits.yaml",
+            "cost-per-request-under: 0.05 USD",
+            "cost-per-request-under: 0.05",
+        ),
+        (
+            "bad-feel",
+            "agents/refund-desk/limits.yaml",
+            "feel: interactive",
+            "feel: snappy",
+        ),
         // A ceiling with nothing saying what happens at it. The commonest way
         // to write one, and the one that costs most: stopping silently and
         // answering as if finished are different enough that the system must
@@ -190,13 +233,22 @@ fn the_mistakes_a_non_coder_actually_makes_are_all_caught_with_a_fix() {
         let out = pact().args(["check", &root]).output().expect("runs");
         let text = String::from_utf8_lossy(&out.stdout);
 
-        assert!(!out.status.success(), "[{name}] must be caught, not accepted");
+        assert!(
+            !out.status.success(),
+            "[{name}] must be caught, not accepted"
+        );
         assert!(text.contains("  fix: "), "[{name}] no fix offered:\n{text}");
-        assert!(text.contains(".yaml:"), "[{name}] no file:line given:\n{text}");
+        assert!(
+            text.contains(".yaml:"),
+            "[{name}] no file:line given:\n{text}"
+        );
 
         // A fix a non-coder can act on names something concrete — a value to
         // type or a spelling to use — not just a restatement of the rule.
-        let fix_line = text.lines().find(|l| l.trim_start().starts_with("fix:")).unwrap();
+        let fix_line = text
+            .lines()
+            .find(|l| l.trim_start().starts_with("fix:"))
+            .unwrap();
         assert!(
             fix_line.contains('`') || fix_line.contains("Did you mean") || fix_line.contains(':'),
             "[{name}] fix is not actionable: {fix_line}"
@@ -221,11 +273,23 @@ fn a_ceiling_with_no_declared_action_is_refused_and_the_choices_are_offered() {
     let out = pact().args(["check", &root]).output().unwrap();
     let text = String::from_utf8_lossy(&out.stdout);
 
-    assert!(!out.status.success(), "a ceiling with no action must be refused:\n{text}");
-    assert!(text.contains("when-it-runs-out"), "must name the missing setting:\n{text}");
-    assert!(text.contains("limits.yaml:"), "must name the file and line:\n{text}");
+    assert!(
+        !out.status.success(),
+        "a ceiling with no action must be refused:\n{text}"
+    );
+    assert!(
+        text.contains("when-it-runs-out"),
+        "must name the missing setting:\n{text}"
+    );
+    assert!(
+        text.contains("limits.yaml:"),
+        "must name the file and line:\n{text}"
+    );
     for choice in ["stop-and-say-so", "ask-a-person", "answer-with-what-it-has"] {
-        assert!(text.contains(choice), "the fix must offer '{choice}':\n{text}");
+        assert!(
+            text.contains(choice),
+            "the fix must offer '{choice}':\n{text}"
+        );
     }
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -246,7 +310,12 @@ fn a_question_put_to_a_person_is_checked_like_everything_else() {
             "if-nobody-answers: approve",
         ),
         // A typo in the one line that says who reads it.
-        ("asked-of-typo", "questions/is-this-ok.yaml", "asked-of:", "asked-off:"),
+        (
+            "asked-of-typo",
+            "questions/is-this-ok.yaml",
+            "asked-of:",
+            "asked-off:",
+        ),
         // The wording left off entirely — a request with nothing to read.
         (
             "no-wording",
@@ -261,9 +330,15 @@ fn a_question_put_to_a_person_is_checked_like_everything_else() {
         let out = pact().args(["check", &root]).output().expect("runs");
         let text = String::from_utf8_lossy(&out.stdout);
 
-        assert!(!out.status.success(), "[{name}] must be caught, not accepted:\n{text}");
+        assert!(
+            !out.status.success(),
+            "[{name}] must be caught, not accepted:\n{text}"
+        );
         assert!(text.contains("  fix: "), "[{name}] no fix offered:\n{text}");
-        assert!(text.contains(".yaml:"), "[{name}] no file:line given:\n{text}");
+        assert!(
+            text.contains(".yaml:"),
+            "[{name}] no file:line given:\n{text}"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 }
@@ -282,7 +357,10 @@ fn a_timeout_cannot_be_written_as_an_approval() {
     );
     let out = pact().args(["check", &root]).output().unwrap();
     let text = String::from_utf8_lossy(&out.stdout);
-    assert!(!out.status.success(), "silence must never be writable as a yes:\n{text}");
+    assert!(
+        !out.status.success(),
+        "silence must never be writable as a yes:\n{text}"
+    );
     // And the fix has to name what CAN be written, or the author is stuck.
     assert!(
         text.contains("decline") && text.contains("escalate") && text.contains("stop-and-say-so"),
@@ -293,14 +371,33 @@ fn a_timeout_cannot_be_written_as_an_approval() {
 
 #[test]
 fn no_diagnostic_assumes_programming_knowledge() {
-    let root = broken("jargon", "agents/refund-desk/needs.yaml", "reasoning: careful", "reasoning: brilliant");
+    let root = broken(
+        "jargon",
+        "agents/refund-desk/needs.yaml",
+        "reasoning: careful",
+        "reasoning: brilliant",
+    );
     let out = pact().args(["check", &root]).output().unwrap();
     let text = String::from_utf8_lossy(&out.stdout).to_lowercase();
     for word in [
-        "enum", "variant", "deserialize", "serde", "unwrap", "panic", "trait",
-        "struct", "vec<", "option<", "stack trace", "null pointer", "schema validation failed",
+        "enum",
+        "variant",
+        "deserialize",
+        "serde",
+        "unwrap",
+        "panic",
+        "trait",
+        "struct",
+        "vec<",
+        "option<",
+        "stack trace",
+        "null pointer",
+        "schema validation failed",
     ] {
-        assert!(!text.contains(word), "diagnostic assumes programming knowledge ('{word}'):\n{text}");
+        assert!(
+            !text.contains(word),
+            "diagnostic assumes programming knowledge ('{word}'):\n{text}"
+        );
     }
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -321,12 +418,17 @@ fn every_field_in_the_specification_carries_help_and_surface_and_tier() {
     //             lookups into it — a field without one is CLASS-4 by default,
     //             so an omission tightens silently rather than failing loudly
     //   tier:     what makes the `no-code` badge (D14) checkable at all
-    let text = std::fs::read_to_string(
-        format!("{}/../../spec/schema.yaml", env!("CARGO_MANIFEST_DIR"))
-    ).unwrap();
+    let text = std::fs::read_to_string(format!(
+        "{}/../../spec/schema.yaml",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap();
     let doc = pact_doc::parse_yaml(&text, camino::Utf8Path::new("spec/schema.yaml"))
         .expect("the specification parses");
-    let groups = doc.get("groups").and_then(pact_doc::Node::as_map).expect("groups:");
+    let groups = doc
+        .get("groups")
+        .and_then(pact_doc::Node::as_map)
+        .expect("groups:");
 
     let mut missing: Vec<String> = Vec::new();
     let mut checked = 0usize;
@@ -349,8 +451,16 @@ fn every_field_in_the_specification_carries_help_and_surface_and_tier() {
         }
     }
 
-    assert!(checked > 100, "only {checked} fields found — the walk is wrong, not the spec");
-    assert!(missing.is_empty(), "{} field(s) short:\n  {}", missing.len(), missing.join("\n  "));
+    assert!(
+        checked > 100,
+        "only {checked} fields found — the walk is wrong, not the spec"
+    );
+    assert!(
+        missing.is_empty(),
+        "{} field(s) short:\n  {}",
+        missing.len(),
+        missing.join("\n  ")
+    );
 }
 
 #[test]
@@ -379,7 +489,9 @@ fn every_command_the_specification_promises_is_a_command_that_exists() {
     let mut text = std::fs::read_to_string(format!("{repo}/spec/schema.yaml")).unwrap();
     let mut stack = vec![std::path::PathBuf::from(format!("{repo}/examples"))];
     while let Some(dir) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         for e in entries.flatten() {
             let p = e.path();
             if p.is_dir() {
@@ -394,13 +506,15 @@ fn every_command_the_specification_promises_is_a_command_that_exists() {
             }
         }
     }
-    let main = std::fs::read_to_string(
-        format!("{}/src/main.rs", env!("CARGO_MANIFEST_DIR"))
-    ).unwrap();
+    let main =
+        std::fs::read_to_string(format!("{}/src/main.rs", env!("CARGO_MANIFEST_DIR"))).unwrap();
 
     // The verbs the dispatch actually has, read from the `match` rather than
     // from a list here — a second copy would drift the first time one is added.
-    let body = main.split_once("    match cmd {").expect("main.rs dispatches on `cmd`").1;
+    let body = main
+        .split_once("    match cmd {")
+        .expect("main.rs dispatches on `cmd`")
+        .1;
     let verbs: Vec<&str> = body
         .split("\n}")
         .next()
@@ -410,11 +524,16 @@ fn every_command_the_specification_promises_is_a_command_that_exists() {
         .flat_map(|l| l.split('"').skip(1).step_by(2))
         .filter(|s| !s.is_empty() && !s.starts_with('-'))
         .collect();
-    assert!(verbs.contains(&"check"), "no verbs parsed — the dispatch changed shape");
+    assert!(
+        verbs.contains(&"check"),
+        "no verbs parsed — the dispatch changed shape"
+    );
 
     let mut promised: Vec<String> = Vec::new();
     for span in text.split('`').skip(1).step_by(2) {
-        let Some(rest) = span.strip_prefix("pact ") else { continue };
+        let Some(rest) = span.strip_prefix("pact ") else {
+            continue;
+        };
         let verb = rest.split_whitespace().next().unwrap_or("");
         if !verbs.contains(&verb) {
             promised.push(format!("`pact {verb}`"));
@@ -448,12 +567,18 @@ fn a_model_nobody_has_heard_of_is_caught_where_the_author_is_and_a_workspace_may
         "model: qwen2.5-7b-instrukt\npolicy: approvals",
     );
     let out = pact().args(["check", &typo]).output().unwrap();
-    let said = String::from_utf8_lossy(&out.stdout).to_string()
-        + &String::from_utf8_lossy(&out.stderr);
+    let said =
+        String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr);
     assert!(said.contains("qwen2.5-7b-instrukt"), "{said}");
     assert!(said.contains("the model catalogue"), "{said}");
-    assert!(said.contains("qwen2.5-7b-instruct"), "the fix must offer what to type:\n{said}");
-    assert!(said.contains("models/catalog.yaml"), "and where a new one goes:\n{said}");
+    assert!(
+        said.contains("qwen2.5-7b-instruct"),
+        "the fix must offer what to type:\n{said}"
+    );
+    assert!(
+        said.contains("models/catalog.yaml"),
+        "and where a new one goes:\n{said}"
+    );
 
     // And the override layer, which is the whole reason this is not a closed
     // list: a machine serving a model this distribution has never heard of adds
@@ -529,9 +654,18 @@ fn a_model_that_only_answers_off_this_machine_is_refused_in_an_air_gapped_worksp
         let said = String::from_utf8_lossy(&out.stdout).to_string()
             + &String::from_utf8_lossy(&out.stderr);
         assert!(!out.status.success(), "{field} must be refused:\n{said}");
-        assert!(said.contains("claude-opus-5"), "name what is wrong:\n{said}");
-        assert!(said.contains("allow-egress"), "name the rule that refused it:\n{said}");
-        assert!(said.contains("workspace.yaml"), "name where that rule lives:\n{said}");
+        assert!(
+            said.contains("claude-opus-5"),
+            "name what is wrong:\n{said}"
+        );
+        assert!(
+            said.contains("allow-egress"),
+            "name the rule that refused it:\n{said}"
+        );
+        assert!(
+            said.contains("workspace.yaml"),
+            "name where that rule lives:\n{said}"
+        );
         assert!(
             said.contains(&format!("write `{field}: qwen2.5-7b-instruct`")),
             "the fix must be a line the author can type:\n{said}"
@@ -551,7 +685,10 @@ fn a_model_that_only_answers_off_this_machine_is_refused_in_an_air_gapped_worksp
     let text = std::fs::read_to_string(&p).unwrap();
     std::fs::write(
         &p,
-        text.replace("summarised-by: qwen2.5-14b-instruct", "summarised-by: claude-opus-5"),
+        text.replace(
+            "summarised-by: qwen2.5-14b-instruct",
+            "summarised-by: claude-opus-5",
+        ),
     )
     .unwrap();
     let out = pact().args(["check", &allowed]).output().unwrap();
@@ -577,20 +714,104 @@ fn a_reference_to_something_this_workspace_does_not_have_is_caught_where_the_aut
     // schema's own R6 note and in §7 of `50-NOT-COPIED.md`: anything the HOST
     // binds (`through:`), and narrowing `may-use:` to one agent's tools.
     let cases: &[(&str, &str, &str, &str, &str)] = &[
-        ("loop", "agents/refund-desk/agent.yaml", "loop: careful", "loop: carefull", "careful"),
-        ("policy", "agents/refund-desk/agent.yaml", "policy: approvals", "policy: aproovals", "approvals"),
-        ("context-policy", "agents/refund-desk/agent.yaml", "context-policy: long-threads", "context-policy: long-thredz", "long-threads"),
-        ("interceptor", "agents/refund-desk/agent.yaml", "- stop-runaway-refunds", "- stop-runaway-refundz", "stop-runaway-refunds"),
-        ("skill-or-tool", "agents/refund-desk/agent.yaml", "  - zendesk", "  - zendsk", "zendesk"),
-        ("limits-asks", "agents/refund-desk/limits.yaml", "asks: keep-going", "asks: keep-goin", "keep-going"),
-        ("teamwork-asks", "agents/refund-desk/teamwork.yaml", "asks: carry-on-without-a-check", "asks: carry-on-without-a-chek", "carry-on-without-a-check"),
-        ("tidying-asks", "context-policies/long-threads.yaml", "asks: too-long-to-send", "asks: too-long", "too-long-to-send"),
-        ("approval-question", "policies/approvals.yaml", "question: is-this-ok", "question: is-this-okay", "is-this-ok"),
-        ("port-answers", "ports/slack.yaml", "answers: refund-desk", "answers: refnud-desk", "refund-desk"),
-        ("schedule-answers", "ports/weekly-review.yaml", "answers: refund-desk", "answers: nobody", "refund-desk"),
-        ("starts-at", "loops/careful.yaml", "starts-at: gather", "starts-at: gathr", "gather"),
-        ("then-target", "loops/careful.yaml", "answered: reply", "answered: repl", "reply"),
-        ("may-use", "loops/careful.yaml", "      - zendesk", "      - stripe", "zendesk"),
+        (
+            "loop",
+            "agents/refund-desk/agent.yaml",
+            "loop: careful",
+            "loop: carefull",
+            "careful",
+        ),
+        (
+            "policy",
+            "agents/refund-desk/agent.yaml",
+            "policy: approvals",
+            "policy: aproovals",
+            "approvals",
+        ),
+        (
+            "context-policy",
+            "agents/refund-desk/agent.yaml",
+            "context-policy: long-threads",
+            "context-policy: long-thredz",
+            "long-threads",
+        ),
+        (
+            "interceptor",
+            "agents/refund-desk/agent.yaml",
+            "- stop-runaway-refunds",
+            "- stop-runaway-refundz",
+            "stop-runaway-refunds",
+        ),
+        (
+            "skill-or-tool",
+            "agents/refund-desk/agent.yaml",
+            "  - zendesk",
+            "  - zendsk",
+            "zendesk",
+        ),
+        (
+            "limits-asks",
+            "agents/refund-desk/limits.yaml",
+            "asks: keep-going",
+            "asks: keep-goin",
+            "keep-going",
+        ),
+        (
+            "teamwork-asks",
+            "agents/refund-desk/teamwork.yaml",
+            "asks: carry-on-without-a-check",
+            "asks: carry-on-without-a-chek",
+            "carry-on-without-a-check",
+        ),
+        (
+            "tidying-asks",
+            "context-policies/long-threads.yaml",
+            "asks: too-long-to-send",
+            "asks: too-long",
+            "too-long-to-send",
+        ),
+        (
+            "approval-question",
+            "policies/approvals.yaml",
+            "question: is-this-ok",
+            "question: is-this-okay",
+            "is-this-ok",
+        ),
+        (
+            "port-answers",
+            "ports/slack.yaml",
+            "answers: refund-desk",
+            "answers: refnud-desk",
+            "refund-desk",
+        ),
+        (
+            "schedule-answers",
+            "ports/weekly-review.yaml",
+            "answers: refund-desk",
+            "answers: nobody",
+            "refund-desk",
+        ),
+        (
+            "starts-at",
+            "loops/careful.yaml",
+            "starts-at: gather",
+            "starts-at: gathr",
+            "gather",
+        ),
+        (
+            "then-target",
+            "loops/careful.yaml",
+            "answered: reply",
+            "answered: repl",
+            "reply",
+        ),
+        (
+            "may-use",
+            "loops/careful.yaml",
+            "      - zendesk",
+            "      - stripe",
+            "zendesk",
+        ),
     ];
 
     for (name, file, from, to, should_offer) in cases {
@@ -598,8 +819,14 @@ fn a_reference_to_something_this_workspace_does_not_have_is_caught_where_the_aut
         let out = pact().args(["check", &root]).output().expect("runs");
         let text = String::from_utf8_lossy(&out.stdout);
 
-        assert!(!out.status.success(), "[{name}] loaded clean with a name that is not there:\n{text}");
-        assert!(text.contains(".yaml:"), "[{name}] no file:line given:\n{text}");
+        assert!(
+            !out.status.success(),
+            "[{name}] loaded clean with a name that is not there:\n{text}"
+        );
+        assert!(
+            text.contains(".yaml:"),
+            "[{name}] no file:line given:\n{text}"
+        );
         assert!(text.contains("  fix: "), "[{name}] no fix offered:\n{text}");
         // The fix has to name what DOES exist. "No such loop" without the list
         // is a dead end for a reader who cannot grep the tree.
@@ -619,8 +846,18 @@ fn a_stage_that_may_never_run_and_an_outcome_that_cannot_happen_are_both_refused
     // schema said so in its own help text for a round while declaring the field
     // `map of text`, which is a field that contradicts itself.
     let cases: &[(&str, &str, &str, &str)] = &[
-        ("never-runs", "loops/careful.yaml", "at-most: 2", "at-most: 0"),
-        ("no-such-outcome", "loops/careful.yaml", "answered: reply", "finished: reply"),
+        (
+            "never-runs",
+            "loops/careful.yaml",
+            "at-most: 2",
+            "at-most: 0",
+        ),
+        (
+            "no-such-outcome",
+            "loops/careful.yaml",
+            "answered: reply",
+            "finished: reply",
+        ),
     ];
     for (name, file, from, to) in cases {
         let root = broken(name, file, from, to);
@@ -632,12 +869,23 @@ fn a_stage_that_may_never_run_and_an_outcome_that_cannot_happen_are_both_refused
     }
     // And the outcome case names the three that do exist, in the author's own
     // words rather than in the group's internal name.
-    let root = broken("outcome-words", "loops/careful.yaml", "answered: reply", "finished: reply");
+    let root = broken(
+        "outcome-words",
+        "loops/careful.yaml",
+        "answered: reply",
+        "finished: reply",
+    );
     let ran = pact().args(["check", &root]).output().unwrap();
     let text = String::from_utf8_lossy(&ran.stdout);
-    assert!(text.contains("is not an outcome a stage can end in"), "{text}");
+    assert!(
+        text.contains("is not an outcome a stage can end in"),
+        "{text}"
+    );
     for outcome in ["used-a-tool", "answered", "too-many-times"] {
-        assert!(text.contains(outcome), "the fix must offer '{outcome}':\n{text}");
+        assert!(
+            text.contains(outcome),
+            "the fix must offer '{outcome}':\n{text}"
+        );
     }
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -660,7 +908,10 @@ fn the_word_a_diagnostic_uses_for_a_stage_is_the_word_the_author_typed() {
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(!out.status.success(), "{text}");
     assert!(text.contains("a stage can have"), "{text}");
-    assert!(!text.contains("phase"), "the author never typed the word 'phase':\n{text}");
+    assert!(
+        !text.contains("phase"),
+        "the author never typed the word 'phase':\n{text}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -694,7 +945,10 @@ fn the_address_vocabulary_in_the_architecture_is_the_one_the_schema_publishes() 
         .and_then(|s| s.split("        reaches:").next())
         .expect("interceptor.when's `parts:` block anchors the address vocabulary");
     let words_of = |position: &str| -> Vec<String> {
-        let after = block.split(&format!("          {position}:")).nth(1).unwrap();
+        let after = block
+            .split(&format!("          {position}:"))
+            .nth(1)
+            .unwrap();
         let mut out = Vec::new();
         for line in after.lines() {
             let t = line.trim();
@@ -702,7 +956,9 @@ fn the_address_vocabulary_in_the_architecture_is_the_one_the_schema_publishes() 
                 out.push(rest.to_string());
             } else if let Some(rest) = t.strip_prefix('[') {
                 out.extend(
-                    rest.trim_end_matches(']').split(',').map(|w| w.trim().to_string()),
+                    rest.trim_end_matches(']')
+                        .split(',')
+                        .map(|w| w.trim().to_string()),
                 );
                 break;
             } else if !out.is_empty() {
@@ -740,7 +996,6 @@ fn the_address_vocabulary_in_the_architecture_is_the_one_the_schema_publishes() 
     }
 }
 
-
 #[test]
 fn a_long_instruction_may_be_split_across_files_and_nothing_else_changes() {
     // The headline rule of both READMEs — *"A directory is a field; a field may
@@ -754,26 +1009,53 @@ fn a_long_instruction_may_be_split_across_files_and_nothing_else_changes() {
     let root = std::env::temp_dir().join(format!("pact-split-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("agents/helper/instructions")).unwrap();
-    std::fs::write(root.join("workspace.yaml"), "name: split\ndescription: A workspace.\n").unwrap();
-    std::fs::write(root.join("agents/helper/agent.yaml"), "description: Answers questions.\n").unwrap();
-    std::fs::write(root.join("agents/helper/instructions/01-tone.md"), "Be brief.\n").unwrap();
+    std::fs::write(
+        root.join("workspace.yaml"),
+        "name: split\ndescription: A workspace.\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("agents/helper/agent.yaml"),
+        "description: Answers questions.\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("agents/helper/instructions/01-tone.md"),
+        "Be brief.\n",
+    )
+    .unwrap();
     std::fs::write(
         root.join("agents/helper/instructions/02-length.md"),
         "Never exceed three sentences.\n",
     )
     .unwrap();
 
-    let out = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
+    let out = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
     let said = String::from_utf8_lossy(&out.stdout);
-    assert!(out.status.success(), "a field split across files must load:\n{said}");
+    assert!(
+        out.status.success(),
+        "a field split across files must load:\n{said}"
+    );
 
     // And it must reach a reader IN ORDER — the ordinal prefix is what the author
     // numbered them with, and `serde_json` sorted the keys at the boundary, so
     // `01-tone` arrived after `02-length`.
-    let shown = pact().args(["show", root.to_str().unwrap()]).output().expect("runs");
+    let shown = pact()
+        .args(["show", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
     let doc: serde_json::Value = serde_json::from_slice(&shown.stdout).expect("JSON");
-    let parts = doc["agents"]["helper"]["instructions"].as_object().expect("a block");
+    let parts = doc["agents"]["helper"]["instructions"]
+        .as_object()
+        .expect("a block");
     let keys: Vec<&str> = parts.keys().map(String::as_str).collect();
-    assert_eq!(keys, vec!["tone", "length"], "the order the author numbered them");
+    assert_eq!(
+        keys,
+        vec!["tone", "length"],
+        "the order the author numbered them"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }

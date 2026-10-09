@@ -30,7 +30,10 @@ fn pact() -> Command {
 }
 
 fn tree() -> String {
-    format!("{}/../../tests/trees/a-desk-that-uses-a-program", env!("CARGO_MANIFEST_DIR"))
+    format!(
+        "{}/../../tests/trees/a-desk-that-uses-a-program",
+        env!("CARGO_MANIFEST_DIR")
+    )
 }
 
 fn run(args: &[&str]) -> (Option<i32>, String, String) {
@@ -49,7 +52,10 @@ fn broken(name: &str, edits: &[(&str, &str, &str)]) -> String {
     for (file, from, to) in edits {
         let p = dst.join(file);
         let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-        assert!(text.contains(from), "fixture drifted: {from:?} not found in {file}");
+        assert!(
+            text.contains(from),
+            "fixture drifted: {from:?} not found in {file}"
+        );
         std::fs::write(&p, text.replace(from, to)).unwrap();
     }
     dst.to_string_lossy().into_owned()
@@ -72,7 +78,11 @@ fn copy_dir(src: &std::path::Path, dst: &std::path::Path) {
 #[test]
 fn an_agent_may_name_a_pure_program_in_uses() {
     let (code, out, err) = run(&["check", &tree(), "--deny-warnings"]);
-    assert_eq!(code, Some(0), "this is the shape the shortcut is FOR:\n{out}{err}");
+    assert_eq!(
+        code,
+        Some(0),
+        "this is the shape the shortcut is FOR:\n{out}{err}"
+    );
 }
 
 /// A program that is not pure keeps its tool.
@@ -87,12 +97,23 @@ fn a_program_that_is_not_pure_may_not_be_named_directly() {
     for word in ["deterministic", "nondeterministic"] {
         let dst = broken(
             &format!("impure-{word}"),
-            &[("programs/check-window/program.yaml", "determinism: pure", &format!("determinism: {word}"))],
+            &[(
+                "programs/check-window/program.yaml",
+                "determinism: pure",
+                &format!("determinism: {word}"),
+            )],
         );
         let (code, out, err) = run(&["check", &dst]);
         let said = format!("{out}{err}");
-        assert_eq!(code, Some(1), "`{word}` must not take the short door:\n{said}");
-        assert!(said.contains("loader/only-a-pure-program-is-used-directly"), "{said}");
+        assert_eq!(
+            code,
+            Some(1),
+            "`{word}` must not take the short door:\n{said}"
+        );
+        assert!(
+            said.contains("loader/only-a-pure-program-is-used-directly"),
+            "{said}"
+        );
         assert!(said.contains("check-window"), "name it:\n{said}");
         assert!(
             said.contains("actions:") || said.contains("action"),
@@ -106,7 +127,11 @@ fn a_program_that_is_not_pure_may_not_be_named_directly() {
 #[test]
 fn the_same_tree_left_pure_loads_clean() {
     let (code, out, err) = run(&["check", &tree(), "--deny-warnings"]);
-    assert_eq!(code, Some(0), "the refusals above prove nothing unless this passes:\n{out}{err}");
+    assert_eq!(
+        code,
+        Some(0),
+        "the refusals above prove nothing unless this passes:\n{out}{err}"
+    );
 }
 
 /// A program named in `uses:` is a program something points at.
@@ -125,11 +150,17 @@ fn a_program_named_in_uses_is_not_reported_as_unreached() {
 /// now offers programs among the places it looked.
 #[test]
 fn a_name_that_is_nothing_is_still_refused() {
-    let dst = broken("nonesuch", &[("agents/desk/agent.yaml", "- check-window", "- check-windo")]);
+    let dst = broken(
+        "nonesuch",
+        &[("agents/desk/agent.yaml", "- check-window", "- check-windo")],
+    );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
     assert_eq!(code, Some(1), "{said}");
     assert!(said.contains("schema/no-such-name"), "{said}");
-    assert!(said.contains("programs"), "programs is one of the places it looked:\n{said}");
+    assert!(
+        said.contains("programs"),
+        "programs is one of the places it looked:\n{said}"
+    );
     let _ = std::fs::remove_dir_all(&dst);
 }

@@ -70,7 +70,11 @@ fn an_action_cannot_say_it_only_looks_things_up_and_also_say_it_moves_money() {
         "an action saying both things loaded clean:\n{}",
         d.render()
     );
-    assert!(d.error_count() >= 1, "it has to be a refusal, not a note:\n{}", d.render());
+    assert!(
+        d.error_count() >= 1,
+        "it has to be a refusal, not a note:\n{}",
+        d.render()
+    );
 }
 
 #[test]
@@ -114,14 +118,27 @@ fn the_message_names_the_action_the_two_lines_and_a_fix_a_support_lead_can_type(
         .expect("the refusal exists");
 
     for named in ["issue-refund", "payments", "reads-only", "spends-money"] {
-        assert!(found.message.contains(named), "the sentence never says '{named}': {}", found.message);
+        assert!(
+            found.message.contains(named),
+            "the sentence never says '{named}': {}",
+            found.message
+        );
     }
     assert!(
-        found.fix.contains("Delete `reads-only: yes`") && found.fix.contains("Delete `spends-money: yes`"),
+        found.fix.contains("Delete `reads-only: yes`")
+            && found.fix.contains("Delete `spends-money: yes`"),
         "both ways out have to be typeable: {}",
         found.fix
     );
-    for jargon in ["boolean", "predicate", "null", "enum", "schema", "field", "invariant"] {
+    for jargon in [
+        "boolean",
+        "predicate",
+        "null",
+        "enum",
+        "schema",
+        "field",
+        "invariant",
+    ] {
         assert!(
             !found.message.to_lowercase().contains(jargon),
             "the sentence leaked '{jargon}': {}",
@@ -131,7 +148,10 @@ fn the_message_names_the_action_the_two_lines_and_a_fix_a_support_lead_can_type(
     // And it points at the OTHER line as well, so the author does not have to
     // hunt for the half of the contradiction the caret is not under.
     assert!(
-        found.related.iter().any(|r| r.message.contains("moves money")),
+        found
+            .related
+            .iter()
+            .any(|r| r.message.contains("moves money")),
         "the second line is never pointed at: {:?}",
         found.related
     );
@@ -151,7 +171,12 @@ fn the_word_the_author_typed_is_the_word_the_message_quotes_back() {
             .items()
             .iter()
             .find(|i| i.rule == "loader/looks-things-up-and-spends")
-            .unwrap_or_else(|| panic!("`reads-only: {spelling}` was not read as a yes:\n{}", d.render()));
+            .unwrap_or_else(|| {
+                panic!(
+                    "`reads-only: {spelling}` was not read as a yes:\n{}",
+                    d.render()
+                )
+            });
         assert!(
             found.message.contains(&format!("reads-only: {spelling}")),
             "written `{spelling}`, quoted back as something else: {}",
@@ -212,10 +237,16 @@ fn the_shipped_trees_write_reads_only_and_are_refused_by_none_of_this() {
     // trust in every other line the tool prints. Both trees write `reads-only:`
     // — on lookups, beside actions that move money — and neither may be touched.
     let here = Utf8Path::new(env!("CARGO_MANIFEST_DIR"));
-    for tree in ["../../examples/refund-desk/tools", "../../tests/trees/one-line-gate/tools"] {
+    for tree in [
+        "../../examples/refund-desk/tools",
+        "../../tests/trees/one-line-gate/tools",
+    ] {
         let dir = here.join(tree);
         let mut seen = 0;
-        for file in std::fs::read_dir(dir.as_std_path()).expect("the tree is there").flatten() {
+        for file in std::fs::read_dir(dir.as_std_path())
+            .expect("the tree is there")
+            .flatten()
+        {
             let path = file.path();
             if path.extension().and_then(|e| e.to_str()) != Some("yaml") {
                 continue;
@@ -230,7 +261,10 @@ fn the_shipped_trees_write_reads_only_and_are_refused_by_none_of_this() {
             // drag in every other rule in the loader.
             let wrapped = format!(
                 "tools:\n  payments:\n{}",
-                text.lines().map(|l| format!("    {l}")).collect::<Vec<_>>().join("\n")
+                text.lines()
+                    .map(|l| format!("    {l}"))
+                    .collect::<Vec<_>>()
+                    .join("\n")
             );
             let d = problems(&wrapped);
             assert!(
@@ -240,6 +274,9 @@ fn the_shipped_trees_write_reads_only_and_are_refused_by_none_of_this() {
                 d.render()
             );
         }
-        assert!(seen > 0, "{dir} was supposed to write `reads-only:` and does not");
+        assert!(
+            seen > 0,
+            "{dir} was supposed to write `reads-only:` and does not"
+        );
     }
 }

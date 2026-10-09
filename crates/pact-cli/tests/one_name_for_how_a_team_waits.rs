@@ -117,9 +117,9 @@ fn waits_in(record: &str) -> BTreeSet<String> {
     for line in after.lines() {
         let line = line.split('#').next().unwrap_or(line);
         let stripped = line.trim();
-        let is_next_key = stripped
-            .split_once(':')
-            .is_some_and(|(k, _)| !k.is_empty() && k.chars().all(|c| c.is_ascii_lowercase() || c == '-'));
+        let is_next_key = stripped.split_once(':').is_some_and(|(k, _)| {
+            !k.is_empty() && k.chars().all(|c| c.is_ascii_lowercase() || c == '-')
+        });
         if is_next_key && !value.is_empty() {
             break;
         }
@@ -152,7 +152,9 @@ fn schema_choices(group: &str, field: &str) -> BTreeSet<String> {
         .split_once('[')
         .and_then(|(_, rest)| rest.split_once(']'))
         .map(|(inner, _)| inner.to_string())
-        .unwrap_or_else(|| panic!("`{group}.{field}` writes its choices in a shape this reads as a list"));
+        .unwrap_or_else(|| {
+            panic!("`{group}.{field}` writes its choices in a shape this reads as a list")
+        });
     list.split(',')
         .map(|w| w.split('#').next().unwrap_or(w).trim().to_string())
         .filter(|w| !w.is_empty())
@@ -232,7 +234,9 @@ fn the_edge_join() -> String {
         .iter()
         .flat_map(|b| join_records(b))
         .next()
-        .expect("§7.3's edge block must still define a `join:` record — that is what the section is")
+        .expect(
+            "§7.3's edge block must still define a `join:` record — that is what the section is",
+        )
 }
 
 #[test]

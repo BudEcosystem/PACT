@@ -344,10 +344,17 @@ impl Default for Policy {
             // expanding `check-window.wasm` into a field called `check-window`
             // would silently discard the extension, which is the quiet loss T7
             // forbids.
-            payload_dirs: ["workspace", "assets", "references", "scripts", "documents", "body"]
-                .iter()
-                .map(|s| (*s).to_string())
-                .collect(),
+            payload_dirs: [
+                "workspace",
+                "assets",
+                "references",
+                "scripts",
+                "documents",
+                "body",
+            ]
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect(),
         }
     }
 }
@@ -388,7 +395,9 @@ impl Policy {
             if SPEAKING_SKIP_DIRS.contains(&name) {
                 return Some(Ignored::ToolingFolder);
             }
-            return TOOL_ONLY_DIRS.contains(&name).then_some(Ignored::ToolArtifact);
+            return TOOL_ONLY_DIRS
+                .contains(&name)
+                .then_some(Ignored::ToolArtifact);
         }
         let (stem, ext) = name.rsplit_once('.').map_or((name, ""), |(s, e)| (s, e));
         if !NON_SPEC_STEMS.contains(&stem.to_ascii_lowercase().as_str()) {
@@ -878,7 +887,9 @@ impl Ignore {
     /// into it.
     pub fn load_within(dir: &Utf8Path, root: Option<&Utf8Path>) -> Self {
         let at = dir.join(".pactignore");
-        let Ok(meta) = std::fs::symlink_metadata(&at) else { return Self::default() };
+        let Ok(meta) = std::fs::symlink_metadata(&at) else {
+            return Self::default();
+        };
         if meta.file_type().is_symlink() {
             let inside = std::fs::canonicalize(&at).ok().and_then(|target| {
                 let target = Utf8PathBuf::from_path_buf(target).ok()?;
@@ -891,10 +902,16 @@ impl Ignore {
                 Some(ok)
             });
             if inside != Some(true) {
-                return Self { patterns: Vec::new(), skipped: vec![at] };
+                return Self {
+                    patterns: Vec::new(),
+                    skipped: vec![at],
+                };
             }
         } else if !meta.is_file() {
-            return Self { patterns: Vec::new(), skipped: vec![at] };
+            return Self {
+                patterns: Vec::new(),
+                skipped: vec![at],
+            };
         }
         let text = std::fs::read_to_string(&at).unwrap_or_default();
         Self::parse_from(&text, &at)
@@ -1060,7 +1077,9 @@ mod ignore_tests {
         std::fs::write(base.join("packages/api/.pactignore"), "node_modules\n").unwrap();
 
         let deep = Ignore::inherited(&base, &base.join("packages/api"));
-        let m = deep.matching("node_modules").expect("the parent's line covers it");
+        let m = deep
+            .matching("node_modules")
+            .expect("the parent's line covers it");
         assert_eq!(
             m.from,
             base.join(".pactignore"),

@@ -110,7 +110,9 @@ pub fn a_bundle_brings_only_what_it_said(root: &Node, schema: &Schema, diags: &m
         // pattern in a workspace is (`derive::resolve`): it is a way of making a
         // document, so a hole is right in it and a hole nothing declares is not.
         for (kind, documents) in brought {
-            let Some(documents) = documents.node.as_map() else { continue };
+            let Some(documents) = documents.node.as_map() else {
+                continue;
+            };
             for (doc, written) in documents {
                 if crate::templates::is_a_pattern(&written.node)
                     && let Err(d) = crate::templates::holes_match_declarations(

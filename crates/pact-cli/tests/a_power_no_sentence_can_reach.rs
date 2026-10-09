@@ -36,8 +36,11 @@ fn with_interceptor(name: &str, body: &str) -> std::path::PathBuf {
     let _ = std::fs::remove_dir_all(&dst);
     std::fs::create_dir_all(dst.join("agents/desk")).unwrap();
     std::fs::create_dir_all(dst.join("interceptors")).unwrap();
-    std::fs::write(dst.join("workspace.yaml"), "name: Probe\ndescription: A probe workspace.\n")
-        .unwrap();
+    std::fs::write(
+        dst.join("workspace.yaml"),
+        "name: Probe\ndescription: A probe workspace.\n",
+    )
+    .unwrap();
     std::fs::write(
         dst.join("agents/desk/agent.yaml"),
         "name: Desk\ndescription: Answers questions.\ninstructions: Answer plainly.\n\
@@ -49,8 +52,15 @@ fn with_interceptor(name: &str, body: &str) -> std::path::PathBuf {
 }
 
 fn check(root: &std::path::Path) -> String {
-    let out = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
-    format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr))
+    let out = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
+    format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    )
 }
 
 /// `send-elsewhere` is produced by exactly one sentence and that sentence is
@@ -99,7 +109,10 @@ fn the_caret_sits_on_the_line_the_fix_says_to_change() {
         .lines()
         .find(|l| l.contains("may: [hide-values, send-elsewhere]"))
         .expect("the may: line is quoted back");
-    assert!(line.trim_start().starts_with('3'), "quoted the wrong line: {line}");
+    assert!(
+        line.trim_start().starts_with('3'),
+        "quoted the wrong line: {line}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -170,7 +183,10 @@ fn a_power_every_moment_can_use_is_never_questioned() {
          may: [hide-values]\n\
          rules:\n  - replace anything that looks like a card number with \"***\"\n",
     );
-    let out = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
+    let out = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
     assert!(
         out.status.success(),
         "a declared power its own sentence uses is correct:\n{}",
@@ -190,6 +206,9 @@ fn the_shipped_trees_gain_nothing_from_this() {
             String::from_utf8_lossy(&out.stderr)
         );
         assert!(out.status.success(), "{tree}:\n{text}");
-        assert!(!text.contains("loader/power-nothing-can-use"), "{tree}:\n{text}");
+        assert!(
+            !text.contains("loader/power-nothing-can-use"),
+            "{tree}:\n{text}"
+        );
     }
 }

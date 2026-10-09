@@ -56,7 +56,9 @@ pub fn no_team_calls_itself(document: &Node, diags: &mut Diagnostics) {
         if reported.contains(start) {
             continue;
         }
-        let Some(path) = walk(&names, start) else { continue };
+        let Some(path) = walk(&names, start) else {
+            continue;
+        };
         // The one grant the ban leaves room for: a circle where EVERY member
         // has written its own bottom (`limits.asks-itself-at-most:`). One
         // missing figure and the refusal stands — naming who. Members of a
@@ -77,7 +79,12 @@ pub fn no_team_calls_itself(document: &Node, diags: &mut Diagnostics) {
         let last = *path.last().expect("a cycle has at least one member");
         let span = names
             .get(last)
-            .and_then(|edges| edges.iter().find(|(to, _)| *to == start).map(|(_, s)| s.clone()))
+            .and_then(|edges| {
+                edges
+                    .iter()
+                    .find(|(to, _)| *to == start)
+                    .map(|(_, s)| s.clone())
+            })
             .or_else(|| spans(&names, &path).into_iter().next_back())
             .expect("the closing edge was written somewhere");
         let last = &names
@@ -132,7 +139,11 @@ pub fn no_base_on_a_team(document: &Node, diags: &mut Diagnostics) {
     let Some(agents) = document.get("agents").and_then(Node::as_map) else {
         return;
     };
-    let is_base = |name: &str| agents.get(name).is_some_and(|a| says_yes(a.node.get("base")));
+    let is_base = |name: &str| {
+        agents
+            .get(name)
+            .is_some_and(|a| says_yes(a.node.get("base")))
+    };
 
     for (_, agent) in agents {
         let Some(team) = agent.node.get("team").and_then(Node::as_map) else {
@@ -159,7 +170,12 @@ pub fn no_base_on_a_team(document: &Node, diags: &mut Diagnostics) {
     // The ingress door: a port's `answers:` is which agent handles what
     // arrives, so a base here is a promise the outside world will reach
     // something that never runs.
-    for (port, entry) in document.get("ports").and_then(Node::as_map).into_iter().flatten() {
+    for (port, entry) in document
+        .get("ports")
+        .and_then(Node::as_map)
+        .into_iter()
+        .flatten()
+    {
         let Some(answers) = entry.node.get("answers") else {
             continue;
         };
@@ -185,8 +201,19 @@ pub fn no_base_on_a_team(document: &Node, diags: &mut Diagnostics) {
     // The routing door: a stage's `may-use:` narrows what the agent may draw
     // on, and one of its vocabularies is `agents`. Offering a base there is
     // offering help that can never come.
-    for (_, loop_) in document.get("loops").and_then(Node::as_map).into_iter().flatten() {
-        for (_, stage) in loop_.node.get("steps").and_then(Node::as_map).into_iter().flatten() {
+    for (_, loop_) in document
+        .get("loops")
+        .and_then(Node::as_map)
+        .into_iter()
+        .flatten()
+    {
+        for (_, stage) in loop_
+            .node
+            .get("steps")
+            .and_then(Node::as_map)
+            .into_iter()
+            .flatten()
+        {
             let Some(may_use) = stage.node.get("may-use") else {
                 continue;
             };
@@ -249,7 +276,11 @@ fn walk<'a>(
 ) -> Option<Vec<&'a str>> {
     let mut path = vec![start];
     let mut on_path: std::collections::BTreeSet<&str> = [start].into_iter().collect();
-    if descend(names, start, start, &mut path, &mut on_path) { Some(path) } else { None }
+    if descend(names, start, start, &mut path, &mut on_path) {
+        Some(path)
+    } else {
+        None
+    }
 }
 
 /// Depth-first from `here`, looking for a way back to `start`.
@@ -288,7 +319,12 @@ fn spans<'a>(
     path: &[&'a str],
 ) -> Vec<pact_diag::Span> {
     path.iter()
-        .filter_map(|who| names.get(who).and_then(|m| m.first()).map(|(_, s)| s.clone()))
+        .filter_map(|who| {
+            names
+                .get(who)
+                .and_then(|m| m.first())
+                .map(|(_, s)| s.clone())
+        })
         .collect()
 }
 
@@ -307,7 +343,10 @@ mod tests {
     #[test]
     fn an_agent_that_names_itself_as_a_teammate_is_refused() {
         let d = check("agents:\n  helper:\n    team:\n      helper: I ask myself.\n");
-        let e = d.items().first().expect("a team with no bottom must be refused");
+        let e = d
+            .items()
+            .first()
+            .expect("a team with no bottom must be refused");
         assert_eq!(e.rule, "loader/team-that-has-no-bottom");
         assert!(e.message.contains("itself"), "{}", e.message);
         assert!(e.fix.contains("`helper:`"), "the line to delete: {}", e.fix);
@@ -315,11 +354,19 @@ mod tests {
 
     #[test]
     fn two_agents_that_name_each_other_are_refused_once_and_the_loop_is_written_out() {
-        let d = check(
-            "agents:\n  a:\n    team:\n      b: helps\n  b:\n    team:\n      a: helps\n",
+        let d =
+            check("agents:\n  a:\n    team:\n      b: helps\n  b:\n    team:\n      a: helps\n");
+        assert_eq!(
+            d.items().len(),
+            1,
+            "one loop is one mistake:\n{}",
+            d.render()
         );
-        assert_eq!(d.items().len(), 1, "one loop is one mistake:\n{}", d.render());
-        assert!(d.items()[0].message.contains("'a' asks 'b' asks 'a'"), "{}", d.items()[0].message);
+        assert!(
+            d.items()[0].message.contains("'a' asks 'b' asks 'a'"),
+            "{}",
+            d.items()[0].message
+        );
     }
 
     #[test]
@@ -358,12 +405,25 @@ mod tests {
              \x20     asks-itself-at-most: 2\n      when-it-runs-out: stop-and-say-so\n\
              \x20 b:\n    team:\n      a: helps\n",
         );
-        assert_eq!(d.items().len(), 1, "one missing figure is one mistake:\n{}", d.render());
+        assert_eq!(
+            d.items().len(),
+            1,
+            "one missing figure is one mistake:\n{}",
+            d.render()
+        );
         let e = &d.items()[0];
         assert_eq!(e.rule, "loader/team-that-has-no-bottom");
         assert!(e.fix.contains("asks-itself-at-most"), "{}", e.fix);
-        assert!(e.fix.contains("'b'"), "the refusal names who is missing: {}", e.fix);
-        assert!(!e.fix.contains("'a',"), "the budgeted member is not blamed: {}", e.fix);
+        assert!(
+            e.fix.contains("'b'"),
+            "the refusal names who is missing: {}",
+            e.fix
+        );
+        assert!(
+            !e.fix.contains("'a',"),
+            "the budgeted member is not blamed: {}",
+            e.fix
+        );
     }
 
     #[test]
@@ -387,7 +447,12 @@ mod tests {
             "agents:\n  desk:\n    team:\n      pattern: helps\n  pattern:\n    base: yes\n\
              \x20   description: a shape\n",
         );
-        assert_eq!(d.items().len(), 1, "one base on one team is one mistake:\n{}", d.render());
+        assert_eq!(
+            d.items().len(),
+            1,
+            "one base on one team is one mistake:\n{}",
+            d.render()
+        );
         let e = &d.items()[0];
         assert_eq!(e.rule, "loader/a-teammate-that-is-only-a-base");
         assert!(e.fix.contains("based-on: pattern"), "{}", e.fix);

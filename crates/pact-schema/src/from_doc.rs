@@ -62,8 +62,14 @@ impl Schema {
                 let (ty_node, help, required, aliases) = match f.as_str() {
                     Some(s) => (s.to_string(), String::new(), false, Vec::new()),
                     None => (
-                        f.get("type").and_then(|n| n.as_str()).unwrap_or("anything").to_string(),
-                        f.get("help").and_then(|n| n.as_str()).unwrap_or("").to_string(),
+                        f.get("type")
+                            .and_then(|n| n.as_str())
+                            .unwrap_or("anything")
+                            .to_string(),
+                        f.get("help")
+                            .and_then(|n| n.as_str())
+                            .unwrap_or("")
+                            .to_string(),
                         f.get("required").and_then(as_bool).unwrap_or(false),
                         names(f, "aliases"),
                     ),
@@ -73,8 +79,12 @@ impl Schema {
                 // owed only where the first clause of the help will not do —
                 // which `check_companions_can_be_quoted` decides below rather
                 // than leaving it to whoever writes the next pair.
-                let summary =
-                    f.get("summary").and_then(|n| n.as_str()).unwrap_or("").trim().to_string();
+                let summary = f
+                    .get("summary")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
                 // A field that makes another one necessary says so here, so the
                 // pairing is data like everything else (see `Field::needs_also`).
                 let needs_also = names(f, "needs-also");
@@ -123,8 +133,7 @@ impl Schema {
                 let may_be_a_folder = f.get("may-be-a-folder").and_then(as_bool).unwrap_or(false);
                 // Whether this field's value can name somewhere outside the
                 // workspace. See `Field::reaches_outside`.
-                let reaches_outside =
-                    f.get("reaches-outside").and_then(as_bool).unwrap_or(false);
+                let reaches_outside = f.get("reaches-outside").and_then(as_bool).unwrap_or(false);
                 // Exactly one of these, whenever this field is set. See
                 // `Field::needs_one_of` for the rule `needs-also:` could not
                 // state and the author it refused.
@@ -145,7 +154,11 @@ impl Schema {
                 let choices: Vec<String> = f
                     .get("choices")
                     .and_then(Node::as_list)
-                    .map(|l| l.iter().filter_map(|n| n.as_str().map(str::to_string)).collect())
+                    .map(|l| {
+                        l.iter()
+                            .filter_map(|n| n.as_str().map(str::to_string))
+                            .collect()
+                    })
                     .unwrap_or_default();
 
                 // The three closed lists behind an event address, in the order
@@ -367,12 +380,18 @@ fn check_companions_can_be_quoted(group: &Group, fields: &pact_doc::Map, diags: 
         for (want, _) in &field.needed_when {
             // A partner that does not exist is already `schema/unknown-companion`
             // where the author is; saying it twice here helps nobody.
-            let Some(other) = group.fields.iter().find(|x| &x.name == want) else { continue };
+            let Some(other) = group.fields.iter().find(|x| &x.name == want) else {
+                continue;
+            };
             let quoted = crate::summary::quotable(other);
-            let Some(why) = crate::summary::why_not_quotable(&quoted) else { continue };
+            let Some(why) = crate::summary::why_not_quotable(&quoted) else {
+                continue;
+            };
             // Point at the PARTNER's line, not at the field that names it: the
             // partner is where the missing `summary:` has to be typed.
-            let Some(at) = fields.get(want).or_else(|| fields.get(&field.name)) else { continue };
+            let Some(at) = fields.get(want).or_else(|| fields.get(&field.name)) else {
+                continue;
+            };
             let at = at.key_span.clone();
             diags.push(Diagnostic::error(
                 "schema/companion-cannot-be-named",
@@ -381,7 +400,11 @@ fn check_companions_can_be_quoted(group: &Group, fields: &pact_doc::Map, diags: 
                     "'{}' asks for '{want}' when it says '{}', and '{want}' has nothing a refusal \
                      can call it: {why}.",
                     field.name,
-                    field.needed_when.iter().find(|(w, _)| w == want).map_or("", |(_, v)| v.as_str()),
+                    field
+                        .needed_when
+                        .iter()
+                        .find(|(w, _)| w == want)
+                        .map_or("", |(_, v)| v.as_str()),
                 ),
                 format!(
                     "Add a line under `{want}:` in spec/schema.yaml naming the setting in one \
@@ -395,9 +418,26 @@ fn check_companions_can_be_quoted(group: &Group, fields: &pact_doc::Map, diags: 
 }
 
 const TYPE_NAMES: &[&str] = &[
-    "text", "yes-no", "number", "integer", "duration", "money", "percent", "threshold",
-    "size", "file-name", "answer-shape", "combine-rule", "moment", "comparand", "one-of", "event-address",
-    "anything", "list of <type>", "map of <type>", "group:<name>",
+    "text",
+    "yes-no",
+    "number",
+    "integer",
+    "duration",
+    "money",
+    "percent",
+    "threshold",
+    "size",
+    "file-name",
+    "answer-shape",
+    "combine-rule",
+    "moment",
+    "comparand",
+    "one-of",
+    "event-address",
+    "anything",
+    "list of <type>",
+    "map of <type>",
+    "group:<name>",
 ];
 
 /// The closed lists a field may carry beside its `type:`, each read by the type
@@ -487,7 +527,10 @@ fn holds_named_entries(ty: &Ty) -> bool {
 /// list was expected, for the same reason `names` accepts one.
 fn words(n: &Node) -> Vec<String> {
     match n.as_list() {
-        Some(l) => l.iter().filter_map(|x| x.as_str().map(str::to_string)).collect(),
+        Some(l) => l
+            .iter()
+            .filter_map(|x| x.as_str().map(str::to_string))
+            .collect(),
         None => n.as_str().map(str::to_string).into_iter().collect(),
     }
 }
@@ -501,8 +544,16 @@ fn forms(f: &Node) -> Option<Forms> {
     let block = f.get("forms")?;
     let one_of = block.get("one-of").and_then(Node::as_list)?;
     Some(Forms {
-        declares: block.get("declares").and_then(|n| n.as_str()).unwrap_or("").to_string(),
-        binds: block.get("binds").and_then(|n| n.as_str()).unwrap_or("").to_string(),
+        declares: block
+            .get("declares")
+            .and_then(|n| n.as_str())
+            .unwrap_or("")
+            .to_string(),
+        binds: block
+            .get("binds")
+            .and_then(|n| n.as_str())
+            .unwrap_or("")
+            .to_string(),
         // The two hole vocabularies, read the same way `parts:` is. Without them
         // a sentence from the right form with a made-up thing in it — or a
         // misspelt tool name — matched and was accepted.
@@ -547,7 +598,10 @@ fn forms(f: &Node) -> Option<Forms> {
 fn names(f: &Node, key: &str) -> Vec<String> {
     match f.get(key) {
         Some(n) => match n.as_list() {
-            Some(l) => l.iter().filter_map(|n| n.as_str().map(str::to_string)).collect(),
+            Some(l) => l
+                .iter()
+                .filter_map(|n| n.as_str().map(str::to_string))
+                .collect(),
             None => n.as_str().map(str::to_string).into_iter().collect(),
         },
         None => Vec::new(),
@@ -582,7 +636,6 @@ pub fn schema_from_yaml(text: &str, diags: &mut Diagnostics) -> Schema {
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -636,7 +689,11 @@ groups:
     fn the_short_and_long_field_forms_mean_the_same_thing() {
         let (s, _) = build();
         let agent = s.group("agent").unwrap();
-        let short = agent.fields.iter().find(|f| f.name == "instructions").unwrap();
+        let short = agent
+            .fields
+            .iter()
+            .find(|f| f.name == "instructions")
+            .unwrap();
         let long = agent.fields.iter().find(|f| f.name == "name").unwrap();
         assert_eq!(short.ty, Ty::Text);
         assert_eq!(long.ty, Ty::Text);
@@ -648,7 +705,15 @@ groups:
     fn nested_types_parse() {
         let (s, _) = build();
         let agent = s.group("agent").unwrap();
-        let by = |n: &str| agent.fields.iter().find(|f| f.name == n).unwrap().ty.clone();
+        let by = |n: &str| {
+            agent
+                .fields
+                .iter()
+                .find(|f| f.name == n)
+                .unwrap()
+                .ty
+                .clone()
+        };
         assert_eq!(by("uses"), Ty::ListOf(Box::new(Ty::Text)));
         assert_eq!(by("team"), Ty::MapOf(Box::new(Ty::Text)));
         assert_eq!(by("limits"), Ty::Group("limits".into()));
@@ -676,7 +741,10 @@ groups:
     #[test]
     fn a_mistake_in_the_specification_is_reported_not_panicked_on() {
         let mut d = Diagnostics::new();
-        let s = schema_from_yaml("groups:\n  agent:\n    fields:\n      x: sparkles\n", &mut d);
+        let s = schema_from_yaml(
+            "groups:\n  agent:\n    fields:\n      x: sparkles\n",
+            &mut d,
+        );
         assert!(d.items().iter().any(|i| i.rule == "schema/unknown-type"));
         // The rest of the schema still builds, so one bad line does not blind
         // the whole validator.
@@ -686,7 +754,10 @@ groups:
     #[test]
     fn one_of_without_choices_is_rejected() {
         let mut d = Diagnostics::new();
-        schema_from_yaml("groups:\n  a:\n    fields:\n      x:\n        type: one-of\n", &mut d);
+        schema_from_yaml(
+            "groups:\n  a:\n    fields:\n      x:\n        type: one-of\n",
+            &mut d,
+        );
         assert!(d.items().iter().any(|i| i.rule == "schema/unknown-type"));
     }
 }

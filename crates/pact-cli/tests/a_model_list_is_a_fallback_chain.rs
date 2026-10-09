@@ -17,7 +17,11 @@ fn tree(name: &str, model: &str) -> PathBuf {
     let root = std::env::temp_dir().join(format!("pact-model-list-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("agents")).unwrap();
-    std::fs::write(root.join("workspace.yaml"), "name: fallback\nallow-egress: []\n").unwrap();
+    std::fs::write(
+        root.join("workspace.yaml"),
+        "name: fallback\nallow-egress: []\n",
+    )
+    .unwrap();
     std::fs::write(
         root.join("agents/desk.yaml"),
         format!("description: answers\ninstructions: Answer.\nmodel: {model}\n"),
@@ -102,9 +106,11 @@ fn discovery_names_the_model_a_run_starts_on_and_the_whole_chain() {
 fn a_fallback_that_is_the_grader_is_said_like_a_pinned_one() {
     // The worked example grades with `qwen2.5-14b-instruct`; a desk that may
     // fall back to it would have some of its answers marked by their author.
-    let src = PathBuf::from(format!("{}/../../examples/refund-desk", env!("CARGO_MANIFEST_DIR")));
-    let root =
-        std::env::temp_dir().join(format!("pact-model-list-grader-{}", std::process::id()));
+    let src = PathBuf::from(format!(
+        "{}/../../examples/refund-desk",
+        env!("CARGO_MANIFEST_DIR")
+    ));
+    let root = std::env::temp_dir().join(format!("pact-model-list-grader-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     copy(&src, &root);
     let agent = root.join("agents/refund-desk/agent.yaml");
@@ -115,7 +121,10 @@ fn a_fallback_that_is_the_grader_is_said_like_a_pinned_one() {
     )
     .unwrap();
     let (_, text) = run(&["check"], &root);
-    assert!(text.contains("loader/judge-is-the-model-under-test"), "{text}");
+    assert!(
+        text.contains("loader/judge-is-the-model-under-test"),
+        "{text}"
+    );
     assert!(text.contains("runs on `qwen2.5-14b-instruct`"), "{text}");
     let _ = std::fs::remove_dir_all(&root);
 }

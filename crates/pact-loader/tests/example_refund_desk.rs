@@ -13,7 +13,9 @@ fn example() -> Utf8PathBuf {
 fn load() -> (pact_doc::Node, Diagnostics) {
     let root = example();
     let mut d = Diagnostics::new();
-    let n = Loader::new(root.clone()).load(&root, &mut d).expect("example loads");
+    let n = Loader::new(root.clone())
+        .load(&root, &mut d)
+        .expect("example loads");
     d.sort();
     (n, d)
 }
@@ -65,7 +67,10 @@ fn the_agent_definition_contains_no_code() {
             }
         }
     }
-    assert!(offenders.is_empty(), "code in the agent definition: {offenders:?}");
+    assert!(
+        offenders.is_empty(),
+        "code in the agent definition: {offenders:?}"
+    );
 }
 
 #[test]
@@ -73,9 +78,14 @@ fn the_supervisor_and_both_specialists_are_present() {
     let (n, _) = load();
     let agents = n.get("agents").expect("agents/ became a field");
     for who in ["refund-desk", "policy-checker", "fraud-checker"] {
-        let a = agents.get(who).unwrap_or_else(|| panic!("missing agent {who}"));
+        let a = agents
+            .get(who)
+            .unwrap_or_else(|| panic!("missing agent {who}"));
         assert!(a.get("name").is_some(), "{who} has a name");
-        assert!(a.get("instructions").is_some(), "{who}'s instructions.md became a field");
+        assert!(
+            a.get("instructions").is_some(),
+            "{who}'s instructions.md became a field"
+        );
     }
 }
 
@@ -85,11 +95,28 @@ fn separate_files_became_fields_of_the_agent_that_owns_them() {
     // are indistinguishable from having been written inside it.
     let (n, _) = load();
     let desk = n.get("agents").and_then(|a| a.get("refund-desk")).unwrap();
-    assert_eq!(desk.get("needs").unwrap().get("reasoning").unwrap().as_str(), Some("careful"));
-    assert_eq!(desk.get("limits").unwrap().get("feel").unwrap().as_str(), Some("interactive"));
+    assert_eq!(
+        desk.get("needs")
+            .unwrap()
+            .get("reasoning")
+            .unwrap()
+            .as_str(),
+        Some("careful")
+    );
+    assert_eq!(
+        desk.get("limits").unwrap().get("feel").unwrap().as_str(),
+        Some("interactive")
+    );
     // `yes` stays text so a model-scores field like "NO" is never mangled;
     // the schema layer coerces where a yes/no is actually expected.
-    assert_eq!(desk.get("needs").unwrap().get("tool-calling").unwrap().as_str(), Some("yes"));
+    assert_eq!(
+        desk.get("needs")
+            .unwrap()
+            .get("tool-calling")
+            .unwrap()
+            .as_str(),
+        Some("yes")
+    );
     // The core spellings expand to an ENFORCED budget as well as a reported
     // objective, so a support lead's few lines are a real spend cap. They are
     // one flat family now: `stop-after: {tool-calls, turns}` is gone, because
@@ -98,7 +125,10 @@ fn separate_files_became_fields_of_the_agent_that_owns_them() {
     // specification itself — and `turn` already means something else in the
     // event lattice, where a turn contains steps.
     let limits = desk.get("limits").unwrap();
-    assert!(limits.get("steps-at-most").is_some(), "the one loop counter");
+    assert!(
+        limits.get("steps-at-most").is_some(),
+        "the one loop counter"
+    );
     assert!(limits.get("tool-calls-at-most").is_some());
     // And a ceiling always says what happens when it is reached.
     assert!(limits.get("when-it-runs-out").is_some());
@@ -119,22 +149,40 @@ fn the_join_policy_is_a_field_of_the_agent_that_owns_the_team() {
         .expect("teamwork.yaml became a field of the agent");
     assert_eq!(tw.get("waits-for").unwrap().as_str(), Some("everyone"));
     assert_eq!(tw.get("starts").unwrap().as_str(), Some("all-at-once"));
-    assert_eq!(tw.get("divides-the-budget").unwrap().as_str(), Some("by-share"));
-    assert_eq!(tw.get("if-someone-fails").unwrap().as_str(), Some("ask-a-person"));
+    assert_eq!(
+        tw.get("divides-the-budget").unwrap().as_str(),
+        Some("by-share")
+    );
+    assert_eq!(
+        tw.get("if-someone-fails").unwrap().as_str(),
+        Some("ask-a-person")
+    );
 
     // A share is declared for every member of the team, or the budget policy
     // names somebody who gets nothing.
-    let team = n.get("agents").and_then(|a| a.get("refund-desk")).and_then(|d| d.get("team"));
-    let shares = tw.get("shares").and_then(pact_doc::Node::as_map).expect("shares");
+    let team = n
+        .get("agents")
+        .and_then(|a| a.get("refund-desk"))
+        .and_then(|d| d.get("team"));
+    let shares = tw
+        .get("shares")
+        .and_then(pact_doc::Node::as_map)
+        .expect("shares");
     for member in team.and_then(pact_doc::Node::as_map).expect("team").keys() {
-        assert!(shares.contains_key(member), "no share declared for {member}");
+        assert!(
+            shares.contains_key(member),
+            "no share declared for {member}"
+        );
     }
 }
 
 #[test]
 fn eval_cases_keep_their_authored_order_and_lose_the_number_prefix() {
     let (n, _) = load();
-    let cases = n.get("evals").and_then(|e| e.get("cases")).expect("evals/cases/ became a field");
+    let cases = n
+        .get("evals")
+        .and_then(|e| e.get("cases"))
+        .expect("evals/cases/ became a field");
     let keys: Vec<&str> = cases.as_map().unwrap().keys().map(String::as_str).collect();
     assert_eq!(
         keys,
@@ -155,8 +203,22 @@ fn the_learning_rules_distinguish_safe_changes_from_ones_needing_a_person() {
     // D23: blast-radius classification has to be expressible by the author.
     let (n, _) = load();
     let l = n.get("learning").expect("learning.yaml became a field");
-    assert!(l.get("may-improve-on-its-own").unwrap().as_list().unwrap().len() >= 2);
-    assert!(l.get("needs-a-person-to-approve").unwrap().as_list().unwrap().len() >= 3);
+    assert!(
+        l.get("may-improve-on-its-own")
+            .unwrap()
+            .as_list()
+            .unwrap()
+            .len()
+            >= 2
+    );
+    assert!(
+        l.get("needs-a-person-to-approve")
+            .unwrap()
+            .as_list()
+            .unwrap()
+            .len()
+            >= 3
+    );
 }
 
 #[test]
@@ -189,7 +251,11 @@ fn the_flat_and_expanded_forms_have_the_same_digest() {
 
     let tree = base.join("tree");
     fs::create_dir_all(&tree).unwrap();
-    fs::write(tree.join("agent.yaml"), "name: Refund Desk\ndescription: Decides refunds\n").unwrap();
+    fs::write(
+        tree.join("agent.yaml"),
+        "name: Refund Desk\ndescription: Decides refunds\n",
+    )
+    .unwrap();
     fs::write(tree.join("instructions.md"), "Be precise.").unwrap();
     fs::write(tree.join("needs.yaml"), "reasoning: careful\n").unwrap();
 

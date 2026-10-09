@@ -115,13 +115,21 @@ mod tests {
     #[test]
     fn a_workspace_with_a_suite_offers_both_the_name_and_the_path_that_is_really_there() {
         let known = known_here(Some(&suite_at("examples/refund-desk/evals/suite.yaml")));
-        assert!(known.names.contains("evals"), "the name spelling: {:?}", known.names);
+        assert!(
+            known.names.contains("evals"),
+            "the name spelling: {:?}",
+            known.names
+        );
         assert!(
             known.names.contains("/evals/suite.yaml"),
             "the path spelling: {:?}",
             known.names
         );
-        assert_eq!(known.names.len(), 2, "two spellings of one address, not more");
+        assert_eq!(
+            known.names.len(),
+            2,
+            "two spellings of one address, not more"
+        );
     }
 
     #[test]
@@ -135,7 +143,11 @@ mod tests {
             ("ws/evals.yaml", "/evals.yaml"),
         ] {
             let known = known_here(Some(&suite_at(real)));
-            assert!(known.names.contains(expect), "{real} should offer {expect}: {:?}", known.names);
+            assert!(
+                known.names.contains(expect),
+                "{real} should offer {expect}: {:?}",
+                known.names
+            );
             assert!(
                 !known.names.contains("/evals/suite.yaml"),
                 "{real} must not offer a file that is not there: {:?}",
@@ -149,14 +161,22 @@ mod tests {
         let known = known_here(None);
         assert!(known.names.is_empty());
         assert!(known.add.contains("`evals/suite.yaml`"), "{}", known.add);
-        assert!(known.add.contains("when:") && known.add.contains("expect:"), "{}", known.add);
+        assert!(
+            known.add.contains("when:") && known.add.contains("expect:"),
+            "{}",
+            known.add
+        );
     }
 
     #[test]
     fn the_command_line_spelling_of_the_workspace_root_cannot_change_the_answer() {
         // `pact check .`, `pact check examples/refund-desk` and an absolute path
         // all load the same tree, so all three must accept the same line.
-        for root in ["./evals/suite.yaml", "evals/suite.yaml", "/home/x/ws/evals/suite.yaml"] {
+        for root in [
+            "./evals/suite.yaml",
+            "evals/suite.yaml",
+            "/home/x/ws/evals/suite.yaml",
+        ] {
             let known = known_here(Some(&suite_at(root)));
             assert!(
                 known.names.contains("/evals/suite.yaml"),

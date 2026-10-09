@@ -47,10 +47,23 @@ fn times(said: &str, what: &str) -> usize {
 #[test]
 fn braces_the_model_is_meant_to_read_load_with_one_warning() {
     let c = check("braces-the-model-is-meant-to-read", &[]);
-    assert_eq!(c.code, Some(0), "a template's own braces are not an error:\n{}", c.said);
+    assert_eq!(
+        c.code,
+        Some(0),
+        "a template's own braces are not an error:\n{}",
+        c.said
+    );
     assert_eq!(times(&c.said, "rule: loader/not-a-hole"), 1, "{}", c.said);
-    assert!(c.said.contains("mailer.yaml:6:23"), "at the braces themselves:\n{}", c.said);
-    assert!(c.said.contains(r"`\{{first_name}}`"), "the escape is offered:\n{}", c.said);
+    assert!(
+        c.said.contains("mailer.yaml:6:23"),
+        "at the braces themselves:\n{}",
+        c.said
+    );
+    assert!(
+        c.said.contains(r"`\{{first_name}}`"),
+        "the escape is offered:\n{}",
+        c.said
+    );
     // The escaped pairs on the next line are said on purpose: nothing about them.
     assert!(!c.said.contains("order_id"), "{}", c.said);
     assert_eq!(times(&c.said, "rule: "), 1, "and nothing else:\n{}", c.said);
@@ -64,7 +77,12 @@ fn braces_the_model_is_meant_to_read_load_with_one_warning() {
 fn braces_that_are_nearly_a_hole_are_each_warned_about() {
     let c = check("braces-that-are-nearly-a-hole", &[]);
     assert_eq!(c.code, Some(0), "{}", c.said);
-    assert_eq!(times(&c.said, "rule: loader/almost-a-hole"), 3, "{}", c.said);
+    assert_eq!(
+        times(&c.said, "rule: loader/almost-a-hole"),
+        3,
+        "{}",
+        c.said
+    );
     for (nearly, at) in [
         ("`{{{run-inputs.brand}}}`", "writer.yaml:5:17"),
         ("`{{run-inputs.brand | upper}}`", "writer.yaml:6:13"),
@@ -73,27 +91,57 @@ fn braces_that_are_nearly_a_hole_are_each_warned_about() {
         assert!(c.said.contains(nearly), "{nearly} is named:\n{}", c.said);
         assert!(c.said.contains(at), "{nearly} is at {at}:\n{}", c.said);
     }
-    assert_eq!(times(&c.said, "rule: "), 3, "the real hole on line 8 is quiet:\n{}", c.said);
+    assert_eq!(
+        times(&c.said, "rule: "),
+        3,
+        "the real hole on line 8 is quiet:\n{}",
+        c.said
+    );
 }
 
 #[test]
 fn a_variants_hole_naming_nothing_is_refused() {
     let c = check("a-variant-with-a-hole-nothing-fills", &[]);
     assert_eq!(c.code, Some(1), "{}", c.said);
-    assert!(c.said.contains("rule: loader/no-such-run-input"), "{}", c.said);
+    assert!(
+        c.said.contains("rule: loader/no-such-run-input"),
+        "{}",
+        c.said
+    );
     assert!(c.said.contains("`variants.small.says:`"), "{}", c.said);
     assert!(c.said.contains("writer.yaml:11:29"), "{}", c.said);
-    assert!(c.said.contains("rule: loader/no-such-remembered-fact"), "{}", c.said);
-    assert!(c.said.contains("`variants.terse.instructions:`"), "{}", c.said);
-    assert_eq!(times(&c.said, "rule: "), 2, "`plain` names a declared input:\n{}", c.said);
+    assert!(
+        c.said.contains("rule: loader/no-such-remembered-fact"),
+        "{}",
+        c.said
+    );
+    assert!(
+        c.said.contains("`variants.terse.instructions:`"),
+        "{}",
+        c.said
+    );
+    assert_eq!(
+        times(&c.said, "rule: "),
+        2,
+        "`plain` names a declared input:\n{}",
+        c.said
+    );
 }
 
 #[test]
 fn a_hole_in_folded_or_quoted_words_is_reported_at_its_own_line() {
     let c = check("a-hole-in-folded-and-quoted-words", &[]);
     assert_eq!(c.code, Some(1), "{}", c.said);
-    assert!(c.said.contains("writer.yaml:6:12"), "the quoted description:\n{}", c.said);
-    assert!(c.said.contains("writer.yaml:11:17"), "the folded instructions:\n{}", c.said);
+    assert!(
+        c.said.contains("writer.yaml:6:12"),
+        "the quoted description:\n{}",
+        c.said
+    );
+    assert!(
+        c.said.contains("writer.yaml:11:17"),
+        "the folded instructions:\n{}",
+        c.said
+    );
 }
 
 #[test]
@@ -109,10 +157,15 @@ fn a_card_says_when_it_publishes_a_description_nobody_will_fill() {
         .args(["card", "mailer", &root])
         .output()
         .expect("runs");
-    let (card, said) =
-        (String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    let (card, said) = (
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    );
     assert_eq!(out.status.code(), Some(0), "{said}");
-    assert!(card.contains("{{run-inputs.brand}}"), "carried as written:\n{card}");
+    assert!(
+        card.contains("{{run-inputs.brand}}"),
+        "carried as written:\n{card}"
+    );
     assert!(
         said.contains("rule: card/a-description-filled-when-a-run-starts"),
         "and said:\n{said}"
@@ -132,10 +185,15 @@ fn an_inventory_says_so_too() {
         .args(["discover", &root])
         .output()
         .expect("runs");
-    let (found, said) =
-        (String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    let (found, said) = (
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    );
     assert_eq!(out.status.code(), Some(0), "{said}");
-    assert!(found.contains("{{run-inputs.brand}}"), "carried as written:\n{found}");
+    assert!(
+        found.contains("{{run-inputs.brand}}"),
+        "carried as written:\n{found}"
+    );
     assert!(
         said.contains("rule: discover/a-description-filled-when-a-run-starts"),
         "and said:\n{said}"

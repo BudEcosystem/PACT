@@ -695,10 +695,7 @@ fn saying_you_meant_it_stops_the_warning_and_does_not_double_report() {
     );
     // Nothing that reads as a mistake, and nothing that fails the gate.
     assert!(
-        !diags
-            .items()
-            .iter()
-            .any(|d| d.severity != Severity::Note),
+        !diags.items().iter().any(|d| d.severity != Severity::Note),
         "a '.pactignore' entry is what the author asked for, so nothing above a \
          note may be said about it:\n{}",
         t.tidy(&diags.render())

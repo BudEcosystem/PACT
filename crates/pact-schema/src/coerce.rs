@@ -312,9 +312,7 @@ pub fn check(node: &Node, ty: &crate::Ty) -> Option<Coerced> {
         | Ty::Group(_)
         | Ty::Moment
         | Ty::EventAddress(..)
-        | Ty::Anything => {
-            Some(Coerced::Text(String::new()))
-        }
+        | Ty::Anything => Some(Coerced::Text(String::new())),
     }
 }
 
@@ -495,63 +493,62 @@ fn duration(s: &str) -> Option<Coerced> {
     let mut unit = String::new();
     let mut any = false;
 
-    let flush = |num: &mut String,
-                 unit: &mut String,
-                 total: &mut Option<u64>,
-                 any: &mut bool|
-     -> bool {
-        if num.is_empty() {
-            return unit.is_empty();
-        }
-        let Ok(v) = num.parse::<f64>() else { return false };
-        let mult = match unit.trim() {
-            "ms" | "millisecond" | "milliseconds" => 1.0,
-            "s" | "sec" | "secs" | "second" | "seconds" | "" => 1000.0,
-            "m" | "min" | "mins" | "minute" | "minutes" => 60_000.0,
-            "h" | "hr" | "hrs" | "hour" | "hours" => 3_600_000.0,
-            "d" | "day" | "days" => 86_400_000.0,
-            _ => return false,
+    let flush =
+        |num: &mut String, unit: &mut String, total: &mut Option<u64>, any: &mut bool| -> bool {
+            if num.is_empty() {
+                return unit.is_empty();
+            }
+            let Ok(v) = num.parse::<f64>() else {
+                return false;
+            };
+            let mult = match unit.trim() {
+                "ms" | "millisecond" | "milliseconds" => 1.0,
+                "s" | "sec" | "secs" | "second" | "seconds" | "" => 1000.0,
+                "m" | "min" | "mins" | "minute" | "minutes" => 60_000.0,
+                "h" | "hr" | "hrs" | "hour" | "hours" => 3_600_000.0,
+                "d" | "day" | "days" => 86_400_000.0,
+                _ => return false,
+            };
+            // This was `*total += (v * mult) as u64`, and both halves of that were
+            // a trap. A float-to-integer cast in Rust SATURATES rather than
+            // wrapping, so one oversized part pinned the running total at the
+            // largest number there is; the NEXT part's addition then went over the
+            // top of it — `attempt to add with overflow` in a debug build, which is
+            // what `cargo run` and the README's own instructions give an author,
+            // and in a release build a silent wrap to a ceiling nobody asked for.
+            //
+            // So the cast is guarded before it can saturate and the addition is
+            // checked, and either way the answer is the same: this is a length of
+            // time, and it is not one that fits, so it is carried out of here as
+            // that rather than added up into a number that is a lie.
+            let ms = v * mult;
+            // And the cast ROUNDS rather than truncating, which is the other half
+            // of "the number that was written is the number that arrives". A
+            // fraction of a second is not held exactly by a double: `1.001 * 1000.0`
+            // is `1000.9999999999999`, and a cast that throws the tail away handed
+            // a scheduler 1000 ms for `answer-within: 1.001s` — a wait a
+            // millisecond shorter than the one written, silently, which is the
+            // small end of the same complaint `1m30s` makes at the large end.
+            // Measured through the shipped command before this line rounded:
+            // `pact waits` reported `"deadline-ms": 1000`.
+            //
+            // Rounding cannot lift anything over the top, because it only moves a
+            // figure by half a millisecond and the guard below is checked on the
+            // unrounded product; and it cannot turn no time at all into some, since
+            // `0.4ms` still rounds to zero and is still refused at the floor.
+            //
+            // `u64::MAX as f64` is 2^64 exactly, so `ms >= it` is precisely "the
+            // cast below is the one that would saturate".
+            *total = if ms >= u64::MAX as f64 {
+                None
+            } else {
+                (*total).and_then(|t| t.checked_add(ms.round() as u64))
+            };
+            *any = true;
+            num.clear();
+            unit.clear();
+            true
         };
-        // This was `*total += (v * mult) as u64`, and both halves of that were
-        // a trap. A float-to-integer cast in Rust SATURATES rather than
-        // wrapping, so one oversized part pinned the running total at the
-        // largest number there is; the NEXT part's addition then went over the
-        // top of it — `attempt to add with overflow` in a debug build, which is
-        // what `cargo run` and the README's own instructions give an author,
-        // and in a release build a silent wrap to a ceiling nobody asked for.
-        //
-        // So the cast is guarded before it can saturate and the addition is
-        // checked, and either way the answer is the same: this is a length of
-        // time, and it is not one that fits, so it is carried out of here as
-        // that rather than added up into a number that is a lie.
-        let ms = v * mult;
-        // And the cast ROUNDS rather than truncating, which is the other half
-        // of "the number that was written is the number that arrives". A
-        // fraction of a second is not held exactly by a double: `1.001 * 1000.0`
-        // is `1000.9999999999999`, and a cast that throws the tail away handed
-        // a scheduler 1000 ms for `answer-within: 1.001s` — a wait a
-        // millisecond shorter than the one written, silently, which is the
-        // small end of the same complaint `1m30s` makes at the large end.
-        // Measured through the shipped command before this line rounded:
-        // `pact waits` reported `"deadline-ms": 1000`.
-        //
-        // Rounding cannot lift anything over the top, because it only moves a
-        // figure by half a millisecond and the guard below is checked on the
-        // unrounded product; and it cannot turn no time at all into some, since
-        // `0.4ms` still rounds to zero and is still refused at the floor.
-        //
-        // `u64::MAX as f64` is 2^64 exactly, so `ms >= it` is precisely "the
-        // cast below is the one that would saturate".
-        *total = if ms >= u64::MAX as f64 {
-            None
-        } else {
-            (*total).and_then(|t| t.checked_add(ms.round() as u64))
-        };
-        *any = true;
-        num.clear();
-        unit.clear();
-        true
-    };
 
     let chars: Vec<char> = s.chars().collect();
     let mut i = 0;
@@ -791,21 +788,18 @@ fn size(node: &Node) -> Option<Coerced> {
 /// word and stays `schema/wrong-type`.
 fn threshold(s: &str) -> Option<Coerced> {
     let s = s.trim();
-    let (op, rest) = if let Some(r) = s.strip_prefix(">=") {
-        (Op::Ge, r)
-    } else if let Some(r) = s.strip_prefix("<=") {
-        (Op::Le, r)
-    } else if let Some(r) = s.strip_prefix("==") {
-        (Op::Eq, r)
-    } else if let Some(r) = s.strip_prefix('>') {
-        (Op::Gt, r)
-    } else if let Some(r) = s.strip_prefix('<') {
-        (Op::Lt, r)
-    } else if let Some(r) = s.strip_prefix('=') {
-        (Op::Eq, r)
-    } else {
-        return None;
-    };
+    // Two-character operators first, so `>=` is never read as `>` and `=`.
+    const OPS: [(&str, Op); 6] = [
+        (">=", Op::Ge),
+        ("<=", Op::Le),
+        ("==", Op::Eq),
+        (">", Op::Gt),
+        ("<", Op::Lt),
+        ("=", Op::Eq),
+    ];
+    let (op, rest) = OPS
+        .iter()
+        .find_map(|&(p, op)| s.strip_prefix(p).map(|r| (op, r)))?;
     let rest = rest.trim();
     let value = match rest.strip_suffix('%') {
         Some(n) => n.trim().parse::<f64>().ok()? / 100.0,
@@ -832,8 +826,16 @@ mod tests {
     #[test]
     fn yes_no_accepts_what_people_actually_write() {
         for (s, expected) in [
-            ("yes", true), ("Yes", true), ("y", true), ("true", true), ("on", true),
-            ("enabled", true), ("no", false), ("N", false), ("false", false), ("off", false),
+            ("yes", true),
+            ("Yes", true),
+            ("y", true),
+            ("true", true),
+            ("on", true),
+            ("enabled", true),
+            ("no", false),
+            ("N", false),
+            ("false", false),
+            ("off", false),
         ] {
             assert_eq!(
                 check(&val(s), &Ty::YesNo),
@@ -848,28 +850,42 @@ mod tests {
     fn norway_is_only_a_boolean_where_a_boolean_was_asked_for() {
         // As text, `NO` is the country. The two layers together are what make
         // this safe: the parser never guesses, the schema always asks.
-        assert_eq!(check(&val("NO"), &Ty::Text), Some(Coerced::Text("NO".into())));
+        assert_eq!(
+            check(&val("NO"), &Ty::Text),
+            Some(Coerced::Text("NO".into()))
+        );
         assert_eq!(check(&val("NO"), &Ty::YesNo), Some(Coerced::YesNo(false)));
     }
 
     #[test]
     fn durations_accept_the_obvious_spellings() {
         for (s, ms) in [
-            ("500ms", 500), ("2s", 2000), ("30s", 30_000), ("1m", 60_000),
-            ("1m30s", 90_000), ("2 minutes", 120_000), ("1h", 3_600_000), ("90", 90_000),
+            ("500ms", 500),
+            ("2s", 2000),
+            ("30s", 30_000),
+            ("1m", 60_000),
+            ("1m30s", 90_000),
+            ("2 minutes", 120_000),
+            ("1h", 3_600_000),
+            ("90", 90_000),
             // The rest of the grammar, which worked all along and which the
             // help now names — the point being that this table and the sentence
             // in `wrong_type` must not be allowed to drift apart. The test that
             // holds them together is
             // `durations_say_what_they_accept.rs`.
-            ("1m 30s", 90_000), ("5 minutes", 300_000), ("30S", 30_000),
-            ("1d", 86_400_000), ("999999h", 3_599_996_400_000),
-            ("250 milliseconds", 250), ("2 hours 30 minutes", 9_000_000),
+            ("1m 30s", 90_000),
+            ("5 minutes", 300_000),
+            ("30S", 30_000),
+            ("1d", 86_400_000),
+            ("999999h", 3_599_996_400_000),
+            ("250 milliseconds", 250),
+            ("2 hours 30 minutes", 9_000_000),
             // Big, and each one still a number of milliseconds that fits. The
             // guard against the ones that do NOT fit must not have taken these
             // with it, and the sums have to come out to the millisecond: a
             // wrapped total is a wrong ceiling that says nothing about itself.
-            ("1000000h", 3_600_000_000_000), ("100000h 30m", 360_001_800_000),
+            ("1000000h", 3_600_000_000_000),
+            ("100000h 30m", 360_001_800_000),
             ("9999d 23h 59m 59s 999ms", 863_999_999_999),
         ] {
             assert_eq!(
@@ -972,7 +988,12 @@ mod tests {
 
     #[test]
     fn money_keeps_its_currency() {
-        let expect = |a: f64, c: &str| Some(Coerced::Money { amount: a, currency: c.into() });
+        let expect = |a: f64, c: &str| {
+            Some(Coerced::Money {
+                amount: a,
+                currency: c.into(),
+            })
+        };
         assert_eq!(check(&val("\"0.05 USD\""), &Ty::Money), expect(0.05, "USD"));
         assert_eq!(check(&val("\"USD 0.05\""), &Ty::Money), expect(0.05, "USD"));
         assert_eq!(check(&val("\"$0.05\""), &Ty::Money), expect(0.05, "USD"));
@@ -984,8 +1005,14 @@ mod tests {
 
     #[test]
     fn percentages_refuse_the_ambiguous_form() {
-        assert_eq!(check(&val("\"90%\""), &Ty::Percent), Some(Coerced::Percent(0.9)));
-        assert_eq!(check(&val("0.9"), &Ty::Percent), Some(Coerced::Percent(0.9)));
+        assert_eq!(
+            check(&val("\"90%\""), &Ty::Percent),
+            Some(Coerced::Percent(0.9))
+        );
+        assert_eq!(
+            check(&val("0.9"), &Ty::Percent),
+            Some(Coerced::Percent(0.9))
+        );
         // `90` might mean 90% or 9000%. Guessing would silently move a pass bar.
         assert_eq!(check(&val("90"), &Ty::Percent), None);
     }
@@ -996,24 +1023,46 @@ mod tests {
         // one was filtered, so `must-pass: -50%` loaded clean and a suite where
         // every case failed reported PASS. Both spellings, one range.
         for s in ["-50%", "150%", "900%", "-0.5"] {
-            assert_eq!(check(&val(&format!("\"{s}\"")), &Ty::Percent), None, "'{s}' is not a share");
+            assert_eq!(
+                check(&val(&format!("\"{s}\"")), &Ty::Percent),
+                None,
+                "'{s}' is not a share"
+            );
         }
-        assert_eq!(check(&val("\"0%\""), &Ty::Percent), Some(Coerced::Percent(0.0)));
-        assert_eq!(check(&val("\"100%\""), &Ty::Percent), Some(Coerced::Percent(1.0)));
+        assert_eq!(
+            check(&val("\"0%\""), &Ty::Percent),
+            Some(Coerced::Percent(0.0))
+        );
+        assert_eq!(
+            check(&val("\"100%\""), &Ty::Percent),
+            Some(Coerced::Percent(1.0))
+        );
     }
 
     #[test]
     fn a_size_accepts_the_spellings_a_model_card_prints() {
-        for (s, n) in [("32k", 32_000), ("128k", 128_000), ("1m", 1_000_000), ("200000", 200_000)] {
+        for (s, n) in [
+            ("32k", 32_000),
+            ("128k", 128_000),
+            ("1m", 1_000_000),
+            ("200000", 200_000),
+        ] {
             assert_eq!(
                 check(&val(&format!("\"{s}\"")), &Ty::Size),
                 Some(Coerced::Size(n)),
                 "'{s}' should be {n}"
             );
         }
-        assert_eq!(check(&val("200000"), &Ty::Size), Some(Coerced::Size(200_000)));
+        assert_eq!(
+            check(&val("200000"), &Ty::Size),
+            Some(Coerced::Size(200_000))
+        );
         for s in ["quite a lot really", "-5k", "k", "", "nan", "inf"] {
-            assert_eq!(check(&val(&format!("\"{s}\"")), &Ty::Size), None, "'{s}' is not a size");
+            assert_eq!(
+                check(&val(&format!("\"{s}\"")), &Ty::Size),
+                None,
+                "'{s}' is not a size"
+            );
         }
         // Big and still a number a model card could print — well under the top.
         assert_eq!(
@@ -1022,7 +1071,11 @@ mod tests {
         );
         // And past the top, where the cast used to saturate silently. Not
         // `None`: the spelling is the same spelling `32k` uses.
-        for s in ["99999999999999999999m", "99999999999999999999999999999", "1e300m"] {
+        for s in [
+            "99999999999999999999m",
+            "99999999999999999999999999999",
+            "1e300m",
+        ] {
             assert_eq!(
                 check(&val(&format!("\"{s}\"")), &Ty::Size),
                 Some(Coerced::SizeTooBig),
@@ -1106,7 +1159,10 @@ mod tests {
             Some(Coerced::SizeTooBig),
             "one figure, one answer, at the end where it mattered"
         );
-        assert_eq!(check(&val("10000000000000000000"), &Ty::Size), Some(Coerced::SizeTooBig));
+        assert_eq!(
+            check(&val("10000000000000000000"), &Ty::Size),
+            Some(Coerced::SizeTooBig)
+        );
     }
 
     /// The bottom of the whole-number scale, which is the mirror of
@@ -1117,7 +1173,10 @@ mod tests {
         // Ran off the bottom: refused by name, both signs.
         for s in ["1e-999", "-1e-999", "1e-400"] {
             assert!(
-                matches!(check(&val(s), &Ty::Integer), Some(Coerced::IntegerTooSmall(_))),
+                matches!(
+                    check(&val(s), &Ty::Integer),
+                    Some(Coerced::IntegerTooSmall(_))
+                ),
                 "'{s}' is a figure that vanished, not a word"
             );
         }
@@ -1126,7 +1185,10 @@ mod tests {
         // it is a number" is the true sentence about it.
         for s in ["abc", "lots", "1.5", "0.5"] {
             assert!(
-                !matches!(check(&val(s), &Ty::Integer), Some(Coerced::IntegerTooSmall(_))),
+                !matches!(
+                    check(&val(s), &Ty::Integer),
+                    Some(Coerced::IntegerTooSmall(_))
+                ),
                 "'{s}' did not run off the bottom of anything"
             );
         }
@@ -1145,7 +1207,11 @@ mod tests {
         // Past holding — `9223372036854775808` is `i64::MAX` plus one, and
         // `1e999` ran off the top of the float it was read as. Both are spelled
         // the way a whole number is spelled.
-        for (s, positive) in [("9223372036854775808", true), ("1e999", true), ("-1e999", false)] {
+        for (s, positive) in [
+            ("9223372036854775808", true),
+            ("1e999", true),
+            ("-1e999", false),
+        ] {
             match check(&val(s), &Ty::Integer) {
                 Some(Coerced::IntegerTooBig(n)) => assert_eq!(
                     n.is_sign_positive(),
@@ -1166,7 +1232,11 @@ mod tests {
         // fraction is not a whole number that ran off an end — it is the wrong
         // kind of figure, and "not a whole number" is true about it.
         for s in ["inf", "nan", "lots", "1.5"] {
-            assert_eq!(check(&val(s), &Ty::Integer), None, "'{s}' is not a whole number");
+            assert_eq!(
+                check(&val(s), &Ty::Integer),
+                None,
+                "'{s}' is not a whole number"
+            );
         }
     }
 
@@ -1175,17 +1245,30 @@ mod tests {
         // The brief's own example: MMLU > 80 && SWE-Verified > 40.
         assert_eq!(
             check(&val("\"> 80\""), &Ty::Threshold),
-            Some(Coerced::Threshold { op: Op::Gt, value: 80.0 })
+            Some(Coerced::Threshold {
+                op: Op::Gt,
+                value: 80.0
+            })
         );
         assert_eq!(
             check(&val("\">=0.8\""), &Ty::Threshold),
-            Some(Coerced::Threshold { op: Op::Ge, value: 0.8 })
+            Some(Coerced::Threshold {
+                op: Op::Ge,
+                value: 0.8
+            })
         );
         assert_eq!(
             check(&val("\"< 200\""), &Ty::Threshold),
-            Some(Coerced::Threshold { op: Op::Lt, value: 200.0 })
+            Some(Coerced::Threshold {
+                op: Op::Lt,
+                value: 200.0
+            })
         );
-        assert_eq!(check(&val("80"), &Ty::Threshold), None, "a bare number states no comparison");
+        assert_eq!(
+            check(&val("80"), &Ty::Threshold),
+            None,
+            "a bare number states no comparison"
+        );
     }
 
     #[test]
@@ -1210,7 +1293,11 @@ mod tests {
     fn a_figure_past_the_end_is_kept_and_a_word_is_not() {
         // Carried up, and infinite, so the ceiling has something to refuse.
         for s in ["1e999", "1e400"] {
-            assert_eq!(check(&val(s), &Ty::Number), Some(Coerced::Number(f64::INFINITY)), "{s}");
+            assert_eq!(
+                check(&val(s), &Ty::Number),
+                Some(Coerced::Number(f64::INFINITY)),
+                "{s}"
+            );
         }
         assert_eq!(
             check(&val("-1e999"), &Ty::Number),
@@ -1219,27 +1306,47 @@ mod tests {
         );
         assert_eq!(
             check(&val("\"> 1e999\""), &Ty::Threshold),
-            Some(Coerced::Threshold { op: Op::Gt, value: f64::INFINITY }),
+            Some(Coerced::Threshold {
+                op: Op::Gt,
+                value: f64::INFINITY
+            }),
             "a comparison is the same figure with an operator in front of it"
         );
 
         // Words. None of these overflowed anything.
         for s in ["inf", "Infinity", "nan", "-inf", ".inf", ".nan"] {
-            assert_eq!(check(&val(s), &Ty::Number), None, "'{s}' is a word, not a size");
+            assert_eq!(
+                check(&val(s), &Ty::Number),
+                None,
+                "'{s}' is a word, not a size"
+            );
         }
-        assert_eq!(check(&val("\"> inf\""), &Ty::Threshold), None, "and one type over");
+        assert_eq!(
+            check(&val("\"> inf\""), &Ty::Threshold),
+            None,
+            "and one type over"
+        );
 
         // And the ordinary numbers are exactly where they were.
         assert_eq!(check(&val("0.7"), &Ty::Number), Some(Coerced::Number(0.7)));
-        assert_eq!(check(&val("1e10"), &Ty::Number), Some(Coerced::Number(1e10)));
+        assert_eq!(
+            check(&val("1e10"), &Ty::Number),
+            Some(Coerced::Number(1e10))
+        );
         assert_eq!(check(&val("42"), &Ty::Number), Some(Coerced::Number(42.0)));
-        assert_eq!(check(&val("-3.25"), &Ty::Number), Some(Coerced::Number(-3.25)));
+        assert_eq!(
+            check(&val("-3.25"), &Ty::Number),
+            Some(Coerced::Number(-3.25))
+        );
     }
 
     #[test]
     fn one_of_is_case_insensitive_and_returns_the_canonical_spelling() {
         let ty = Ty::OneOf(vec!["careful".into(), "expert".into()]);
-        assert_eq!(check(&val("CAREFUL"), &ty), Some(Coerced::Text("careful".into())));
+        assert_eq!(
+            check(&val("CAREFUL"), &ty),
+            Some(Coerced::Text("careful".into()))
+        );
         assert_eq!(check(&val("sloppy"), &ty), None);
     }
 }

@@ -97,5 +97,8 @@ fn a_write_with_an_undo_is_not_noted() {
     for stage in ["post", "pay"] {
         assert!(!text.contains(&format!("note: '{stage}' calls")), "{text}");
     }
-    assert!(text.contains("note: 'tell-sender' calls `outlook/send-email`"), "{text}");
+    assert!(
+        text.contains("note: 'tell-sender' calls `outlook/send-email`"),
+        "{text}"
+    );
 }

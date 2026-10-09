@@ -95,7 +95,11 @@ fn spec() -> Schema {
     const SPEC: &str = include_str!("../../../spec/schema.yaml");
     let mut d = Diagnostics::new();
     let s = pact_schema::from_doc::schema_from_yaml(SPEC, &mut d);
-    assert!(!d.has_errors(), "the shipped specification does not load:\n{}", d.render());
+    assert!(
+        !d.has_errors(),
+        "the shipped specification does not load:\n{}",
+        d.render()
+    );
     s
 }
 
@@ -122,7 +126,12 @@ fn below_the_floor<'a>(d: &'a Diagnostics, written: &str) -> &'a pact_diag::Diag
     d.items()
         .iter()
         .find(|x| x.rule == "schema/below-the-floor")
-        .unwrap_or_else(|| panic!("`{written}` is not a spend cap and loaded clean:\n{}", d.render()))
+        .unwrap_or_else(|| {
+            panic!(
+                "`{written}` is not a spend cap and loaded clean:\n{}",
+                d.render()
+            )
+        })
 }
 
 /// Every way of writing an amount that is not an amount of money to spend.
@@ -139,7 +148,11 @@ fn a_spend_cap_that_is_no_money_at_all_is_refused_where_the_author_wrote_it() {
             "must name the field: {}",
             e.message
         );
-        assert!(e.message.contains(written), "must quote what was written: {}", e.message);
+        assert!(
+            e.message.contains(written),
+            "must quote what was written: {}",
+            e.message
+        );
     }
 }
 
@@ -158,7 +171,11 @@ fn the_fix_for_a_spend_cap_with_no_money_in_it_is_a_line_they_can_type() {
         // And it must carry the field's own help, the way every other floor
         // refusal does, so the author is told what the line is for as well as
         // how to spell it.
-        assert!(e.fix.contains("the most one request may cost"), "the help is missing: {}", e.fix);
+        assert!(
+            e.fix.contains("the most one request may cost"),
+            "the help is missing: {}",
+            e.fix
+        );
     }
 }
 
@@ -184,7 +201,10 @@ fn an_amount_that_is_not_an_amount_is_not_told_it_is_too_small() {
     }
     // And the other way round: a real amount that is too small keeps the
     // wording the duration floor set, so the two floors read as one rule.
-    for (written, said) in [("0 USD", "which is no money at all"), ("-5 USD", "less than nothing")] {
+    for (written, said) in [
+        ("0 USD", "which is no money at all"),
+        ("-5 USD", "less than nothing"),
+    ] {
         let d = limits(&format!("cost-per-request-under: {written}"));
         let e = below_the_floor(&d, written);
         assert!(
@@ -202,8 +222,17 @@ fn every_spelling_of_a_number_that_is_not_one_is_caught() {
     // spelling this check did not recognise would be a cap that silently
     // stopped existing.
     for written in [
-        "NaN USD", "nan USD", "NAN USD", "USD NaN", "inf USD", "-inf USD", "infinity USD",
-        "Infinity USD", "USD inf", "$NaN", "$inf",
+        "NaN USD",
+        "nan USD",
+        "NAN USD",
+        "USD NaN",
+        "inf USD",
+        "-inf USD",
+        "infinity USD",
+        "Infinity USD",
+        "USD inf",
+        "$NaN",
+        "$inf",
     ] {
         let d = limits(&format!("cost-per-request-under: {written}"));
         below_the_floor(&d, written);
@@ -311,11 +340,16 @@ fn an_amount_that_is_too_large_to_count_is_not_told_it_is_not_an_amount() {
         .find(|x| x.rule == "schema/too-much-to-count")
         .unwrap_or_else(|| panic!("`1e400 USD` is not a countable amount:\n{}", d.render()));
     assert!(
-        e.message.contains("a larger amount than this can keep track of"),
+        e.message
+            .contains("a larger amount than this can keep track of"),
         "it is a figure, and too big a one: {}",
         e.message
     );
-    assert!(e.fix.contains("any smaller amount"), "the fix points downward: {}", e.fix);
+    assert!(
+        e.fix.contains("any smaller amount"),
+        "the fix points downward: {}",
+        e.fix
+    );
     assert!(
         !d.items().iter().any(|x| x.rule == "schema/below-the-floor"),
         "nothing is under the floor and over the ceiling at once:\n{}",
@@ -334,7 +368,14 @@ fn an_amount_of_money_anybody_would_write_is_still_an_amount_of_money() {
     // The floor must not have swallowed the ordinary case, or the half-penny
     // one: `Field::at_least` is a whole number and could not have expressed
     // this bottom, which is the other reason it belongs to the type.
-    for written in ["0.05 USD", "0.0001 USD", "500 JPY", "$0.05", "USD 12", "1000000 EUR"] {
+    for written in [
+        "0.05 USD",
+        "0.0001 USD",
+        "500 JPY",
+        "$0.05",
+        "USD 12",
+        "1000000 EUR",
+    ] {
         let d = limits(&format!("cost-per-request-under: {written}"));
         assert!(!d.has_errors(), "`{written}` must load:\n{}", d.render());
     }

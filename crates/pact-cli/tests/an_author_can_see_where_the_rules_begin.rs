@@ -84,7 +84,10 @@ fn saying_where_the_rules_are_is_not_a_warning() {
 /// summary: a tree with nothing to say says nothing.
 #[test]
 fn a_skill_with_no_written_rules_is_not_mentioned() {
-    let tree = format!("{}/../../examples/answers-from-documents", env!("CARGO_MANIFEST_DIR"));
+    let tree = format!(
+        "{}/../../examples/answers-from-documents",
+        env!("CARGO_MANIFEST_DIR")
+    );
     let (code, said) = run(&["check", &tree, "--deny-warnings"]);
     assert_eq!(code, Some(0), "{said}");
     assert!(

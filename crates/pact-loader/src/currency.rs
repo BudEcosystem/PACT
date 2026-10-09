@@ -242,7 +242,8 @@ fn walk(
 /// caller has already coerced it to `Money` and a non-text money value came from
 /// a number, which is a figure by construction.
 fn has_a_figure_to_price(node: &Node) -> bool {
-    node.as_str().is_none_or(|w| crate::money::no_figure_in(w.trim()).is_none())
+    node.as_str()
+        .is_none_or(|w| crate::money::no_figure_in(w.trim()).is_none())
 }
 
 /// The refusal: what was written, what is wrong with it, and a line to type.

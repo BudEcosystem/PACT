@@ -56,7 +56,10 @@ fn example_with(name: &str, files: &[(&str, &str)]) -> String {
     copy_dir(std::path::Path::new(&example()), &dst);
     for (file, body) in files {
         let p = dst.join(file);
-        assert!(p.exists(), "fixture drifted: {file} is not in the worked example");
+        assert!(
+            p.exists(),
+            "fixture drifted: {file} is not in the worked example"
+        );
         std::fs::write(&p, body).unwrap();
     }
     dst.to_string_lossy().into_owned()
@@ -75,9 +78,15 @@ fn copy_dir(src: &std::path::Path, dst: &std::path::Path) {
 }
 
 fn check(root: &str) -> String {
-    let out = pact().args(["check", root]).output().expect("the binary runs");
+    let out = pact()
+        .args(["check", root])
+        .output()
+        .expect("the binary runs");
     let text = String::from_utf8_lossy(&out.stdout).into_owned();
-    assert!(!out.status.success(), "a file that will not parse must still be refused:\n{text}");
+    assert!(
+        !out.status.success(),
+        "a file that will not parse must still be refused:\n{text}"
+    );
     text
 }
 
@@ -89,7 +98,10 @@ fn check(root: &str) -> String {
 fn errors(rendered: &str) -> Vec<String> {
     let mut blocks: Vec<Vec<&str>> = Vec::new();
     for line in rendered.lines() {
-        if ["error: ", "warning: ", "note: "].iter().any(|k| line.starts_with(k)) {
+        if ["error: ", "warning: ", "note: "]
+            .iter()
+            .any(|k| line.starts_with(k))
+        {
             blocks.push(Vec::new());
         }
         if let Some(b) = blocks.last_mut() {
@@ -105,10 +117,9 @@ fn errors(rendered: &str) -> Vec<String> {
 
 /// The block reporting `rule`, or a failure quoting the whole report.
 fn the_one_about<'a>(blocks: &'a [String], rule: &str, text: &str) -> &'a String {
-    blocks
-        .iter()
-        .find(|b| b.contains(rule))
-        .unwrap_or_else(|| panic!("the syntax mistake itself must still be reported ({rule}):\n{text}"))
+    blocks.iter().find(|b| b.contains(rule)).unwrap_or_else(|| {
+        panic!("the syntax mistake itself must still be reported ({rule}):\n{text}")
+    })
 }
 
 /// What every syntax error owes its reader, checked in one place because both
@@ -117,9 +128,14 @@ fn the_one_about<'a>(blocks: &'a [String], rule: &str, text: &str) -> &'a String
 /// than the one it replaced.
 fn points_at_the_line(block: &str, file: &str, line: u32) {
     assert!(block.contains(file), "it must name the file:\n{block}");
-    assert!(block.contains(&format!("{file}:{line}:")), "and the line inside it:\n{block}");
     assert!(
-        block.lines().any(|l| l.trim_start().starts_with(&format!("{line} |"))),
+        block.contains(&format!("{file}:{line}:")),
+        "and the line inside it:\n{block}"
+    );
+    assert!(
+        block
+            .lines()
+            .any(|l| l.trim_start().starts_with(&format!("{line} |"))),
         "and echo that line back:\n{block}"
     );
     // The caret sits under the character the parser stopped at, so its distance
@@ -127,9 +143,11 @@ fn points_at_the_line(block: &str, file: &str, line: u32) {
     // spaces along and the duplicate-key case one. Strip the gutter and the
     // padding, and ask only that something points.
     assert!(
-        block
-            .lines()
-            .any(|l| l.trim_start().trim_start_matches('|').trim_start().starts_with('^')),
+        block.lines().any(|l| l
+            .trim_start()
+            .trim_start_matches('|')
+            .trim_start()
+            .starts_with('^')),
         "and put a caret under it:\n{block}"
     );
     assert!(
@@ -199,7 +217,10 @@ fn a_setting_written_twice_in_a_self_file_is_reported_once_and_not_also_as_absen
     nothing_is_reported_missing(&blocks, &text);
     let dup = the_one_about(&blocks, "doc/duplicate-key", &text);
     points_at_the_line(dup, "agents/fraud-checker/agent.yaml", 3);
-    assert!(dup.contains("first set here"), "and point at the other one too:\n{dup}");
+    assert!(
+        dup.contains("first set here"),
+        "and point at the other one too:\n{dup}"
+    );
     assert_eq!(blocks.len(), 1, "one mistake is one message:\n{text}");
 
     let _ = std::fs::remove_dir_all(&root);
@@ -226,21 +247,32 @@ fn a_self_file_that_will_not_parse_does_not_hide_a_mistake_in_the_file_beside_it
                  allow-egress: []\n",
             ),
             // A real, unrelated mistake: this agent has no description at all.
-            ("agents/fraud-checker/agent.yaml", "name: Fraud Checker\nuses:\n  - zendesk\n"),
+            (
+                "agents/fraud-checker/agent.yaml",
+                "name: Fraud Checker\nuses:\n  - zendesk\n",
+            ),
         ],
     );
     let text = check(&root);
     let blocks = errors(&text);
 
     assert!(
-        blocks.iter().any(|b| b.contains("An agent must have a 'description'.")),
+        blocks
+            .iter()
+            .any(|b| b.contains("An agent must have a 'description'.")),
         "the mistake in the file next to the broken one is still true:\n{text}"
     );
     assert!(
-        !blocks.iter().any(|b| b.contains("A workspace must have a 'name'.")),
+        !blocks
+            .iter()
+            .any(|b| b.contains("A workspace must have a 'name'.")),
         "and the phantom is still gone — line 1 of workspace.yaml is `name: refund-desk`:\n{text}"
     );
-    points_at_the_line(the_one_about(&blocks, "doc/yaml-syntax", &text), "workspace.yaml", 4);
+    points_at_the_line(
+        the_one_about(&blocks, "doc/yaml-syntax", &text),
+        "workspace.yaml",
+        4,
+    );
 
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -253,7 +285,10 @@ fn a_self_file_that_parses_is_still_held_to_every_setting_it_owes() {
     // still reported — and reported at the line the author can act on.
     let root = example_with(
         "still-checked",
-        &[("agents/fraud-checker/agent.yaml", "name: Fraud Checker\nuses:\n  - zendesk\n")],
+        &[(
+            "agents/fraud-checker/agent.yaml",
+            "name: Fraud Checker\nuses:\n  - zendesk\n",
+        )],
     );
     let text = check(&root);
     let blocks = errors(&text);
@@ -264,7 +299,9 @@ fn a_self_file_that_parses_is_still_held_to_every_setting_it_owes() {
         "a description that is genuinely absent is genuinely reported:\n{missing}"
     );
     assert!(
-        missing.lines().any(|l| l.trim_start().starts_with("fix: ") && l.contains("description:")),
+        missing
+            .lines()
+            .any(|l| l.trim_start().starts_with("fix: ") && l.contains("description:")),
         "O7.3: with a line to type:\n{missing}"
     );
     assert_eq!(blocks.len(), 1, "and still only the one:\n{text}");

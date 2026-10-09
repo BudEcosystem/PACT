@@ -970,7 +970,7 @@ impl<'a> Flow<'a> {
             conditions::of_shape(&self.shape_of_path(frames, n)?.shape)
         };
         for when in workflows::list(lines) {
-            let left = when.get("value").and_then(&kind);
+            let left = when.get("value").and_then(kind);
             conditions::line(when, Position::Elsewhere, left, &kind, diags);
         }
     }

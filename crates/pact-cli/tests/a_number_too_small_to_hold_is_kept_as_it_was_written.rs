@@ -482,7 +482,9 @@ fn a_count_of_tokens_that_underflowed_is_refused_rather_than_read_as_none() {
     for written in ["1e-999", "1e-999m"] {
         let root = workspace(
             "size-underflow",
-            &format!("needs:\n  because: it has to read a long thread.\n  context-at-least: {written}\n"),
+            &format!(
+                "needs:\n  because: it has to read a long thread.\n  context-at-least: {written}\n"
+            ),
         );
         let (ok, text) = checked(&root);
         assert!(
@@ -513,7 +515,9 @@ fn a_count_of_tokens_that_underflowed_is_refused_rather_than_read_as_none() {
     for written in ["0", "0k", "32k", "200000"] {
         let root = workspace(
             "size-honest",
-            &format!("needs:\n  because: it has to read a long thread.\n  context-at-least: {written}\n"),
+            &format!(
+                "needs:\n  because: it has to read a long thread.\n  context-at-least: {written}\n"
+            ),
         );
         let (ok, text) = checked(&root);
         assert!(ok, "`{written}` must still load:\n{text}");
@@ -541,7 +545,9 @@ fn a_size_that_rounds_to_no_tokens_is_not_told_its_figure_vanished() {
     for written in ["0.0000001k", "0.0004k", "0.0009k", "\"0.5\"", "\"0.9\""] {
         let root = workspace(
             "size-floor",
-            &format!("needs:\n  because: it has to read a long thread.\n  context-at-least: {written}\n"),
+            &format!(
+                "needs:\n  because: it has to read a long thread.\n  context-at-least: {written}\n"
+            ),
         );
         let (ok, text) = checked(&root);
         assert!(!ok, "`{written}` is a context window of nothing:\n{text}");
@@ -822,10 +828,22 @@ fn a_share_of_the_whole_that_underflowed_is_refused_too() {
     // MEANT is zero with nothing lost — `0%`, `0.0`, `0.00%` and `0.0e10%` carry
     // no non-zero figure — and `0.0000001%` is `1e-9`, held exactly, so it never
     // underflowed anything and is not this.
-    for written in ["0%", "0.0", "0", "0.00%", "0.0e10%", "0.0000001%", "70%", "0.7"] {
+    for written in [
+        "0%",
+        "0.0",
+        "0",
+        "0.00%",
+        "0.0e10%",
+        "0.0000001%",
+        "70%",
+        "0.7",
+    ] {
         let root = suite("pct-honest", written);
         let (ok, text) = checked(&root);
-        assert!(ok, "`must-pass: {written}` is a share somebody meant:\n{text}");
+        assert!(
+            ok,
+            "`must-pass: {written}` is a share somebody meant:\n{text}"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 }

@@ -150,15 +150,24 @@ mod tests {
             first_clause("when to run — plain words like `weekday mornings at 9`, or a cron line"),
             "when to run"
         );
-        assert_eq!(first_clause("who it goes to next, when the line above says escalate"), "who it goes to next");
-        assert_eq!(first_clause("how long they have. Once that time is up"), "how long they have");
+        assert_eq!(
+            first_clause("who it goes to next, when the line above says escalate"),
+            "who it goes to next"
+        );
+        assert_eq!(
+            first_clause("how long they have. Once that time is up"),
+            "how long they have"
+        );
     }
 
     #[test]
     fn help_written_across_several_lines_becomes_one_line() {
         // The schema folds every help with `>`, so the string arrives with
         // newlines in it and a diagnostic must not.
-        assert_eq!(first_clause("who it\n  goes to\n  next. And then"), "who it goes to next");
+        assert_eq!(
+            first_clause("who it\n  goes to\n  next. And then"),
+            "who it goes to next"
+        );
     }
 
     #[test]
@@ -186,7 +195,11 @@ mod tests {
             "when the clock should start a run",
             "the deadline for an answer",
         ] {
-            assert_eq!(why_not_quotable(good), None, "\"{good}\" should be quotable");
+            assert_eq!(
+                why_not_quotable(good),
+                None,
+                "\"{good}\" should be quotable"
+            );
         }
     }
 
@@ -194,13 +207,22 @@ mod tests {
     fn a_paragraph_is_refused_even_when_it_opens_correctly() {
         let long = "which of the many settings on this kind the person answering is expected to \
                     read before they decide anything at all";
-        assert!(why_not_quotable(long).is_some(), "a paragraph is not a name");
+        assert!(
+            why_not_quotable(long).is_some(),
+            "a paragraph is not a name"
+        );
     }
 
     #[test]
     fn the_reason_a_name_is_refused_is_something_a_person_can_act_on() {
         let why = why_not_quotable("with `enough-of-them`").expect("refused");
-        assert!(why.contains("'with'"), "must name the word that broke it: {why}");
-        assert!(why.contains("nothing says with"), "must show the sentence it would make: {why}");
+        assert!(
+            why.contains("'with'"),
+            "must name the word that broke it: {why}"
+        );
+        assert!(
+            why.contains("nothing says with"),
+            "must show the sentence it would make: {why}"
+        );
     }
 }

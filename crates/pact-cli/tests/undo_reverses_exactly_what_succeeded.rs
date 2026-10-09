@@ -39,7 +39,10 @@ fn check(label: &str, edits: &[(&str, &str, &str)]) -> (bool, String) {
     for (file, from, to) in edits {
         let p = dst.join(file);
         let text = std::fs::read_to_string(&p).unwrap();
-        assert!(text.contains(from), "fixture drifted: {from:?} not in {file}");
+        assert!(
+            text.contains(from),
+            "fixture drifted: {from:?} not in {file}"
+        );
         std::fs::write(&p, text.replacen(from, to, 1)).unwrap();
     }
     let out = Command::new(env!("CARGO_BIN_EXE_pact"))
@@ -82,7 +85,10 @@ fn an_undo_that_only_reads_is_refused() {
         ),
         "{text}"
     );
-    assert!(text.contains("rule: loader/an-undo-that-does-not-fit"), "{text}");
+    assert!(
+        text.contains("rule: loader/an-undo-that-does-not-fit"),
+        "{text}"
+    );
 }
 
 #[test]
@@ -120,7 +126,10 @@ fn an_undo_whose_inputs_the_write_cannot_fill_is_refused_and_both_are_shown() {
             "    takes: { envelope-id: money }\n",
         )],
     );
-    assert!(!ok && text.contains("rule: loader/an-undo-that-does-not-fit"), "{text}");
+    assert!(
+        !ok && text.contains("rule: loader/an-undo-that-does-not-fit"),
+        "{text}"
+    );
 }
 
 #[test]
@@ -207,7 +216,10 @@ fn a_status_check_is_a_read_the_calls_own_inputs_fill() {
         ),
         "{text}"
     );
-    assert!(text.contains("rule: loader/a-status-check-that-does-not-fit"), "{text}");
+    assert!(
+        text.contains("rule: loader/a-status-check-that-does-not-fit"),
+        "{text}"
+    );
     let (ok, text) = check(
         "status-unfit",
         &[(
@@ -225,14 +237,17 @@ fn a_status_check_is_a_read_the_calls_own_inputs_fill() {
         "{text}"
     );
     assert!(
-        text.contains("fix: Name a read whose `takes:` is filled from `account`, `site` (its inputs)."),
+        text.contains(
+            "fix: Name a read whose `takes:` is filled from `account`, `site` (its inputs)."
+        ),
         "{text}"
     );
 }
 
 #[test]
 fn a_failure_plan_undoes_a_stage_and_chooses_items_only_on_an_each() {
-    let envelope = "    bind: { agreement: steps.contract.agreement, signers: steps.contract.signers }\n";
+    let envelope =
+        "    bind: { agreement: steps.contract.agreement, signers: steps.contract.signers }\n";
     let (ok, text) = check(
         "plan-undo",
         &[(

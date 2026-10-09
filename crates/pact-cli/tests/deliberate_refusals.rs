@@ -74,7 +74,10 @@ fn the_specification_records_what_it_refuses() {
         ("the developer console", "4,754"),
         ("running author code to check it", "Failed to execute the"),
     ] {
-        assert!(text.contains(evidence), "the refusal of {what} has lost its evidence ({evidence:?})");
+        assert!(
+            text.contains(evidence),
+            "the refusal of {what} has lost its evidence ({evidence:?})"
+        );
     }
 }
 
@@ -88,11 +91,19 @@ fn every_up_front_refusal_says_what_eve_ships_why_pact_declines_and_what_to_do_i
     let text = page();
     let sections: Vec<&str> = text.split("\n### ").skip(1).collect();
     let up_front: Vec<&&str> = sections.iter().filter(|s| s.starts_with("1.")).collect();
-    assert_eq!(up_front.len(), 4, "§1 must carry exactly the four refusals the design took up front");
+    assert_eq!(
+        up_front.len(),
+        4,
+        "§1 must carry exactly the four refusals the design took up front"
+    );
 
     for s in up_front {
         let title = s.lines().next().unwrap_or("");
-        for part in ["**What Eve ships.**", "**Why PACT declines.**", "**What to do instead.**"] {
+        for part in [
+            "**What Eve ships.**",
+            "**Why PACT declines.**",
+            "**What to do instead.**",
+        ] {
             assert!(s.contains(part), "§{title} is missing {part}");
         }
     }
@@ -101,15 +112,33 @@ fn every_up_front_refusal_says_what_eve_ships_why_pact_declines_and_what_to_do_i
 #[test]
 fn every_refusal_in_the_ledger_carries_a_reason_and_a_replacement() {
     let rows = ledger();
-    assert!(rows.len() >= 12, "only {} refusals recorded — the ledger has gone stale", rows.len());
+    assert!(
+        rows.len() >= 12,
+        "only {} refusals recorded — the ledger has gone stale",
+        rows.len()
+    );
 
     for row in &rows {
-        assert_eq!(row.len(), 5, "a ledger row is #, refusal, because, instead, where: {row:?}");
+        assert_eq!(
+            row.len(),
+            5,
+            "a ledger row is #, refusal, because, instead, where: {row:?}"
+        );
         let id = &row[0];
         // A reason that fits in a handful of words is a label, not a reason.
-        assert!(row[2].split_whitespace().count() >= 8, "{id}: the reason is too short to be one: {:?}", row[2]);
-        assert!(!row[3].is_empty(), "{id}: nothing offered in place of what was refused");
-        assert!(!row[4].is_empty(), "{id}: no pointer to where the refusal is argued");
+        assert!(
+            row[2].split_whitespace().count() >= 8,
+            "{id}: the reason is too short to be one: {:?}",
+            row[2]
+        );
+        assert!(
+            !row[3].is_empty(),
+            "{id}: nothing offered in place of what was refused"
+        );
+        assert!(
+            !row[4].is_empty(),
+            "{id}: no pointer to where the refusal is argued"
+        );
     }
 }
 
@@ -134,7 +163,12 @@ fn no_refusal_is_explained_by_saying_it_was_not_needed() {
     for row in ledger() {
         let because = row[2].to_lowercase();
         for phrase in RESTATEMENTS {
-            assert!(!because.contains(phrase), "{}: {phrase:?} is a restatement, not a reason: {:?}", row[0], row[2]);
+            assert!(
+                !because.contains(phrase),
+                "{}: {phrase:?} is a restatement, not a reason: {:?}",
+                row[0],
+                row[2]
+            );
         }
     }
 }
@@ -157,7 +191,12 @@ fn no_capability_is_answered_with_experts_write_code_for_that() {
     for row in ledger() {
         let instead = row[3].to_lowercase();
         for escape in ESCAPES {
-            assert!(!instead.contains(escape), "{}: {escape:?} is not an answer a non-coder can take: {:?}", row[0], row[3]);
+            assert!(
+                !instead.contains(escape),
+                "{}: {escape:?} is not an answer a non-coder can take: {:?}",
+                row[0],
+                row[3]
+            );
         }
     }
 }
@@ -176,14 +215,23 @@ fn every_ledger_row_points_at_something_that_exists() {
             } else {
                 format!("## {reference}. ")
             };
-            assert!(text.contains(&heading), "{id} points at §{reference}, which is not a heading here");
+            assert!(
+                text.contains(&heading),
+                "{id} points at §{reference}, which is not a heading here"
+            );
         }
         // "§2 (G5)" must land on a real row of the mechanism table.
         for mechanism in mechanism_refs(target) {
-            assert!(text.contains(&format!("**{mechanism}**")), "{id} points at {mechanism}, which is not in the mechanism table");
+            assert!(
+                text.contains(&format!("**{mechanism}**")),
+                "{id} points at {mechanism}, which is not in the mechanism table"
+            );
         }
         if target.contains("spec/schema.yaml") {
-            assert!(repo().join("spec/schema.yaml").exists(), "{id} points at a specification file that is not there");
+            assert!(
+                repo().join("spec/schema.yaml").exists(),
+                "{id} points at a specification file that is not there"
+            );
         }
     }
 }
@@ -193,7 +241,10 @@ fn section_refs(cell: &str) -> Vec<String> {
     let mut rest = cell;
     while let Some(at) = rest.find('§') {
         rest = &rest['§'.len_utf8() + at..];
-        let n: String = rest.chars().take_while(|c| c.is_ascii_digit() || *c == '.').collect();
+        let n: String = rest
+            .chars()
+            .take_while(|c| c.is_ascii_digit() || *c == '.')
+            .collect();
         let n = n.trim_end_matches('.').to_string();
         if !n.is_empty() {
             out.push(n);
@@ -215,17 +266,44 @@ fn the_reasons_read_without_programming_knowledge() {
     // lead has to be able to read why a thing is absent, because they are the
     // person most likely to ask for it back.
     const JARGON: &[&str] = &[
-        "enum", "enums", "serde", "deserialize", "deserialise", "unwrap", "trait", "traits",
-        "struct", "structs", "stdout", "stderr", "regex", "async", "await", "mutex",
-        "callback", "closure", "idempotent", "polymorphic", "nullable", "abi",
+        "enum",
+        "enums",
+        "serde",
+        "deserialize",
+        "deserialise",
+        "unwrap",
+        "trait",
+        "traits",
+        "struct",
+        "structs",
+        "stdout",
+        "stderr",
+        "regex",
+        "async",
+        "await",
+        "mutex",
+        "callback",
+        "closure",
+        "idempotent",
+        "polymorphic",
+        "nullable",
+        "abi",
     ];
     for row in ledger() {
         for cell in [&row[2], &row[3]] {
             for word in JARGON {
-                assert!(!says_word(cell, word), "{}: '{word}' assumes programming knowledge: {cell:?}", row[0]);
+                assert!(
+                    !says_word(cell, word),
+                    "{}: '{word}' assumes programming knowledge: {cell:?}",
+                    row[0]
+                );
             }
             for phrase in ["stack trace", "null pointer", "type error"] {
-                assert!(!cell.to_lowercase().contains(phrase), "{}: '{phrase}' assumes programming knowledge: {cell:?}", row[0]);
+                assert!(
+                    !cell.to_lowercase().contains(phrase),
+                    "{}: '{phrase}' assumes programming knowledge: {cell:?}",
+                    row[0]
+                );
             }
         }
     }
@@ -245,7 +323,11 @@ fn a_deferral_is_kept_apart_from_a_refusal() {
         "§6 must point at the list that holds the re-admission conditions"
     );
     for row in ledger() {
-        assert!(!row[4].contains("§6"), "{}: a deferral must not be recorded as a refusal", row[0]);
+        assert!(
+            !row[4].contains("§6"),
+            "{}: a deferral must not be recorded as a refusal",
+            row[0]
+        );
     }
 }
 
@@ -255,12 +337,18 @@ fn the_three_categories_are_each_given_a_way_to_be_checked() {
     // can decide, for a capability in front of them, which of the three it is —
     // otherwise "no fourth category" is unfalsifiable.
     let text = page();
-    assert!(text.contains("No fourth category"), "the clause the page serves must be quoted in it");
+    assert!(
+        text.contains("No fourth category"),
+        "the clause the page serves must be quoted in it"
+    );
     for artifact in [
-        "spec/schema.yaml",                              // (a)
-        "PACT DECLARES a port",                          // (b) — the schema saying so itself
-        "crates/pact-cli/tests/deliberate_refusals.rs",  // (c) — this file
+        "spec/schema.yaml",                             // (a)
+        "PACT DECLARES a port",                         // (b) — the schema saying so itself
+        "crates/pact-cli/tests/deliberate_refusals.rs", // (c) — this file
     ] {
-        assert!(text.contains(artifact), "no way given to check a category: {artifact} is not named");
+        assert!(
+            text.contains(artifact),
+            "no way given to check a category: {artifact} is not named"
+        );
     }
 }

@@ -25,7 +25,8 @@ use pact_loader::Loader;
 use pact_schema::Schema;
 
 fn tree() -> Utf8PathBuf {
-    Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/trees/an-agent-built-on-another")
+    Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/trees/an-agent-built-on-another")
 }
 
 /// The shipped specification, read from the file rather than restated.
@@ -119,7 +120,9 @@ fn the_derived_agent_carries_neither_based_on_nor_base() {
 fn the_description_is_the_patterns_sentence() {
     let (doc, _) = resolved();
     assert_eq!(
-        agent(&doc, "refunds").get("description").and_then(Node::as_str),
+        agent(&doc, "refunds")
+            .get("description")
+            .and_then(Node::as_str),
         Some("The shape of a desk — a spend cap and a stop rule — for real desks to be based on."),
         "refunds writes no `description:` — it is the pattern's, inherited"
     );

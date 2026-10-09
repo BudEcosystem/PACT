@@ -44,20 +44,23 @@
 
 use camino::Utf8Path;
 use pact_doc::{Value, parse_yaml};
-use pact_schema::coerce::{Coerced, SCORE_TOLERANCE, check};
 use pact_schema::Ty;
+use pact_schema::coerce::{Coerced, SCORE_TOLERANCE, check};
 
 /// The table both ports are held to.
 fn table() -> pact_doc::Node {
-    let path = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../spec/comparisons.yaml");
-    let text = std::fs::read_to_string(&path)
-        .expect("spec/comparisons.yaml is part of the repository");
+    let path = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/comparisons.yaml");
+    let text =
+        std::fs::read_to_string(&path).expect("spec/comparisons.yaml is part of the repository");
     parse_yaml(&text, &path).expect("spec/comparisons.yaml parses")
 }
 
 fn text_at(node: &pact_doc::Node, key: &str) -> String {
-    match &node.get(key).unwrap_or_else(|| panic!("every row states '{key}'")).value {
+    match &node
+        .get(key)
+        .unwrap_or_else(|| panic!("every row states '{key}'"))
+        .value
+    {
         Value::Str(s) => s.clone(),
         other => panic!("'{key}' is written as quoted text, not {other:?}"),
     }
@@ -89,7 +92,11 @@ fn the_tolerance_is_the_one_the_specification_states() {
 #[test]
 fn every_comparison_in_the_table_is_decided_the_way_the_table_says() {
     let doc = table();
-    let rows = match &doc.get("cases").expect("spec/comparisons.yaml states `cases:`").value {
+    let rows = match &doc
+        .get("cases")
+        .expect("spec/comparisons.yaml states `cases:`")
+        .value
+    {
         Value::List(rows) => rows.clone(),
         other => panic!("`cases:` is a list, not {other:?}"),
     };
@@ -108,7 +115,8 @@ fn every_comparison_in_the_table_is_decided_the_way_the_table_says() {
         let expected = text_at(row, "holds") == "yes";
         let because = text_at(row, "because");
 
-        let Some(Coerced::Threshold { op, value }) = check(&scalar(&written), &Ty::Threshold) else {
+        let Some(Coerced::Threshold { op, value }) = check(&scalar(&written), &Ty::Threshold)
+        else {
             panic!(
                 "the checker cannot read '{written}' as a comparison at all, and \
                  spec/comparisons.yaml says an author may write it"

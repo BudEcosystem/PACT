@@ -29,7 +29,10 @@ fn pact() -> Command {
 }
 
 fn tree() -> String {
-    format!("{}/../../tests/trees/handing-work-to-a-named-agent", env!("CARGO_MANIFEST_DIR"))
+    format!(
+        "{}/../../tests/trees/handing-work-to-a-named-agent",
+        env!("CARGO_MANIFEST_DIR")
+    )
 }
 
 fn run(args: &[&str]) -> (Option<i32>, String, String) {
@@ -48,7 +51,10 @@ fn broken(name: &str, edits: &[(&str, &str, &str)]) -> String {
     for (file, from, to) in edits {
         let p = dst.join(file);
         let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-        assert!(text.contains(from), "fixture drifted: {from:?} not found in {file}");
+        assert!(
+            text.contains(from),
+            "fixture drifted: {from:?} not found in {file}"
+        );
         std::fs::write(&p, text.replace(from, to)).unwrap();
     }
     dst.to_string_lossy().into_owned()
@@ -74,7 +80,11 @@ fn copy_dir(src: &std::path::Path, dst: &std::path::Path) {
 #[test]
 fn a_workspace_that_can_answer_the_question_it_asks_says_nothing() {
     let (code, out, err) = run(&["check", &tree(), "--deny-warnings"]);
-    assert_eq!(code, Some(0), "this is the shape the feature is FOR:\n{out}{err}");
+    assert_eq!(
+        code,
+        Some(0),
+        "this is the shape the feature is FOR:\n{out}{err}"
+    );
 }
 
 /// A name nothing can be handed to.
@@ -92,15 +102,25 @@ fn asking_for_an_agent_no_agent_here_could_be_is_said_out_loud() {
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
     assert_eq!(code, Some(0), "a half-written tree still loads:\n{said}");
-    assert!(said.contains("loader/a-name-nothing-can-be-handed-to"), "{said}");
-    assert!(said.contains("takes-this-one"), "name the line that asks:\n{said}");
+    assert!(
+        said.contains("loader/a-name-nothing-can-be-handed-to"),
+        "{said}"
+    );
+    assert!(
+        said.contains("takes-this-one"),
+        "name the line that asks:\n{said}"
+    );
     assert!(
         said.contains("asks-itself-at-most"),
         "and the line that would make an agent handable:\n{said}"
     );
 
     let (strict, _, _) = run(&["check", &dst, "--deny-warnings"]);
-    assert_eq!(strict, Some(1), "and it has teeth for whoever asks for them");
+    assert_eq!(
+        strict,
+        Some(1),
+        "and it has teeth for whoever asks for them"
+    );
     let _ = std::fs::remove_dir_all(&dst);
 }
 
@@ -119,8 +139,16 @@ fn a_base_is_not_an_agent_a_name_can_be_handed_to() {
         &[
             // The `team:` line goes too: a base named as a teammate is already
             // refused by its own door, and this test is about the OTHER one.
-            ("agents/dispatcher/agent.yaml", "team:\n  worker: does the work when nobody was named for this request.\n", ""),
-            ("agents/worker/agent.yaml", "description: Does the work.", "base: yes\ndescription: Does the work."),
+            (
+                "agents/dispatcher/agent.yaml",
+                "team:\n  worker: does the work when nobody was named for this request.\n",
+                "",
+            ),
+            (
+                "agents/worker/agent.yaml",
+                "description: Does the work.",
+                "base: yes\ndescription: Does the work.",
+            ),
         ],
     );
     let (code, out, err) = run(&["check", &dst]);
@@ -141,7 +169,11 @@ fn a_base_is_not_an_agent_a_name_can_be_handed_to() {
 fn a_workspace_that_asks_for_no_such_name_is_never_told_about_it() {
     let dst = broken(
         "no-shape",
-        &[("agents/dispatcher/agent.yaml", "run-inputs:\n  takes-this-one: agent\n", "")],
+        &[(
+            "agents/dispatcher/agent.yaml",
+            "run-inputs:\n  takes-this-one: agent\n",
+            "",
+        )],
     );
     let (code, out, err) = run(&["check", &dst, "--deny-warnings"]);
     let said = format!("{out}{err}");

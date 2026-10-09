@@ -85,7 +85,10 @@ fn workspace(name: &str, loop_text: &str) -> String {
 
 fn check(root: &str) -> (bool, String) {
     let out = pact().args(["check", root]).output().expect("runs");
-    (out.status.success(), String::from_utf8_lossy(&out.stdout).into_owned())
+    (
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+    )
 }
 
 #[test]
@@ -104,20 +107,41 @@ fn a_stage_no_path_from_starts_at_ever_reaches_is_named_at_check_time() {
     // and the author's own command. Nothing is constructed here — the loop is
     // read off the tree by the loader, which is the only thing that proves the
     // line the author typed reaches the rule.
-    let root = workspace("unreachable", &CAREFUL.replace("starts-at: gather", "starts-at: reply"));
+    let root = workspace(
+        "unreachable",
+        &CAREFUL.replace("starts-at: gather", "starts-at: reply"),
+    );
     let (ok, text) = check(&root);
-    assert!(!ok, "an unreachable stage must be refused, not reported clean:\n{text}");
+    assert!(
+        !ok,
+        "an unreachable stage must be refused, not reported clean:\n{text}"
+    );
 
-    assert!(text.contains("loops/careful.yaml:"), "must name the file and line: {text}");
-    assert!(text.contains("gather") && text.contains("re-read"), "must name both stages: {text}");
+    assert!(
+        text.contains("loops/careful.yaml:"),
+        "must name the file and line: {text}"
+    );
+    assert!(
+        text.contains("gather") && text.contains("re-read"),
+        "must name both stages: {text}"
+    );
     assert!(
         text.contains("Nothing in this loop ever sends the agent to"),
         "must say plainly why: {text}"
     );
     // Typeable, both ways out: start there, or route there.
-    assert!(text.contains("`starts-at: gather`"), "the fix must be a line to type: {text}");
-    assert!(text.contains("`answered: gather`"), "and the other line to type: {text}");
-    assert!(text.contains("delete them"), "and the honest third option: {text}");
+    assert!(
+        text.contains("`starts-at: gather`"),
+        "the fix must be a line to type: {text}"
+    );
+    assert!(
+        text.contains("`answered: gather`"),
+        "and the other line to type: {text}"
+    );
+    assert!(
+        text.contains("delete them"),
+        "and the honest third option: {text}"
+    );
 }
 
 #[test]
@@ -125,26 +149,49 @@ fn two_stages_nothing_reaches_are_one_problem_to_fix_and_not_two() {
     // Same collapse `note_companions`/`report_companions` do for a repeated
     // companion complaint: the reader has one edit to make, so they get one
     // sentence and a pointer at the rest.
-    let root = workspace("collapsed", &CAREFUL.replace("starts-at: gather", "starts-at: reply"));
+    let root = workspace(
+        "collapsed",
+        &CAREFUL.replace("starts-at: gather", "starts-at: reply"),
+    );
     let (_, text) = check(&root);
     assert_eq!(
-        text.matches("Nothing in this loop ever sends the agent to").count(),
+        text.matches("Nothing in this loop ever sends the agent to")
+            .count(),
         1,
         "the sentence must not be repeated per stage:\n{text}"
     );
-    assert!(text.contains("is never reached either"), "the rest are related lines: {text}");
-    assert!(text.contains("1 problem(s) found"), "and it counts as one problem: {text}");
+    assert!(
+        text.contains("is never reached either"),
+        "the rest are related lines: {text}"
+    );
+    assert!(
+        text.contains("1 problem(s) found"),
+        "and it counts as one problem: {text}"
+    );
 }
 
 #[test]
 fn the_refusal_of_an_unreachable_stage_uses_no_words_a_non_coder_would_have_to_look_up() {
-    let root = workspace("plain", &CAREFUL.replace("starts-at: gather", "starts-at: reply"));
+    let root = workspace(
+        "plain",
+        &CAREFUL.replace("starts-at: gather", "starts-at: reply"),
+    );
     let (_, text) = check(&root);
     let lower = text.to_lowercase();
     for jargon in [
-        "reachab", "graph", "node", "traversal", "unreachable", "orphan", "cycle", "vertex",
+        "reachab",
+        "graph",
+        "node",
+        "traversal",
+        "unreachable",
+        "orphan",
+        "cycle",
+        "vertex",
         "dead code",
     ] {
-        assert!(!lower.contains(jargon), "diagnostic leaked '{jargon}':\n{text}");
+        assert!(
+            !lower.contains(jargon),
+            "diagnostic leaked '{jargon}':\n{text}"
+        );
     }
 }

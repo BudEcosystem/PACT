@@ -39,7 +39,10 @@ fn broken(name: &str, file: &str, from: &str, to: &str) -> String {
     copy(std::path::Path::new(&example()), &dst);
     let p = dst.join(file);
     let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-    assert!(text.contains(from), "fixture drifted: {from:?} not in {file}");
+    assert!(
+        text.contains(from),
+        "fixture drifted: {from:?} not in {file}"
+    );
     std::fs::write(&p, text.replace(from, to)).unwrap();
     dst.to_string_lossy().into_owned()
 }
@@ -48,7 +51,11 @@ fn copy(src: &std::path::Path, dst: &std::path::Path) {
     std::fs::create_dir_all(dst).unwrap();
     for e in std::fs::read_dir(src).unwrap().flatten() {
         let (s, d) = (e.path(), dst.join(e.file_name()));
-        if s.is_dir() { copy(&s, &d) } else { std::fs::copy(&s, &d).map(|_| ()).unwrap() }
+        if s.is_dir() {
+            copy(&s, &d)
+        } else {
+            std::fs::copy(&s, &d).map(|_| ()).unwrap()
+        }
     }
 }
 
@@ -70,7 +77,10 @@ fn the_shipped_example_says_where_every_one_of_its_tools_reaches() {
     // server, so nothing here has anything to say about them.
     let (said, ok) = checked(&example());
     assert!(ok, "the worked example must still load cleanly:\n{said}");
-    assert!(!said.contains("reaches"), "nothing to say about a correct tree:\n{said}");
+    assert!(
+        !said.contains("reaches"),
+        "nothing to say about a correct tree:\n{said}"
+    );
 }
 
 #[test]
@@ -78,10 +88,21 @@ fn a_tool_with_no_line_saying_where_it_reaches_is_refused_before_anything_runs()
     // Reproduced before this check existed: this exact edit printed
     // "OK — … loaded cleanly (491 settings)." and exited 0, and a run then
     // answered every refund with `error: no tool named 'payments'`.
-    let root = broken("nowhere", "tools/payments.yaml", "connect: payments-server", "");
+    let root = broken(
+        "nowhere",
+        "tools/payments.yaml",
+        "connect: payments-server",
+        "",
+    );
     let (said, ok) = checked(&root);
-    assert!(!ok, "a tool that can never run must not load cleanly:\n{said}");
-    assert!(said.contains("tools/payments.yaml"), "the file is named:\n{said}");
+    assert!(
+        !ok,
+        "a tool that can never run must not load cleanly:\n{said}"
+    );
+    assert!(
+        said.contains("tools/payments.yaml"),
+        "the file is named:\n{said}"
+    );
     assert!(
         said.contains("no `connect:`, no `url:` and no `says:`"),
         "which of the three are present is what the author has to know:\n{said}"
@@ -92,7 +113,10 @@ fn a_tool_with_no_line_saying_where_it_reaches_is_refused_before_anything_runs()
     );
     // The fix has to be a line that can be typed, not a description of one.
     for typeable in ["connect: ", "url: ", "method: post", "says: "] {
-        assert!(said.contains(typeable), "the fix must offer {typeable:?}:\n{said}");
+        assert!(
+            said.contains(typeable),
+            "the fix must offer {typeable:?}:\n{said}"
+        );
     }
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -109,10 +133,22 @@ fn a_tool_naming_two_places_to_reach_is_refused_and_both_lines_are_shown() {
         "connect: payments-server\nurl: host/payments-api\nmethod: post",
     );
     let (said, ok) = checked(&root);
-    assert!(!ok, "two ways to reach is an unanswered question, not a setting:\n{said}");
-    assert!(said.contains("tools/payments.yaml"), "the file is named:\n{said}");
-    assert!(said.contains("`connect:` and `url:`"), "both are named:\n{said}");
-    assert!(said.contains("already set here"), "the first line is shown beside the second:\n{said}");
+    assert!(
+        !ok,
+        "two ways to reach is an unanswered question, not a setting:\n{said}"
+    );
+    assert!(
+        said.contains("tools/payments.yaml"),
+        "the file is named:\n{said}"
+    );
+    assert!(
+        said.contains("`connect:` and `url:`"),
+        "both are named:\n{said}"
+    );
+    assert!(
+        said.contains("already set here"),
+        "the first line is shown beside the second:\n{said}"
+    );
     assert!(said.contains("Delete `url:`"), "a typeable fix:\n{said}");
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -130,9 +166,18 @@ fn a_tool_calling_an_address_with_nothing_saying_which_kind_of_call_is_refused()
         "url: host/payments-api",
     );
     let (said, ok) = checked(&root);
-    assert!(!ok, "an address with no kind of call cannot be made:\n{said}");
-    assert!(said.contains("'url' is set, but 'method' is not."), "{said}");
-    assert!(said.contains("get, post, put, patch, delete"), "the choices are offered:\n{said}");
+    assert!(
+        !ok,
+        "an address with no kind of call cannot be made:\n{said}"
+    );
+    assert!(
+        said.contains("'url' is set, but 'method' is not."),
+        "{said}"
+    );
+    assert!(
+        said.contains("get, post, put, patch, delete"),
+        "the choices are offered:\n{said}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -149,9 +194,18 @@ fn the_word_that_used_to_stand_in_front_of_the_three_is_no_longer_a_setting() {
         "runs-as: connected-system\nconnect: payments-server",
     );
     let (said, ok) = checked(&root);
-    assert!(!ok, "a setting the specification has not got must be refused:\n{said}");
-    assert!(said.contains("runs-as"), "the word the author typed is quoted back:\n{said}");
-    assert!(said.contains("tools/payments.yaml"), "the file is named:\n{said}");
+    assert!(
+        !ok,
+        "a setting the specification has not got must be refused:\n{said}"
+    );
+    assert!(
+        said.contains("runs-as"),
+        "the word the author typed is quoted back:\n{said}"
+    );
+    assert!(
+        said.contains("tools/payments.yaml"),
+        "the file is named:\n{said}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -168,6 +222,9 @@ fn a_tool_that_puts_its_question_to_a_model_needs_no_server_at_all() {
         "says: Decide whether this refund is within policy.",
     );
     let (said, ok) = checked(&root);
-    assert!(ok, "one way to reach is enough, whichever one it is:\n{said}");
+    assert!(
+        ok,
+        "one way to reach is enough, whichever one it is:\n{said}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }

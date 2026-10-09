@@ -195,7 +195,10 @@ impl Node {
             Value::File(f) => f.path.len() + f.content_type.len() + f.digest.len(),
             Value::Payload(p) => {
                 p.root.len()
-                    + p.files.iter().map(|f| f.path.len() + f.content_type.len()).sum::<usize>()
+                    + p.files
+                        .iter()
+                        .map(|f| f.path.len() + f.content_type.len())
+                        .sum::<usize>()
             }
             _ => 0,
         }
@@ -232,14 +235,19 @@ impl Node {
             Value::Float(f) => serde_json::Number::from_f64(*f).map_or(J::Null, J::Number),
             Value::Str(s) => J::String(s.clone()),
             Value::List(items) => J::Array(items.iter().map(Node::to_json).collect()),
-            Value::Map(m) => {
-                J::Object(m.iter().map(|(k, e)| (k.clone(), e.node.to_json())).collect())
-            }
+            Value::Map(m) => J::Object(
+                m.iter()
+                    .map(|(k, e)| (k.clone(), e.node.to_json()))
+                    .collect(),
+            ),
             Value::File(f) => file_ref_json(f),
             Value::Payload(p) => {
                 let mut o = serde_json::Map::new();
                 o.insert("$payload".into(), J::String(p.root.clone()));
-                o.insert("files".into(), J::Array(p.files.iter().map(file_ref_json).collect()));
+                o.insert(
+                    "files".into(),
+                    J::Array(p.files.iter().map(file_ref_json).collect()),
+                );
                 J::Object(o)
             }
         }
@@ -249,8 +257,14 @@ impl Node {
 fn file_ref_json(f: &FileRef) -> serde_json::Value {
     let mut o = serde_json::Map::new();
     o.insert("$file".into(), serde_json::Value::String(f.path.clone()));
-    o.insert("contentType".into(), serde_json::Value::String(f.content_type.clone()));
-    o.insert("sizeBytes".into(), serde_json::Value::Number(f.size_bytes.into()));
+    o.insert(
+        "contentType".into(),
+        serde_json::Value::String(f.content_type.clone()),
+    );
+    o.insert(
+        "sizeBytes".into(),
+        serde_json::Value::Number(f.size_bytes.into()),
+    );
     if !f.digest.is_empty() {
         o.insert("digest".into(), serde_json::Value::String(f.digest.clone()));
     }
@@ -294,7 +308,13 @@ mod tests {
         let leaf = Node::str("x", sp());
         let inner = Node::list(vec![leaf.clone(), leaf.clone()], sp());
         let mut m = Map::new();
-        m.insert("a".into(), Entry { key_span: sp(), node: inner });
+        m.insert(
+            "a".into(),
+            Entry {
+                key_span: sp(),
+                node: inner,
+            },
+        );
         let root = Node::map(m, sp());
 
         assert_eq!(root.depth(), 3); // map -> list -> str
@@ -317,7 +337,10 @@ mod tests {
         assert_eq!(j["sizeBytes"], 2048);
         // The fingerprint of the contents, and never the contents.
         assert_eq!(j["digest"], "b".repeat(64));
-        assert!(j.get("data").is_none(), "binary payloads must never be inlined");
+        assert!(
+            j.get("data").is_none(),
+            "binary payloads must never be inlined"
+        );
     }
 
     #[test]
@@ -327,6 +350,10 @@ mod tests {
             root.insert(k, sp(), Node::str(k, sp()));
         }
         let keys: Vec<_> = root.as_map().unwrap().keys().map(String::as_str).collect();
-        assert_eq!(keys, vec!["zebra", "apple", "mango"], "D18: diffs must stay meaningful");
+        assert_eq!(
+            keys,
+            vec!["zebra", "apple", "mango"],
+            "D18: diffs must stay meaningful"
+        );
     }
 }

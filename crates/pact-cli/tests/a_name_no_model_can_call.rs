@@ -74,7 +74,10 @@ fn copy_dir(src: &Path, dst: &Path) {
 fn edit(root: &Path, file: &str, from: &str, to: &str) {
     let p = root.join(file);
     let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-    assert!(text.contains(from), "the worked example drifted: {from:?} not in {file}");
+    assert!(
+        text.contains(from),
+        "the worked example drifted: {from:?} not in {file}"
+    );
     std::fs::write(&p, text.replace(from, to)).unwrap();
 }
 
@@ -82,10 +85,14 @@ fn edit(root: &Path, file: &str, from: &str, to: &str) {
 /// not read as "struct". Borrowed from `deliberate_refusals.rs`, which holds the
 /// refusal ledger to the same bar.
 fn says_word(haystack: &str, word: &str) -> bool {
-    let words: Vec<&str> =
-        haystack.split(|c: char| !c.is_ascii_alphanumeric()).filter(|s| !s.is_empty()).collect();
-    let wanted: Vec<&str> =
-        word.split(|c: char| !c.is_ascii_alphanumeric()).filter(|s| !s.is_empty()).collect();
+    let words: Vec<&str> = haystack
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|s| !s.is_empty())
+        .collect();
+    let wanted: Vec<&str> = word
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|s| !s.is_empty())
+        .collect();
     words.windows(wanted.len().max(1)).any(|w| w == wanted)
 }
 
@@ -106,11 +113,19 @@ fn a_tool_whose_file_name_has_a_space_in_it_is_refused_at_check_time() {
     // Exactly the two lines an author types to add a tool: the file, and the
     // `uses:` line that puts it in front of the model.
     std::fs::write(root.join("tools/Get Weather.yaml"), WEATHER).unwrap();
-    edit(root.as_path(), "agents/refund-desk/agent.yaml", "  - refund-policy", "  - refund-policy\n  - Get Weather");
+    edit(
+        root.as_path(),
+        "agents/refund-desk/agent.yaml",
+        "  - refund-policy",
+        "  - refund-policy\n  - Get Weather",
+    );
 
     let (ok, said) = check(&root);
 
-    assert!(!ok, "a name every provider refuses must not pass `pact check`:\n{said}");
+    assert!(
+        !ok,
+        "a name every provider refuses must not pass `pact check`:\n{said}"
+    );
     // By this mechanism and not by a neighbouring one. `pact check` grew several
     // loader walks this round and a test that only asks "was it refused" would
     // go on passing with this one deleted.
@@ -118,10 +133,16 @@ fn a_tool_whose_file_name_has_a_space_in_it_is_refused_at_check_time() {
         said.contains("rule: loader/name-a-model-cannot-call"),
         "the name check must be what fired:\n{said}"
     );
-    assert!(said.contains("'Get Weather'"), "name what is wrong:\n{said}");
+    assert!(
+        said.contains("'Get Weather'"),
+        "name what is wrong:\n{said}"
+    );
     // The file and the line, which is the whole point of doing this in the
     // loader rather than at run time in another language.
-    assert!(said.contains("Get Weather.yaml:"), "name the file and the line:\n{said}");
+    assert!(
+        said.contains("Get Weather.yaml:"),
+        "name the file and the line:\n{said}"
+    );
     // A typeable fix that spells the corrected name, in BOTH places the author
     // has to retype it. "Use a valid name" is a dead end for a reader who cannot
     // look the rule up.
@@ -142,20 +163,46 @@ fn a_teammate_whose_folder_name_has_a_capital_letter_is_refused_at_check_time() 
     // lowers `tools:` keys, and `harness.py` puts both in the one list the model
     // chooses a name out of.
     let root = copy_of_the_example("teammate-with-a-capital");
-    std::fs::rename(root.join("agents/fraud-checker"), root.join("agents/Fraud Checker")).unwrap();
-    edit(root.as_path(), "agents/refund-desk/agent.yaml", "  fraud-checker: Looks", "  Fraud Checker: Looks");
-    edit(root.as_path(), "agents/refund-desk/teamwork.yaml", "  fraud-checker: 40%", "  Fraud Checker: 40%");
+    std::fs::rename(
+        root.join("agents/fraud-checker"),
+        root.join("agents/Fraud Checker"),
+    )
+    .unwrap();
+    edit(
+        root.as_path(),
+        "agents/refund-desk/agent.yaml",
+        "  fraud-checker: Looks",
+        "  Fraud Checker: Looks",
+    );
+    edit(
+        root.as_path(),
+        "agents/refund-desk/teamwork.yaml",
+        "  fraud-checker: 40%",
+        "  Fraud Checker: 40%",
+    );
 
     let (ok, said) = check(&root);
 
-    assert!(!ok, "a teammate the model cannot name must be refused:\n{said}");
+    assert!(
+        !ok,
+        "a teammate the model cannot name must be refused:\n{said}"
+    );
     assert!(
         said.contains("rule: loader/name-a-model-cannot-call"),
         "the name check must be what fired:\n{said}"
     );
-    assert!(said.contains("'Fraud Checker'"), "name what is wrong:\n{said}");
-    assert!(said.contains("capital letter"), "say why, in the author's own terms:\n{said}");
-    assert!(said.contains("agent.yaml:"), "name the file and the line:\n{said}");
+    assert!(
+        said.contains("'Fraud Checker'"),
+        "name what is wrong:\n{said}"
+    );
+    assert!(
+        said.contains("capital letter"),
+        "say why, in the author's own terms:\n{said}"
+    );
+    assert!(
+        said.contains("agent.yaml:"),
+        "name the file and the line:\n{said}"
+    );
     assert!(
         said.contains("Rename the folder to `agents/fraud-checker`"),
         "an agent is a folder — say so, and spell it:\n{said}"
@@ -181,13 +228,28 @@ fn one_bad_name_produces_one_message_and_not_one_per_line_that_uses_it() {
     // which is how every other check in this loader reports a mistake written in
     // more than one place.
     let root = copy_of_the_example("said-once");
-    std::fs::rename(root.join("agents/fraud-checker"), root.join("agents/Fraud Checker")).unwrap();
-    edit(root.as_path(), "agents/refund-desk/agent.yaml", "  fraud-checker: Looks", "  Fraud Checker: Looks");
-    edit(root.as_path(), "agents/refund-desk/teamwork.yaml", "  fraud-checker: 40%", "  Fraud Checker: 40%");
+    std::fs::rename(
+        root.join("agents/fraud-checker"),
+        root.join("agents/Fraud Checker"),
+    )
+    .unwrap();
+    edit(
+        root.as_path(),
+        "agents/refund-desk/agent.yaml",
+        "  fraud-checker: Looks",
+        "  Fraud Checker: Looks",
+    );
+    edit(
+        root.as_path(),
+        "agents/refund-desk/teamwork.yaml",
+        "  fraud-checker: 40%",
+        "  Fraud Checker: 40%",
+    );
 
     let (_, said) = check(&root);
     assert_eq!(
-        said.matches("rule: loader/name-a-model-cannot-call").count(),
+        said.matches("rule: loader/name-a-model-cannot-call")
+            .count(),
         1,
         "one mistake gets one message:\n{said}"
     );
@@ -213,14 +275,38 @@ fn nothing_the_name_check_says_assumes_programming_knowledge() {
     // vocabulary, because the rule really is a regular expression.
     let root = copy_of_the_example("jargon");
     std::fs::write(root.join("tools/Get Weather.yaml"), WEATHER).unwrap();
-    edit(root.as_path(), "agents/refund-desk/agent.yaml", "  - refund-policy", "  - refund-policy\n  - Get Weather");
+    edit(
+        root.as_path(),
+        "agents/refund-desk/agent.yaml",
+        "  - refund-policy",
+        "  - refund-policy\n  - Get Weather",
+    );
 
     let (_, said) = check(&root);
     let text = said.to_lowercase();
     for word in [
-        "regex", "regular expression", "identifier", "string", "ascii", "alphanumeric", "slug",
-        "enum", "variant", "deserialize", "serde", "unwrap", "panic", "trait", "struct", "vec",
-        "option", "hashmap", "stack trace", "api", "endpoint", "400",
+        "regex",
+        "regular expression",
+        "identifier",
+        "string",
+        "ascii",
+        "alphanumeric",
+        "slug",
+        "enum",
+        "variant",
+        "deserialize",
+        "serde",
+        "unwrap",
+        "panic",
+        "trait",
+        "struct",
+        "vec",
+        "option",
+        "hashmap",
+        "stack trace",
+        "api",
+        "endpoint",
+        "400",
     ] {
         assert!(
             !says_word(&text, word),
@@ -238,16 +324,35 @@ fn retyping_what_the_fix_says_leaves_the_workspace_loading_cleanly() {
     // says, literally, and asks the binary again.
     let root = copy_of_the_example("retyped");
     std::fs::write(root.join("tools/Get Weather.yaml"), WEATHER).unwrap();
-    edit(root.as_path(), "agents/refund-desk/agent.yaml", "  - refund-policy", "  - refund-policy\n  - Get Weather");
+    edit(
+        root.as_path(),
+        "agents/refund-desk/agent.yaml",
+        "  - refund-policy",
+        "  - refund-policy\n  - Get Weather",
+    );
     let (ok, said) = check(&root);
-    assert!(!ok, "the mistake has to be there before the fix means anything:\n{said}");
+    assert!(
+        !ok,
+        "the mistake has to be there before the fix means anything:\n{said}"
+    );
 
     // Exactly the two things the fix names, and nothing else.
-    std::fs::rename(root.join("tools/Get Weather.yaml"), root.join("tools/get-weather.yaml"))
-        .unwrap();
-    edit(root.as_path(), "agents/refund-desk/agent.yaml", "  - Get Weather", "  - get-weather");
+    std::fs::rename(
+        root.join("tools/Get Weather.yaml"),
+        root.join("tools/get-weather.yaml"),
+    )
+    .unwrap();
+    edit(
+        root.as_path(),
+        "agents/refund-desk/agent.yaml",
+        "  - Get Weather",
+        "  - get-weather",
+    );
 
     let (ok, said) = check(&root);
-    assert!(ok, "doing what the fix says must end the problem, not move it:\n{said}");
+    assert!(
+        ok,
+        "doing what the fix says must end the problem, not move it:\n{said}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }

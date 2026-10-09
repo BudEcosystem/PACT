@@ -40,7 +40,10 @@ fn example_with(name: &str, file: &str, body: &str) -> String {
     let _ = std::fs::remove_dir_all(&dst);
     copy_dir(std::path::Path::new(&example()), &dst);
     let p = dst.join(file);
-    assert!(p.exists(), "fixture drifted: {file} is not in the worked example");
+    assert!(
+        p.exists(),
+        "fixture drifted: {file} is not in the worked example"
+    );
     std::fs::write(&p, body).unwrap();
     dst.to_string_lossy().into_owned()
 }
@@ -71,9 +74,15 @@ fn copy_dir(src: &std::path::Path, dst: &std::path::Path) {
 }
 
 fn check(root: &str) -> String {
-    let out = pact().args(["check", root]).output().expect("the binary runs");
+    let out = pact()
+        .args(["check", root])
+        .output()
+        .expect("the binary runs");
     let text = String::from_utf8_lossy(&out.stdout).into_owned();
-    assert!(!out.status.success(), "an unfinished file must still be refused:\n{text}");
+    assert!(
+        !out.status.success(),
+        "an unfinished file must still be refused:\n{text}"
+    );
     text
 }
 
@@ -82,7 +91,10 @@ fn check(root: &str) -> String {
 fn problems_in(rendered: &str, file: &str) -> Vec<String> {
     let mut blocks: Vec<Vec<&str>> = Vec::new();
     for line in rendered.lines() {
-        if ["error: ", "warning: ", "note: "].iter().any(|k| line.starts_with(k)) {
+        if ["error: ", "warning: ", "note: "]
+            .iter()
+            .any(|k| line.starts_with(k))
+        {
             blocks.push(Vec::new());
         }
         if let Some(b) = blocks.last_mut() {
@@ -101,7 +113,10 @@ fn problems_in(rendered: &str, file: &str) -> Vec<String> {
 /// never typed is never mentioned.
 fn only_what_is_missing(text: &str, file: &str, must_name: &str) {
     let mine = problems_in(text, file);
-    assert!(!mine.is_empty(), "an unfinished file must be reported at all:\n{text}");
+    assert!(
+        !mine.is_empty(),
+        "an unfinished file must be reported at all:\n{text}"
+    );
     assert!(
         mine.iter().any(|b| b.contains(must_name)),
         "the report has to say what is missing ({must_name}):\n{}",
@@ -207,8 +222,14 @@ fn a_markdown_self_file_whose_fences_are_not_settings_names_no_invented_setting(
         mine[0]
     );
     for block in &mine {
-        assert!(!block.contains("'content'"), "still no invented setting name:\n{block}");
-        assert!(!block.contains("Remove it"), "still nothing to remove:\n{block}");
+        assert!(
+            !block.contains("'content'"),
+            "still no invented setting name:\n{block}"
+        );
+        assert!(
+            !block.contains("Remove it"),
+            "still nothing to remove:\n{block}"
+        );
     }
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -235,14 +256,25 @@ fn a_self_file_that_is_neither_settings_nor_prose_is_told_what_it_should_be() {
         .iter()
         .find(|b| b.contains("loader/self-file-not-settings"))
         .unwrap_or_else(|| panic!("a file that is not settings must be named as such:\n{text}"));
-    assert!(named.contains("agent.yaml"), "it must name the file:\n{named}");
-    assert!(named.contains("a list"), "and say what it is instead:\n{named}");
     assert!(
-        named.lines().any(|l| l.trim_start().starts_with("fix: ") && l.contains("description:")),
+        named.contains("agent.yaml"),
+        "it must name the file:\n{named}"
+    );
+    assert!(
+        named.contains("a list"),
+        "and say what it is instead:\n{named}"
+    );
+    assert!(
+        named
+            .lines()
+            .any(|l| l.trim_start().starts_with("fix: ") && l.contains("description:")),
         "O7.3: and give a line the author can type:\n{named}"
     );
     for block in &mine {
-        assert!(!block.contains("'content'"), "still no invented setting name:\n{block}");
+        assert!(
+            !block.contains("'content'"),
+            "still no invented setting name:\n{block}"
+        );
     }
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -265,7 +297,11 @@ fn a_procedure_written_as_plain_prose_is_not_mistaken_for_an_unfinished_file() {
     let text = check(&root);
     let mine = problems_in(&text, "skills/refund-policy/SKILL.md");
     assert_eq!(mine.len(), 1, "only the description is missing:\n{text}");
-    assert!(mine[0].contains("'description'"), "and that is what it says:\n{}", mine[0]);
+    assert!(
+        mine[0].contains("'description'"),
+        "and that is what it says:\n{}",
+        mine[0]
+    );
     assert!(
         !mine[0].contains("self-file-not-settings"),
         "prose is a shape a self file is allowed to be:\n{}",

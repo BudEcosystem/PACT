@@ -38,7 +38,10 @@ fn repo() -> std::path::PathBuf {
 }
 
 fn example() -> String {
-    repo().join("examples/refund-desk").to_string_lossy().into_owned()
+    repo()
+        .join("examples/refund-desk")
+        .to_string_lossy()
+        .into_owned()
 }
 
 /// Copy the example and apply one edit, returning the temp root.
@@ -48,7 +51,10 @@ fn broken(name: &str, file: &str, from: &str, to: &str) -> String {
     copy(std::path::Path::new(&example()), &dst);
     let p = dst.join(file);
     let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-    assert!(text.contains(from), "fixture drifted: {from:?} not in {file}");
+    assert!(
+        text.contains(from),
+        "fixture drifted: {from:?} not in {file}"
+    );
     std::fs::write(&p, text.replace(from, to)).unwrap();
     dst.to_string_lossy().into_owned()
 }
@@ -57,7 +63,11 @@ fn copy(src: &std::path::Path, dst: &std::path::Path) {
     std::fs::create_dir_all(dst).unwrap();
     for e in std::fs::read_dir(src).unwrap().flatten() {
         let (s, d) = (e.path(), dst.join(e.file_name()));
-        if s.is_dir() { copy(&s, &d) } else { std::fs::copy(&s, &d).map(|_| ()).unwrap() }
+        if s.is_dir() {
+            copy(&s, &d)
+        } else {
+            std::fs::copy(&s, &d).map(|_| ()).unwrap()
+        }
     }
 }
 
@@ -78,7 +88,8 @@ fn the_worked_example_says_what_to_write_down_and_still_loads_cleanly() {
     );
 
     let shown = pact().args(["show", &example()]).output().expect("runs");
-    let doc: serde_json::Value = serde_json::from_slice(&shown.stdout).expect("`pact show` is JSON");
+    let doc: serde_json::Value =
+        serde_json::from_slice(&shown.stdout).expect("`pact show` is JSON");
     let watch = &doc["watch"]["tool-calls"];
     assert_eq!(watch["when"], "step.tool.completed", "{doc:#}");
     assert_eq!(watch["writes-to"], "tool-calls.jsonl", "{doc:#}");
@@ -92,19 +103,44 @@ fn a_watch_that_names_a_moment_that_does_not_exist_is_refused_where_the_author_t
     // language, in a process the author never starts. `type: event-address`
     // closed that for the half that changes things; this holds it closed for the
     // half that watches.
-    let root = broken("bad-address", "watch/tool-calls.yaml", "step.tool.completed", "turn.answer.after");
+    let root = broken(
+        "bad-address",
+        "watch/tool-calls.yaml",
+        "step.tool.completed",
+        "turn.answer.after",
+    );
     let out = pact().args(["check", &root]).output().expect("runs");
     let text = String::from_utf8_lossy(&out.stdout);
 
-    assert!(!out.status.success(), "a watch on a moment that does not exist must be refused:\n{text}");
-    assert!(text.contains("watch/tool-calls.yaml:"), "must name the file and line:\n{text}");
+    assert!(
+        !out.status.success(),
+        "a watch on a moment that does not exist must be refused:\n{text}"
+    );
+    assert!(
+        text.contains("watch/tool-calls.yaml:"),
+        "must name the file and line:\n{text}"
+    );
     assert!(text.contains("  fix: "), "must offer a fix:\n{text}");
     // The fix names every word that IS a thing that happens, plus the author's
     // own escape — otherwise the author is refused and stuck.
-    for thing in ["message", "reasoning", "tool", "approval", "compaction", "stage", "limit"] {
-        assert!(text.contains(thing), "the fix must offer '{thing}':\n{text}");
+    for thing in [
+        "message",
+        "reasoning",
+        "tool",
+        "approval",
+        "compaction",
+        "stage",
+        "limit",
+    ] {
+        assert!(
+            text.contains(thing),
+            "the fix must offer '{thing}':\n{text}"
+        );
     }
-    assert!(text.contains("x-"), "the fix must mention the author's own prefix:\n{text}");
+    assert!(
+        text.contains("x-"),
+        "the fix must mention the author's own prefix:\n{text}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -123,13 +159,27 @@ fn a_watch_on_a_well_formed_address_that_nothing_ever_reaches_is_refused_too() {
     // Closed with DATA, not a branch: `reaches:` sits beside `parts:` on the
     // field in `spec/schema.yaml`, so the next moment a run starts emitting is
     // one line of YAML in the same file as the vocabulary it is spelled from.
-    let root = broken("unreachable", "watch/tool-calls.yaml", "step.tool.completed", "session.tool.completed");
+    let root = broken(
+        "unreachable",
+        "watch/tool-calls.yaml",
+        "step.tool.completed",
+        "session.tool.completed",
+    );
     let out = pact().args(["check", &root]).output().expect("runs");
     let text = String::from_utf8_lossy(&out.stdout);
 
-    assert!(!out.status.success(), "a watch nothing ever reaches must be refused:\n{text}");
-    assert!(text.contains("watch/tool-calls.yaml:"), "must name the file and line:\n{text}");
-    assert!(text.contains("rule: schema/nothing-happens-there"), "{text}");
+    assert!(
+        !out.status.success(),
+        "a watch nothing ever reaches must be refused:\n{text}"
+    );
+    assert!(
+        text.contains("watch/tool-calls.yaml:"),
+        "must name the file and line:\n{text}"
+    );
+    assert!(
+        text.contains("rule: schema/nothing-happens-there"),
+        "{text}"
+    );
     // The moments that same THING really has — a short list an author can act
     // on, not the whole lattice.
     assert!(
@@ -179,7 +229,10 @@ fn the_moments_a_watch_may_name_are_the_ones_the_harness_really_emits() {
         .map(str::to_string)
         .collect();
 
-    assert!(!emitted.is_empty(), "nothing parsed out of watches.py — it changed shape");
+    assert!(
+        !emitted.is_empty(),
+        "nothing parsed out of watches.py — it changed shape"
+    );
     assert_eq!(
         listed, emitted,
         "the schema and the harness disagree about which moments a run reaches"
@@ -207,19 +260,37 @@ fn the_observe_half_is_checked_by_the_same_tool_and_the_same_rule_as_the_change_
                 } else if t.starts_with("error: ") || t.starts_with("warning: ") {
                     a_note = false;
                 }
-                (!a_note).then(|| t.starts_with("rule: ").then(|| t.to_string())).flatten()
+                (!a_note)
+                    .then(|| t.starts_with("rule: ").then(|| t.to_string()))
+                    .flatten()
             })
             .unwrap_or_else(|| panic!("no rule named in:\n{text}"))
     };
 
-    let watched = broken("same-rule-w", "watch/tool-calls.yaml", "step.tool.completed", "turn.answer.after");
+    let watched = broken(
+        "same-rule-w",
+        "watch/tool-calls.yaml",
+        "step.tool.completed",
+        "turn.answer.after",
+    );
     let a = pact().args(["check", &watched]).output().unwrap();
-    let intercepted =
-        broken("same-rule-i", "interceptors/redact-card-numbers.yaml", "step.message.before", "turn.answer.after");
+    let intercepted = broken(
+        "same-rule-i",
+        "interceptors/redact-card-numbers.yaml",
+        "step.message.before",
+        "turn.answer.after",
+    );
     let b = pact().args(["check", &intercepted]).output().unwrap();
 
-    let (a, b) = (String::from_utf8_lossy(&a.stdout), String::from_utf8_lossy(&b.stdout));
-    assert_eq!(rule_of(&a), rule_of(&b), "one mistake, two rule names:\n{a}\n{b}");
+    let (a, b) = (
+        String::from_utf8_lossy(&a.stdout),
+        String::from_utf8_lossy(&b.stdout),
+    );
+    assert_eq!(
+        rule_of(&a),
+        rule_of(&b),
+        "one mistake, two rule names:\n{a}\n{b}"
+    );
     assert_eq!(rule_of(&a), "rule: schema/not-a-moment");
     let _ = std::fs::remove_dir_all(&watched);
     let _ = std::fs::remove_dir_all(&intercepted);
@@ -239,7 +310,9 @@ fn the_address_vocabulary_is_written_once_and_the_watching_kind_points_at_it() {
     // the list out again.
     let schema = std::fs::read_to_string(repo().join("spec/schema.yaml")).unwrap();
     assert_eq!(
-        schema.matches("part: [session, turn, step, action]").count(),
+        schema
+            .matches("part: [session, turn, step, action]")
+            .count(),
         1,
         "the address vocabulary is written more than once"
     );
@@ -267,14 +340,19 @@ fn watching_a_run_is_offered_to_a_beginner_and_changing_one_is_not() {
     let text = std::fs::read_to_string(repo().join("spec/schema.yaml")).unwrap();
     let doc = pact_doc::parse_yaml(&text, camino::Utf8Path::new("spec/schema.yaml"))
         .expect("the specification parses");
-    let groups = doc.get("groups").and_then(pact_doc::Node::as_map).expect("groups:");
+    let groups = doc
+        .get("groups")
+        .and_then(pact_doc::Node::as_map)
+        .expect("groups:");
 
     let fields_of = |group: &str| -> &pact_doc::Map {
         groups
             .get(group)
             .and_then(|g| g.node.get("fields"))
             .and_then(pact_doc::Node::as_map)
-            .unwrap_or_else(|| panic!("no `{group}` group — apply the schema edit from needs_wiring"))
+            .unwrap_or_else(|| {
+                panic!("no `{group}` group — apply the schema edit from needs_wiring")
+            })
     };
     let says = |group: &str, field: &str, want: &str| -> String {
         fields_of(group)
@@ -285,18 +363,42 @@ fn watching_a_run_is_offered_to_a_beginner_and_changing_one_is_not() {
             .to_string()
     };
 
-    assert_eq!(says("workspace", "watch", "tier"), "core", "watching is the beginner's half");
-    assert_eq!(says("workspace", "interceptors", "tier"), "expert", "changing things is not");
+    assert_eq!(
+        says("workspace", "watch", "tier"),
+        "core",
+        "watching is the beginner's half"
+    );
+    assert_eq!(
+        says("workspace", "interceptors", "tier"),
+        "expert",
+        "changing things is not"
+    );
 
     let watch = fields_of("watch");
-    assert!(watch.len() >= 3, "a watch needs a description, a moment and a destination");
+    assert!(
+        watch.len() >= 3,
+        "a watch needs a description, a moment and a destination"
+    );
     for name in watch.keys() {
-        assert_eq!(says("watch", name, "tier"), "core", "watch.{name} is not a beginner's field");
-        assert!(!says("watch", name, "help").trim().is_empty(), "watch.{name} has no help");
-        assert!(!says("watch", name, "surface").trim().is_empty(), "watch.{name} has no surface");
+        assert_eq!(
+            says("watch", name, "tier"),
+            "core",
+            "watch.{name} is not a beginner's field"
+        );
+        assert!(
+            !says("watch", name, "help").trim().is_empty(),
+            "watch.{name} has no help"
+        );
+        assert!(
+            !says("watch", name, "surface").trim().is_empty(),
+            "watch.{name} has no surface"
+        );
     }
     // And there is no `may:` on it — the absence IS the guarantee. A watch with
     // a power list would be an interceptor, and the one word that turned it into
     // one would be typed into a document nobody thought needed reviewing.
-    assert!(watch.get("may").is_none(), "a watch must have nothing it `may` do");
+    assert!(
+        watch.get("may").is_none(),
+        "a watch must have nothing it `may` do"
+    );
 }

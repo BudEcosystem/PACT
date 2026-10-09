@@ -35,7 +35,10 @@ fn edited(name: &str, edits: &[(&str, &str, &str)]) -> String {
     for (file, from, to) in edits {
         let p = dst.join(file);
         let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-        assert!(text.contains(from), "fixture drifted: {from:?} not found in {file}");
+        assert!(
+            text.contains(from),
+            "fixture drifted: {from:?} not found in {file}"
+        );
         std::fs::write(&p, text.replace(from, to)).unwrap();
     }
     dst.to_string_lossy().into_owned()
@@ -79,8 +82,8 @@ fn a_hosted_model_this_distribution_prices_can_be_named_by_the_author() {
         ],
     );
     let out = pact().args(["check", &root]).output().unwrap();
-    let said = String::from_utf8_lossy(&out.stdout).to_string()
-        + &String::from_utf8_lossy(&out.stderr);
+    let said =
+        String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr);
     assert!(
         out.status.success(),
         "a model this distribution publishes a price for must be nameable:\n{said}"
@@ -103,11 +106,14 @@ fn the_hosted_rows_added_for_price_are_still_refused_where_nothing_may_leave_the
         )],
     );
     let out = pact().args(["check", &root]).output().unwrap();
-    let said = String::from_utf8_lossy(&out.stdout).to_string()
-        + &String::from_utf8_lossy(&out.stderr);
+    let said =
+        String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr);
     assert!(!out.status.success(), "it loaded clean:\n{said}");
     assert!(said.contains(PRICED_ELSEWHERE), "name the model:\n{said}");
-    assert!(said.contains("allow-egress"), "name the line to change:\n{said}");
+    assert!(
+        said.contains("allow-egress"),
+        "name the line to change:\n{said}"
+    );
     assert!(
         said.contains("qwen2.5-7b-instruct"),
         "and offer a model that runs here:\n{said}"

@@ -30,7 +30,11 @@ fn spec() -> pact_schema::Schema {
     const SPEC: &str = include_str!("../../../spec/schema.yaml");
     let mut d = pact_diag::Diagnostics::new();
     let s = pact_schema::from_doc::schema_from_yaml(SPEC, &mut d);
-    assert!(!d.has_errors(), "the shipped specification does not load:\n{}", d.render());
+    assert!(
+        !d.has_errors(),
+        "the shipped specification does not load:\n{}",
+        d.render()
+    );
     s
 }
 
@@ -62,8 +66,15 @@ fn reaching(name: &str, egress: &str, address: &str) -> std::path::PathBuf {
 }
 
 fn check(root: &std::path::Path) -> String {
-    let out = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
-    format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr))
+    let out = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
+    format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    )
 }
 
 #[test]
@@ -74,7 +85,10 @@ fn a_tool_that_reaches_the_internet_is_refused_when_nothing_may_leave() {
         text.contains("loader/reaches-outside-the-box"),
         "the door that needs no resource file must be refused:\n{text}"
     );
-    assert!(text.contains("vendor.example.com"), "the message names the address:\n{text}");
+    assert!(
+        text.contains("vendor.example.com"),
+        "the message names the address:\n{text}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -84,7 +98,10 @@ fn an_address_the_host_resolves_is_not_something_leaving_the_box() {
     // make `allow-egress: []` mean "no tools at all" rather than "nothing
     // leaves", and the flagship would stop loading.
     let root = reaching("hostrel", "[]", "host/vendor-upload");
-    let out = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
+    let out = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
     assert!(
         out.status.success(),
         "a name the runtime looks up is not egress:\n{}",
@@ -101,11 +118,17 @@ fn the_fix_it_offers_leaves_a_tree_that_checks_clean() {
     assert!(told.contains("Add `tools` to `allow-egress:`"), "{told}");
 
     let allowed = reaching("allowed", "[tools]", "https://vendor.example.com/upload");
-    let a = pact().args(["check", allowed.to_str().unwrap()]).output().expect("runs");
+    let a = pact()
+        .args(["check", allowed.to_str().unwrap()])
+        .output()
+        .expect("runs");
     assert!(a.status.success(), "{}", String::from_utf8_lossy(&a.stdout));
 
     let rewritten = reaching("rewritten", "[]", "host/vendor-upload");
-    let b = pact().args(["check", rewritten.to_str().unwrap()]).output().expect("runs");
+    let b = pact()
+        .args(["check", rewritten.to_str().unwrap()])
+        .output()
+        .expect("runs");
     assert!(b.status.success(), "{}", String::from_utf8_lossy(&b.stdout));
 
     for p in [root, allowed, rewritten] {
@@ -121,7 +144,11 @@ fn a_workspace_that_drew_no_boundary_is_not_given_one() {
     let _ = std::fs::remove_dir_all(&dst);
     std::fs::create_dir_all(dst.join("agents/desk")).unwrap();
     std::fs::create_dir_all(dst.join("tools")).unwrap();
-    std::fs::write(dst.join("workspace.yaml"), "name: Probe\ndescription: A probe.\n").unwrap();
+    std::fs::write(
+        dst.join("workspace.yaml"),
+        "name: Probe\ndescription: A probe.\n",
+    )
+    .unwrap();
     std::fs::write(
         dst.join("agents/desk/agent.yaml"),
         "name: Desk\ndescription: Uploads.\ninstructions: Upload it.\nuses: [vendor]\n",
@@ -133,8 +160,15 @@ fn a_workspace_that_drew_no_boundary_is_not_given_one() {
          method: post\nactions:\n  upload:\n    description: Sends it.\n",
     )
     .unwrap();
-    let out = pact().args(["check", dst.to_str().unwrap()]).output().expect("runs");
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stdout));
+    let out = pact()
+        .args(["check", dst.to_str().unwrap()])
+        .output()
+        .expect("runs");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
     let _ = std::fs::remove_dir_all(&dst);
 }
 

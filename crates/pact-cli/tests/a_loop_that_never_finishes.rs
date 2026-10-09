@@ -54,7 +54,10 @@ fn edited(name: &str, edits: &[(&str, &str, &str)]) -> String {
     for (file, from, to) in edits {
         let p = dst.join(file);
         let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-        assert!(text.contains(from), "fixture drifted: {from:?} not found in {file}");
+        assert!(
+            text.contains(from),
+            "fixture drifted: {from:?} not found in {file}"
+        );
         std::fs::write(&p, text.replace(from, to)).unwrap();
     }
     dst.to_string_lossy().into_owned()
@@ -89,25 +92,55 @@ fn a_loop_no_path_of_which_reaches_done_is_refused_before_it_burns_a_budget() {
     let out = pact().args(["check", &root]).output().expect("runs");
     let text = String::from_utf8_lossy(&out.stdout);
 
-    assert!(!out.status.success(), "a loop that cannot end must not load cleanly:\n{text}");
-    assert!(text.contains("rule: loader/loop-that-never-finishes"), "{text}");
-    assert!(text.contains("loops/careful.yaml:"), "must name the file and line: {text}");
-    assert!(text.contains("the loop 'careful'"), "must name the loop: {text}");
+    assert!(
+        !out.status.success(),
+        "a loop that cannot end must not load cleanly:\n{text}"
+    );
+    assert!(
+        text.contains("rule: loader/loop-that-never-finishes"),
+        "{text}"
+    );
+    assert!(
+        text.contains("loops/careful.yaml:"),
+        "must name the file and line: {text}"
+    );
+    assert!(
+        text.contains("the loop 'careful'"),
+        "must name the loop: {text}"
+    );
     // The caret lands on a line the author can see is wrong, not on the file.
-    assert!(text.contains("answered: reply"), "must show the line: {text}");
+    assert!(
+        text.contains("answered: reply"),
+        "must show the line: {text}"
+    );
     // What it costs, in the terms a support lead has: not "no terminal state".
     // Both halves measured on this very tree — 4 model calls became 12, and all
     // three `when-it-runs-out:` actions came back carrying the ceiling.
     assert!(text.contains("goes round again"), "{text}");
     assert!(text.contains("paid for over and over"), "{text}");
-    assert!(text.contains("ran out rather than that it finished"), "{text}");
+    assert!(
+        text.contains("ran out rather than that it finished"),
+        "{text}"
+    );
     // And the fix is a line to change, with the stage to change it in.
-    assert!(text.contains("Change one of these lines to `done`"), "{text}");
-    assert!(text.contains("`answered: done`"), "the fix must be typeable: {text}");
-    assert!(text.contains("under `reply`"), "and say where to type it: {text}");
+    assert!(
+        text.contains("Change one of these lines to `done`"),
+        "{text}"
+    );
+    assert!(
+        text.contains("`answered: done`"),
+        "the fix must be typeable: {text}"
+    );
+    assert!(
+        text.contains("under `reply`"),
+        "and say where to type it: {text}"
+    );
     // The escape hatch, because this rule refuses one shape somebody may have
     // meant: a loop that goes round a bounded number of times and then stops.
-    assert!(text.contains("`at-most: 3`") && text.contains("`too-many-times:`"), "{text}");
+    assert!(
+        text.contains("`at-most: 3`") && text.contains("`too-many-times:`"),
+        "{text}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -139,10 +172,16 @@ fn the_worked_example_as_shipped_is_never_told_its_loop_cannot_end() {
     // is midway through editing a redaction.
     let file = format!("{}/{LOOP}", example());
     let careful = std::fs::read_to_string(&file).expect("the worked example is there");
-    assert!(careful.contains(THE_ENDING), "fixture drifted: {file} no longer ends anywhere");
+    assert!(
+        careful.contains(THE_ENDING),
+        "fixture drifted: {file} no longer ends anywhere"
+    );
 
     let text = checked(&example());
-    assert!(!text.contains("loop-that-never-finishes"), "the shipped loop was refused:\n{text}");
+    assert!(
+        !text.contains("loop-that-never-finishes"),
+        "the shipped loop was refused:\n{text}"
+    );
 }
 
 #[test]
@@ -153,10 +192,17 @@ fn a_loop_that_ends_only_when_a_stage_runs_out_of_turns_is_left_alone() {
     // worried about a runaway — unwritable.
     let root = edited(
         "bounded",
-        &[(LOOP, "    then:\n      answered: done", "    at-most: 1\n    then:\n      answered: reply\n      too-many-times: done")],
+        &[(
+            LOOP,
+            "    then:\n      answered: done",
+            "    at-most: 1\n    then:\n      answered: reply\n      too-many-times: done",
+        )],
     );
     let text = checked(&root);
-    assert!(!text.contains("loop-that-never-finishes"), "a bounded loop was refused:\n{text}");
+    assert!(
+        !text.contains("loop-that-never-finishes"),
+        "a bounded loop was refused:\n{text}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -165,10 +211,26 @@ fn no_message_about_a_loop_that_cannot_end_uses_a_word_a_non_coder_would_look_up
     let root = edited("plain", &[(LOOP, THE_ENDING, "answered: reply")]);
     let text = checked(&root).to_lowercase();
     for jargon in [
-        "reachab", "graph", "node", "traversal", "orphan", "cycle", "vertex", "infinite",
-        "terminal", "dead code", "invariant", "predicate", "enum", "unwrap", "panic",
+        "reachab",
+        "graph",
+        "node",
+        "traversal",
+        "orphan",
+        "cycle",
+        "vertex",
+        "infinite",
+        "terminal",
+        "dead code",
+        "invariant",
+        "predicate",
+        "enum",
+        "unwrap",
+        "panic",
     ] {
-        assert!(!text.contains(jargon), "diagnostic leaked '{jargon}':\n{text}");
+        assert!(
+            !text.contains(jargon),
+            "diagnostic leaked '{jargon}':\n{text}"
+        );
     }
     let _ = std::fs::remove_dir_all(&root);
 }

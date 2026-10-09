@@ -45,7 +45,10 @@ fn pact() -> Command {
 }
 
 fn tree() -> String {
-    format!("{}/../../tests/trees/a-desk-whose-program-decides", env!("CARGO_MANIFEST_DIR"))
+    format!(
+        "{}/../../tests/trees/a-desk-whose-program-decides",
+        env!("CARGO_MANIFEST_DIR")
+    )
 }
 
 fn run(args: &[&str]) -> (Option<i32>, String) {
@@ -68,7 +71,10 @@ fn broken(name: &str, edits: &[(&str, &str, &str)]) -> String {
     for (file, from, to) in edits {
         let p = dst.join(file);
         let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-        assert!(text.contains(from), "fixture drifted: {from:?} not found in {file}");
+        assert!(
+            text.contains(from),
+            "fixture drifted: {from:?} not found in {file}"
+        );
         std::fs::write(&p, text.replace(from, to)).unwrap();
     }
     dst.to_string_lossy().into_owned()
@@ -94,7 +100,11 @@ fn copy_dir(src: &std::path::Path, dst: &std::path::Path) {
 #[test]
 fn a_tree_that_reaches_a_program_three_ways_loads_clean() {
     let (code, said) = run(&["check", &tree(), "--deny-warnings"]);
-    assert_eq!(code, Some(0), "this is the shape the doors are FOR:\n{said}");
+    assert_eq!(
+        code,
+        Some(0),
+        "this is the shape the doors are FOR:\n{said}"
+    );
 }
 
 /// A program named only inside a sentence is a program something names.
@@ -127,9 +137,15 @@ fn a_program_that_decides_where_the_run_goes_must_be_pure() {
         );
         let (code, said) = run(&["check", &dst]);
         assert_eq!(code, Some(1), "`{word}` must not route a loop:\n{said}");
-        assert!(said.contains("loader/only-a-pure-program-decides"), "{said}");
+        assert!(
+            said.contains("loader/only-a-pure-program-decides"),
+            "{said}"
+        );
         assert!(said.contains("pick-next"), "name the program:\n{said}");
-        assert!(said.contains("pure"), "and say what to write instead:\n{said}");
+        assert!(
+            said.contains("pure"),
+            "and say what to write instead:\n{said}"
+        );
         let _ = std::fs::remove_dir_all(&dst);
     }
 }
@@ -152,8 +168,15 @@ fn a_program_that_rewrites_what_is_said_must_be_pure() {
             )],
         );
         let (code, said) = run(&["check", &dst]);
-        assert_eq!(code, Some(1), "`{word}` must not rewrite an answer:\n{said}");
-        assert!(said.contains("loader/only-a-pure-program-rewrites"), "{said}");
+        assert_eq!(
+            code,
+            Some(1),
+            "`{word}` must not rewrite an answer:\n{said}"
+        );
+        assert!(
+            said.contains("loader/only-a-pure-program-rewrites"),
+            "{said}"
+        );
         assert!(said.contains("house-style"), "name the program:\n{said}");
         let _ = std::fs::remove_dir_all(&dst);
     }
@@ -203,8 +226,15 @@ fn a_room_declared_for_one_purpose_does_not_retract_the_seam_for_another() {
     // tool that connects to it — is still `wasm`, so the TOOL pairing must still
     // refuse. That is the half that stays.
     let (code, said) = run(&["check", &dst]);
-    assert_eq!(code, Some(1), "the tool pairing is decidable and still asked:\n{said}");
-    assert!(said.contains("loader/nothing-here-can-run-that-program"), "{said}");
+    assert_eq!(
+        code,
+        Some(1),
+        "the tool pairing is decidable and still asked:\n{said}"
+    );
+    assert!(
+        said.contains("loader/nothing-here-can-run-that-program"),
+        "{said}"
+    );
     let _ = std::fs::remove_dir_all(&dst);
 
     // And the reproduction: a room for one engine beside a program reached with
@@ -230,7 +260,11 @@ fn a_room_declared_for_one_purpose_does_not_retract_the_seam_for_another() {
         "description: Tidies a column of numbers.\nengine: python\ndeterminism: pure\ntakes:\n  rows: text\nanswers-with:\n  tidied: text\nfuel:\n  instructions-at-most: 10m\n  runs-for-at-most: 2s\n  when-it-runs-out: stop-and-say-so\n",
     )
     .unwrap();
-    std::fs::write(two.join("programs/tidy-csv/body/tidy.py"), "# a placeholder\n").unwrap();
+    std::fs::write(
+        two.join("programs/tidy-csv/body/tidy.py"),
+        "# a placeholder\n",
+    )
+    .unwrap();
     std::fs::create_dir_all(two.join("tools")).unwrap();
     std::fs::write(
         two.join("tools/tidy.yaml"),
@@ -239,8 +273,11 @@ fn a_room_declared_for_one_purpose_does_not_retract_the_seam_for_another() {
     .unwrap();
     let agent = two.join("agents/desk/agent.yaml");
     let text = std::fs::read_to_string(&agent).unwrap();
-    std::fs::write(&agent, text.replace("  - check-window\n", "  - check-window\n  - tidy\n"))
-        .unwrap();
+    std::fs::write(
+        &agent,
+        text.replace("  - check-window\n", "  - check-window\n  - tidy\n"),
+    )
+    .unwrap();
 
     let (code, said) = run(&["check", &two.to_string_lossy(), "--deny-warnings"]);
     assert_eq!(
@@ -286,7 +323,11 @@ fn a_code_stage_and_a_directly_used_program_can_live_in_one_tree() {
     std::fs::write(&agent, format!("{text}loop: works-it-out\n")).unwrap();
 
     let (code, said) = run(&["check", &dst.to_string_lossy(), "--deny-warnings"]);
-    assert_eq!(code, Some(0), "obeying one refusal must not produce another:\n{said}");
+    assert_eq!(
+        code,
+        Some(0),
+        "obeying one refusal must not produce another:\n{said}"
+    );
     let _ = std::fs::remove_dir_all(&dst);
 }
 
@@ -299,17 +340,27 @@ fn a_code_stage_and_a_directly_used_program_can_live_in_one_tree() {
 /// tree that demonstrates the shortcut.
 #[test]
 fn a_workspace_with_no_room_at_all_is_not_refused_for_it() {
-    let no_room =
-        format!("{}/../../tests/trees/a-desk-that-uses-a-program", env!("CARGO_MANIFEST_DIR"));
+    let no_room = format!(
+        "{}/../../tests/trees/a-desk-that-uses-a-program",
+        env!("CARGO_MANIFEST_DIR")
+    );
     let (code, said) = run(&["check", &no_room, "--deny-warnings"]);
-    assert_eq!(code, Some(0), "the host supplies the room for this one:\n{said}");
+    assert_eq!(
+        code,
+        Some(0),
+        "the host supplies the room for this one:\n{said}"
+    );
 }
 
 /// The positive control, again, after all the mutations above.
 #[test]
 fn the_fixture_itself_was_never_edited() {
     let (code, said) = run(&["check", &tree(), "--deny-warnings"]);
-    assert_eq!(code, Some(0), "the refusals prove nothing unless this still passes:\n{said}");
+    assert_eq!(
+        code,
+        Some(0),
+        "the refusals prove nothing unless this still passes:\n{said}"
+    );
 }
 
 /// A stage that writes code needs somewhere to run it, said before the run.
@@ -345,9 +396,19 @@ fn a_stage_that_writes_code_needs_a_room_declared_to_run_it() {
     // And the program that needed it, so the refusal under test is the only one.
     std::fs::remove_dir_all(std::path::Path::new(&dst).join("programs")).unwrap();
     let (code, said) = run(&["check", &dst]);
-    assert_eq!(code, Some(1), "a stage that can only ever halt is not a stage:\n{said}");
-    assert!(said.contains("loader/nothing-here-can-run-that-program"), "{said}");
-    assert!(said.contains("run-code") || said.contains("writes code"), "{said}");
+    assert_eq!(
+        code,
+        Some(1),
+        "a stage that can only ever halt is not a stage:\n{said}"
+    );
+    assert!(
+        said.contains("loader/nothing-here-can-run-that-program"),
+        "{said}"
+    );
+    assert!(
+        said.contains("run-code") || said.contains("writes code"),
+        "{said}"
+    );
     assert!(said.contains("sandbox"), "and say what to add:\n{said}");
     let _ = std::fs::remove_dir_all(&dst);
 }
@@ -364,7 +425,11 @@ fn a_stage_that_writes_code_loads_where_a_room_is_declared() {
         )],
     );
     let (code, said) = run(&["check", &dst]);
-    assert_eq!(code, Some(0), "the refusal above proves nothing unless this passes:\n{said}");
+    assert_eq!(
+        code,
+        Some(0),
+        "the refusal above proves nothing unless this passes:\n{said}"
+    );
     let _ = std::fs::remove_dir_all(&dst);
 }
 
@@ -399,12 +464,17 @@ fn a_stage_that_writes_code_loads_where_a_room_is_declared() {
 /// Mutation: change `workspace.programs`' tier to `core`. Red, naming the field.
 #[test]
 fn writing_a_carried_program_is_priced_as_expert_work() {
-    let text =
-        std::fs::read_to_string(format!("{}/../../spec/schema.yaml", env!("CARGO_MANIFEST_DIR")))
-            .expect("the specification is there");
+    let text = std::fs::read_to_string(format!(
+        "{}/../../spec/schema.yaml",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .expect("the specification is there");
     let doc = pact_doc::parse_yaml(&text, camino::Utf8Path::new("spec/schema.yaml"))
         .expect("the specification parses");
-    let groups = doc.get("groups").and_then(pact_doc::Node::as_map).expect("groups:");
+    let groups = doc
+        .get("groups")
+        .and_then(pact_doc::Node::as_map)
+        .expect("groups:");
 
     let tier = |group: &str, field: &str| -> String {
         groups
@@ -474,7 +544,11 @@ fn a_program_a_suite_grades_with_is_not_reported_as_unreached() {
     std::fs::remove_dir_all(std::path::Path::new(&dst).join("interceptors")).unwrap();
     let agent = std::path::Path::new(&dst).join("agents/desk/agent.yaml");
     let text = std::fs::read_to_string(&agent).unwrap();
-    std::fs::write(&agent, text.replace("interceptors:\n  - in-house-style\n", "")).unwrap();
+    std::fs::write(
+        &agent,
+        text.replace("interceptors:\n  - in-house-style\n", ""),
+    )
+    .unwrap();
 
     std::fs::create_dir_all(std::path::Path::new(&dst).join("evals")).unwrap();
     std::fs::write(
@@ -484,6 +558,10 @@ fn a_program_a_suite_grades_with_is_not_reported_as_unreached() {
     .unwrap();
 
     let (code, said) = run(&["check", &dst, "--deny-warnings"]);
-    assert_eq!(code, Some(0), "the suite grades with it, so something names it:\n{said}");
+    assert_eq!(
+        code,
+        Some(0),
+        "the suite grades with it, so something names it:\n{said}"
+    );
     let _ = std::fs::remove_dir_all(&dst);
 }

@@ -49,7 +49,10 @@ fn pact() -> Command {
 }
 
 fn example() -> PathBuf {
-    PathBuf::from(format!("{}/../../examples/refund-desk", env!("CARGO_MANIFEST_DIR")))
+    PathBuf::from(format!(
+        "{}/../../examples/refund-desk",
+        env!("CARGO_MANIFEST_DIR")
+    ))
 }
 
 /// A private copy of the worked example. Tests in one binary share a process
@@ -65,7 +68,11 @@ fn copy(src: &Path, dst: &Path) {
     std::fs::create_dir_all(dst).unwrap();
     for e in std::fs::read_dir(src).unwrap().flatten() {
         let (s, d) = (e.path(), dst.join(e.file_name()));
-        if s.is_dir() { copy(&s, &d) } else { std::fs::copy(&s, &d).map(|_| ()).unwrap() }
+        if s.is_dir() {
+            copy(&s, &d)
+        } else {
+            std::fs::copy(&s, &d).map(|_| ()).unwrap()
+        }
     }
 }
 
@@ -74,7 +81,8 @@ fn copy(src: &Path, dst: &Path) {
 /// author makes the day a tool grows a second file beside it.
 fn give_it_a_folder(root: &Path, was: &str, kind: &str) {
     let file = root.join(was);
-    let body = std::fs::read(&file).unwrap_or_else(|e| panic!("{was} is in the worked example: {e}"));
+    let body =
+        std::fs::read(&file).unwrap_or_else(|e| panic!("{was} is in the worked example: {e}"));
     std::fs::remove_file(&file).unwrap();
     let dir = file.with_extension("");
     std::fs::create_dir_all(&dir).unwrap();
@@ -83,7 +91,10 @@ fn give_it_a_folder(root: &Path, was: &str, kind: &str) {
 
 /// What `pact check` said, and whether it agreed to load the tree.
 fn check(root: &Path) -> (bool, String) {
-    let out = pact().args(["check", root.to_str().unwrap()]).output().expect("the binary runs");
+    let out = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("the binary runs");
     let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
     text.push_str(&String::from_utf8_lossy(&out.stderr));
     (out.status.success(), text)
@@ -91,7 +102,10 @@ fn check(root: &Path) -> (bool, String) {
 
 /// The loaded document, as the only door an adapter comes through (P-1).
 fn show(root: &Path) -> serde_json::Value {
-    let out = pact().args(["show", root.to_str().unwrap()]).output().expect("the binary runs");
+    let out = pact()
+        .args(["show", root.to_str().unwrap()])
+        .output()
+        .expect("the binary runs");
     assert!(
         out.status.success(),
         "`show` refused the tree:\n{}",
@@ -102,9 +116,11 @@ fn show(root: &Path) -> serde_json::Value {
 
 /// The content digest `discover` publishes for a workspace.
 fn digest(root: &Path) -> String {
-    let out = pact().args(["discover", root.to_str().unwrap()]).output().expect("the binary runs");
-    let v: serde_json::Value =
-        serde_json::from_slice(&out.stdout).expect("`discover` prints JSON");
+    let out = pact()
+        .args(["discover", root.to_str().unwrap()])
+        .output()
+        .expect("the binary runs");
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("`discover` prints JSON");
     v.get(0)
         .and_then(|w| w.get("digest"))
         .and_then(serde_json::Value::as_str)
@@ -119,7 +135,10 @@ fn one_kind_moves_into_a_folder(name: &str, was: &str, kind: &str) {
     give_it_a_folder(&root, was, kind);
 
     let (ok, text) = check(&root);
-    assert!(ok, "`{was}` written as `{kind}.yaml` in a folder must load:\n{text}");
+    assert!(
+        ok,
+        "`{was}` written as `{kind}.yaml` in a folder must load:\n{text}"
+    );
     assert!(
         !text.contains("is not something"),
         "the settings landed in a field named after the file:\n{text}"
@@ -178,7 +197,11 @@ fn all_four_folders_at_once_are_still_the_worked_example() {
 
     let (ok, text) = check(&root);
     assert!(ok, "all four folder forms together must load:\n{text}");
-    assert_eq!(digest(&root), digest(&example()), "four folders, one artifact");
+    assert_eq!(
+        digest(&root),
+        digest(&example()),
+        "four folders, one artifact"
+    );
 
     // And the settings are really in there, at full depth. `loaded cleanly` is
     // what the tree printed BEFORE this round too, for a tree that had dropped
@@ -230,7 +253,10 @@ fn a_new_tool_in_a_folder_is_never_told_to_remove_its_own_filename() {
     .unwrap();
 
     let (ok, text) = check(&root);
-    assert!(ok, "a tool written straight into a folder must load:\n{text}");
+    assert!(
+        ok,
+        "a tool written straight into a folder must load:\n{text}"
+    );
     for unactionable in [
         // "Remove it" — `tool` is the filename.
         "'tool' is not something a tool can have.",
@@ -238,7 +264,10 @@ fn a_new_tool_in_a_folder_is_never_told_to_remove_its_own_filename() {
         "A tool must have a 'description'.",
         "does not say where it reaches",
     ] {
-        assert!(!text.contains(unactionable), "still says {unactionable:?}:\n{text}");
+        assert!(
+            !text.contains(unactionable),
+            "still says {unactionable:?}:\n{text}"
+        );
     }
 
     let doc = show(&root);
@@ -271,7 +300,10 @@ fn a_redaction_beside_the_workspace_is_still_the_workspaces_own_setting() {
     // never let out. So this test fails the moment somebody adds the stem, here,
     // next to the reason, instead of in the worked example.
     let root = example();
-    assert!(root.join("redaction.yaml").is_file(), "the example still ships the flat spelling");
+    assert!(
+        root.join("redaction.yaml").is_file(),
+        "the example still ships the flat spelling"
+    );
 
     let (ok, text) = check(&root);
     assert!(ok, "the shipped worked example must load:\n{text}");
@@ -282,12 +314,17 @@ fn a_redaction_beside_the_workspace_is_still_the_workspaces_own_setting() {
 
     let doc = show(&root);
     assert!(
-        doc["redaction"]["hide"].as_array().is_some_and(|h| !h.is_empty()),
+        doc["redaction"]["hide"]
+            .as_array()
+            .is_some_and(|h| !h.is_empty()),
         "`redaction.yaml` must arrive as the workspace's `redaction:` setting, \
          not as part of the workspace's own fields"
     );
     // The other half of the same fact: its contents must NOT have been merged
     // into the workspace. A `hide:` at the top of the document is what a stem
     // for `redaction` would produce.
-    assert!(doc.get("hide").is_none(), "the redaction's settings leaked into the workspace");
+    assert!(
+        doc.get("hide").is_none(),
+        "the redaction's settings leaked into the workspace"
+    );
 }

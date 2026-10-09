@@ -542,7 +542,10 @@ fn an_answer_that_binds_nothing_hands_back_nothing() {
         ),
         "{text}"
     );
-    assert!(text.contains("does: answer"), "the caret is on its `does:` line:\n{text}");
+    assert!(
+        text.contains("does: answer"),
+        "the caret is on its `does:` line:\n{text}"
+    );
 }
 
 #[test]

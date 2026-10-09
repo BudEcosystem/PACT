@@ -56,13 +56,27 @@ impl Span {
         byte_start: usize,
         byte_end: usize,
     ) -> Self {
-        Self { file: file.into(), line, col, byte_start, byte_end, file_to_start: None }
+        Self {
+            file: file.into(),
+            line,
+            col,
+            byte_start,
+            byte_end,
+            file_to_start: None,
+        }
     }
 
     /// A span identifying a whole file, used when the problem is the file's
     /// existence, name, or absence rather than its content.
     pub fn whole_file(file: impl Into<Utf8PathBuf>) -> Self {
-        Self { file: file.into(), line: 1, col: 1, byte_start: 0, byte_end: 0, file_to_start: None }
+        Self {
+            file: file.into(),
+            line: 1,
+            col: 1,
+            byte_start: 0,
+            byte_end: 0,
+            file_to_start: None,
+        }
     }
 
     /// A span identifying a **folder** whose settings have nowhere to be
@@ -248,7 +262,10 @@ impl Diagnostic {
 
     #[must_use]
     pub fn with_related(mut self, span: Span, message: impl Into<String>) -> Self {
-        self.related.push(Related { span, message: message.into() });
+        self.related.push(Related {
+            span,
+            message: message.into(),
+        });
         self
     }
 }
@@ -289,7 +306,10 @@ impl Diagnostics {
     /// value: a value's span is the whole value, and where a word sits in a
     /// folded or quoted one can only be read off the file.
     pub fn source_of(&self, path: &Utf8Path) -> Option<&str> {
-        self.sources.iter().find(|(p, _)| p == path).map(|(_, t)| t.as_str())
+        self.sources
+            .iter()
+            .find(|(p, _)| p == path)
+            .map(|(_, t)| t.as_str())
     }
 
     /// Take another collection's registered file texts.
@@ -319,11 +339,17 @@ impl Diagnostics {
     }
 
     pub fn error_count(&self) -> usize {
-        self.items.iter().filter(|d| d.severity == Severity::Error).count()
+        self.items
+            .iter()
+            .filter(|d| d.severity == Severity::Error)
+            .count()
     }
 
     pub fn warning_count(&self) -> usize {
-        self.items.iter().filter(|d| d.severity == Severity::Warning).count()
+        self.items
+            .iter()
+            .filter(|d| d.severity == Severity::Warning)
+            .count()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -344,7 +370,11 @@ impl Diagnostics {
 
     /// Render every diagnostic for a terminal reader.
     pub fn render(&self) -> String {
-        self.items.iter().map(|d| self.render_one(d)).collect::<Vec<_>>().join("\n")
+        self.items
+            .iter()
+            .map(|d| self.render_one(d))
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     fn render_one(&self, d: &Diagnostic) -> String {
@@ -435,7 +465,9 @@ fn caret_width(text: &str, span: &Span, line_chars: usize, start_col: usize) -> 
     // What is left of the printed line once the caret has been indented to its
     // column. One caret is the floor — a span that ends past the line's end
     // still has to point somewhere.
-    let room = (line_chars + 1).saturating_sub(start_col).clamp(1, MAX_CARETS);
+    let room = (line_chars + 1)
+        .saturating_sub(start_col)
+        .clamp(1, MAX_CARETS);
     let covered = text
         .get(span.byte_start..end)
         // Offsets that do not land on character boundaries cannot be measured;
@@ -463,14 +495,25 @@ mod tests {
 
     #[test]
     fn every_diagnostic_carries_a_fix() {
-        let d = Diagnostic::error("loader/test", span(), "something is wrong", "do this instead");
-        assert!(!d.fix.is_empty(), "O7.3: a diagnostic without a fix must be unconstructable");
+        let d = Diagnostic::error(
+            "loader/test",
+            span(),
+            "something is wrong",
+            "do this instead",
+        );
+        assert!(
+            !d.fix.is_empty(),
+            "O7.3: a diagnostic without a fix must be unconstructable"
+        );
     }
 
     #[test]
     fn render_includes_where_what_why_and_how() {
         let mut diags = Diagnostics::new();
-        diags.add_source("agents/refund/agent.yaml", "name: refund\ndesc: x\n    bad: y\n");
+        diags.add_source(
+            "agents/refund/agent.yaml",
+            "name: refund\ndesc: x\n    bad: y\n",
+        );
         diags.push(Diagnostic::error(
             "loader/unknown-field",
             span(),
@@ -500,7 +543,10 @@ mod tests {
             "shorten the underline",
         ));
         let (indent, carets) = caret_row(&diags.render()).expect("an underline was drawn");
-        assert_eq!(indent, 4, "the caret starts under the column the diagnostic names");
+        assert_eq!(
+            indent, 4,
+            "the caret starts under the column the diagnostic names"
+        );
         assert_eq!(
             indent + carets,
             "name: Fraud Checker".chars().count(),
@@ -522,7 +568,11 @@ mod tests {
             "use one of: tea, coffee",
         ));
         let (indent, carets) = caret_row(&diags.render()).expect("an underline was drawn");
-        assert_eq!((indent, carets), (6, 4), "four characters marked, not five bytes");
+        assert_eq!(
+            (indent, carets),
+            (6, 4),
+            "four characters marked, not five bytes"
+        );
     }
 
     #[test]
@@ -546,10 +596,22 @@ mod tests {
             "Add a line: `description: ...`",
         ));
         let out = diags.render();
-        assert!(caret_row(&out).is_none(), "nothing to underline, so no underline:\n{out}");
-        assert!(!out.contains("name: Hello"), "and so no line is singled out either:\n{out}");
-        assert!(out.contains("agents/hello/agent.yaml:1:1"), "still says where:\n{out}");
-        assert!(out.contains("Add a line: `description: ...`"), "still says what to type:\n{out}");
+        assert!(
+            caret_row(&out).is_none(),
+            "nothing to underline, so no underline:\n{out}"
+        );
+        assert!(
+            !out.contains("name: Hello"),
+            "and so no line is singled out either:\n{out}"
+        );
+        assert!(
+            out.contains("agents/hello/agent.yaml:1:1"),
+            "still says where:\n{out}"
+        );
+        assert!(
+            out.contains("Add a line: `description: ...`"),
+            "still says what to type:\n{out}"
+        );
     }
 
     #[test]
@@ -571,9 +633,18 @@ mod tests {
             "Create `/tmp/hello/workspace.yaml` and put one line in it: `name: ...`",
         ));
         let out = diags.render();
-        assert!(out.contains("--> /tmp/hello\n"), "the folder is named, and only named:\n{out}");
-        assert!(!out.contains("/tmp/hello:1:1"), "a folder has no line 1:\n{out}");
-        assert!(!out.contains("not this file"), "and nothing of it is quoted:\n{out}");
+        assert!(
+            out.contains("--> /tmp/hello\n"),
+            "the folder is named, and only named:\n{out}"
+        );
+        assert!(
+            !out.contains("/tmp/hello:1:1"),
+            "a folder has no line 1:\n{out}"
+        );
+        assert!(
+            !out.contains("not this file"),
+            "and nothing of it is quoted:\n{out}"
+        );
         assert!(
             out.contains("Create `/tmp/hello/workspace.yaml`"),
             "the file to make is what replaces the position:\n{out}"
@@ -603,7 +674,12 @@ mod tests {
             "a block that owes a line",
             "f",
         ));
-        diags.push(Diagnostic::error("loader/unreadable", Span::whole_file("a.yaml"), "a file", "f"));
+        diags.push(Diagnostic::error(
+            "loader/unreadable",
+            Span::whole_file("a.yaml"),
+            "a file",
+            "f",
+        ));
         diags.push(Diagnostic::error(
             "loader/past-the-end",
             Span::new("a.yaml", 99, 1, 0, 0),
@@ -616,10 +692,17 @@ mod tests {
         let quoted: Vec<usize> = rows
             .iter()
             .enumerate()
-            .filter(|(_, r)| r.split_once(" | ").is_some_and(|(g, _)| g.trim().parse::<u32>().is_ok()))
+            .filter(|(_, r)| {
+                r.split_once(" | ")
+                    .is_some_and(|(g, _)| g.trim().parse::<u32>().is_ok())
+            })
             .map(|(i, _)| i)
             .collect();
-        assert_eq!(quoted.len(), 1, "only the span with a width may quote a line:\n{rendered}");
+        assert_eq!(
+            quoted.len(),
+            1,
+            "only the span with a width may quote a line:\n{rendered}"
+        );
         for i in quoted {
             let under = rows.get(i + 1).copied().unwrap_or("");
             assert!(
@@ -643,9 +726,24 @@ mod tests {
     #[test]
     fn sort_is_deterministic_by_file_then_position() {
         let mut diags = Diagnostics::new();
-        diags.push(Diagnostic::error("z", Span::new("b.yaml", 1, 1, 10, 11), "m", "f"));
-        diags.push(Diagnostic::error("y", Span::new("a.yaml", 5, 1, 50, 51), "m", "f"));
-        diags.push(Diagnostic::error("x", Span::new("a.yaml", 1, 1, 0, 1), "m", "f"));
+        diags.push(Diagnostic::error(
+            "z",
+            Span::new("b.yaml", 1, 1, 10, 11),
+            "m",
+            "f",
+        ));
+        diags.push(Diagnostic::error(
+            "y",
+            Span::new("a.yaml", 5, 1, 50, 51),
+            "m",
+            "f",
+        ));
+        diags.push(Diagnostic::error(
+            "x",
+            Span::new("a.yaml", 1, 1, 0, 1),
+            "m",
+            "f",
+        ));
         diags.sort();
         let order: Vec<_> = diags.items().iter().map(|d| d.span.file.as_str()).collect();
         assert_eq!(order, vec!["a.yaml", "a.yaml", "b.yaml"]);

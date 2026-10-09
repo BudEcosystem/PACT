@@ -158,8 +158,7 @@ pub fn reaches(written: &str, allowed: &str) -> bool {
     }
     let mine: Vec<&str> = allowed.split('.').collect();
     let theirs: Vec<&str> = written.split('.').collect();
-    theirs.len() <= mine.len()
-        && theirs.iter().zip(&mine).all(|(t, m)| *t == "*" || t == m)
+    theirs.len() <= mine.len() && theirs.iter().zip(&mine).all(|(t, m)| *t == "*" || t == m)
 }
 
 // ────────────────────────────────────────────────────────────── the matcher
@@ -196,7 +195,10 @@ fn strip_article(value: &str) -> String {
 /// rather than `to_lowercase` because it cannot change the length of the string
 /// and the matcher walks by byte position.
 fn normalise(s: &str) -> String {
-    s.split_whitespace().collect::<Vec<_>>().join(" ").to_ascii_lowercase()
+    s.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase()
 }
 
 fn tokens(say: &str) -> Vec<Tok> {

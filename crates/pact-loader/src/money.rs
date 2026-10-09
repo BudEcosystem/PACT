@@ -396,8 +396,12 @@ fn figure_slot(written: &str) -> String {
     // figures. `more-than:` is free text an author types, so it holds whatever
     // they typed.
     let letters: Vec<char> = cleaned.chars().collect();
-    let Some(cut) = letters.len().checked_sub(3) else { return cleaned };
-    let runs_on = cut.checked_sub(1).is_some_and(|i| letters[i].is_ascii_alphabetic());
+    let Some(cut) = letters.len().checked_sub(3) else {
+        return cleaned;
+    };
+    let runs_on = cut
+        .checked_sub(1)
+        .is_some_and(|i| letters[i].is_ascii_alphabetic());
     if !runs_on && letters[cut..].iter().all(char::is_ascii_alphabetic) {
         return letters[..cut].iter().collect();
     }
@@ -531,7 +535,11 @@ fn a_threshold_that_is_not_a_figure(document: &Node, diags: &mut Diagnostics) {
                         "Write the figure a person should be asked {}, the way that argument \
                          is declared in the tool's `takes:` — `{word}: 200 USD` for an amount \
                          of money, `{word}: 80` for a score.",
-                        if word == "more-than" { "above" } else { "below" }
+                        if word == "more-than" {
+                            "above"
+                        } else {
+                            "below"
+                        }
                     )
                 },
             ));

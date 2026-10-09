@@ -362,7 +362,9 @@ impl Tree {
     fn fifo(&self, rel: &str) -> bool {
         let p = self.0.join(rel);
         fs::create_dir_all(p.parent().unwrap()).unwrap();
-        let made = std::process::Command::new("mkfifo").arg(p.as_str()).status();
+        let made = std::process::Command::new("mkfifo")
+            .arg(p.as_str())
+            .status();
         let ok = matches!(&made, Ok(s) if s.success());
         if !ok {
             announce(&format!(
@@ -856,10 +858,7 @@ fn a_pactignore_line_reaches_below_the_top_of_an_attachment_folder() {
     files.sort();
     assert_eq!(
         files,
-        vec![
-            "check_window.py".to_string(),
-            "helpers/real.py".to_string()
-        ],
+        vec!["check_window.py".to_string(), "helpers/real.py".to_string()],
         "the real files stay, both links go.\nfiles: {files:?}"
     );
     assert!(
@@ -895,7 +894,10 @@ fn a_pactignore_line_takes_an_ordinary_file_out_of_an_attachment_folder_and_says
     // above did — leaves the whole note deletable with the crate green.
     let t = Tree::new("ignored-content");
     t.file("skills/refund-policy/scripts/.pactignore", "secret.py\n");
-    t.file("skills/refund-policy/scripts/secret.py", "print('secret')\n");
+    t.file(
+        "skills/refund-policy/scripts/secret.py",
+        "print('secret')\n",
+    );
 
     let (doc, d) = t.load();
     let files = script_files(&doc);

@@ -26,7 +26,11 @@ fn spec() -> Schema {
     const SPEC: &str = include_str!("../../../spec/schema.yaml");
     let mut d = Diagnostics::new();
     let s = pact_schema::from_doc::schema_from_yaml(SPEC, &mut d);
-    assert!(!d.has_errors(), "the shipped specification does not load:\n{}", d.render());
+    assert!(
+        !d.has_errors(),
+        "the shipped specification does not load:\n{}",
+        d.render()
+    );
     s
 }
 
@@ -79,7 +83,9 @@ fn a_base_that_writes_a_blank_line_is_still_refused() {
     // The exemption is for the unwritten, not the badly written.
     let d = agent("base: yes\ndescription: a pattern\ninstructions: \"\"\n");
     assert!(
-        d.items().iter().any(|x| x.rule == "schema/nothing-written-here"),
+        d.items()
+            .iter()
+            .any(|x| x.rule == "schema/nothing-written-here"),
         "a written blank is its own mistake, `base:` or no `base:`:\n{}",
         d.render()
     );

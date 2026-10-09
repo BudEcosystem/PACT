@@ -44,7 +44,11 @@ fn copy(src: &std::path::Path, dst: &std::path::Path) {
     std::fs::create_dir_all(dst).unwrap();
     for e in std::fs::read_dir(src).unwrap().flatten() {
         let (s, d) = (e.path(), dst.join(e.file_name()));
-        if s.is_dir() { copy(&s, &d) } else { std::fs::copy(&s, &d).map(|_| ()).unwrap() }
+        if s.is_dir() {
+            copy(&s, &d)
+        } else {
+            std::fs::copy(&s, &d).map(|_| ()).unwrap()
+        }
     }
 }
 
@@ -52,7 +56,10 @@ fn copy(src: &std::path::Path, dst: &std::path::Path) {
 fn edit(root: &std::path::Path, file: &str, from: &str, to: &str) {
     let p = root.join(file);
     let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-    assert!(text.contains(from), "fixture drifted: {from:?} not in {file}");
+    assert!(
+        text.contains(from),
+        "fixture drifted: {from:?} not in {file}"
+    );
     std::fs::write(&p, text.replace(from, to)).unwrap();
 }
 
@@ -62,7 +69,10 @@ fn check(root: &std::path::Path) -> (bool, String) {
         .args(["check", root.to_str().expect("a utf-8 path")])
         .output()
         .expect("the binary runs");
-    (out.status.success(), String::from_utf8_lossy(&out.stdout).into_owned())
+    (
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+    )
 }
 
 #[test]
@@ -88,11 +98,23 @@ fn deleting_the_timer_from_the_worked_example_is_what_makes_the_promise_empty() 
     std::fs::remove_file(root.join("ports/weekly-review.yaml")).expect("the timer was there");
     let (ok, text) = check(&root);
 
-    assert!(ok, "a half-written tree still loads — this is a warning:\n{text}");
-    assert!(text.contains("nothing-runs-the-review"), "nothing was said:\n{text}");
+    assert!(
+        ok,
+        "a half-written tree still loads — this is a warning:\n{text}"
+    );
+    assert!(
+        text.contains("nothing-runs-the-review"),
+        "nothing was said:\n{text}"
+    );
     assert!(text.contains("learning.yaml:"), "no file and line:\n{text}");
-    assert!(text.contains("review: weekly"), "the line is not quoted back:\n{text}");
-    assert!(text.contains("warning"), "a warning is what a half-written tree gets:\n{text}");
+    assert!(
+        text.contains("review: weekly"),
+        "the line is not quoted back:\n{text}"
+    );
+    assert!(
+        text.contains("warning"),
+        "a warning is what a half-written tree gets:\n{text}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -105,11 +127,25 @@ fn the_fix_names_the_port_file_to_create_and_every_line_to_put_in_it() {
     std::fs::remove_file(root.join("ports/weekly-review.yaml")).unwrap();
     let (_, text) = check(&root);
 
-    assert!(text.contains("ports/weekly-review.yaml"), "name the file to create:\n{text}");
-    for line in ["kind: schedule", "every: Friday at 4pm", "answers:", "says:"] {
-        assert!(text.contains(line), "the fix must spell out `{line}`:\n{text}");
+    assert!(
+        text.contains("ports/weekly-review.yaml"),
+        "name the file to create:\n{text}"
+    );
+    for line in [
+        "kind: schedule",
+        "every: Friday at 4pm",
+        "answers:",
+        "says:",
+    ] {
+        assert!(
+            text.contains(line),
+            "the fix must spell out `{line}`:\n{text}"
+        );
     }
-    assert!(text.contains("review: manual"), "offer the other way out:\n{text}");
+    assert!(
+        text.contains("review: manual"),
+        "offer the other way out:\n{text}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -143,7 +179,10 @@ fn saying_a_person_starts_the_review_by_hand_is_a_line_that_makes_the_file_true(
     let (ok, text) = check(&root);
 
     assert!(ok, "{text}");
-    assert!(!text.contains("nothing-runs-the-review"), "a person starts it:\n{text}");
+    assert!(
+        !text.contains("nothing-runs-the-review"),
+        "a person starts it:\n{text}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -154,11 +193,19 @@ fn a_workspace_that_never_improves_itself_is_owed_no_review() {
     // whole point of the check is that two authored files decide it together.
     let root = copied("off");
     std::fs::remove_file(root.join("ports/weekly-review.yaml")).unwrap();
-    edit(&root, "learning.yaml", "enabled: propose-only", "enabled: off");
+    edit(
+        &root,
+        "learning.yaml",
+        "enabled: propose-only",
+        "enabled: off",
+    );
     let (ok, text) = check(&root);
 
     assert!(ok, "{text}");
-    assert!(!text.contains("nothing-runs-the-review"), "nothing is proposed:\n{text}");
+    assert!(
+        !text.contains("nothing-runs-the-review"),
+        "nothing is proposed:\n{text}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -174,11 +221,27 @@ fn the_warning_reads_without_programming_knowledge_and_ends_in_a_fix() {
     assert!(text.contains(".yaml:"), "no file:line given:\n{text}");
     let lower = text.to_lowercase();
     for word in [
-        "enum", "variant", "deserialize", "serde", "unwrap", "panic", "trait", "struct",
-        "vec<", "option<", "stack trace", "null pointer", "schema validation failed",
-        "cron", "callback", "async",
+        "enum",
+        "variant",
+        "deserialize",
+        "serde",
+        "unwrap",
+        "panic",
+        "trait",
+        "struct",
+        "vec<",
+        "option<",
+        "stack trace",
+        "null pointer",
+        "schema validation failed",
+        "cron",
+        "callback",
+        "async",
     ] {
-        assert!(!lower.contains(word), "assumes programming knowledge ('{word}'):\n{text}");
+        assert!(
+            !lower.contains(word),
+            "assumes programming knowledge ('{word}'):\n{text}"
+        );
     }
     let _ = std::fs::remove_dir_all(&root);
 }

@@ -64,9 +64,10 @@ use pact_schema::{Schema, Ty};
 /// The engines a resource says it can host.
 fn hosted_by(resource: &Node) -> Vec<String> {
     match resource.get("engines").map(|n| &n.value) {
-        Some(pact_doc::Value::List(items)) => {
-            items.iter().filter_map(|i| i.as_str().map(str::to_owned)).collect()
-        }
+        Some(pact_doc::Value::List(items)) => items
+            .iter()
+            .filter_map(|i| i.as_str().map(str::to_owned))
+            .collect(),
         // A single value where a list belongs is accepted everywhere else in
         // this format (FR-1.4.7).
         Some(pact_doc::Value::Str(one)) => vec![one.clone()],
@@ -84,20 +85,31 @@ fn hosted_by(resource: &Node) -> Vec<String> {
 /// `needs-a-person:`, `spends-money:` and `same-request-key:` can be written.
 /// Letting it in through `uses:` would make the shortcut the way round the gate.
 fn only_pure_programs_are_used_directly(root: &Node, diags: &mut Diagnostics) {
-    let Some(agents) = root.get("agents").and_then(Node::as_map) else { return };
+    let Some(agents) = root.get("agents").and_then(Node::as_map) else {
+        return;
+    };
     let programs = root.get("programs").and_then(Node::as_map);
     for (agent_name, agent) in agents {
-        let Some(uses) = agent.node.get("uses") else { continue };
+        let Some(uses) = agent.node.get("uses") else {
+            continue;
+        };
         let named: Vec<(&str, &Node)> = match &uses.value {
-            pact_doc::Value::List(items) => {
-                items.iter().filter_map(|i| i.as_str().map(|s| (s, i))).collect()
-            }
+            pact_doc::Value::List(items) => items
+                .iter()
+                .filter_map(|i| i.as_str().map(|s| (s, i)))
+                .collect(),
             pact_doc::Value::Str(one) => vec![(one.as_str(), uses)],
             _ => continue,
         };
         for (name, at) in named {
-            let Some(program) = programs.and_then(|p| p.get(name)) else { continue };
-            let how = program.node.get("determinism").and_then(Node::as_str).unwrap_or("");
+            let Some(program) = programs.and_then(|p| p.get(name)) else {
+                continue;
+            };
+            let how = program
+                .node
+                .get("determinism")
+                .and_then(Node::as_str)
+                .unwrap_or("");
             if how == "pure" {
                 continue;
             }
@@ -129,16 +141,26 @@ fn only_pure_programs_are_used_directly(root: &Node, diags: &mut Diagnostics) {
 /// read. That is a stronger requirement than the one on `uses:`, where purity
 /// buys the absence of anything to govern; here it buys determinism itself.
 fn only_pure_programs_project(root: &Node, diags: &mut Diagnostics) {
-    let Some(tools) = root.get("tools").and_then(Node::as_map) else { return };
+    let Some(tools) = root.get("tools").and_then(Node::as_map) else {
+        return;
+    };
     let programs = root.get("programs").and_then(Node::as_map);
     for (tool_name, tool) in tools {
-        let Some(actions) = tool.node.get("actions").and_then(Node::as_map) else { continue };
+        let Some(actions) = tool.node.get("actions").and_then(Node::as_map) else {
+            continue;
+        };
         for (action_name, action) in actions {
             let Some(named) = action.node.get("projects-with").and_then(Node::as_str) else {
                 continue;
             };
-            let Some(program) = programs.and_then(|p| p.get(named)) else { continue };
-            let how = program.node.get("determinism").and_then(Node::as_str).unwrap_or("");
+            let Some(program) = programs.and_then(|p| p.get(named)) else {
+                continue;
+            };
+            let how = program
+                .node
+                .get("determinism")
+                .and_then(Node::as_str)
+                .unwrap_or("");
             if how == "pure" {
                 continue;
             }
@@ -178,15 +200,29 @@ fn only_pure_programs_project(root: &Node, diags: &mut Diagnostics) {
 /// argument `projects-with:` makes about what the model READS, one level up: this
 /// one is about where the run GOES.
 fn only_pure_programs_decide(root: &Node, diags: &mut Diagnostics) {
-    let Some(loops) = root.get("loops").and_then(Node::as_map) else { return };
+    let Some(loops) = root.get("loops").and_then(Node::as_map) else {
+        return;
+    };
     let programs = root.get("programs").and_then(Node::as_map);
     for (loop_name, shape) in loops {
-        let Some(steps) = shape.node.get("steps").and_then(Node::as_map) else { continue };
+        let Some(steps) = shape.node.get("steps").and_then(Node::as_map) else {
+            continue;
+        };
         for (stage_name, stage) in steps {
-            let Some(then) = stage.node.get("then") else { continue };
-            let Some(named) = then.get("decided-by").and_then(Node::as_str) else { continue };
-            let Some(program) = programs.and_then(|p| p.get(named)) else { continue };
-            let how = program.node.get("determinism").and_then(Node::as_str).unwrap_or("");
+            let Some(then) = stage.node.get("then") else {
+                continue;
+            };
+            let Some(named) = then.get("decided-by").and_then(Node::as_str) else {
+                continue;
+            };
+            let Some(program) = programs.and_then(|p| p.get(named)) else {
+                continue;
+            };
+            let how = program
+                .node
+                .get("determinism")
+                .and_then(Node::as_str)
+                .unwrap_or("");
             if how == "pure" {
                 continue;
             }
@@ -237,8 +273,14 @@ fn only_pure_programs_rewrite(root: &Node, schema: &Schema, diags: &mut Diagnost
         if named.collection != PROGRAMS {
             continue;
         }
-        let Some(program) = programs.and_then(|p| p.get(named.name.as_str())) else { continue };
-        let how = program.node.get("determinism").and_then(Node::as_str).unwrap_or("");
+        let Some(program) = programs.and_then(|p| p.get(named.name.as_str())) else {
+            continue;
+        };
+        let how = program
+            .node
+            .get("determinism")
+            .and_then(Node::as_str)
+            .unwrap_or("");
         if how == "pure" {
             continue;
         }
@@ -299,7 +341,9 @@ struct Reach {
 pub fn a_room_is_needed_with_no_tool_to_name_it(root: &Node, schema: &Schema) -> bool {
     if let Some(loops) = root.get("loops").and_then(Node::as_map) {
         for (_, shape) in loops {
-            let Some(steps) = shape.node.get("steps").and_then(Node::as_map) else { continue };
+            let Some(steps) = shape.node.get("steps").and_then(Node::as_map) else {
+                continue;
+            };
             if steps
                 .iter()
                 .any(|(_, st)| st.node.get("does").and_then(Node::as_str) == Some(RUN_CODE))
@@ -308,7 +352,9 @@ pub fn a_room_is_needed_with_no_tool_to_name_it(root: &Node, schema: &Schema) ->
             }
         }
     }
-    let Some(programs) = root.get("programs").and_then(Node::as_map) else { return false };
+    let Some(programs) = root.get("programs").and_then(Node::as_map) else {
+        return false;
+    };
     let mut found = Vec::new();
     reaches(root, "workspace", schema, "", 0, &mut found);
     if found.iter().any(|r| {
@@ -369,7 +415,9 @@ fn reaches(
     let Some(g) = schema.group(group) else { return };
     let Some(map) = node.as_map() else { return };
     for field in &g.fields {
-        let Some(entry) = map.get(field.name.as_str()) else { continue };
+        let Some(entry) = map.get(field.name.as_str()) else {
+            continue;
+        };
         if field.names.iter().any(|n| n == PROGRAMS) {
             let items: Vec<&Node> = match &entry.node.value {
                 pact_doc::Value::List(l) => l.iter().collect(),
@@ -416,7 +464,9 @@ fn reaches(
 
 /// Every room this workspace declares, and what each says it can run.
 fn rooms(root: &Node) -> Vec<(String, Vec<String>)> {
-    let Some(resources) = root.get("resources").and_then(Node::as_map) else { return Vec::new() };
+    let Some(resources) = root.get("resources").and_then(Node::as_map) else {
+        return Vec::new();
+    };
     resources
         .iter()
         .filter(|(_, r)| r.node.get("resource-kind").and_then(Node::as_str) == Some("sandbox"))
@@ -482,9 +532,13 @@ fn a_stage_that_writes_code_has_a_room(root: &Node, diags: &mut Diagnostics) {
     if !rooms(root).is_empty() {
         return;
     }
-    let Some(loops) = root.get("loops").and_then(Node::as_map) else { return };
+    let Some(loops) = root.get("loops").and_then(Node::as_map) else {
+        return;
+    };
     for (loop_name, shape) in loops {
-        let Some(steps) = shape.node.get("steps").and_then(Node::as_map) else { continue };
+        let Some(steps) = shape.node.get("steps").and_then(Node::as_map) else {
+            continue;
+        };
         for (stage_name, stage) in steps {
             if stage.node.get("does").and_then(Node::as_str) != Some(RUN_CODE) {
                 continue;
@@ -526,7 +580,14 @@ fn hands_back(owner: &Node) -> Option<std::collections::BTreeMap<String, String>
                     .node
                     .as_str()
                     .map_or_else(|| shape.node.to_json().to_string(), str::to_string);
-                (name.clone(), written.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase())
+                (
+                    name.clone(),
+                    written
+                        .split_whitespace()
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                        .to_lowercase(),
+                )
             })
             .collect(),
     )
@@ -561,12 +622,18 @@ fn hands_back_what_its_program_does(
         .collect();
     Some(Diagnostic::error(
         "loader/an-action-and-its-program-hand-back-different-things",
-        action.get("answers-with").map_or_else(|| action.span.clone(), |n| n.span.start_of_block()),
+        action
+            .get("answers-with")
+            .map_or_else(|| action.span.clone(), |n| n.span.start_of_block()),
         format!(
             "'{tool}/{action_name}' runs the program '{named}', and the two `answers-with:` \
              blocks disagree about {}{}.",
             differs.join(", "),
-            if runs.is_empty() { format!(" — '{named}' says nothing about what it hands back") } else { String::new() }
+            if runs.is_empty() {
+                format!(" — '{named}' says nothing about what it hands back")
+            } else {
+                String::new()
+            }
         ),
         format!(
             "Delete `answers-with:` from '{tool}/{action_name}' (the program's is what a \
@@ -582,12 +649,16 @@ pub fn check(root: &Node, schema: &Schema, diags: &mut Diagnostics) {
     only_pure_programs_project(root, diags);
     only_pure_programs_decide(root, diags);
     only_pure_programs_rewrite(root, schema, diags);
-    let Some(tools) = root.get("tools").and_then(Node::as_map) else { return };
+    let Some(tools) = root.get("tools").and_then(Node::as_map) else {
+        return;
+    };
     let programs = root.get("programs").and_then(Node::as_map);
     let resources = root.get("resources").and_then(Node::as_map);
 
     for (tool_name, tool) in tools {
-        let Some(actions) = tool.node.get("actions").and_then(Node::as_map) else { continue };
+        let Some(actions) = tool.node.get("actions").and_then(Node::as_map) else {
+            continue;
+        };
         // Which locked room this tool reaches. A tool reaches ONE place
         // (`reach.rs`), so there is one answer or none.
         let reaches = tool.node.get("connect").and_then(Node::as_str);
@@ -599,20 +670,26 @@ pub fn check(root: &Node, schema: &Schema, diags: &mut Diagnostics) {
             // Whether the program EXISTS is `names: programs`, held by the
             // schema where the author wrote it. This pass only asks whether the
             // arrangement can work.
-            let Some(program) = programs.and_then(|p| p.get(named)) else { continue };
-            if let Some(d) =
-                hands_back_what_its_program_does(tool_name, action_name, &action.node, named, &program.node)
-            {
+            let Some(program) = programs.and_then(|p| p.get(named)) else {
+                continue;
+            };
+            if let Some(d) = hands_back_what_its_program_does(
+                tool_name,
+                action_name,
+                &action.node,
+                named,
+                &program.node,
+            ) {
                 diags.push(d);
             }
             let Some(engine) = program.node.get("engine").and_then(Node::as_str) else {
                 continue;
             };
 
-            let at = action.node.get("program").map_or_else(
-                || action.key_span.clone(),
-                |n| n.span.clone(),
-            );
+            let at = action
+                .node
+                .get("program")
+                .map_or_else(|| action.key_span.clone(), |n| n.span.clone());
 
             let Some(server) = reaches else {
                 diags.push(Diagnostic::error(
@@ -630,7 +707,9 @@ pub fn check(root: &Node, schema: &Schema, diags: &mut Diagnostics) {
                 continue;
             };
 
-            let Some(resource) = resources.and_then(|r| r.get(server)) else { continue };
+            let Some(resource) = resources.and_then(|r| r.get(server)) else {
+                continue;
+            };
             let kind = resource.node.get("resource-kind").and_then(Node::as_str);
             if kind != Some("sandbox") {
                 diags.push(Diagnostic::error(

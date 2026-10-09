@@ -46,7 +46,9 @@ fn worked_example() -> Utf8PathBuf {
 /// A test reading only one of the three could pass with the other two wrong.
 fn read(root: &Utf8PathBuf) -> (Node, LoadReport, Diagnostics) {
     let mut d = Diagnostics::new();
-    let node = Loader::new(root.clone()).load(root, &mut d).expect("the tree loads");
+    let node = Loader::new(root.clone())
+        .load(root, &mut d)
+        .expect("the tree loads");
     let report = LoadReport::of(&node, &mut d);
     approvals::check(&node, &mut d);
     pact_loader::money::check(&node, &mut d);
@@ -78,9 +80,17 @@ fn one_line_in_a_tool_file_produces_a_wait_with_no_question_and_no_policy_anywhe
         asked,
         vec![approvals::SHIPPED_QUESTION],
         "a gate written the short way is not on the list a scheduler walks: {:?}",
-        report.waits.iter().map(|w| (w.reason, w.question.as_str())).collect::<Vec<_>>()
+        report
+            .waits
+            .iter()
+            .map(|w| (w.reason, w.question.as_str()))
+            .collect::<Vec<_>>()
     );
-    assert!(diags.is_empty(), "and a correct tree is warned about nothing:\n{}", diags.render());
+    assert!(
+        diags.is_empty(),
+        "and a correct tree is warned about nothing:\n{}",
+        diags.render()
+    );
 }
 
 #[test]
@@ -89,10 +99,18 @@ fn the_wait_a_short_gate_makes_carries_the_same_deadline_and_audience_a_written_
     // or nowhere: these four fields are all a runtime is given to act on, and a
     // wait missing any of them is one that parks and is never looked at again.
     let (_, report, _) = read(&tree());
-    let wait = report.waits.iter().find(|w| w.reason == NEEDS_APPROVAL).expect("the gate");
+    let wait = report
+        .waits
+        .iter()
+        .find(|w| w.reason == NEEDS_APPROVAL)
+        .expect("the gate");
 
     assert_eq!(wait.answer_within, "30m", "the wait has to end somewhere");
-    assert_eq!(wait.deadline_ms, Some(30 * 60 * 1000), "not thirty times shorter");
+    assert_eq!(
+        wait.deadline_ms,
+        Some(30 * 60 * 1000),
+        "not thirty times shorter"
+    );
     assert!(wait.wakes(), "a scheduler has a moment to wake at");
     assert!(
         !wait.asked_of.is_empty(),
@@ -126,7 +144,11 @@ fn the_wait_points_at_the_line_the_author_really_typed() {
     // policy's. The expected line is read out of the file rather than written
     // here, so moving the line moves both sides.
     let (_, report, _) = read(&tree());
-    let wait = report.waits.iter().find(|w| w.reason == NEEDS_APPROVAL).expect("the gate");
+    let wait = report
+        .waits
+        .iter()
+        .find(|w| w.reason == NEEDS_APPROVAL)
+        .expect("the gate");
     let file = tree().join("tools/payments.yaml");
     let text = std::fs::read_to_string(&file).expect("the tool file is on disk");
     let expected = text
@@ -152,21 +174,38 @@ fn deleting_the_one_line_takes_the_gate_off_the_list_and_the_money_warning_comes
     let copy = copy_of("deleted");
     let file = copy.join("tools/payments.yaml");
     let text = std::fs::read_to_string(&file).unwrap();
-    assert!(text.contains("needs-a-person: yes"), "the line this test deletes must exist");
+    assert!(
+        text.contains("needs-a-person: yes"),
+        "the line this test deletes must exist"
+    );
     std::fs::write(&file, text.replace("    needs-a-person: yes\n", "")).unwrap();
 
     let (_, report, diags) = read(&copy);
     assert!(
         report.waits.is_empty(),
         "the gate outlived the line that wrote it: {:?}",
-        report.waits.iter().map(|w| w.question.as_str()).collect::<Vec<_>>()
+        report
+            .waits
+            .iter()
+            .map(|w| w.question.as_str())
+            .collect::<Vec<_>>()
     );
     let warn = diags
         .items()
         .iter()
         .find(|d| d.rule == "loader/money-moves-with-nobody-asked")
-        .unwrap_or_else(|| panic!("an ungated spend must be said out loud:\n{}", diags.render()));
-    assert!(warn.message.contains("money moves without anybody being asked"), "{}", warn.message);
+        .unwrap_or_else(|| {
+            panic!(
+                "an ungated spend must be said out loud:\n{}",
+                diags.render()
+            )
+        });
+    assert!(
+        warn.message
+            .contains("money moves without anybody being asked"),
+        "{}",
+        warn.message
+    );
 
     let _ = std::fs::remove_dir_all(&copy);
 }
@@ -181,7 +220,10 @@ fn an_action_that_moves_money_and_asks_a_person_in_one_line_is_not_reported_as_u
     // already written.
     let (_, _, diags) = read(&tree());
     assert!(
-        !diags.items().iter().any(|d| d.rule == "loader/money-moves-with-nobody-asked"),
+        !diags
+            .items()
+            .iter()
+            .any(|d| d.rule == "loader/money-moves-with-nobody-asked"),
         "an action gated in one line was reported as ungated:\n{}",
         diags.render()
     );
@@ -198,9 +240,15 @@ fn the_read_only_action_beside_it_is_not_gated_by_its_neighbours_line() {
     let expanded = approvals::desugared(&doc);
     let named: Vec<String> = expanded.iter().map(approvals::Desugared::named).collect();
     assert_eq!(named, vec!["payments/issue-refund"]);
-    assert_eq!(expanded[0].shows, vec!["order-number", "amount"], "the values a person sees");
+    assert_eq!(
+        expanded[0].shows,
+        vec!["order-number", "amount"],
+        "the values a person sees"
+    );
     assert!(
-        expanded[0].because.contains("Send money back to the customer"),
+        expanded[0]
+            .because
+            .contains("Send money back to the customer"),
         "the person is shown what the action does, in the action's own words: {}",
         expanded[0].because
     );
@@ -223,8 +271,14 @@ fn a_rule_about_the_same_action_wins_and_the_author_is_told_where_they_overlap()
     let file = copy.join("tools/payments.yaml");
     let text = std::fs::read_to_string(&file).unwrap();
     assert!(text.contains("    inspects: [amount]"), "fixture drifted");
-    std::fs::write(&file, text.replace("    inspects: [amount]", "    needs-a-person: yes\n    inspects: [amount]"))
-        .unwrap();
+    std::fs::write(
+        &file,
+        text.replace(
+            "    inspects: [amount]",
+            "    needs-a-person: yes\n    inspects: [amount]",
+        ),
+    )
+    .unwrap();
     let (_, after, diags) = read(&copy);
 
     assert_eq!(
@@ -237,8 +291,17 @@ fn a_rule_about_the_same_action_wins_and_the_author_is_told_where_they_overlap()
         .items()
         .iter()
         .find(|d| d.rule == "loader/asked-for-twice")
-        .unwrap_or_else(|| panic!("a line that decides nothing must be said out loud:\n{}", diags.render()));
-    assert_eq!(warn.severity, pact_diag::Severity::Warning, "both lines are legitimate");
+        .unwrap_or_else(|| {
+            panic!(
+                "a line that decides nothing must be said out loud:\n{}",
+                diags.render()
+            )
+        });
+    assert_eq!(
+        warn.severity,
+        pact_diag::Severity::Warning,
+        "both lines are legitimate"
+    );
     assert!(warn.message.contains("issue-refund") && warn.message.contains("payments"));
     assert!(
         warn.fix.contains("Delete `needs-a-person: yes`"),
@@ -259,25 +322,49 @@ fn the_question_pact_ships_would_pass_every_check_a_written_one_has_to() {
     // something, it says what an answer looks like, somebody can answer it, and
     // its deadline can be read.
     let shipped = approvals::shipped_question();
-    let says = shipped.get("says").and_then(Node::as_str).unwrap_or("").trim();
+    let says = shipped
+        .get("says")
+        .and_then(Node::as_str)
+        .unwrap_or("")
+        .trim();
     assert!(!says.is_empty(), "a park with nothing to read is a hang");
     assert!(
         !says.contains("pact:question"),
         "the person reads wording, not the name of a file: {says}"
     );
 
-    let answer = shipped.get("answer").and_then(Node::as_map).expect("it says what an answer is");
+    let answer = shipped
+        .get("answer")
+        .and_then(Node::as_map)
+        .expect("it says what an answer is");
     assert!(
-        answer.values().any(|e| e.node.as_str() == Some("yes or no")),
+        answer
+            .values()
+            .any(|e| e.node.as_str() == Some("yes or no")),
         "a gate with no yes-or-no in it cannot be refused"
     );
 
-    let asked_of = shipped.get("asked-of").and_then(Node::as_list).unwrap_or_default();
-    assert!(!asked_of.is_empty(), "naming nobody means nobody can answer");
+    let asked_of = shipped
+        .get("asked-of")
+        .and_then(Node::as_list)
+        .unwrap_or_default();
+    assert!(
+        !asked_of.is_empty(),
+        "naming nobody means nobody can answer"
+    );
 
-    assert_eq!(shipped.get("answer-within").and_then(Node::as_str), Some("30m"));
-    let timeout = shipped.get("if-nobody-answers").and_then(Node::as_str).unwrap_or("");
-    assert!(["stop-and-say-so", "decline"].contains(&timeout), "silence is never a yes: {timeout}");
+    assert_eq!(
+        shipped.get("answer-within").and_then(Node::as_str),
+        Some("30m")
+    );
+    let timeout = shipped
+        .get("if-nobody-answers")
+        .and_then(Node::as_str)
+        .unwrap_or("");
+    assert!(
+        ["stop-and-say-so", "decline"].contains(&timeout),
+        "silence is never a yes: {timeout}"
+    );
     assert!(
         shipped.get("escalates-to").is_none(),
         "there is nobody here to escalate to, so it must not claim to"
@@ -288,12 +375,18 @@ fn the_question_pact_ships_would_pass_every_check_a_written_one_has_to() {
 fn the_shipped_question_is_read_from_the_file_an_author_can_open() {
     // Not a literal in Rust. A wording change in `spec/questions/is-this-ok.yaml`
     // has to reach the binary, or the file is documentation of something else.
-    let text =
-        std::fs::read_to_string(Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../spec/questions/is-this-ok.yaml"))
-        .expect("the shipped question is a file on disk");
-    let says = approvals::shipped_question().get("says").and_then(Node::as_str).unwrap();
-    assert!(text.contains(says), "the compiled copy and the file disagree about the wording");
+    let text = std::fs::read_to_string(
+        Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../spec/questions/is-this-ok.yaml"),
+    )
+    .expect("the shipped question is a file on disk");
+    let says = approvals::shipped_question()
+        .get("says")
+        .and_then(Node::as_str)
+        .unwrap();
+    assert!(
+        text.contains(says),
+        "the compiled copy and the file disagree about the wording"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────── helpers

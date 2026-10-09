@@ -279,10 +279,7 @@ fn the_warning_line_itself_names_the_folder() {
         .expect("the binary runs");
     let said = said(&out);
 
-    let warning_lines: Vec<&str> = said
-        .lines()
-        .filter(|l| l.starts_with("warning:"))
-        .collect();
+    let warning_lines: Vec<&str> = said.lines().filter(|l| l.starts_with("warning:")).collect();
     assert!(
         warning_lines.iter().any(|l| l.contains("agents/build")),
         "no warning SENTENCE names the folder that was skipped — only the arrow \

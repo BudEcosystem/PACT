@@ -71,10 +71,16 @@ const OFF: &str = "off";
 /// typed, and a second message about it here would offer a fix for a mistake
 /// they did not make. Same argument `ports.rs` makes about a misspelt `kind:`.
 pub fn check(document: &Node, schema: &pact_schema::Schema, diags: &mut Diagnostics) {
-    let Some(learning) = document.get("learning") else { return };
+    let Some(learning) = document.get("learning") else {
+        return;
+    };
     let Some(map) = learning.as_map() else { return };
-    let Some(entry) = map.get("review") else { return };
-    let Some(said) = entry.node.as_str().map(str::trim) else { return };
+    let Some(entry) = map.get("review") else {
+        return;
+    };
+    let Some(said) = entry.node.as_str().map(str::trim) else {
+        return;
+    };
     if said.is_empty() || said.eq_ignore_ascii_case(BY_HAND) {
         return;
     }
@@ -82,7 +88,10 @@ pub fn check(document: &Node, schema: &pact_schema::Schema, diags: &mut Diagnost
     // Learning switched off proposes nothing, so there is nothing for a review
     // to be shown. Checked the same way `redaction.rs` checks it and against the
     // same word, so the two cannot come to disagree about what "off" is.
-    let enabled = map.get("enabled").and_then(|e| e.node.as_str()).map(str::trim);
+    let enabled = map
+        .get("enabled")
+        .and_then(|e| e.node.as_str())
+        .map(str::trim);
     if enabled.is_some_and(|w| w.eq_ignore_ascii_case(OFF)) {
         return;
     }
@@ -134,7 +143,9 @@ pub fn check(document: &Node, schema: &pact_schema::Schema, diags: &mut Diagnost
 /// the worked example — which ships `ports/weekly-review.yaml` beside
 /// `review: weekly` — is warned about a timer it has.
 fn has_a_timer(document: &Node) -> bool {
-    let Some(ports) = document.get("ports").and_then(Node::as_map) else { return false };
+    let Some(ports) = document.get("ports").and_then(Node::as_map) else {
+        return false;
+    };
     ports.iter().any(|(_, entry)| {
         // A file that did not parse says nothing about what is inside it, so it
         // is not counted as a timer and not counted as proof there is none —
@@ -196,7 +207,11 @@ ports:
         const SPEC: &str = include_str!("../../../spec/schema.yaml");
         let mut d = Diagnostics::new();
         let s = pact_schema::from_doc::schema_from_yaml(SPEC, &mut d);
-        assert!(!d.has_errors(), "the shipped specification does not load:\n{}", d.render());
+        assert!(
+            !d.has_errors(),
+            "the shipped specification does not load:\n{}",
+            d.render()
+        );
         s
     }
 
@@ -209,7 +224,12 @@ ports:
     }
 
     fn only(d: &Diagnostics) -> &Diagnostic {
-        assert_eq!(d.items().len(), 1, "expected exactly one problem:\n{}", d.render());
+        assert_eq!(
+            d.items().len(),
+            1,
+            "expected exactly one problem:\n{}",
+            d.render()
+        );
         &d.items()[0]
     }
 
@@ -217,15 +237,28 @@ ports:
     fn a_workspace_that_promises_a_weekly_review_and_has_no_clock_is_told_so() {
         // The measured defect: `review: weekly` with nothing that can reach a
         // Friday printed one line of "loaded cleanly" and exited 0.
-        let d = check_text(&WORKSPACE.replace("    kind: schedule\n", "").replace(
-            "    every: Friday at 4pm\n",
-            "",
-        ));
+        let d = check_text(
+            &WORKSPACE
+                .replace("    kind: schedule\n", "")
+                .replace("    every: Friday at 4pm\n", ""),
+        );
         let e = only(&d);
         assert_eq!(e.rule, "loader/nothing-runs-the-review");
-        assert_eq!(e.severity, pact_diag::Severity::Warning, "a half-written tree still loads");
-        assert!(e.message.contains("review: weekly"), "quote the line: {}", e.message);
-        assert!(e.message.contains("runs on a clock"), "say what is missing: {}", e.message);
+        assert_eq!(
+            e.severity,
+            pact_diag::Severity::Warning,
+            "a half-written tree still loads"
+        );
+        assert!(
+            e.message.contains("review: weekly"),
+            "quote the line: {}",
+            e.message
+        );
+        assert!(
+            e.message.contains("runs on a clock"),
+            "say what is missing: {}",
+            e.message
+        );
     }
 
     #[test]
@@ -233,22 +266,39 @@ ports:
         // D13: a message with nowhere to go is not a diagnostic. Naming the file
         // and every line it needs is the difference between "somebody has to
         // schedule this" and something a support lead can type.
-        let d = check_text(&WORKSPACE.replace("  weekly-review:\n", "  x-unused:\n").replace(
-            "    kind: schedule\n",
-            "    kind: conversation\n",
-        ));
+        let d = check_text(
+            &WORKSPACE
+                .replace("  weekly-review:\n", "  x-unused:\n")
+                .replace("    kind: schedule\n", "    kind: conversation\n"),
+        );
         let e = only(&d);
-        assert!(e.fix.contains("ports/weekly-review.yaml"), "name the file: {}", e.fix);
+        assert!(
+            e.fix.contains("ports/weekly-review.yaml"),
+            "name the file: {}",
+            e.fix
+        );
         assert!(e.fix.contains("kind: schedule"), "name the line: {}", e.fix);
-        assert!(e.fix.contains("every: Friday at 4pm"), "name the line: {}", e.fix);
-        assert!(e.fix.contains("review: manual"), "offer the other way out: {}", e.fix);
+        assert!(
+            e.fix.contains("every: Friday at 4pm"),
+            "name the line: {}",
+            e.fix
+        );
+        assert!(
+            e.fix.contains("review: manual"),
+            "offer the other way out: {}",
+            e.fix
+        );
     }
 
     #[test]
     fn a_workspace_with_a_timer_in_it_is_left_alone() {
         // The half that matters most, and the line that READS `ports/`: the
         // worked example's own shape must not be warned about.
-        assert!(check_text(WORKSPACE).is_empty(), "{}", check_text(WORKSPACE).render());
+        assert!(
+            check_text(WORKSPACE).is_empty(),
+            "{}",
+            check_text(WORKSPACE).render()
+        );
     }
 
     #[test]
@@ -257,7 +307,11 @@ ports:
         // who took the advice and wrote one line instead of two must not be told
         // they have no clock.
         let d = check_text(&WORKSPACE.replace("    kind: schedule\n", ""));
-        assert!(d.is_empty(), "`every:` is what makes a port a timer:\n{}", d.render());
+        assert!(
+            d.is_empty(),
+            "`every:` is what makes a port a timer:\n{}",
+            d.render()
+        );
     }
 
     #[test]
@@ -268,7 +322,11 @@ ports:
             .replace("    kind: schedule\n", "")
             .replace("    every: Friday at 4pm\n", "")
             .replace("review: weekly", "review: manual");
-        assert!(check_text(&text).is_empty(), "{}", check_text(&text).render());
+        assert!(
+            check_text(&text).is_empty(),
+            "{}",
+            check_text(&text).render()
+        );
     }
 
     #[test]
@@ -279,7 +337,11 @@ ports:
             .replace("    kind: schedule\n", "")
             .replace("    every: Friday at 4pm\n", "")
             .replace("enabled: propose-only", "enabled: off");
-        assert!(check_text(&text).is_empty(), "{}", check_text(&text).render());
+        assert!(
+            check_text(&text).is_empty(),
+            "{}",
+            check_text(&text).render()
+        );
     }
 
     #[test]
@@ -297,7 +359,11 @@ ports:
             .replace("    kind: schedule\n", "")
             .replace("    every: Friday at 4pm\n", "")
             .replace("enabled: propose-only", "enabled: propose only");
-        assert!(check_text(&text).is_empty(), "one mistake gets one message:\n{}", check_text(&text).render());
+        assert!(
+            check_text(&text).is_empty(),
+            "one mistake gets one message:\n{}",
+            check_text(&text).render()
+        );
     }
 
     #[test]
@@ -310,7 +376,11 @@ ports:
             "learning:\n  enabled: propose-only\n  review: weekly\nports:\n  weekly-review:\n    {}: yes\n",
             pact_doc::UNLOADED
         );
-        assert!(check_text(&text).is_empty(), "{}", check_text(&text).render());
+        assert!(
+            check_text(&text).is_empty(),
+            "{}",
+            check_text(&text).render()
+        );
     }
 
     #[test]
@@ -325,7 +395,10 @@ ports:
             "'{BY_HAND}' is what this module reads as 'a person starts it', and the \
              specification no longer offers it: {intervals:?}"
         );
-        assert!(intervals.len() >= 2, "`review:` offers no interval to promise: {intervals:?}");
+        assert!(
+            intervals.len() >= 2,
+            "`review:` offers no interval to promise: {intervals:?}"
+        );
 
         let states = words_the_specification_offers(&spec(), "learning", "enabled");
         assert!(
@@ -341,7 +414,10 @@ ports:
             .replace("    kind: schedule\n", "")
             .replace("    every: Friday at 4pm\n", "");
         let rendered = check_text(&text).render();
-        assert!(rendered.contains("  review: weekly"), "the line is shown:\n{rendered}");
+        assert!(
+            rendered.contains("  review: weekly"),
+            "the line is shown:\n{rendered}"
+        );
         assert!(
             rendered.contains(&"^".repeat("review: weekly".len())),
             "the whole setting is underlined:\n{rendered}"

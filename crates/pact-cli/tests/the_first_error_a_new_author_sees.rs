@@ -57,15 +57,24 @@ fn write(root: &std::path::Path, rel: &str, body: &str) {
 
 /// What `pact check` prints, and whether it refused.
 fn check(root: &std::path::Path) -> (bool, String) {
-    let out = pact().args(["check", root.to_str().unwrap()]).output().expect("the binary runs");
-    (out.status.success(), String::from_utf8_lossy(&out.stdout).into_owned())
+    let out = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("the binary runs");
+    (
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+    )
 }
 
 /// The report split into one block per problem, in the order printed.
 fn problems(rendered: &str) -> Vec<String> {
     let mut blocks: Vec<Vec<&str>> = Vec::new();
     for line in rendered.lines() {
-        if ["error: ", "warning: ", "note: "].iter().any(|k| line.starts_with(k)) {
+        if ["error: ", "warning: ", "note: "]
+            .iter()
+            .any(|k| line.starts_with(k))
+        {
             blocks.push(Vec::new());
         }
         if let Some(b) = blocks.last_mut() {
@@ -86,7 +95,11 @@ fn fix_line(block: &str) -> String {
 /// The text between the n-th pair of backticks in `s`.
 fn quoted(s: &str, n: usize) -> String {
     let parts: Vec<&str> = s.split('`').collect();
-    assert!(parts.len() > n * 2, "expected at least {} quoted things in: {s}", n + 1);
+    assert!(
+        parts.len() > n * 2,
+        "expected at least {} quoted things in: {s}",
+        n + 1
+    );
     parts[n * 2 + 1].to_string()
 }
 
@@ -94,7 +107,11 @@ fn quoted(s: &str, n: usize) -> String {
 /// not have written.
 fn the_first_tree_anybody_makes(name: &str) -> std::path::PathBuf {
     let root = tree(name);
-    write(&root, "agents/hello/agent.yaml", "description: says hello\n");
+    write(
+        &root,
+        "agents/hello/agent.yaml",
+        "description: says hello\n",
+    );
     root
 }
 
@@ -102,9 +119,15 @@ fn the_first_tree_anybody_makes(name: &str) -> std::path::PathBuf {
 fn the_first_error_a_brand_new_author_sees_names_a_file_they_can_create() {
     let root = the_first_tree_anybody_makes("names-a-file");
     let (ok, text) = check(&root);
-    assert!(!ok, "a workspace with no name must still be refused:\n{text}");
+    assert!(
+        !ok,
+        "a workspace with no name must still be refused:\n{text}"
+    );
 
-    let first = problems(&text).first().cloned().expect("something was reported");
+    let first = problems(&text)
+        .first()
+        .cloned()
+        .expect("something was reported");
     assert!(
         first.contains("must have a 'name'"),
         "the missing name is still the first thing said:\n{text}"
@@ -190,7 +213,10 @@ fn typing_the_fix_exactly_as_it_is_written_clears_the_error() {
     // And the tree is now a workspace the rest of the toolchain can see. This is
     // what rules out the other spellings the loader would also have accepted:
     // `hello/hello.yaml` loads and `pact discover` never finds it.
-    let listed = pact().args(["discover", root.to_str().unwrap()]).output().expect("the binary runs");
+    let listed = pact()
+        .args(["discover", root.to_str().unwrap()])
+        .output()
+        .expect("the binary runs");
     let listed = String::from_utf8_lossy(&listed.stdout).into_owned();
     assert!(
         listed.contains("Hello Desk"),
@@ -209,16 +235,26 @@ fn a_folder_shaped_agent_with_no_file_of_its_own_is_told_which_file_to_start() {
     // non-technical author reaches for without being taught anything.
     let root = tree("folder-shaped-agent");
     write(&root, "workspace.yaml", "name: Hello Desk\n");
-    write(&root, "agents/hello/instructions.md", "Say hello politely.\n");
+    write(
+        &root,
+        "agents/hello/instructions.md",
+        "Say hello politely.\n",
+    );
     let (ok, text) = check(&root);
-    assert!(!ok, "an agent with no description must still be refused:\n{text}");
+    assert!(
+        !ok,
+        "an agent with no description must still be refused:\n{text}"
+    );
 
     let mine = problems(&text)
         .into_iter()
         .find(|b| b.contains("must have a 'description'"))
         .unwrap_or_else(|| panic!("the missing description must be reported:\n{text}"));
     let fix = fix_line(&mine);
-    assert!(fix.starts_with("Create "), "there is no file to add a line to:\n{mine}");
+    assert!(
+        fix.starts_with("Create "),
+        "there is no file to add a line to:\n{mine}"
+    );
     assert_eq!(
         std::path::Path::new(&quoted(&fix, 0)),
         root.join("agents/hello/agent.yaml"),
@@ -235,7 +271,11 @@ fn a_setting_missing_from_a_file_that_does_exist_is_still_told_to_add_a_line() {
     // like on the way to being finished.
     let root = tree("file-that-exists");
     write(&root, "workspace.yaml", "# TODO\n");
-    write(&root, "agents/hello/agent.yaml", "description: says hello\n");
+    write(
+        &root,
+        "agents/hello/agent.yaml",
+        "description: says hello\n",
+    );
     let (ok, text) = check(&root);
     assert!(!ok, "an unnamed workspace is still refused:\n{text}");
 

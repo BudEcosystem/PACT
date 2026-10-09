@@ -134,7 +134,9 @@ pub fn kind_of(port: &Node) -> Kind {
 /// (the same-setting-twice mistake this whole module is about, made by the
 /// checker instead of the author).
 pub fn check(document: &Node, schema: &pact_schema::Schema, diags: &mut Diagnostics) {
-    let Some(ports) = document.get("ports").and_then(Node::as_map) else { return };
+    let Some(ports) = document.get("ports").and_then(Node::as_map) else {
+        return;
+    };
     let choices = kinds_the_specification_offers(schema);
 
     for (name, entry) in ports {
@@ -203,9 +205,11 @@ pub fn check(document: &Node, schema: &pact_schema::Schema, diags: &mut Diagnost
         // The whole setting is underlined, key and value, because the sentence
         // quotes the whole setting.
         let at = lead_at.clone().merge(
-            &port.as_map().and_then(|m| m.get(lead)).map(|e| e.node.span.clone()).unwrap_or_else(
-                || lead_at.clone(),
-            ),
+            &port
+                .as_map()
+                .and_then(|m| m.get(lead))
+                .map(|e| e.node.span.clone())
+                .unwrap_or_else(|| lead_at.clone()),
         );
 
         let dead = and_list(&written.iter().map(|(f, _)| *f).collect::<Vec<_>>());
@@ -224,7 +228,11 @@ pub fn check(document: &Node, schema: &pact_schema::Schema, diags: &mut Diagnost
                         "Change `kind: {word}` to `kind: {SCHEDULE}`, or delete the `{lead}:` \
                          line. {} only work on a timer too, so {} with it.",
                         and_list(&written.iter().skip(1).map(|(f, _)| *f).collect::<Vec<_>>()),
-                        if written.len() == 2 { "it goes" } else { "they go" }
+                        if written.len() == 2 {
+                            "it goes"
+                        } else {
+                            "they go"
+                        }
                     )
                 };
                 Diagnostic::error(
@@ -321,7 +329,11 @@ ports:
         const SPEC: &str = include_str!("../../../spec/schema.yaml");
         let mut d = Diagnostics::new();
         let s = pact_schema::from_doc::schema_from_yaml(SPEC, &mut d);
-        assert!(!d.has_errors(), "the shipped specification does not load:\n{}", d.render());
+        assert!(
+            !d.has_errors(),
+            "the shipped specification does not load:\n{}",
+            d.render()
+        );
         s
     }
 
@@ -334,14 +346,23 @@ ports:
     }
 
     fn only(d: &Diagnostics) -> &Diagnostic {
-        assert_eq!(d.items().len(), 1, "expected exactly one problem:\n{}", d.render());
+        assert_eq!(
+            d.items().len(),
+            1,
+            "expected exactly one problem:\n{}",
+            d.render()
+        );
         &d.items()[0]
     }
 
     #[test]
     fn a_timer_written_the_way_the_worked_example_writes_one_is_left_alone() {
         // The half that matters most: a correct tree must not be warned about.
-        assert!(check_text(WORKSPACE).is_empty(), "{}", check_text(WORKSPACE).render());
+        assert!(
+            check_text(WORKSPACE).is_empty(),
+            "{}",
+            check_text(WORKSPACE).render()
+        );
     }
 
     #[test]
@@ -350,7 +371,11 @@ ports:
         // line is gone and `every:`, `says:` and `if-still-running:` are all
         // still fine, because the document already answered what kind it is.
         let d = check_text(&WORKSPACE.replace("    kind: schedule\n", ""));
-        assert!(d.is_empty(), "`every:` is what makes it a timer:\n{}", d.render());
+        assert!(
+            d.is_empty(),
+            "`every:` is what makes it a timer:\n{}",
+            d.render()
+        );
     }
 
     #[test]
@@ -360,10 +385,20 @@ ports:
         let d = check_text(&WORKSPACE.replace("kind: schedule", "kind: event"));
         let e = only(&d);
         assert_eq!(e.rule, "loader/a-timer-that-cannot-fire");
-        assert_eq!(e.severity, pact_diag::Severity::Error, "nothing intends a dead timer");
-        assert!(e.message.contains("the clock will never run it"), "{}", e.message);
+        assert_eq!(
+            e.severity,
+            pact_diag::Severity::Error,
+            "nothing intends a dead timer"
+        );
         assert!(
-            e.fix.starts_with("Change `kind: event` to `kind: schedule`, or delete the `every:` line."),
+            e.message.contains("the clock will never run it"),
+            "{}",
+            e.message
+        );
+        assert!(
+            e.fix.starts_with(
+                "Change `kind: event` to `kind: schedule`, or delete the `every:` line."
+            ),
             "the fix has to be two lines the author can type: {}",
             e.fix
         );
@@ -376,14 +411,30 @@ ports:
         // only the line the caret is under gets told off again next run.
         let text = WORKSPACE
             .replace("kind: schedule", "kind: inbound-call")
-            .replace("    if-still-running: skip\n", "    if-still-running: skip\n    if-missed: skip\n");
+            .replace(
+                "    if-still-running: skip\n",
+                "    if-still-running: skip\n    if-missed: skip\n",
+            );
         let d = check_text(&text);
         let e = only(&d);
         for field in ["every:", "says:", "if-missed:"] {
-            assert!(e.message.contains(field), "{field} is not named: {}", e.message);
+            assert!(
+                e.message.contains(field),
+                "{field} is not named: {}",
+                e.message
+            );
         }
-        assert!(e.fix.contains("`says:` and `if-missed:` only work on a timer too"), "{}", e.fix);
-        assert_eq!(e.related.len(), 1, "the `kind:` line is the other half of the story");
+        assert!(
+            e.fix
+                .contains("`says:` and `if-missed:` only work on a timer too"),
+            "{}",
+            e.fix
+        );
+        assert_eq!(
+            e.related.len(),
+            1,
+            "the `kind:` line is the other half of the story"
+        );
     }
 
     #[test]
@@ -410,9 +461,22 @@ ports:
         let said = check_text(&text);
         let e = only(&said);
         assert_eq!(e.rule, "loader/a-timer-that-cannot-fire");
-        assert!(e.message.contains("nothing in the port 'weekly-review' says it is one"), "{}", e.message);
-        assert!(e.fix.contains("`every: Friday at 4pm`"), "the fix names the line to add: {}", e.fix);
-        assert!(!e.fix.contains("Change `kind:"), "there is no `kind:` line to change: {}", e.fix);
+        assert!(
+            e.message
+                .contains("nothing in the port 'weekly-review' says it is one"),
+            "{}",
+            e.message
+        );
+        assert!(
+            e.fix.contains("`every: Friday at 4pm`"),
+            "the fix names the line to add: {}",
+            e.fix
+        );
+        assert!(
+            !e.fix.contains("Change `kind:"),
+            "there is no `kind:` line to change: {}",
+            e.fix
+        );
     }
 
     #[test]
@@ -425,7 +489,11 @@ ports:
         assert_eq!(e.rule, "loader/nothing-says-how-work-arrives");
         assert!(e.message.contains("'slack'"), "{}", e.message);
         for choice in ["conversation", "schedule", "inbound-call", "event"] {
-            assert!(e.fix.contains(choice), "the fix must offer '{choice}': {}", e.fix);
+            assert!(
+                e.fix.contains(choice),
+                "the fix must offer '{choice}': {}",
+                e.fix
+            );
         }
     }
 
@@ -435,14 +503,20 @@ ports:
         // writes both, and so may anybody who prefers to say it out loud.
         assert!(check_text(WORKSPACE).is_empty());
         let spelled = WORKSPACE.replace("kind: schedule", "kind: Schedule");
-        assert!(check_text(&spelled).is_empty(), "the word is the word, whatever its case");
+        assert!(
+            check_text(&spelled).is_empty(),
+            "the word is the word, whatever its case"
+        );
     }
 
     #[test]
     fn the_underline_covers_the_setting_the_sentence_quotes() {
         let d = check_text(&WORKSPACE.replace("kind: schedule", "kind: event"));
         let rendered = d.render();
-        assert!(rendered.contains("    every: Friday at 4pm"), "the line is shown:\n{rendered}");
+        assert!(
+            rendered.contains("    every: Friday at 4pm"),
+            "the line is shown:\n{rendered}"
+        );
         assert!(
             rendered.contains(&"^".repeat("every: Friday at 4pm".len())),
             "the whole setting is underlined:\n{rendered}"
@@ -455,7 +529,11 @@ ports:
         // reported; adding "nothing says how work arrives" would be a second
         // thing to fix for a file whose contents nobody has read.
         let text = format!("ports:\n  slack:\n    {}: yes\n", pact_doc::UNLOADED);
-        assert!(check_text(&text).is_empty(), "{}", check_text(&text).render());
+        assert!(
+            check_text(&text).is_empty(),
+            "{}",
+            check_text(&text).render()
+        );
     }
 
     #[test]
@@ -470,7 +548,10 @@ ports:
         // word this file calls the clock has to stay one of them or the
         // derivation is naming something that no longer exists.
         let words = kinds_the_specification_offers(&spec());
-        assert!(words.len() >= 2, "the specification offers no choices for `kind:`: {words:?}");
+        assert!(
+            words.len() >= 2,
+            "the specification offers no choices for `kind:`: {words:?}"
+        );
         assert!(
             words.iter().any(|w| w == SCHEDULE),
             "'{SCHEDULE}' is what this module derives from an `every:` line, and the \
@@ -484,6 +565,10 @@ ports:
         // typed and lists every word that works; a second sentence here would
         // offer `kind: schedule` to somebody who meant `event`.
         let d = check_text(&WORKSPACE.replace("kind: schedule", "kind: evnt"));
-        assert!(d.is_empty(), "one mistake gets one message:\n{}", d.render());
+        assert!(
+            d.is_empty(),
+            "one mistake gets one message:\n{}",
+            d.render()
+        );
     }
 }

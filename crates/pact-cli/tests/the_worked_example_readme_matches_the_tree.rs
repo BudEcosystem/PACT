@@ -57,7 +57,11 @@ fn files() -> Vec<String> {
     let mut out = Vec::new();
     walk(&root, &root, &mut out);
     out.sort();
-    assert!(out.len() > 30, "only {} files found — the walk is wrong, not the tree", out.len());
+    assert!(
+        out.len() > 30,
+        "only {} files found — the walk is wrong, not the tree",
+        out.len()
+    );
     out
 }
 
@@ -98,7 +102,9 @@ fn table_patterns() -> Vec<String> {
         if !inside || !line.starts_with('|') {
             continue;
         }
-        let Some(cell) = line.split('|').nth(1) else { continue };
+        let Some(cell) = line.split('|').nth(1) else {
+            continue;
+        };
         out.extend(backticked(cell));
     }
     // Deliberately low. This guard exists for one thing only — a parser that has
@@ -118,7 +124,11 @@ fn table_patterns() -> Vec<String> {
 }
 
 fn backticked(text: &str) -> Vec<String> {
-    text.split('`').skip(1).step_by(2).map(str::to_string).collect()
+    text.split('`')
+        .skip(1)
+        .step_by(2)
+        .map(str::to_string)
+        .collect()
 }
 
 /// Does `pattern`, as an author would read it, describe `path`?
@@ -162,7 +172,10 @@ fn nearest(missing: &str, files: &[String]) -> Option<String> {
         return Some(hit.clone());
     }
     let base = Path::new(missing).file_name()?.to_str()?.to_string();
-    files.iter().find(|f| f.ends_with(&format!("/{base}"))).cloned()
+    files
+        .iter()
+        .find(|f| f.ends_with(&format!("/{base}")))
+        .cloned()
 }
 
 #[test]
@@ -180,7 +193,9 @@ fn every_path_the_worked_examples_table_names_is_a_path_that_is_really_there() {
             Some(real) => format!("write `{real}` instead"),
             None => "delete the row, or add the file it describes".to_string(),
         };
-        dead.push(format!("`{pattern}` is named by the table and is not in the tree\n    fix: {fix}"));
+        dead.push(format!(
+            "`{pattern}` is named by the table and is not in the tree\n    fix: {fix}"
+        ));
     }
     assert!(
         dead.is_empty(),
@@ -263,7 +278,6 @@ fn every_path_the_worked_examples_prose_names_is_a_path_that_is_really_there() {
     );
 }
 
-
 // ---------------------------------------------------------------------------
 // `docs/20-ARCHITECTURE-DRAFT.md` §11.1 — the same tree, drawn a second time
 // ---------------------------------------------------------------------------
@@ -341,7 +355,9 @@ fn drawn_paths() -> Vec<(usize, Drawn)> {
         if line.trim().is_empty() || line.trim_start().starts_with('#') {
             continue;
         }
-        let Some(cut) = line.find("├── ").or_else(|| line.find("└── ")) else { continue };
+        let Some(cut) = line.find("├── ").or_else(|| line.find("└── ")) else {
+            continue;
+        };
         let depth = line[..cut].chars().count() / 4;
         let label = line[cut + "├── ".len()..].trim();
         if let Some(dir) = label.strip_suffix('/') {
@@ -356,12 +372,17 @@ fn drawn_paths() -> Vec<(usize, Drawn)> {
              columns per level.",
             stack.len()
         );
-        let prefix =
-            if depth == 0 { String::new() } else { format!("{}/", stack[..depth].join("/")) };
+        let prefix = if depth == 0 {
+            String::new()
+        } else {
+            format!("{}/", stack[..depth].join("/"))
+        };
         for leaf in expand(label) {
             let path = format!("{prefix}{leaf}");
             if path.contains('…') || path.contains("...") {
-                let folder = path.rsplit_once('/').map_or(String::new(), |(d, _)| d.to_string());
+                let folder = path
+                    .rsplit_once('/')
+                    .map_or(String::new(), |(d, _)| d.to_string());
                 out.push((n, Drawn::Folder(folder)));
             } else {
                 out.push((n, Drawn::File(path)));
@@ -383,9 +404,16 @@ fn expand(label: &str) -> Vec<String> {
     if let Some((head, rest)) = label.split_once('{')
         && let Some(inner) = rest.strip_suffix('}')
     {
-        return inner.split(',').map(|s| format!("{head}{}", s.trim())).collect();
+        return inner
+            .split(',')
+            .map(|s| format!("{head}{}", s.trim()))
+            .collect();
     }
-    label.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
+    label
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
 }
 
 #[test]
@@ -439,7 +467,9 @@ fn the_file_count_the_architecture_draft_prints_is_the_number_of_files_in_the_tr
                 continue;
             }
             let said = line.split_whitespace().nth(i - 1).unwrap_or("");
-            let Ok(said) = said.parse::<usize>() else { continue };
+            let Ok(said) = said.parse::<usize>() else {
+                continue;
+            };
             quoted += 1;
             assert_eq!(
                 said,
@@ -470,9 +500,10 @@ fn every_path_the_architecture_drafts_tree_block_draws_is_a_file_that_is_really_
     for (line, drawn) in drawn_paths() {
         let (what, ok) = match &drawn {
             Drawn::File(p) => (p.clone(), files.contains(p)),
-            Drawn::Folder(d) => {
-                (format!("{d}/"), files.iter().any(|f| f.starts_with(&format!("{d}/"))))
-            }
+            Drawn::Folder(d) => (
+                format!("{d}/"),
+                files.iter().any(|f| f.starts_with(&format!("{d}/"))),
+            ),
         };
         if !ok {
             let fix = match nearest(what.trim_end_matches('/'), &files) {
@@ -539,8 +570,12 @@ fn nothing_the_tree_block_lists_as_deliberately_absent_is_present() {
         if !after_tree {
             continue;
         }
-        let Some(body) = raw.trim().strip_prefix('#') else { continue };
-        let Some(claim) = body.split('—').next() else { continue };
+        let Some(body) = raw.trim().strip_prefix('#') else {
+            continue;
+        };
+        let Some(claim) = body.split('—').next() else {
+            continue;
+        };
         let claim = claim.trim();
         if claim.is_empty() || !claim.contains(['/', '.']) || claim.contains(' ') {
             continue;

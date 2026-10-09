@@ -50,7 +50,10 @@ fn spec_for(test: &str) -> std::path::PathBuf {
         text
     } else {
         let anchor = "      evals:\n        type: text\n";
-        assert!(text.contains(anchor), "the `agent.evals` field moved; update this fixture");
+        assert!(
+            text.contains(anchor),
+            "the `agent.evals` field moved; update this fixture"
+        );
         text.replacen(anchor, &format!("{anchor}        {HOLDS_EVALS}\n"), 1)
     };
     let dst = std::env::temp_dir().join(format!(
@@ -70,7 +73,10 @@ fn worked_example_with(test: &str, edits: &[(&str, &str, &str)]) -> std::path::P
     for (file, from, to) in edits {
         let p = dst.join(file);
         let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-        assert!(text.contains(from), "fixture drifted: {from:?} not found in {file}");
+        assert!(
+            text.contains(from),
+            "fixture drifted: {from:?} not found in {file}"
+        );
         std::fs::write(&p, text.replace(from, to)).unwrap();
     }
     dst
@@ -95,23 +101,39 @@ fn check(test: &str, root: &std::path::Path) -> (bool, String) {
         .env("PACT_SPEC", spec_for(test))
         .output()
         .expect("the binary runs");
-    (out.status.success(), String::from_utf8_lossy(&out.stdout).into_owned())
+    (
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+    )
 }
 
 #[test]
 fn an_evals_line_pointing_at_a_file_that_is_not_there_is_refused_at_check_time() {
     let root = worked_example_with(
         "missing",
-        &[("agents/refund-desk/agent.yaml", "evals: /evals/suite.yaml", "evals: /evals/suit.yaml")],
+        &[(
+            "agents/refund-desk/agent.yaml",
+            "evals: /evals/suite.yaml",
+            "evals: /evals/suit.yaml",
+        )],
     );
     let (ok, text) = check("missing", &root);
-    assert!(!ok, "a suite that is not there must stop the check:\n{text}");
+    assert!(
+        !ok,
+        "a suite that is not there must stop the check:\n{text}"
+    );
     assert!(text.contains("schema/no-such-name"), "{text}");
-    assert!(text.contains("/evals/suit.yaml"), "must quote what the author wrote: {text}");
+    assert!(
+        text.contains("/evals/suit.yaml"),
+        "must quote what the author wrote: {text}"
+    );
     // And the alternative offered has to be the suite this tree really has, not
     // a general complaint. That value can only have come from reading the tree,
     // so this is also what fails if the checker stops reading it.
-    assert!(text.contains("/evals/suite.yaml"), "must offer the suite that is there: {text}");
+    assert!(
+        text.contains("/evals/suite.yaml"),
+        "must offer the suite that is there: {text}"
+    );
 }
 
 #[test]
@@ -121,7 +143,11 @@ fn the_refusal_names_the_file_the_line_and_a_suite_that_does_exist() {
     // message cannot leave out for a reader who cannot grep the tree.
     let root = worked_example_with(
         "four-parts",
-        &[("agents/refund-desk/agent.yaml", "evals: /evals/suite.yaml", "evals: /evals/suit.yaml")],
+        &[(
+            "agents/refund-desk/agent.yaml",
+            "evals: /evals/suite.yaml",
+            "evals: /evals/suit.yaml",
+        )],
     );
     let (_, text) = check("four-parts", &root);
     // The line is READ from the tree rather than written down here: pinning `29`
@@ -137,7 +163,10 @@ fn the_refusal_names_the_file_the_line_and_a_suite_that_does_exist() {
         text.contains(&format!("agents/refund-desk/agent.yaml:{line}:8")),
         "file, line and column: {text}"
     );
-    assert!(text.contains("^^^"), "the caret must sit under the value: {text}");
+    assert!(
+        text.contains("^^^"),
+        "the caret must sit under the value: {text}"
+    );
     assert!(
         text.contains("Change it to one of: /evals/suite.yaml, evals"),
         "the fix must name the suites that DO exist: {text}"
@@ -163,7 +192,11 @@ fn the_name_spelling_means_the_same_suite_as_the_path_spelling() {
     // spellings are one address (D2 — the tree is the document).
     let root = worked_example_with(
         "by-name",
-        &[("agents/refund-desk/agent.yaml", "evals: /evals/suite.yaml", "evals: evals")],
+        &[(
+            "agents/refund-desk/agent.yaml",
+            "evals: /evals/suite.yaml",
+            "evals: evals",
+        )],
     );
     let (ok, text) = check("by-name", &root);
     assert!(ok, "the name spelling must be accepted too:\n{text}");
@@ -184,7 +217,10 @@ fn an_evals_line_pointing_at_a_file_that_is_not_a_suite_is_refused() {
     let (ok, text) = check("not-a-suite", &root);
     assert!(!ok, "a policy is not a suite of checks:\n{text}");
     assert!(text.contains("schema/no-such-name"), "{text}");
-    assert!(text.contains("/evals/suite.yaml"), "must offer the one that is: {text}");
+    assert!(
+        text.contains("/evals/suite.yaml"),
+        "must offer the one that is: {text}"
+    );
 }
 
 #[test]
@@ -203,7 +239,10 @@ fn naming_a_setting_inside_the_suite_is_not_naming_the_suite() {
             )],
         );
         let (ok, text) = check("inside", &root);
-        assert!(!ok, "'{inside}' is a setting inside the suite, not a suite:\n{text}");
+        assert!(
+            !ok,
+            "'{inside}' is a setting inside the suite, not a suite:\n{text}"
+        );
         assert!(
             text.contains("Change it to one of: /evals/suite.yaml, evals"),
             "and the two spellings that ARE the suite must be offered: {text}"
@@ -219,7 +258,10 @@ fn deleting_the_only_suite_refuses_the_agent_that_points_at_it() {
     let root = worked_example_with("no-suite", &[]);
     std::fs::remove_dir_all(root.join("evals")).unwrap();
     let (ok, text) = check("no-suite", &root);
-    assert!(!ok, "an agent's checks cannot be deleted out from under it silently:\n{text}");
+    assert!(
+        !ok,
+        "an agent's checks cannot be deleted out from under it silently:\n{text}"
+    );
     // And it must say so as a SENTENCE, not as a list of one phrase. The fix
     // used to read ``Change it to one of: nothing is declared yet — or write one
     // in `evals/suite.yaml` ``, which instructs the reader to type the words
@@ -234,7 +276,8 @@ fn deleting_the_only_suite_refuses_the_agent_that_points_at_it() {
         "a list of nothing is not a choice — it tells the reader to type a phrase: {text}"
     );
     assert!(
-        text.to_lowercase().contains("write one in `evals/suite.yaml`"),
+        text.to_lowercase()
+            .contains("write one in `evals/suite.yaml`"),
         "with the file to write: {text}"
     );
 }
@@ -253,8 +296,11 @@ fn the_specification_ships_the_line_that_holds_evals_to_a_real_suite() {
         .split("      evals:\n        type: text\n")
         .nth(1)
         .expect("the `agent.evals` field exists and is text");
-    let block: String =
-        field.lines().take_while(|l| l.starts_with("        ")).collect::<Vec<_>>().join("\n");
+    let block: String = field
+        .lines()
+        .take_while(|l| l.starts_with("        "))
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(
         block.contains(HOLDS_EVALS),
         "add `{HOLDS_EVALS}` under `agent.evals` in spec/schema.yaml. Without it \

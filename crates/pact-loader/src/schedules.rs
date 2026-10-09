@@ -77,8 +77,9 @@ const DAYS: [(&str, u32); 17] = [
     ("saturday", 6),
 ];
 
-const MONTHS: [&str; 12] =
-    ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+const MONTHS: [&str; 12] = [
+    "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+];
 
 /// The words that are a whole schedule by themselves.
 const NAMED: [(&str, &str); 8] = [
@@ -92,11 +93,20 @@ const NAMED: [(&str, &str); 8] = [
     ("every second", "@every 1s"),
 ];
 
-const UNITS: [(&str, u64); 4] = [("second", 1), ("minute", 60), ("hour", 3600), ("day", 86400)];
+const UNITS: [(&str, u64); 4] = [
+    ("second", 1),
+    ("minute", 60),
+    ("hour", 3600),
+    ("day", 86400),
+];
 
 /// One `every:` line as the one form a clock keeps, or why it is not one.
 pub fn read(written: &str) -> Result<String, Unreadable> {
-    let text = written.to_lowercase().split_whitespace().collect::<Vec<_>>().join(" ");
+    let text = written
+        .to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
     if text.is_empty() {
         return Err(Unreadable::NotATime);
     }
@@ -118,7 +128,11 @@ pub fn read(written: &str) -> Result<String, Unreadable> {
         Some(line) => line,
         None => calendar(&text)?.ok_or(Unreadable::NotATime)?,
     };
-    if comes_round(&line) { Ok(line) } else { Err(Unreadable::NeverComes) }
+    if comes_round(&line) {
+        Ok(line)
+    } else {
+        Err(Unreadable::NeverComes)
+    }
 }
 
 /// `every <n> <unit>[s]`, in seconds.
@@ -135,7 +149,11 @@ fn interval(text: &str) -> Option<u64> {
     }
     // More digits than a number holds is still an interval, and one no clock
     // can keep: the caller refuses it as never coming round.
-    let n = count.parse::<u64>().ok().and_then(|n| n.checked_mul(seconds)).unwrap_or(u64::MAX);
+    let n = count
+        .parse::<u64>()
+        .ok()
+        .and_then(|n| n.checked_mul(seconds))
+        .unwrap_or(u64::MAX);
     (n > 0).then_some(n)
 }
 
@@ -154,7 +172,9 @@ fn cron(text: &str) -> Result<Option<String>, Unreadable> {
     let in_cron = |f: &&str| {
         !f.is_empty()
             && f.bytes().all(|b| {
-                b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'*' | b'/' | b',' | b'-')
+                b.is_ascii_lowercase()
+                    || b.is_ascii_digit()
+                    || matches!(b, b'*' | b'/' | b',' | b'-')
             })
     };
     if !matches!(fields.len(), 5 | 6) || !fields.iter().all(in_cron) {
@@ -179,7 +199,11 @@ fn values(field: &str, at: usize) -> Result<Option<u64>, Unreadable> {
     let (name, low, high) = FIELDS[at];
     let named = |word: &str| -> Option<u32> {
         match at {
-            4 => MONTHS.iter().zip(1..).find(|(m, _)| **m == word).map(|(_, i)| i),
+            4 => MONTHS
+                .iter()
+                .zip(1..)
+                .find(|(m, _)| **m == word)
+                .map(|(_, i)| i),
             5 => DAYS.iter().find(|(d, _)| *d == word).map(|(_, i)| *i),
             _ => None,
         }
@@ -204,11 +228,15 @@ fn values(field: &str, at: usize) -> Result<Option<u64>, Unreadable> {
             (low, high)
         } else {
             let (first, last) = body.split_once('-').unwrap_or((body, ""));
-            let Some(lo) = number(first) else { return Ok(None) };
+            let Some(lo) = number(first) else {
+                return Ok(None);
+            };
             let hi = if last.is_empty() {
                 if stepped { high } else { lo }
             } else {
-                let Some(hi) = number(last) else { return Ok(None) };
+                let Some(hi) = number(last) else {
+                    return Ok(None);
+                };
                 hi
             };
             (lo, hi)
@@ -229,7 +257,10 @@ fn values(field: &str, at: usize) -> Result<Option<u64>, Unreadable> {
 
 /// `<days> [<part of day>] at <time>`, or `<days>` alone (at midnight).
 fn calendar(text: &str) -> Result<Option<String>, Unreadable> {
-    let text = text.strip_prefix("on ").or_else(|| text.strip_prefix("every ")).unwrap_or(text);
+    let text = text
+        .strip_prefix("on ")
+        .or_else(|| text.strip_prefix("every "))
+        .unwrap_or(text);
     let (days_part, time_part) = text.split_once(" at ").unwrap_or((text, ""));
     let spaced = days_part.replace(',', " ");
     let mut words: Vec<&str> = spaced.split_whitespace().collect();
@@ -241,7 +272,9 @@ fn calendar(text: &str) -> Result<Option<String>, Unreadable> {
     if part.is_some() {
         words.pop();
     }
-    let Some(days) = days(&words) else { return Ok(None) };
+    let Some(days) = days(&words) else {
+        return Ok(None);
+    };
     if time_part.is_empty() {
         // `weekday mornings` names no hour, and midnight is not a morning.
         return Ok(part.is_none().then(|| format!("0 0 0 * * {days}")));
@@ -264,7 +297,13 @@ fn days(words: &[&str]) -> Option<String> {
     }
     named.sort_unstable();
     named.dedup();
-    (!named.is_empty()).then(|| named.iter().map(u32::to_string).collect::<Vec<_>>().join(","))
+    (!named.is_empty()).then(|| {
+        named
+            .iter()
+            .map(u32::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
+    })
 }
 
 /// The parts of a day a line may name.
@@ -348,14 +387,21 @@ fn comes_round(line: &str) -> bool {
     // The longest each month ever is; February in a leap year.
     const LONGEST: [u32; 12] = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
     let first = days.trailing_zeros();
-    LONGEST.iter().zip(1..).any(|(longest, month)| months & (1 << month) != 0 && first <= *longest)
+    LONGEST
+        .iter()
+        .zip(1..)
+        .any(|(longest, month)| months & (1 << month) != 0 && first <= *longest)
 }
 
 /// Refuse an `every:` line no clock can keep, on every port that writes one.
 pub fn check(document: &Node, diags: &mut Diagnostics) {
-    let Some(ports) = document.get("ports").and_then(Node::as_map) else { return };
+    let Some(ports) = document.get("ports").and_then(Node::as_map) else {
+        return;
+    };
     for (name, entry) in ports {
-        let Some(every) = entry.node.as_map().and_then(|m| m.get("every")) else { continue };
+        let Some(every) = entry.node.as_map().and_then(|m| m.get("every")) else {
+            continue;
+        };
         let written = match &every.node.value {
             Value::Str(s) => s.trim().to_string(),
             Value::Int(n) => n.to_string(),
@@ -393,7 +439,10 @@ mod tests {
     use pact_doc::parse_yaml;
 
     fn conformance() -> serde_json::Value {
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/conformance/schedules.json");
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/conformance/schedules.json"
+        );
         serde_json::from_str(&std::fs::read_to_string(path).expect("the conformance list"))
             .expect("json")
     }
@@ -402,9 +451,16 @@ mod tests {
     fn every_line_the_list_accepts_is_read_into_the_line_it_names() {
         let list = conformance();
         let accepted = list["accepted"].as_object().expect("accepted");
-        assert!(accepted.len() >= 30, "the list is the grammar; it is not a sample");
+        assert!(
+            accepted.len() >= 30,
+            "the list is the grammar; it is not a sample"
+        );
         for (written, line) in accepted {
-            assert_eq!(read(written).as_deref(), Ok(line.as_str().unwrap()), "every: {written}");
+            assert_eq!(
+                read(written).as_deref(),
+                Ok(line.as_str().unwrap()),
+                "every: {written}"
+            );
         }
     }
 
@@ -413,13 +469,19 @@ mod tests {
         let list = conformance();
         for written in list["refused"].as_array().expect("refused") {
             let written = written.as_str().unwrap();
-            assert!(read(written).is_err(), "`every: {written}` was read: {:?}", read(written));
+            assert!(
+                read(written).is_err(),
+                "`every: {written}` was read: {:?}",
+                read(written)
+            );
         }
     }
 
     #[test]
     fn a_time_that_could_be_either_half_of_the_day_says_so() {
-        let Err(Unreadable::Because(why)) = read("Friday at 4") else { panic!("read") };
+        let Err(Unreadable::Because(why)) = read("Friday at 4") else {
+            panic!("read")
+        };
         assert!(why.contains("4am or 4pm"), "{why}");
         assert_eq!(read("0 0 30 2 *"), Err(Unreadable::NeverComes));
         assert_eq!(read("every fortnight"), Err(Unreadable::NotATime));
@@ -443,9 +505,17 @@ mod tests {
 
     #[test]
     fn a_port_whose_line_no_clock_can_keep_is_refused_at_the_line() {
-        for every in ["every fortnight", "'0 0 30 2 *'", "nights at 14", "Friday at 4"] {
+        for every in [
+            "every fortnight",
+            "'0 0 30 2 *'",
+            "nights at 14",
+            "Friday at 4",
+        ] {
             let d = checked(every);
-            let e = d.items().first().unwrap_or_else(|| panic!("`every: {every}` loaded"));
+            let e = d
+                .items()
+                .first()
+                .unwrap_or_else(|| panic!("`every: {every}` loaded"));
             assert_eq!(e.rule, "loader/every-is-not-a-time");
             assert_eq!(e.span.line, 4);
             assert!(e.fix.contains("`Friday at 4pm`"), "{}", e.fix);

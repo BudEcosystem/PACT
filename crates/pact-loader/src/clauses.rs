@@ -53,7 +53,11 @@ use pact_doc::Node;
 /// the closed set is closed, and widening it by substring would make `## Notes`
 /// normative the day somebody wrote `## Notes on policy`.
 fn makes_rules(line: &str) -> bool {
-    let t = line.trim_start().trim_start_matches('#').trim().to_ascii_lowercase();
+    let t = line
+        .trim_start()
+        .trim_start_matches('#')
+        .trim()
+        .to_ascii_lowercase();
     t == "policy" || t == "rules" || t.ends_with(" policy")
 }
 
@@ -89,7 +93,11 @@ fn rules_in(body: &str) -> Option<(usize, String)> {
             continue;
         }
         if t.starts_with('#') {
-            inside = if makes_rules(t) { Some(t.trim().to_string()) } else { None };
+            inside = if makes_rules(t) {
+                Some(t.trim().to_string())
+            } else {
+                None
+            };
             continue;
         }
         if let Some(heading) = &inside
@@ -106,10 +114,16 @@ fn rules_in(body: &str) -> Option<(usize, String)> {
 
 /// Say, per skill, where its written rules are.
 pub fn say_where_the_rules_are(root: &Node, diags: &mut Diagnostics) {
-    let Some(skills) = root.get("skills").and_then(Node::as_map) else { return };
+    let Some(skills) = root.get("skills").and_then(Node::as_map) else {
+        return;
+    };
     for (name, skill) in skills {
-        let Some(body) = skill.node.get("content").and_then(Node::as_str) else { continue };
-        let Some((how_many, under)) = rules_in(body) else { continue };
+        let Some(body) = skill.node.get("content").and_then(Node::as_str) else {
+            continue;
+        };
+        let Some((how_many, under)) = rules_in(body) else {
+            continue;
+        };
         diags.push(Diagnostic::note(
             "loader/where-the-rules-are",
             skill.key_span.clone(),

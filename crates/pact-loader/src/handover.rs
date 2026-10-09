@@ -69,28 +69,32 @@ fn declarations(
     let Some(g) = schema.group(group) else { return };
     let Some(map) = node.as_map() else { return };
     for field in &g.fields {
-        let Some(entry) = map.get(field.name.as_str()) else { continue };
+        let Some(entry) = map.get(field.name.as_str()) else {
+            continue;
+        };
         match &field.ty {
             Ty::MapOf(inner) => match inner.as_ref() {
                 Ty::AnswerShape(shapes) => {
-                    let Some(spellings) =
-                        shapes.iter().find(|(n, _)| n == AGENT_SHAPE).map(|(_, s)| s)
+                    let Some(spellings) = shapes
+                        .iter()
+                        .find(|(n, _)| n == AGENT_SHAPE)
+                        .map(|(_, s)| s)
                     else {
                         continue;
                     };
-                    let Some(declared) = entry.node.as_map() else { continue };
+                    let Some(declared) = entry.node.as_map() else {
+                        continue;
+                    };
                     for (asked, what) in declared {
-                        let Some(spelt) = what.node.as_str() else { continue };
+                        let Some(spelt) = what.node.as_str() else {
+                            continue;
+                        };
                         let spelt = spelt.trim().to_ascii_lowercase();
                         if spellings.iter().any(|s| s.eq_ignore_ascii_case(&spelt)) {
                             // The KEY the author wrote, not just the block it
                             // sits in: `run-inputs:` is where to look and
                             // `takes-this-one:` is the line that asks.
-                            found.push((
-                                asked.clone(),
-                                field.name.clone(),
-                                what.node.span.clone(),
-                            ));
+                            found.push((asked.clone(), field.name.clone(), what.node.span.clone()));
                         }
                     }
                 }
@@ -130,7 +134,10 @@ fn can_be_handed_work(agent: &Node) -> bool {
     let abstract_base = matches!(
         agent.get("base").and_then(Node::as_str).map(str::trim),
         Some("yes" | "true" | "on")
-    ) || matches!(agent.get("base").map(|n| &n.value), Some(pact_doc::Value::Bool(true)));
+    ) || matches!(
+        agent.get("base").map(|n| &n.value),
+        Some(pact_doc::Value::Bool(true))
+    );
     budgeted && !abstract_base
 }
 
@@ -144,7 +151,12 @@ pub fn check(root: &Node, schema: &Schema, diags: &mut Diagnostics) {
 
     let agents = root.get("agents").and_then(Node::as_map);
     let handable: Vec<&String> = agents
-        .map(|m| m.iter().filter(|(_, e)| can_be_handed_work(&e.node)).map(|(k, _)| k).collect())
+        .map(|m| {
+            m.iter()
+                .filter(|(_, e)| can_be_handed_work(&e.node))
+                .map(|(k, _)| k)
+                .collect()
+        })
         .unwrap_or_default();
     if !handable.is_empty() {
         return;

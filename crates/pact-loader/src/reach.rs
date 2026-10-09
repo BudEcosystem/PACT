@@ -70,7 +70,9 @@ const WAYS: &[(&str, &str)] = &[
 /// Takes the loaded document and nothing else — the same purity `money::check`
 /// keeps, and the reason this can run beside every other check in one pass.
 pub fn check(document: &Node, diags: &mut Diagnostics) {
-    let Some(tools) = document.get("tools").and_then(Node::as_map) else { return };
+    let Some(tools) = document.get("tools").and_then(Node::as_map) else {
+        return;
+    };
 
     for (name, entry) in tools {
         // A tool that is not a set of settings at all — `payments: see the wiki`
@@ -78,7 +80,9 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
         // that fit ("should be a set of settings"). Counting to nought here as
         // well would be two messages for one mistake, and the second would send
         // the reader adding a `connect:` line to something that is not a block.
-        let Some(fields) = entry.node.as_map() else { continue };
+        let Some(fields) = entry.node.as_map() else {
+            continue;
+        };
         // A file whose contents the loader never read says nothing about what
         // is inside it, so nothing about what is inside it is checked — the
         // guard `ports::check` already carries, at the seam that needs it just
@@ -136,14 +140,17 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
                 // same: look at both, keep one.
                 let first = &written[0];
                 let extra = &written[1];
-                let at = fields
-                    .get(extra.0)
-                    .map_or_else(|| entry.key_span.clone(), |e| e.key_span.clone().merge(&e.node.span));
+                let at = fields.get(extra.0).map_or_else(
+                    || entry.key_span.clone(),
+                    |e| e.key_span.clone().merge(&e.node.span),
+                );
                 let also = fields
                     .get(first.0)
                     .map_or_else(|| entry.key_span.clone(), |e| e.key_span.clone());
-                let all: Vec<String> =
-                    written.iter().map(|(field, _)| format!("`{field}:`")).collect();
+                let all: Vec<String> = written
+                    .iter()
+                    .map(|(field, _)| format!("`{field}:`"))
+                    .collect();
                 diags.push(
                     Diagnostic::error(
                         "loader/tool-reaches-two-places",
@@ -210,7 +217,12 @@ tools:
     }
 
     fn only(d: &Diagnostics) -> &Diagnostic {
-        assert_eq!(d.items().len(), 1, "expected exactly one diagnostic:\n{}", d.render());
+        assert_eq!(
+            d.items().len(),
+            1,
+            "expected exactly one diagnostic:\n{}",
+            d.render()
+        );
         &d.items()[0]
     }
 
@@ -219,14 +231,26 @@ tools:
         // The half that matters most: a correct tree must not be refused. A
         // false positive on the shipped shape costs an author their trust in
         // every other line the tool prints.
-        assert!(check_text(WORKSPACE).is_empty(), "{}", check_text(WORKSPACE).render());
+        assert!(
+            check_text(WORKSPACE).is_empty(),
+            "{}",
+            check_text(WORKSPACE).render()
+        );
     }
 
     #[test]
     fn each_of_the_three_ways_to_reach_somewhere_counts_on_its_own() {
-        for line in ["connect: payments-server", "url: host/payments-api", "says: Refund this."] {
+        for line in [
+            "connect: payments-server",
+            "url: host/payments-api",
+            "says: Refund this.",
+        ] {
             let text = WORKSPACE.replace("connect: payments-server", line);
-            assert!(check_text(&text).is_empty(), "{line} is a way to reach: {}", check_text(&text).render());
+            assert!(
+                check_text(&text).is_empty(),
+                "{line} is a way to reach: {}",
+                check_text(&text).render()
+            );
         }
     }
 
@@ -235,28 +259,50 @@ tools:
         let d = check_text(&WORKSPACE.replace("    connect: payments-server\n", ""));
         let e = only(&d);
         assert_eq!(e.rule, "loader/tool-reaches-nowhere");
-        assert_eq!(e.severity, pact_diag::Severity::Error, "no reading of the file makes it work");
-        assert!(e.message.contains("no `connect:`, no `url:` and no `says:`"), "{}", e.message);
+        assert_eq!(
+            e.severity,
+            pact_diag::Severity::Error,
+            "no reading of the file makes it work"
+        );
+        assert!(
+            e.message
+                .contains("no `connect:`, no `url:` and no `says:`"),
+            "{}",
+            e.message
+        );
         assert!(
             e.message.contains("error: no tool named 'payments'"),
             "the sentence has to name what the author would otherwise only see at run time: {}",
             e.message
         );
         for typeable in ["connect: ", "url: ", "method: post", "says: "] {
-            assert!(e.fix.contains(typeable), "the fix must be typeable ({typeable}): {}", e.fix);
+            assert!(
+                e.fix.contains(typeable),
+                "the fix must be typeable ({typeable}): {}",
+                e.fix
+            );
         }
     }
 
     #[test]
     fn a_tool_that_names_two_places_is_refused_and_both_are_named() {
-        let d = check_text(
-            &WORKSPACE.replace("connect: payments-server", "connect: payments-server\n    url: host/payments-api"),
-        );
+        let d = check_text(&WORKSPACE.replace(
+            "connect: payments-server",
+            "connect: payments-server\n    url: host/payments-api",
+        ));
         let e = only(&d);
         assert_eq!(e.rule, "loader/tool-reaches-two-places");
-        assert!(e.message.contains("`connect:` and `url:`"), "both are named: {}", e.message);
+        assert!(
+            e.message.contains("`connect:` and `url:`"),
+            "both are named: {}",
+            e.message
+        );
         assert!(e.fix.contains("Delete `url:`"), "a typeable fix: {}", e.fix);
-        assert!(e.fix.contains("or delete `connect:`"), "and the other way round: {}", e.fix);
+        assert!(
+            e.fix.contains("or delete `connect:`"),
+            "and the other way round: {}",
+            e.fix
+        );
     }
 
     #[test]
@@ -264,12 +310,19 @@ tools:
         // The reader's next act is to look at both lines and keep one, so both
         // have to be on the screen — the shape `loader/ambiguous-field` uses for
         // one setting written twice.
-        let d = check_text(
-            &WORKSPACE.replace("connect: payments-server", "connect: payments-server\n    url: host/payments-api"),
-        );
+        let d = check_text(&WORKSPACE.replace(
+            "connect: payments-server",
+            "connect: payments-server\n    url: host/payments-api",
+        ));
         let rendered = d.render();
-        assert!(rendered.contains("url: host/payments-api"), "the line pointed at is shown:\n{rendered}");
-        assert!(rendered.contains("already set here"), "the first is shown beside it:\n{rendered}");
+        assert!(
+            rendered.contains("url: host/payments-api"),
+            "the line pointed at is shown:\n{rendered}"
+        );
+        assert!(
+            rendered.contains("already set here"),
+            "the first is shown beside it:\n{rendered}"
+        );
     }
 
     #[test]
@@ -279,9 +332,14 @@ tools:
             "connect: payments-server\n    url: host/payments-api\n    says: Refund this.",
         ));
         let e = only(&d);
-        assert!(e.message.contains("names three places to reach"), "{}", e.message);
         assert!(
-            e.message.contains("`connect:`, `url:` and `says:` are all set"),
+            e.message.contains("names three places to reach"),
+            "{}",
+            e.message
+        );
+        assert!(
+            e.message
+                .contains("`connect:`, `url:` and `says:` are all set"),
             "all three are named, so the author can see the whole mistake: {}",
             e.message
         );

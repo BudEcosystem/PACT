@@ -64,8 +64,14 @@ fn copy(src: &std::path::Path, dst: &std::path::Path) {
 }
 
 fn check(root: &std::path::Path) -> (bool, String) {
-    let out = pact().args(["check", root.to_str().unwrap()]).output().expect("the binary runs");
-    (out.status.success(), String::from_utf8_lossy(&out.stdout).into_owned())
+    let out = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("the binary runs");
+    (
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+    )
 }
 
 #[test]
@@ -74,12 +80,25 @@ fn the_deleted_second_setting_is_refused_by_name_rather_than_ignored() {
     // It must not load and do nothing — that is the state this whole deletion
     // exists to end — and the message has to name the file, the line, and a
     // setting the author can type instead.
-    let root = with_learning("auto-apply", "enabled: propose-only", "enabled: propose-only\nauto-apply: no");
+    let root = with_learning(
+        "auto-apply",
+        "enabled: propose-only",
+        "enabled: propose-only\nauto-apply: no",
+    );
     let (ok, text) = check(&root);
 
-    assert!(!ok, "`auto-apply:` must be refused, and it loaded cleanly:\n{text}");
-    assert!(text.contains("'auto-apply' is not something learning can have"), "{text}");
-    assert!(text.contains("learning.yaml:"), "must name the file and the line:\n{text}");
+    assert!(
+        !ok,
+        "`auto-apply:` must be refused, and it loaded cleanly:\n{text}"
+    );
+    assert!(
+        text.contains("'auto-apply' is not something learning can have"),
+        "{text}"
+    );
+    assert!(
+        text.contains("learning.yaml:"),
+        "must name the file and the line:\n{text}"
+    );
     assert!(text.contains("  fix: "), "must offer a fix:\n{text}");
     assert!(
         text.contains("enabled"),
@@ -96,10 +115,19 @@ fn the_word_that_used_to_mean_the_strongest_answer_is_refused_with_the_three_tha
     let root = with_learning("stale-yes", "enabled: propose-only", "enabled: yes");
     let (ok, text) = check(&root);
 
-    assert!(!ok, "`enabled: yes` is no longer a choice and must be refused:\n{text}");
-    assert!(text.contains("learning.yaml:"), "must name the file and the line:\n{text}");
+    assert!(
+        !ok,
+        "`enabled: yes` is no longer a choice and must be refused:\n{text}"
+    );
+    assert!(
+        text.contains("learning.yaml:"),
+        "must name the file and the line:\n{text}"
+    );
     for choice in ["off", "propose-only", "applies-safe-changes-itself"] {
-        assert!(text.contains(choice), "the fix must offer '{choice}':\n{text}");
+        assert!(
+            text.contains(choice),
+            "the fix must offer '{choice}':\n{text}"
+        );
     }
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -130,15 +158,32 @@ fn saying_it_applies_changes_itself_makes_the_author_say_which_ones() {
     std::fs::write(&p, stripped).unwrap();
 
     let (ok, text) = check(&root);
-    assert!(!ok, "the third choice with nothing saying what may change must be refused:\n{text}");
-    assert!(text.contains("may-improve-on-its-own"), "must name the missing setting:\n{text}");
+    assert!(
+        !ok,
+        "the third choice with nothing saying what may change must be refused:\n{text}"
+    );
+    assert!(
+        text.contains("may-improve-on-its-own"),
+        "must name the missing setting:\n{text}"
+    );
     assert!(
         text.contains("applies-safe-changes-itself"),
         "must quote the value that made it necessary, or the reader cannot tell why:\n{text}"
     );
-    assert!(text.contains("learning.yaml:"), "must name the file and the line:\n{text}");
-    for choice in ["phrasing", "examples", "skill-notes", "when-skills-are-used"] {
-        assert!(text.contains(choice), "the fix must offer '{choice}':\n{text}");
+    assert!(
+        text.contains("learning.yaml:"),
+        "must name the file and the line:\n{text}"
+    );
+    for choice in [
+        "phrasing",
+        "examples",
+        "skill-notes",
+        "when-skills-are-used",
+    ] {
+        assert!(
+            text.contains(choice),
+            "the fix must offer '{choice}':\n{text}"
+        );
     }
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -149,7 +194,11 @@ fn saying_nothing_applies_itself_does_not_demand_a_list_of_what_may() {
     // wrong mechanism: it fires on PRESENCE, so `auto-apply: no` — the line
     // meaning *"nothing takes effect without a person"* — demanded a list of
     // what does. A workspace on `propose-only` owes no such list.
-    let root = with_learning("propose-only-no-list", "enabled: propose-only", "enabled: propose-only");
+    let root = with_learning(
+        "propose-only-no-list",
+        "enabled: propose-only",
+        "enabled: propose-only",
+    );
     let p = root.join("learning.yaml");
     let text = std::fs::read_to_string(&p).unwrap();
     let stripped: String = text
@@ -163,7 +212,10 @@ fn saying_nothing_applies_itself_does_not_demand_a_list_of_what_may() {
     std::fs::write(&p, stripped).unwrap();
 
     let (ok, text) = check(&root);
-    assert!(ok, "`propose-only` owes no list of what may change itself:\n{text}");
+    assert!(
+        ok,
+        "`propose-only` owes no list of what may change itself:\n{text}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -189,7 +241,9 @@ fn the_specification_has_exactly_one_setting_for_this_decision() {
         "`auto-apply:` is back beside `enabled:`. Two settings for one decision \
          is what §5 R59 records deleting — see docs/50-NOT-COPIED.md."
     );
-    let enabled = learning.get("enabled").expect("`enabled:` is the surviving setting");
+    let enabled = learning
+        .get("enabled")
+        .expect("`enabled:` is the surviving setting");
     let choices: Vec<&str> = enabled
         .node
         .get("choices")
@@ -220,7 +274,10 @@ fn the_refusal_ledger_records_the_deletion() {
         .lines()
         .find(|l| l.starts_with("| R59 "))
         .expect("§5 must carry the row that argues deleting `learning.auto-apply:`");
-    assert!(row.contains("auto-apply"), "R59 must name what was deleted: {row}");
+    assert!(
+        row.contains("auto-apply"),
+        "R59 must name what was deleted: {row}"
+    );
     assert!(
         row.contains("applies-safe-changes-itself"),
         "R59 must name what an author writes instead: {row}"

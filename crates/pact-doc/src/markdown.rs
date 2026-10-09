@@ -63,11 +63,19 @@ pub struct Folded {
 
 impl Folded {
     fn plain(node: Node) -> Self {
-        Self { node, report: None, front_matter_refused: false }
+        Self {
+            node,
+            report: None,
+            front_matter_refused: false,
+        }
     }
 
     fn reported(node: Node, report: Diagnostic) -> Self {
-        Self { node, report: Some(report), front_matter_refused: false }
+        Self {
+            node,
+            report: Some(report),
+            front_matter_refused: false,
+        }
     }
 }
 
@@ -113,7 +121,10 @@ impl Markdown {
         }
 
         let body_is_blank = self.body.trim().is_empty();
-        let existing = fm.as_map().and_then(|m| m.get(body_field)).map(|e| e.node.span.clone());
+        let existing = fm
+            .as_map()
+            .and_then(|m| m.get(body_field))
+            .map(|e| e.node.span.clone());
 
         match (existing, body_is_blank) {
             (Some(prior), false) => {
@@ -245,7 +256,14 @@ pub fn parse_markdown(text: &str, file: &Utf8Path) -> Result<Markdown, Box<Diagn
     };
 
     // Front matter starts on line 2 (after the opening fence) at byte `open_len`.
-    let fm = parse_yaml_at(fm_text, file, Offset { line: 1, byte: open_len })?;
+    let fm = parse_yaml_at(
+        fm_text,
+        file,
+        Offset {
+            line: 1,
+            byte: open_len,
+        },
+    )?;
 
     // The span starts at the first line of the body THAT HAS WORDS ON IT, not
     // at the byte after the closing fence. Convention puts a blank line there —
@@ -274,13 +292,7 @@ pub fn parse_markdown(text: &str, file: &Utf8Path) -> Result<Markdown, Box<Diagn
     Ok(Markdown {
         front_matter: Some(fm),
         body: prose(body),
-        body_span: Span::new(
-            file,
-            body_line,
-            1,
-            body_byte,
-            text.len(),
-        ),
+        body_span: Span::new(file, body_line, 1, body_byte, text.len()),
     })
 }
 
@@ -322,7 +334,10 @@ fn whole(text: &str, file: &Utf8Path) -> Span {
 fn strip_open_fence(text: &str) -> Option<&str> {
     let t = text.strip_prefix('\u{feff}').unwrap_or(text);
     let rest = t.strip_prefix("---")?;
-    match rest.strip_prefix("\r\n").or_else(|| rest.strip_prefix('\n')) {
+    match rest
+        .strip_prefix("\r\n")
+        .or_else(|| rest.strip_prefix('\n'))
+    {
         Some(r) => Some(r),
         // A bare `---` with nothing after it is an empty document, not front matter.
         None if rest.trim().is_empty() => Some(""),
@@ -361,7 +376,10 @@ mod tests {
         let f = md.into_node("instructions");
         assert!(f.report.is_none());
         assert!(!f.front_matter_refused);
-        assert_eq!(f.node.as_str().unwrap().trim(), "You review pull requests.\nBe concise.");
+        assert_eq!(
+            f.node.as_str().unwrap().trim(),
+            "You review pull requests.\nBe concise."
+        );
     }
 
     #[test]
@@ -369,7 +387,10 @@ mod tests {
         let md = p("---\ndescription: Reviews PRs\n---\nYou review pull requests.\n");
         let f = md.into_node("instructions");
         assert!(f.report.is_none());
-        assert_eq!(f.node.get("description").unwrap().as_str(), Some("Reviews PRs"));
+        assert_eq!(
+            f.node.get("description").unwrap().as_str(),
+            Some("Reviews PRs")
+        );
         assert_eq!(
             f.node.get("instructions").unwrap().as_str().unwrap().trim(),
             "You review pull requests."
@@ -406,13 +427,18 @@ mod tests {
     fn setting_the_body_field_twice_is_refused_rather_than_silently_picked() {
         let md = p("---\ninstructions: from the top\n---\nfrom the bottom\n");
         let f = md.into_node("instructions");
-        let d = f.report.expect("T7: conflicts are reported, never silently resolved");
+        let d = f
+            .report
+            .expect("T7: conflicts are reported, never silently resolved");
         assert_eq!(d.rule, "doc/body-and-field");
         // One of the two authored values does not reach the document, so this is
         // a refusal, not a remark: `pact check` exited 0 on it for as long as it
         // was a warning.
         assert_eq!(d.severity, pact_diag::Severity::Error);
-        assert_eq!(f.node.get("instructions").unwrap().as_str(), Some("from the top"));
+        assert_eq!(
+            f.node.get("instructions").unwrap().as_str(),
+            Some("from the top")
+        );
     }
 
     #[test]
@@ -428,9 +454,16 @@ mod tests {
         // front matter are this shape, opencode's `empty-frontmatter.md` among
         // them. Nothing is above the line, so nothing can be lost by reading the
         // file as what it is: text.
-        for md in ["---\n---\n\nContent\n", "---\n# just a comment\n---\n\nContent\n"] {
+        for md in [
+            "---\n---\n\nContent\n",
+            "---\n# just a comment\n---\n\nContent\n",
+        ] {
             let f = p(md).into_node("instructions");
-            assert!(f.report.is_none(), "nothing is lost here: {:?}", f.report.map(|d| d.message));
+            assert!(
+                f.report.is_none(),
+                "nothing is lost here: {:?}",
+                f.report.map(|d| d.message)
+            );
             assert!(!f.front_matter_refused);
             assert_eq!(f.node.as_str().unwrap().trim(), "Content");
         }
@@ -450,13 +483,17 @@ mod tests {
         // thing the sentence says.
         assert_eq!(d.span.line, 2, "{}", d.message);
         assert_eq!(d.related[0].span.line, 5);
-        assert!(d.message.contains("a list"), "the kind, in words: {}", d.message);
+        assert!(
+            d.message.contains("a list"),
+            "the kind, in words: {}",
+            d.message
+        );
     }
 
     #[test]
     fn unterminated_front_matter_is_a_clear_error() {
-        let err = parse_markdown("---\nname: a\nno closing fence\n", Utf8Path::new("t.md"))
-            .unwrap_err();
+        let err =
+            parse_markdown("---\nname: a\nno closing fence\n", Utf8Path::new("t.md")).unwrap_err();
         assert_eq!(err.rule, "doc/unterminated-front-matter");
         assert!(err.fix.contains("---"));
     }

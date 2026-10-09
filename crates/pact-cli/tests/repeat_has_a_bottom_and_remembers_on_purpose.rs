@@ -204,7 +204,10 @@ fn an_until_that_reads_nothing_the_round_writes_is_refused() {
     );
     let (ok, text) = check(&root);
     assert!(!ok, "{text}");
-    assert!(text.contains("rule: loader/until-that-cannot-change"), "{text}");
+    assert!(
+        text.contains("rule: loader/until-that-cannot-change"),
+        "{text}"
+    );
     assert!(
         text.contains("'check-twice' repeats until something holds, and its `until:` reads nothing the round writes"),
         "{text}"
@@ -226,7 +229,10 @@ fn an_until_that_looks_at_a_call_is_refused_because_a_round_calls_nothing_there(
     );
     let (ok, text) = check(&root);
     assert!(!ok, "{text}");
-    assert!(text.contains("rule: loader/compared-in-the-wrong-shape"), "{text}");
+    assert!(
+        text.contains("rule: loader/compared-in-the-wrong-shape"),
+        "{text}"
+    );
     assert!(text.contains("fix: Write `value:` instead"), "{text}");
 }
 

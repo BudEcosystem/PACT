@@ -203,7 +203,10 @@ fn a_field_of(document: &Node, came: &Map, said: &str) -> bool {
         return false;
     };
     for part in parts {
-        let named = at.node.as_str().map(|s| s.trim().trim_end_matches(", optional").trim());
+        let named = at
+            .node
+            .as_str()
+            .map(|s| s.trim().trim_end_matches(", optional").trim());
         let Some(next) = named
             .and_then(|n| document.get("shapes")?.get(n)?.as_map())
             .and_then(|m| m.get(part))

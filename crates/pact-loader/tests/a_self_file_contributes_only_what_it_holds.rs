@@ -46,7 +46,9 @@ impl Tree {
 
     fn load(&self) -> (Node, Diagnostics) {
         let mut d = Diagnostics::new();
-        let n = Loader::new(self.0.clone()).load(&self.0, &mut d).expect("the folder loads");
+        let n = Loader::new(self.0.clone())
+            .load(&self.0, &mut d)
+            .expect("the folder loads");
         d.sort();
         (n, d)
     }
@@ -75,8 +77,15 @@ fn a_self_file_holding_only_a_comment_adds_no_setting_of_its_own() {
         "only the sibling file contributed: {}",
         thing.to_json()
     );
-    assert_eq!(thing.get("instructions").unwrap().as_str().unwrap().trim(), "Be brief.");
-    assert!(!d.has_errors(), "an unfinished file is not a broken one:\n{}", d.render());
+    assert_eq!(
+        thing.get("instructions").unwrap().as_str().unwrap().trim(),
+        "Be brief."
+    );
+    assert!(
+        !d.has_errors(),
+        "an unfinished file is not a broken one:\n{}",
+        d.render()
+    );
 }
 
 #[test]
@@ -85,8 +94,15 @@ fn a_self_file_with_nothing_in_it_at_all_adds_no_setting_of_its_own() {
     let t = Tree::with_self_file("empty", "thing.yaml", "");
     let (root, d) = t.load();
     let thing = root.get("thing").expect("the folder is still a field");
-    assert!(thing.get("content").is_none(), "nothing in, nothing out: {}", thing.to_json());
-    assert!(thing.get("instructions").is_some(), "and the siblings still load");
+    assert!(
+        thing.get("content").is_none(),
+        "nothing in, nothing out: {}",
+        thing.to_json()
+    );
+    assert!(
+        thing.get("instructions").is_some(),
+        "and the siblings still load"
+    );
     assert!(!d.has_errors(), "{}", d.render());
 }
 
@@ -118,8 +134,15 @@ fn a_self_file_written_as_prose_and_left_blank_adds_no_setting_of_its_own() {
             "only the sibling file contributed: {}",
             thing.to_json()
         );
-        assert!(thing.get("instructions").is_some(), "and the siblings still load");
-        assert!(!d.has_errors(), "an unfinished file is not a broken one:\n{}", d.render());
+        assert!(
+            thing.get("instructions").is_some(),
+            "and the siblings still load"
+        );
+        assert!(
+            !d.has_errors(),
+            "an unfinished file is not a broken one:\n{}",
+            d.render()
+        );
     }
 }
 
@@ -152,9 +175,21 @@ fn a_self_file_that_is_neither_settings_nor_prose_is_named_rather_than_renamed()
         .iter()
         .find(|x| x.rule == "loader/self-file-not-settings")
         .unwrap_or_else(|| panic!("this cannot pass silently:\n{}", d.render()));
-    assert!(e.message.contains("thing.yaml"), "name the file: {}", e.message);
-    assert!(e.message.contains("a list"), "and say what it is instead: {}", e.message);
-    assert!(e.fix.contains("description:"), "O7.3: give a line to type: {}", e.fix);
+    assert!(
+        e.message.contains("thing.yaml"),
+        "name the file: {}",
+        e.message
+    );
+    assert!(
+        e.message.contains("a list"),
+        "and say what it is instead: {}",
+        e.message
+    );
+    assert!(
+        e.fix.contains("description:"),
+        "O7.3: give a line to type: {}",
+        e.fix
+    );
     assert!(
         !e.message.contains("Value") && !e.message.contains("Seq"),
         "D13: no type names in anything an author reads: {}",
@@ -167,18 +202,28 @@ fn a_self_file_that_is_neither_settings_nor_prose_is_named_rather_than_renamed()
         "and no setting is invented to carry it: {}",
         thing.to_json()
     );
-    assert!(thing.get("instructions").is_some(), "the siblings are untouched");
+    assert!(
+        thing.get("instructions").is_some(),
+        "the siblings are untouched"
+    );
 }
 
 #[test]
 fn a_self_file_that_is_settings_still_supplies_them() {
     // The ordinary case, kept beside the others so a change to the branch has
     // to keep passing it.
-    let t = Tree::with_self_file("map", "thing.yaml", "name: thing\ndescription: Does a thing.\n");
+    let t = Tree::with_self_file(
+        "map",
+        "thing.yaml",
+        "name: thing\ndescription: Does a thing.\n",
+    );
     let (root, d) = t.load();
     let thing = root.get("thing").unwrap();
     assert_eq!(thing.get("name").unwrap().as_str(), Some("thing"));
-    assert_eq!(thing.get("description").unwrap().as_str(), Some("Does a thing."));
+    assert_eq!(
+        thing.get("description").unwrap().as_str(),
+        Some("Does a thing.")
+    );
     assert!(thing.get("instructions").is_some());
     assert!(!d.has_errors(), "{}", d.render());
 }

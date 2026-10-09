@@ -49,7 +49,10 @@ fn pinned_to(name: &str, model: &str) -> String {
 
     let p = dst.join("agents/refund-desk/agent.yaml");
     let text = std::fs::read_to_string(&p).expect("the worked example has an agent file");
-    assert!(!text.contains("\nmodel:"), "fixture drifted: the example already pins a model");
+    assert!(
+        !text.contains("\nmodel:"),
+        "fixture drifted: the example already pins a model"
+    );
     std::fs::write(&p, format!("{text}\nmodel: {model}\n")).unwrap();
     dst.to_string_lossy().into_owned()
 }
@@ -58,13 +61,20 @@ fn copy(src: &std::path::Path, dst: &std::path::Path) {
     std::fs::create_dir_all(dst).unwrap();
     for e in std::fs::read_dir(src).unwrap().flatten() {
         let (s, d) = (e.path(), dst.join(e.file_name()));
-        if s.is_dir() { copy(&s, &d) } else { std::fs::copy(&s, &d).map(|_| ()).unwrap() }
+        if s.is_dir() {
+            copy(&s, &d)
+        } else {
+            std::fs::copy(&s, &d).map(|_| ()).unwrap()
+        }
     }
 }
 
 fn check(root: &str) -> (bool, String) {
     let out = pact().args(["check", root]).output().expect("runs");
-    (out.status.success(), String::from_utf8_lossy(&out.stdout).into_owned())
+    (
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+    )
 }
 
 /// Just the paragraph about the judge, out of everything `check` printed.
@@ -97,19 +107,28 @@ fn the_worked_example_pins_no_model_so_nothing_is_said_about_its_judge() {
 fn an_agent_graded_by_the_model_it_runs_on_is_warned_about_at_check_time() {
     let (_, text) = check(&pinned_to("same", GRADER));
     let said = about_the_judge(&text);
-    assert!(!said.is_empty(), "a self-graded suite must be said out loud:\n{text}");
+    assert!(
+        !said.is_empty(),
+        "a self-graded suite must be said out loud:\n{text}"
+    );
 
     // Where: the agent's own `model:` line, which is the line most workspaces
     // will change — and the message names the other one, so a reader who wants
     // to move the judge instead knows where it is.
-    assert!(said.contains("agent.yaml:"), "must name the file and line: {said}");
+    assert!(
+        said.contains("agent.yaml:"),
+        "must name the file and line: {said}"
+    );
     // What: in plain words, naming the agent, both settings, and the consequence.
     assert!(said.contains("`refund-desk` runs on"), "{said}");
     assert!(said.contains(&format!("`graded-by: {GRADER}`")), "{said}");
     assert!(said.contains("marks its own homework"), "{said}");
     // How: two lines the author can type, one per direction.
     assert!(said.contains("`models/catalog.yaml`"), "typeable: {said}");
-    assert!(said.contains("write a different `model:`"), "typeable: {said}");
+    assert!(
+        said.contains("write a different `model:`"),
+        "typeable: {said}"
+    );
 }
 
 #[test]
@@ -120,7 +139,10 @@ fn two_spellings_of_one_model_are_still_one_model() {
     // workspace it exists for, and the author would never learn.
     let (_, text) = check(&pinned_to("alias", "\"qwen2.5:14b-instruct\""));
     let said = about_the_judge(&text);
-    assert!(!said.is_empty(), "an alias of the grader is the grader:\n{text}");
+    assert!(
+        !said.is_empty(),
+        "an alias of the grader is the grader:\n{text}"
+    );
     assert!(said.contains("qwen2.5:14b-instruct"), "{said}");
 }
 
@@ -145,8 +167,14 @@ fn grading_yourself_is_a_warning_because_one_machine_may_have_one_model() {
     let (ok, text) = check(&pinned_to("warning-not-error", GRADER));
     let said = about_the_judge(&text);
     assert!(said.starts_with("warning:"), "not an error: {said}");
-    assert!(ok, "a self-graded suite must still load, and exit 0:\n{text}");
-    assert!(text.contains("loaded with"), "counted as a warning, not a problem: {text}");
+    assert!(
+        ok,
+        "a self-graded suite must still load, and exit 0:\n{text}"
+    );
+    assert!(
+        text.contains("loaded with"),
+        "counted as a warning, not a problem: {text}"
+    );
 }
 
 #[test]
@@ -155,10 +183,26 @@ fn the_warning_about_the_judge_uses_no_words_a_non_coder_would_have_to_look_up()
     let said = about_the_judge(&text).to_lowercase();
     assert!(!said.is_empty());
     for jargon in [
-        "boolean", "predicate", "null", "field type", "schema", "validate", "traversal",
-        "cross-document", "identifier", "namespace", "resolve", "invariant", "enum",
-        "alias", "llm", "inference",
+        "boolean",
+        "predicate",
+        "null",
+        "field type",
+        "schema",
+        "validate",
+        "traversal",
+        "cross-document",
+        "identifier",
+        "namespace",
+        "resolve",
+        "invariant",
+        "enum",
+        "alias",
+        "llm",
+        "inference",
     ] {
-        assert!(!said.contains(jargon), "the sentence leaked '{jargon}':\n{said}");
+        assert!(
+            !said.contains(jargon),
+            "the sentence leaked '{jargon}':\n{said}"
+        );
     }
 }

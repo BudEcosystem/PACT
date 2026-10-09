@@ -65,13 +65,20 @@ fn copy(src: &Path, dst: &Path) {
     std::fs::create_dir_all(dst).unwrap();
     for e in std::fs::read_dir(src).unwrap().flatten() {
         let (s, d) = (e.path(), dst.join(e.file_name()));
-        if s.is_dir() { copy(&s, &d) } else { std::fs::copy(&s, &d).map(|_| ()).unwrap() }
+        if s.is_dir() {
+            copy(&s, &d)
+        } else {
+            std::fs::copy(&s, &d).map(|_| ()).unwrap()
+        }
     }
 }
 
 /// What `pact check` says, and whether it agreed to load the tree.
 fn check(root: &Path) -> (bool, String) {
-    let out = pact().args(["check", root.to_str().unwrap()]).output().expect("the binary runs");
+    let out = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("the binary runs");
     let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
     text.push_str(&String::from_utf8_lossy(&out.stderr));
     (out.status.success(), text)
@@ -98,14 +105,26 @@ fn deleting_an_agents_instructions_file_is_refused_instead_of_reported_clean() {
     std::fs::remove_file(root.join("agents/fraud-checker/instructions.md")).unwrap();
 
     let (ok, text) = check(&root);
-    assert!(!ok, "an agent that would do nothing must be refused:\n{text}");
-    assert!(text.contains("An agent must have 'instructions'."), "must say what is wrong:\n{text}");
+    assert!(
+        !ok,
+        "an agent that would do nothing must be refused:\n{text}"
+    );
+    assert!(
+        text.contains("An agent must have 'instructions'."),
+        "must say what is wrong:\n{text}"
+    );
     assert!(
         text.contains("agents/fraud-checker/agent.yaml:"),
         "must name the file and the line:\n{text}"
     );
-    assert!(text.contains("schema/missing-field"), "reported as a missing setting:\n{text}");
-    assert!(text.contains("Nothing was run."), "and nothing runs on a refused tree:\n{text}");
+    assert!(
+        text.contains("schema/missing-field"),
+        "reported as a missing setting:\n{text}"
+    );
+    assert!(
+        text.contains("Nothing was run."),
+        "and nothing runs on a refused tree:\n{text}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -127,7 +146,10 @@ fn an_instructions_line_in_agent_yaml_satisfies_it_with_no_second_file() {
     .unwrap();
 
     let (ok, said) = check(&root);
-    assert!(ok, "the inline spelling must satisfy it on its own:\n{said}");
+    assert!(
+        ok,
+        "the inline spelling must satisfy it on its own:\n{said}"
+    );
     assert!(said.contains("loaded cleanly"), "{said}");
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -143,13 +165,22 @@ fn a_long_instruction_split_across_a_folder_also_satisfies_it() {
     let dir = root.join("agents/fraud-checker/instructions");
     std::fs::remove_file(root.join("agents/fraud-checker/instructions.md")).unwrap();
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("01-what-to-look-for.md"), "Look for signs the order is not genuine.\n")
-        .unwrap();
-    std::fs::write(dir.join("02-what-to-say.md"), "Say which signs you found, and how strong.\n")
-        .unwrap();
+    std::fs::write(
+        dir.join("01-what-to-look-for.md"),
+        "Look for signs the order is not genuine.\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("02-what-to-say.md"),
+        "Say which signs you found, and how strong.\n",
+    )
+    .unwrap();
 
     let (ok, said) = check(&root);
-    assert!(ok, "an instruction split across files must satisfy it:\n{said}");
+    assert!(
+        ok,
+        "an instruction split across files must satisfy it:\n{said}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -168,9 +199,18 @@ fn the_fix_names_both_of_the_places_the_words_are_allowed_to_go() {
         .lines()
         .find(|l| l.trim_start().starts_with("fix:"))
         .unwrap_or_else(|| panic!("the refusal carries no fix line:\n{text}"));
-    assert!(fix.contains("instructions: ..."), "the inline line to type:\n{fix}");
-    assert!(fix.contains("agent.yaml"), "and the file that line goes in:\n{fix}");
-    assert!(fix.contains("instructions.md"), "and the file spelling:\n{fix}");
+    assert!(
+        fix.contains("instructions: ..."),
+        "the inline line to type:\n{fix}"
+    );
+    assert!(
+        fix.contains("agent.yaml"),
+        "and the file that line goes in:\n{fix}"
+    );
+    assert!(
+        fix.contains("instructions.md"),
+        "and the file spelling:\n{fix}"
+    );
     assert!(
         fix.contains("agents/<name>/instructions.md"),
         "named as a path, so it can be created without guessing where:\n{fix}"
@@ -185,13 +225,26 @@ fn the_refusal_uses_no_word_a_non_coder_would_have_to_look_up() {
     let (_, text) = check(&root);
     let lower = text.to_lowercase();
     for jargon in [
-        "schema", "field", "validation", "required attribute", "null", "none", "key error",
-        "manifest", "parse",
+        "schema",
+        "field",
+        "validation",
+        "required attribute",
+        "null",
+        "none",
+        "key error",
+        "manifest",
+        "parse",
     ] {
         // The rule name is the one place a machine-readable identifier belongs,
         // so it is taken out before the sentence is read for jargon.
-        let prose: String = lower.lines().filter(|l| !l.trim_start().starts_with("rule:")).collect();
-        assert!(!prose.contains(jargon), "the refusal leaked '{jargon}':\n{text}");
+        let prose: String = lower
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("rule:"))
+            .collect();
+        assert!(
+            !prose.contains(jargon),
+            "the refusal leaked '{jargon}':\n{text}"
+        );
     }
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -207,8 +260,14 @@ fn a_report_about_a_missing_instruction_quotes_no_line_it_cannot_underline() {
     let (_, text) = check(&root);
 
     let quoted = text.lines().filter(|l| l.contains(" | ")).count();
-    assert_eq!(quoted, 0, "a missing setting must not single out a line that is correct:\n{text}");
-    assert!(!text.contains('^'), "and nothing is underlined either:\n{text}");
+    assert_eq!(
+        quoted, 0,
+        "a missing setting must not single out a line that is correct:\n{text}"
+    );
+    assert!(
+        !text.contains('^'),
+        "and nothing is underlined either:\n{text}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -224,14 +283,20 @@ fn three_agents_with_nothing_to_do_are_three_problems_and_never_a_clean_load() {
         std::fs::remove_file(root.join(format!("agents/{who}/instructions.md"))).unwrap();
     }
     let (ok, text) = check(&root);
-    assert!(!ok, "three agents that would do nothing must not load clean:\n{text}");
+    assert!(
+        !ok,
+        "three agents that would do nothing must not load clean:\n{text}"
+    );
     assert_eq!(
         text.matches("An agent must have 'instructions'.").count(),
         3,
         "each agent is named, not just the first:\n{text}"
     );
     for who in ["refund-desk", "policy-checker", "fraud-checker"] {
-        assert!(text.contains(&format!("agents/{who}/agent.yaml:")), "{who} unnamed:\n{text}");
+        assert!(
+            text.contains(&format!("agents/{who}/agent.yaml:")),
+            "{who} unnamed:\n{text}"
+        );
     }
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -245,12 +310,24 @@ fn nothing_pact_discover_publishes_can_be_an_agent_that_would_do_nothing() {
     // is indexed at all.
     let root = copy_of_the_example("discover");
     std::fs::remove_file(root.join("agents/fraud-checker/instructions.md")).unwrap();
-    let out = pact().args(["discover", root.to_str().unwrap()]).output().expect("runs");
+    let out = pact()
+        .args(["discover", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
     let shown = String::from_utf8_lossy(&out.stdout);
     let said = String::from_utf8_lossy(&out.stderr);
-    assert!(!shown.contains("\"runnable\": false"), "an unrunnable agent was published:\n{shown}");
-    assert!(!shown.contains("fraud-checker"), "the tree was indexed anyway:\n{shown}");
-    assert!(said.contains("skipping"), "and the reader is told why it is absent:\n{said}");
+    assert!(
+        !shown.contains("\"runnable\": false"),
+        "an unrunnable agent was published:\n{shown}"
+    );
+    assert!(
+        !shown.contains("fraud-checker"),
+        "the tree was indexed anyway:\n{shown}"
+    );
+    assert!(
+        said.contains("skipping"),
+        "and the reader is told why it is absent:\n{said}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -263,7 +340,10 @@ fn an_agent_that_would_do_nothing_never_reaches_an_adapter() {
     // that matters.
     let root = copy_of_the_example("show");
     std::fs::remove_file(root.join("agents/fraud-checker/instructions.md")).unwrap();
-    let out = pact().args(["show", root.to_str().unwrap()]).output().expect("runs");
+    let out = pact()
+        .args(["show", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
     assert!(
         !out.status.success(),
         "`show` handed an adapter an agent with no instructions:\n{}",
@@ -312,8 +392,14 @@ fn an_instruction_holding_only_a_blank_line_is_refused_like_an_empty_one() {
     let root = copy_of_the_example("blank-line");
     overwrite(&root, "agents/fraud-checker/instructions.md", "\n   \n\n");
     let (ok, text) = check(&root);
-    assert!(!ok, "a file holding only whitespace must be refused:\n{text}");
-    assert!(text.contains("'instructions' is here with nothing in it"), "{text}");
+    assert!(
+        !ok,
+        "a file holding only whitespace must be refused:\n{text}"
+    );
+    assert!(
+        text.contains("'instructions' is here with nothing in it"),
+        "{text}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -330,8 +416,14 @@ fn an_instructions_line_written_as_an_empty_quote_is_refused_too() {
 
     let (ok, text) = check(&root);
     assert!(!ok, "an empty instructions line must be refused:\n{text}");
-    assert!(text.contains("'instructions' is here with nothing in it"), "{text}");
-    assert!(text.contains("agents/fraud-checker/agent.yaml:"), "named where it is:\n{text}");
+    assert!(
+        text.contains("'instructions' is here with nothing in it"),
+        "{text}"
+    );
+    assert!(
+        text.contains("agents/fraud-checker/agent.yaml:"),
+        "named where it is:\n{text}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -363,9 +455,13 @@ fn three_emptied_instruction_files_are_three_problems_and_never_a_clean_load() {
         overwrite(&root, &format!("agents/{who}/instructions.md"), "");
     }
     let (ok, text) = check(&root);
-    assert!(!ok, "three emptied instructions must not load clean:\n{text}");
+    assert!(
+        !ok,
+        "three emptied instructions must not load clean:\n{text}"
+    );
     assert_eq!(
-        text.matches("'instructions' is here with nothing in it").count(),
+        text.matches("'instructions' is here with nothing in it")
+            .count(),
         3,
         "each emptied file is named, not just the first:\n{text}"
     );
@@ -379,8 +475,14 @@ fn an_agent_whose_instruction_was_emptied_never_reaches_an_adapter() {
     // still let the harness run an agent with an empty instruction.
     let root = copy_of_the_example("emptied-show");
     overwrite(&root, "agents/fraud-checker/instructions.md", "");
-    let out = pact().args(["show", root.to_str().unwrap()]).output().expect("runs");
-    assert!(!out.status.success(), "`show` handed an adapter an empty instruction");
+    let out = pact()
+        .args(["show", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
+    assert!(
+        !out.status.success(),
+        "`show` handed an adapter an empty instruction"
+    );
     assert!(
         String::from_utf8_lossy(&out.stderr).contains("'instructions' is here with nothing in it"),
         "and it must say why, in the same words `check` uses"
@@ -400,7 +502,13 @@ fn blanking_a_required_line_that_is_not_instructions_is_refused_identically() {
     let was = std::fs::read_to_string(&agent).unwrap();
     let blanked: String = was
         .lines()
-        .map(|l| if l.starts_with("description:") { "description: \"\"" } else { l })
+        .map(|l| {
+            if l.starts_with("description:") {
+                "description: \"\""
+            } else {
+                l
+            }
+        })
         .collect::<Vec<_>>()
         .join("\n");
     std::fs::write(&agent, format!("{blanked}\n")).unwrap();
@@ -425,10 +533,19 @@ fn a_line_that_is_not_required_may_still_be_left_blank() {
     let was = std::fs::read_to_string(&agent).unwrap();
     let blanked: String = was
         .lines()
-        .map(|l| if l.starts_with("name:") { "name: \"\"" } else { l })
+        .map(|l| {
+            if l.starts_with("name:") {
+                "name: \"\""
+            } else {
+                l
+            }
+        })
         .collect::<Vec<_>>()
         .join("\n");
-    assert!(blanked.contains("name: \"\""), "the fixture has no `name:` line to blank");
+    assert!(
+        blanked.contains("name: \"\""),
+        "the fixture has no `name:` line to blank"
+    );
     std::fs::write(&agent, format!("{blanked}\n")).unwrap();
 
     let (ok, text) = check(&root);
@@ -446,9 +563,11 @@ fn the_specification_is_what_makes_this_refusal_happen_and_not_any_rust_here() {
     // Read off the shipped file rather than a copy, for the reason
     // `diagnostics_read_as_english.rs` gives: a schema built in this file would
     // prove the checker works and say nothing about the specification.
-    let text =
-        std::fs::read_to_string(format!("{}/../../spec/schema.yaml", env!("CARGO_MANIFEST_DIR")))
-            .unwrap();
+    let text = std::fs::read_to_string(format!(
+        "{}/../../spec/schema.yaml",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap();
     let doc = pact_doc::parse_yaml(&text, camino::Utf8Path::new("spec/schema.yaml")).unwrap();
     let f = doc
         .get("groups")
@@ -458,7 +577,9 @@ fn the_specification_is_what_makes_this_refusal_happen_and_not_any_rust_here() {
         .expect("`agent.instructions` is in the specification");
 
     assert_eq!(
-        f.get("required").and_then(pact_doc::Node::as_str).map(str::trim),
+        f.get("required")
+            .and_then(pact_doc::Node::as_str)
+            .map(str::trim),
         Some("yes"),
         "`agent.instructions` stopped being required, so a workspace of agents \
          that will do nothing loads clean again"
@@ -469,7 +590,9 @@ fn the_specification_is_what_makes_this_refusal_happen_and_not_any_rust_here() {
     // refusal with no way out.
     for want in ["help", "surface", "tier"] {
         assert!(
-            f.get(want).and_then(pact_doc::Node::as_str).is_some_and(|s| !s.trim().is_empty()),
+            f.get(want)
+                .and_then(pact_doc::Node::as_str)
+                .is_some_and(|s| !s.trim().is_empty()),
             "`agent.instructions` has no `{want}:`"
         );
     }

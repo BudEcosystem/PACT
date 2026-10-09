@@ -17,7 +17,10 @@ fn tree() -> String {
 }
 
 fn pact(args: &[&str]) -> (Option<i32>, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_pact")).args(args).output().expect("runs");
+    let out = Command::new(env!("CARGO_BIN_EXE_pact"))
+        .args(args)
+        .output()
+        .expect("runs");
     (
         out.status.code(),
         format!(
@@ -41,15 +44,24 @@ fn the_tree_is_clean_and_every_field_reaches_the_document() {
     assert_eq!(desk["run-inputs"]["shop"], "text");
     assert_eq!(desk["checks-at-most"], 3);
     assert_eq!(desk["checked-by"][0]["must-contain"][0], "refund");
-    assert_eq!(desk["checked-by"][1]["must-call-before"]["first"], "orders/look-up");
+    assert_eq!(
+        desk["checked-by"][1]["must-call-before"]["first"],
+        "orders/look-up"
+    );
     assert_eq!(desk["limits"]["starts-at-most"], 4);
     assert_eq!(desk["limits"]["nests-at-most"], 1);
-    assert_eq!(desk["teamwork"]["may-start"], serde_json::json!(["catalogue", "narrowed-new"]));
+    assert_eq!(
+        desk["teamwork"]["may-start"],
+        serde_json::json!(["catalogue", "narrowed-new"])
+    );
     let hands_back = &doc["tools"]["orders"]["actions"]["look-up"]["answers-with"];
     assert_eq!(hands_back["status"], "one of delivered, in-transit, lost");
     assert_eq!(hands_back["total"], "money");
     assert!(
-        desk["instructions"].as_str().unwrap().contains("{{run-inputs.shop}}"),
+        desk["instructions"]
+            .as_str()
+            .unwrap()
+            .contains("{{run-inputs.shop}}"),
         "a hole is carried unfilled: its value arrives with a run"
     );
 }
@@ -71,7 +83,12 @@ fn may_start_without_either_of_its_bounds_is_refused() {
         assert!(text.contains(bound), "fixture drifted: {bound:?}");
         std::fs::write(&limits, text.replace(bound, "")).unwrap();
         let (code, said) = pact(&["check", dst.to_str().unwrap()]);
-        assert_eq!(code, Some(1), "`may-start:` loaded without `{}`:\n{said}", bound.trim());
+        assert_eq!(
+            code,
+            Some(1),
+            "`may-start:` loaded without `{}`:\n{said}",
+            bound.trim()
+        );
         assert!(said.contains(bound.split(':').next().unwrap()), "{said}");
         let _ = std::fs::remove_dir_all(&dst);
     }

@@ -64,12 +64,17 @@ pub fn improving_with_nothing_held_back(document: &Node, diags: &mut Diagnostics
     if document.get("redaction").is_some() {
         return;
     }
-    if document.get("learning").and_then(|l| l.get("enabled")).and_then(Node::as_str)
+    if document
+        .get("learning")
+        .and_then(|l| l.get("enabled"))
+        .and_then(Node::as_str)
         != Some(UNATTENDED)
     {
         return;
     }
-    let Some(roles) = document.get("allow-egress") else { return };
+    let Some(roles) = document.get("allow-egress") else {
+        return;
+    };
     let Some(entry) = roles
         .as_list()
         .and_then(|list| list.iter().find(|r| r.as_str() == Some(REFLECTOR)))
@@ -141,11 +146,26 @@ learning:
     #[test]
     fn a_system_that_improves_itself_off_this_machine_is_refused_without_a_redaction() {
         let d = check(ALL_THREE);
-        let e = d.items().first().expect("all three lines together must be refused");
+        let e = d
+            .items()
+            .first()
+            .expect("all three lines together must be refused");
         assert_eq!(e.rule, "loader/improving-with-nothing-held-back");
-        assert_eq!(e.severity, pact_diag::Severity::Error, "AD-88 says load-time error");
-        assert!(e.fix.contains("redaction.yaml"), "name the file to write: {}", e.fix);
-        assert!(e.fix.contains("hide:"), "name the line to put in it: {}", e.fix);
+        assert_eq!(
+            e.severity,
+            pact_diag::Severity::Error,
+            "AD-88 says load-time error"
+        );
+        assert!(
+            e.fix.contains("redaction.yaml"),
+            "name the file to write: {}",
+            e.fix
+        );
+        assert!(
+            e.fix.contains("hide:"),
+            "name the line to put in it: {}",
+            e.fix
+        );
     }
 
     #[test]
@@ -153,7 +173,9 @@ learning:
         // The whole point: this is the line that READS `redaction:`. A workspace
         // with the same three settings and a `redaction.yaml` beside them is
         // accepted, so the author's file is what changed the answer.
-        let d = check(&format!("{ALL_THREE}redaction:\n  hide:\n    - anything that looks like a card number\n"));
+        let d = check(&format!(
+            "{ALL_THREE}redaction:\n  hide:\n    - anything that looks like a card number\n"
+        ));
         assert!(d.is_empty(), "{}", d.render());
     }
 
@@ -173,7 +195,11 @@ learning:
         let d = check("allow-egress: []\nlearning:\n  enabled: applies-safe-changes-itself\n");
         assert!(d.is_empty(), "{}", d.render());
         let d = check("allow-egress: [llm]\nlearning:\n  enabled: applies-safe-changes-itself\n");
-        assert!(d.is_empty(), "the improver is not the model doing the work: {}", d.render());
+        assert!(
+            d.is_empty(),
+            "the improver is not the model doing the work: {}",
+            d.render()
+        );
     }
 
     /// The specification as it actually ships, never one built in this file.
@@ -186,7 +212,11 @@ learning:
         const SPEC: &str = include_str!("../../../spec/schema.yaml");
         let mut d = Diagnostics::new();
         let s = pact_schema::from_doc::schema_from_yaml(SPEC, &mut d);
-        assert!(!d.has_errors(), "the shipped specification does not load:\n{}", d.render());
+        assert!(
+            !d.has_errors(),
+            "the shipped specification does not load:\n{}",
+            d.render()
+        );
         s
     }
 
@@ -226,11 +256,18 @@ learning:
         let d = check(ALL_THREE);
         let e = d.items().first().expect("refused");
         let offered = the_lines_it_tells_you_to_type(&e.fix);
-        assert!(!offered.is_empty(), "the fix must show lines to type:\n{}", e.fix);
+        assert!(
+            !offered.is_empty(),
+            "the fix must show lines to type:\n{}",
+            e.fix
+        );
 
         let written = format!(
             "description: What may never leave this workspace.\nhide:\n{}",
-            offered.iter().map(|s| format!("  - {s}\n")).collect::<String>()
+            offered
+                .iter()
+                .map(|s| format!("  - {s}\n"))
+                .collect::<String>()
         );
         let node = parse_yaml(&written, camino::Utf8Path::new("redaction.yaml")).expect("parses");
         let mut d = Diagnostics::new();

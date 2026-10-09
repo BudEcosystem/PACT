@@ -51,7 +51,10 @@ fn broken(name: &str, from_tree: &str, edits: &[(&str, &str, &str)]) -> String {
     for (file, from, to) in edits {
         let p = dst.join(file);
         let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-        assert!(text.contains(from), "fixture drifted: {from:?} not found in {file}");
+        assert!(
+            text.contains(from),
+            "fixture drifted: {from:?} not found in {file}"
+        );
         std::fs::write(&p, text.replace(from, to)).unwrap();
     }
     dst.to_string_lossy().into_owned()
@@ -88,16 +91,31 @@ fn one_pattern_makes_two_desks() {
     let doc: serde_json::Value = serde_json::from_str(&shown).expect("JSON");
 
     let refunds = &doc["agents"]["refunds"];
-    assert_eq!(refunds["description"], "A desk that answers questions about refunds.", "{shown}");
-    assert_eq!(refunds["limits"]["cost-per-request-under"], "0.05 USD", "{shown}");
+    assert_eq!(
+        refunds["description"], "A desk that answers questions about refunds.",
+        "{shown}"
+    );
+    assert_eq!(
+        refunds["limits"]["cost-per-request-under"], "0.05 USD",
+        "{shown}"
+    );
     assert!(
-        refunds["instructions"].as_str().unwrap_or_default().contains("about refunds"),
+        refunds["instructions"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("about refunds"),
         "a hole inside a sentence is filled too:\n{shown}"
     );
 
     let returns = &doc["agents"]["returns"];
-    assert_eq!(returns["description"], "A desk that answers questions about returns.", "{shown}");
-    assert_eq!(returns["limits"]["cost-per-request-under"], "0.10 USD", "{shown}");
+    assert_eq!(
+        returns["description"], "A desk that answers questions about returns.",
+        "{shown}"
+    );
+    assert_eq!(
+        returns["limits"]["cost-per-request-under"], "0.10 USD",
+        "{shown}"
+    );
 }
 
 /// The pattern is not in the tree it made.
@@ -111,7 +129,10 @@ fn the_pattern_itself_is_not_one_of_the_desks() {
     let (_, shown, _) = run(&["show", &tree("two-desks-one-pattern")]);
     let doc: serde_json::Value = serde_json::from_str(&shown).expect("JSON");
     let agents = doc["agents"].as_object().expect("agents");
-    assert!(agents.contains_key("refunds") && agents.contains_key("returns"), "{shown}");
+    assert!(
+        agents.contains_key("refunds") && agents.contains_key("returns"),
+        "{shown}"
+    );
     assert!(
         !agents.contains_key("desk-pattern"),
         "a pattern is a way of making a desk, not a desk:\n{shown}"
@@ -119,7 +140,10 @@ fn the_pattern_itself_is_not_one_of_the_desks() {
 
     // And nothing downstream is offered it either.
     let (_, found, _) = run(&["discover", &tree("two-desks-one-pattern")]);
-    assert!(!found.contains("desk-pattern"), "not published either:\n{found}");
+    assert!(
+        !found.contains("desk-pattern"),
+        "not published either:\n{found}"
+    );
 }
 
 /// The tree that used a pattern and the tree that wrote it out are one document.
@@ -129,7 +153,10 @@ fn the_pattern_tree_and_the_longhand_tree_are_one_document() {
     let (cb, b, eb) = run(&["show", &tree("two-desks-longhand")]);
     assert_eq!(ca, Some(0), "{a}{ea}");
     assert_eq!(cb, Some(0), "{b}{eb}");
-    assert_eq!(a, b, "a pattern is a way of writing a document, not a different document");
+    assert_eq!(
+        a, b,
+        "a pattern is a way of writing a document, not a different document"
+    );
 }
 
 /// A parameter nobody filled in is refused, naming it and what it is.
@@ -143,8 +170,14 @@ fn an_unfilled_parameter_is_refused_naming_it() {
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
     assert_eq!(code, Some(1), "{said}");
-    assert!(said.contains("loader/a-pattern-needs-what-it-expects"), "{said}");
-    assert!(said.contains("daily-cap"), "name the one that is missing:\n{said}");
+    assert!(
+        said.contains("loader/a-pattern-needs-what-it-expects"),
+        "{said}"
+    );
+    assert!(
+        said.contains("daily-cap"),
+        "name the one that is missing:\n{said}"
+    );
     let _ = std::fs::remove_dir_all(&dst);
 }
 
@@ -152,7 +185,11 @@ fn an_unfilled_parameter_is_refused_naming_it() {
 #[test]
 fn the_same_tree_with_every_argument_supplied_loads_clean() {
     let (code, out, err) = run(&["check", &tree("two-desks-one-pattern"), "--deny-warnings"]);
-    assert_eq!(code, Some(0), "the refusals above prove nothing unless this passes:\n{out}{err}");
+    assert_eq!(
+        code,
+        Some(0),
+        "the refusals above prove nothing unless this passes:\n{out}{err}"
+    );
 }
 
 /// An argument no parameter declares is refused, with the ones that are declared.
@@ -164,14 +201,24 @@ fn an_argument_no_parameter_declares_is_refused() {
     let dst = broken(
         "extra",
         "two-desks-one-pattern",
-        &[("agents/refunds/agent.yaml", "daily-cap: 0.05 USD", "dailycap: 0.05 USD")],
+        &[(
+            "agents/refunds/agent.yaml",
+            "daily-cap: 0.05 USD",
+            "dailycap: 0.05 USD",
+        )],
     );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
     assert_eq!(code, Some(1), "{said}");
-    assert!(said.contains("loader/a-pattern-takes-only-what-it-expects"), "{said}");
+    assert!(
+        said.contains("loader/a-pattern-takes-only-what-it-expects"),
+        "{said}"
+    );
     assert!(said.contains("dailycap"), "the one they typed:\n{said}");
-    assert!(said.contains("daily-cap"), "and the one that is declared:\n{said}");
+    assert!(
+        said.contains("daily-cap"),
+        "and the one that is declared:\n{said}"
+    );
     let _ = std::fs::remove_dir_all(&dst);
 }
 
@@ -181,12 +228,19 @@ fn an_argument_of_the_wrong_shape_is_refused() {
     let dst = broken(
         "shape",
         "two-desks-one-pattern",
-        &[("agents/refunds/agent.yaml", "daily-cap: 0.05 USD", "daily-cap: whenever")],
+        &[(
+            "agents/refunds/agent.yaml",
+            "daily-cap: 0.05 USD",
+            "daily-cap: whenever",
+        )],
     );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
     assert_eq!(code, Some(1), "{said}");
-    assert!(said.contains("loader/an-argument-is-not-its-shape"), "{said}");
+    assert!(
+        said.contains("loader/an-argument-is-not-its-shape"),
+        "{said}"
+    );
     assert!(said.contains("daily-cap"), "{said}");
     let _ = std::fs::remove_dir_all(&dst);
 }
@@ -201,7 +255,11 @@ fn a_hole_no_parameter_declares_is_refused_at_the_pattern() {
     let dst = broken(
         "loose-hole",
         "two-desks-one-pattern",
-        &[("agents/desk-pattern/agent.yaml", "questions about <domain>, briefly", "questions about <domain>, briefly, in <tone>")],
+        &[(
+            "agents/desk-pattern/agent.yaml",
+            "questions about <domain>, briefly",
+            "questions about <domain>, briefly, in <tone>",
+        )],
     );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
@@ -217,7 +275,11 @@ fn arguments_without_a_pattern_are_refused() {
     let dst = broken(
         "orphan-with",
         "two-desks-longhand",
-        &[("agents/refunds/agent.yaml", "description:", "with:\n  domain: refunds\ndescription:")],
+        &[(
+            "agents/refunds/agent.yaml",
+            "description:",
+            "with:\n  domain: refunds\ndescription:",
+        )],
     );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
@@ -233,13 +295,25 @@ fn a_pattern_nothing_uses_is_said_out_loud() {
         "unused-pattern",
         "two-desks-one-pattern",
         &[
-            ("agents/refunds/agent.yaml", "based-on: desk-pattern\nwith:\n  domain: refunds\n  daily-cap: 0.05 USD\n", "description: A plain desk.\ninstructions: Answer briefly.\n"),
-            ("agents/returns/agent.yaml", "based-on: desk-pattern\nwith:\n  domain: returns\n  daily-cap: 0.10 USD\n", "description: Another plain desk.\ninstructions: Answer briefly.\n"),
+            (
+                "agents/refunds/agent.yaml",
+                "based-on: desk-pattern\nwith:\n  domain: refunds\n  daily-cap: 0.05 USD\n",
+                "description: A plain desk.\ninstructions: Answer briefly.\n",
+            ),
+            (
+                "agents/returns/agent.yaml",
+                "based-on: desk-pattern\nwith:\n  domain: returns\n  daily-cap: 0.10 USD\n",
+                "description: Another plain desk.\ninstructions: Answer briefly.\n",
+            ),
         ],
     );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
-    assert_eq!(code, Some(0), "an unused pattern is a warning, not a wall:\n{said}");
+    assert_eq!(
+        code,
+        Some(0),
+        "an unused pattern is a warning, not a wall:\n{said}"
+    );
     assert!(said.contains("loader/nothing-uses-this-pattern"), "{said}");
     assert!(said.contains("desk-pattern"), "{said}");
     let _ = std::fs::remove_dir_all(&dst);
@@ -256,8 +330,16 @@ fn an_argument_may_be_a_shared_figure() {
         "value-arg",
         "two-desks-one-pattern",
         &[
-            ("workspace.yaml", "allow-egress: []", "allow-egress: []\nvalues:\n  house-cap:\n    description: The cap every desk here shares.\n    shape: money\n    value: 0.25 USD\n"),
-            ("agents/refunds/agent.yaml", "daily-cap: 0.05 USD", "daily-cap: {use: house-cap}"),
+            (
+                "workspace.yaml",
+                "allow-egress: []",
+                "allow-egress: []\nvalues:\n  house-cap:\n    description: The cap every desk here shares.\n    shape: money\n    value: 0.25 USD\n",
+            ),
+            (
+                "agents/refunds/agent.yaml",
+                "daily-cap: 0.05 USD",
+                "daily-cap: {use: house-cap}",
+            ),
         ],
     );
     let (code, shown, err) = run(&["show", &dst]);
@@ -287,12 +369,19 @@ fn an_argument_is_a_figure_and_not_a_block_of_settings() {
     let dst = broken(
         "block-arg",
         "two-desks-one-pattern",
-        &[("agents/refunds/agent.yaml", "  daily-cap: 0.05 USD", "  daily-cap:\n    run-arbitrary: yes\n    cost-per-request-under: 0.05 USD")],
+        &[(
+            "agents/refunds/agent.yaml",
+            "  daily-cap: 0.05 USD",
+            "  daily-cap:\n    run-arbitrary: yes\n    cost-per-request-under: 0.05 USD",
+        )],
     );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
     assert_eq!(code, Some(1), "{said}");
-    assert!(said.contains("loader/an-argument-is-a-figure-not-a-block"), "{said}");
+    assert!(
+        said.contains("loader/an-argument-is-a-figure-not-a-block"),
+        "{said}"
+    );
     assert!(said.contains("daily-cap"), "name the parameter:\n{said}");
     let _ = std::fs::remove_dir_all(&dst);
 }
@@ -308,12 +397,19 @@ fn a_hole_inside_an_argument_is_refused() {
     let dst = broken(
         "hole-arg",
         "two-desks-one-pattern",
-        &[("agents/refunds/agent.yaml", "  domain: refunds", "  domain: refunds for <domain>")],
+        &[(
+            "agents/refunds/agent.yaml",
+            "  domain: refunds",
+            "  domain: refunds for <domain>",
+        )],
     );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
     assert_eq!(code, Some(1), "{said}");
-    assert!(said.contains("loader/an-argument-is-not-a-pattern"), "{said}");
+    assert!(
+        said.contains("loader/an-argument-is-not-a-pattern"),
+        "{said}"
+    );
     let _ = std::fs::remove_dir_all(&dst);
 }
 
@@ -335,13 +431,17 @@ fn a_pattern_built_on_a_pattern_is_still_a_pattern() {
         "two-desks-one-pattern",
         &[
             // A middle layer: fixes the cap, still expects the domain.
-            ("agents/refunds/agent.yaml",
-             "based-on: desk-pattern\nwith:\n  domain: refunds\n  daily-cap: 0.05 USD\n",
-             "based-on: desk-pattern\nexpects:\n  domain:\n    shape: text\n    help: what this desk answers about\nwith:\n  domain: <domain>\n  daily-cap: 0.05 USD\n"),
+            (
+                "agents/refunds/agent.yaml",
+                "based-on: desk-pattern\nwith:\n  domain: refunds\n  daily-cap: 0.05 USD\n",
+                "based-on: desk-pattern\nexpects:\n  domain:\n    shape: text\n    help: what this desk answers about\nwith:\n  domain: <domain>\n  daily-cap: 0.05 USD\n",
+            ),
             // And a leaf built on the middle layer.
-            ("agents/returns/agent.yaml",
-             "based-on: desk-pattern\nwith:\n  domain: returns\n  daily-cap: 0.10 USD\n",
-             "based-on: refunds\nwith:\n  domain: returns\n"),
+            (
+                "agents/returns/agent.yaml",
+                "based-on: desk-pattern\nwith:\n  domain: returns\n  daily-cap: 0.10 USD\n",
+                "based-on: refunds\nwith:\n  domain: returns\n",
+            ),
         ],
     );
     let (code, out, err) = run(&["check", &dst]);
@@ -351,17 +451,26 @@ fn a_pattern_built_on_a_pattern_is_still_a_pattern() {
     let (_, shown, _) = run(&["show", &dst]);
     let doc: serde_json::Value = serde_json::from_str(&shown).expect("JSON");
     let agents = doc["agents"].as_object().expect("agents");
-    assert!(!agents.contains_key("desk-pattern"), "the root pattern is gone:\n{shown}");
+    assert!(
+        !agents.contains_key("desk-pattern"),
+        "the root pattern is gone:\n{shown}"
+    );
     assert!(
         !agents.contains_key("refunds"),
         "and so is the middle one — it declares `expects:`, so it is a way of making a desk:\n{shown}"
     );
-    assert!(agents.contains_key("returns"), "the leaf is the only desk:\n{shown}");
+    assert!(
+        agents.contains_key("returns"),
+        "the leaf is the only desk:\n{shown}"
+    );
     assert!(
         !shown.contains('<'),
         "and no unfilled hole survives into the document:\n{shown}"
     );
-    assert_eq!(agents["returns"]["description"], "A desk that answers questions about returns.");
+    assert_eq!(
+        agents["returns"]["description"],
+        "A desk that answers questions about returns."
+    );
     let _ = std::fs::remove_dir_all(&dst);
 }
 
@@ -377,12 +486,19 @@ fn a_figure_whose_shape_is_not_a_shape_is_refused() {
     let dst = broken(
         "bad-shape",
         "two-desks-longhand",
-        &[("workspace.yaml", "allow-egress: []", "allow-egress: []\nvalues:\n  cap:\n    description: a figure\n    shape: munny\n    value: 0.05 USD\n")],
+        &[(
+            "workspace.yaml",
+            "allow-egress: []",
+            "allow-egress: []\nvalues:\n  cap:\n    description: a figure\n    shape: munny\n    value: 0.05 USD\n",
+        )],
     );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
     assert_eq!(code, Some(1), "{said}");
-    assert!(said.contains("loader/not-a-shape-a-figure-can-have"), "{said}");
+    assert!(
+        said.contains("loader/not-a-shape-a-figure-can-have"),
+        "{said}"
+    );
     assert!(said.contains("munny"), "the word they typed:\n{said}");
     assert!(said.contains("money"), "and the ones that work:\n{said}");
     let _ = std::fs::remove_dir_all(&dst);
@@ -398,12 +514,19 @@ fn a_figure_with_nothing_in_it_is_refused() {
     let dst = broken(
         "no-value",
         "two-desks-longhand",
-        &[("workspace.yaml", "allow-egress: []", "allow-egress: []\nvalues:\n  cap:\n    description: a figure nobody finished writing\n")],
+        &[(
+            "workspace.yaml",
+            "allow-egress: []",
+            "allow-egress: []\nvalues:\n  cap:\n    description: a figure nobody finished writing\n",
+        )],
     );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
     assert_eq!(code, Some(1), "{said}");
-    assert!(said.contains("loader/a-figure-with-nothing-in-it"), "{said}");
+    assert!(
+        said.contains("loader/a-figure-with-nothing-in-it"),
+        "{said}"
+    );
     assert!(said.contains("cap"), "{said}");
     let _ = std::fs::remove_dir_all(&dst);
 }
@@ -419,12 +542,19 @@ fn a_parameter_whose_shape_is_not_a_shape_is_refused() {
     let dst = broken(
         "bad-param-shape",
         "two-desks-one-pattern",
-        &[("agents/desk-pattern/agent.yaml", "    shape: money", "    shape: munny")],
+        &[(
+            "agents/desk-pattern/agent.yaml",
+            "    shape: money",
+            "    shape: munny",
+        )],
     );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
     assert_eq!(code, Some(1), "{said}");
-    assert!(said.contains("loader/not-a-shape-a-figure-can-have"), "{said}");
+    assert!(
+        said.contains("loader/not-a-shape-a-figure-can-have"),
+        "{said}"
+    );
     assert!(said.contains("munny"), "the word they typed:\n{said}");
     assert!(said.contains("money"), "and the ones that work:\n{said}");
     let _ = std::fs::remove_dir_all(&dst);
@@ -443,11 +573,19 @@ fn a_pattern_may_write_a_literal_angle_bracket() {
     let dst = broken(
         "xml-tag",
         "two-desks-one-pattern",
-        &[("agents/desk-pattern/agent.yaml", "Answer questions about <domain>, briefly", "Put your reasoning in <<thinking>> tags. Answer questions about <domain>, briefly")],
+        &[(
+            "agents/desk-pattern/agent.yaml",
+            "Answer questions about <domain>, briefly",
+            "Put your reasoning in <<thinking>> tags. Answer questions about <domain>, briefly",
+        )],
     );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
-    assert_eq!(code, Some(0), "an angle bracket is not always a hole:\n{said}");
+    assert_eq!(
+        code,
+        Some(0),
+        "an angle bracket is not always a hole:\n{said}"
+    );
 
     let (_, shown, _) = run(&["show", &dst]);
     assert!(
@@ -544,7 +682,10 @@ fn an_argument_may_be_a_list_of_figures() {
     assert_eq!(code, Some(0), "a list of figures is a value:\n{out}{err}");
     let (_, shown, _) = run(&["show", &dst]);
     let doc: serde_json::Value = serde_json::from_str(&shown).expect("JSON");
-    assert_eq!(doc["agents"]["refunds"]["uses"][0], "refund-policy", "{shown}");
+    assert_eq!(
+        doc["agents"]["refunds"]["uses"][0], "refund-policy",
+        "{shown}"
+    );
     let _ = std::fs::remove_dir_all(&dst);
 }
 
@@ -554,11 +695,18 @@ fn a_list_of_blocks_is_still_not_a_figure() {
     let dst = broken(
         "list-of-blocks",
         "two-desks-one-pattern",
-        &[("agents/refunds/agent.yaml", "  daily-cap: 0.05 USD", "  daily-cap:\n    - run-arbitrary: yes")],
+        &[(
+            "agents/refunds/agent.yaml",
+            "  daily-cap: 0.05 USD",
+            "  daily-cap:\n    - run-arbitrary: yes",
+        )],
     );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
     assert_eq!(code, Some(1), "{said}");
-    assert!(said.contains("loader/an-argument-is-a-figure-not-a-block"), "{said}");
+    assert!(
+        said.contains("loader/an-argument-is-a-figure-not-a-block"),
+        "{said}"
+    );
     let _ = std::fs::remove_dir_all(&dst);
 }

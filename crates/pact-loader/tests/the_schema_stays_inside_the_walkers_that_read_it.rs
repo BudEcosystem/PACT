@@ -41,7 +41,10 @@ const SHALLOWEST_WALKER: usize = 12;
 
 /// How far one group's own fields can descend into other groups.
 fn deepest(schema: &pact_doc::Node) -> (usize, Vec<String>) {
-    let groups = schema.get("groups").and_then(pact_doc::Node::as_map).expect("groups:");
+    let groups = schema
+        .get("groups")
+        .and_then(pact_doc::Node::as_map)
+        .expect("groups:");
     let group_of = |ty: &str| -> Option<String> {
         for prefix in ["group:", "map of group:", "list of group:"] {
             if let Some(rest) = ty.strip_prefix(prefix) {
@@ -64,12 +67,16 @@ fn deepest(schema: &pact_doc::Node) -> (usize, Vec<String>) {
         if path.len() > best.0 {
             best = (path.len(), path.clone());
         }
-        let Some(entry) = groups.get(name.as_str()) else { continue };
+        let Some(entry) = groups.get(name.as_str()) else {
+            continue;
+        };
         let Some(fields) = entry.node.get("fields").and_then(pact_doc::Node::as_map) else {
             continue;
         };
         for (field, f) in fields {
-            let Some(ty) = f.node.get("type").and_then(pact_doc::Node::as_str) else { continue };
+            let Some(ty) = f.node.get("type").and_then(pact_doc::Node::as_str) else {
+                continue;
+            };
             let Some(sub) = group_of(ty) else { continue };
             let mut below = seen.clone();
             below.insert(name.clone());

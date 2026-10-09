@@ -34,7 +34,10 @@ fn pact() -> Command {
 }
 
 fn tree() -> String {
-    format!("{}/../../tests/trees/a-desk-with-a-program", env!("CARGO_MANIFEST_DIR"))
+    format!(
+        "{}/../../tests/trees/a-desk-with-a-program",
+        env!("CARGO_MANIFEST_DIR")
+    )
 }
 
 fn run(args: &[&str]) -> (Option<i32>, String, String) {
@@ -53,7 +56,10 @@ fn broken(name: &str, edits: &[(&str, &str, &str)]) -> String {
     for (file, from, to) in edits {
         let p = dst.join(file);
         let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-        assert!(text.contains(from), "fixture drifted: {from:?} not found in {file}");
+        assert!(
+            text.contains(from),
+            "fixture drifted: {from:?} not found in {file}"
+        );
         std::fs::write(&p, text.replace(from, to)).unwrap();
     }
     dst.to_string_lossy().into_owned()
@@ -75,7 +81,11 @@ fn copy_dir(src: &std::path::Path, dst: &std::path::Path) {
 #[test]
 fn a_desk_that_carries_a_program_loads_clean() {
     let (code, out, err) = run(&["check", &tree(), "--deny-warnings"]);
-    assert_eq!(code, Some(0), "this is the shape the feature is FOR:\n{out}{err}");
+    assert_eq!(
+        code,
+        Some(0),
+        "this is the shape the feature is FOR:\n{out}{err}"
+    );
 }
 
 /// The body is carried by name, type, size and fingerprint — never by contents.
@@ -84,12 +94,17 @@ fn the_body_is_carried_as_files_and_not_as_settings() {
     let (_, shown, _) = run(&["show", &tree()]);
     let doc: serde_json::Value = serde_json::from_str(&shown).expect("JSON");
     let body = &doc["programs"]["check-window"]["body"];
-    let files = body["files"].as_array().expect("a body is a folder of files");
+    let files = body["files"]
+        .as_array()
+        .expect("a body is a folder of files");
     let wasm = files
         .iter()
         .find(|f| f["$file"].as_str() == Some("check-window.wasm"))
         .expect("the body is carried");
-    assert!(wasm["digest"].as_str().is_some_and(|d| d.len() == 64), "fingerprinted:\n{shown}");
+    assert!(
+        wasm["digest"].as_str().is_some_and(|d| d.len() == 64),
+        "fingerprinted:\n{shown}"
+    );
     assert!(wasm["sizeBytes"].is_number(), "{shown}");
     // And the bytes are nowhere in the document.
     assert!(
@@ -110,12 +125,18 @@ fn checking_a_program_does_not_run_it() {
     let body = std::path::Path::new(&dst).join("programs/check-window/body");
     std::fs::write(
         body.join("hostile.py"),
-        format!("open({:?}, 'w').write('executed')\n", canary.to_str().unwrap()),
+        format!(
+            "open({:?}, 'w').write('executed')\n",
+            canary.to_str().unwrap()
+        ),
     )
     .unwrap();
     for verb in ["check", "show", "waits", "discover"] {
         let _ = run(&[verb, &dst]);
-        assert!(!canary.exists(), "`pact {verb}` ran a program it was only asked to read");
+        assert!(
+            !canary.exists(),
+            "`pact {verb}` ran a program it was only asked to read"
+        );
     }
     let _ = std::fs::remove_dir_all(&dst);
 }
@@ -123,12 +144,22 @@ fn checking_a_program_does_not_run_it() {
 /// An action naming a program that is not there is refused, with the ones that are.
 #[test]
 fn an_action_naming_no_such_program_is_refused() {
-    let dst = broken("no-such", &[("tools/refund-window.yaml", "program: check-window", "program: check-windo")]);
+    let dst = broken(
+        "no-such",
+        &[(
+            "tools/refund-window.yaml",
+            "program: check-window",
+            "program: check-windo",
+        )],
+    );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
     assert_eq!(code, Some(1), "{said}");
     assert!(said.contains("schema/no-such-name"), "{said}");
-    assert!(said.contains("check-window"), "name the one that is there:\n{said}");
+    assert!(
+        said.contains("check-window"),
+        "name the one that is there:\n{said}"
+    );
     let _ = std::fs::remove_dir_all(&dst);
 }
 
@@ -139,11 +170,17 @@ fn an_action_naming_no_such_program_is_refused() {
 /// failure, so it is said here.
 #[test]
 fn a_sandbox_that_cannot_host_the_engine_is_refused() {
-    let dst = broken("wrong-engine", &[("resources/local-sandbox.yaml", "  - wasm", "  - typescript")]);
+    let dst = broken(
+        "wrong-engine",
+        &[("resources/local-sandbox.yaml", "  - wasm", "  - typescript")],
+    );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
     assert_eq!(code, Some(1), "{said}");
-    assert!(said.contains("loader/nothing-here-can-run-that-program"), "{said}");
+    assert!(
+        said.contains("loader/nothing-here-can-run-that-program"),
+        "{said}"
+    );
     assert!(said.contains("wasm"), "name the engine it needs:\n{said}");
     let _ = std::fs::remove_dir_all(&dst);
 }
@@ -155,7 +192,14 @@ fn a_sandbox_that_cannot_host_the_engine_is_refused() {
 /// person and answering anyway are three different governance decisions.
 #[test]
 fn fuel_with_no_action_is_refused() {
-    let dst = broken("no-action", &[("programs/check-window/program.yaml", "  when-it-runs-out: stop-and-say-so\n", "")]);
+    let dst = broken(
+        "no-action",
+        &[(
+            "programs/check-window/program.yaml",
+            "  when-it-runs-out: stop-and-say-so\n",
+            "",
+        )],
+    );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
     assert_eq!(code, Some(1), "{said}");
@@ -167,7 +211,14 @@ fn fuel_with_no_action_is_refused() {
 /// A program nothing calls is said out loud.
 #[test]
 fn a_program_nothing_calls_is_said_out_loud() {
-    let dst = broken("unused", &[("tools/refund-window.yaml", "    program: check-window\n", "")]);
+    let dst = broken(
+        "unused",
+        &[(
+            "tools/refund-window.yaml",
+            "    program: check-window\n",
+            "",
+        )],
+    );
     let (code, out, err) = run(&["check", &dst]);
     let said = format!("{out}{err}");
     assert_eq!(code, Some(0), "a half-written tree still loads:\n{said}");
@@ -181,7 +232,10 @@ fn a_program_nothing_calls_is_said_out_loud() {
 fn the_consent_to_run_reaches_the_list_of_waits() {
     let (code, waits, err) = run(&["waits", &tree()]);
     assert_eq!(code, Some(0), "{waits}{err}");
-    assert!(waits.contains("may-we-run"), "a runtime is obliged to walk this list:\n{waits}");
+    assert!(
+        waits.contains("may-we-run"),
+        "a runtime is obliged to walk this list:\n{waits}"
+    );
 }
 
 /// An action that runs a program may say what it hands back (02P A4), and it is
@@ -196,19 +250,35 @@ fn an_action_that_hands_back_something_its_program_does_not_is_refused() {
     // The same words: nothing to say.
     let same = broken(
         "same-answer",
-        &[("tools/refund-window.yaml", ACTION, "    program: check-window\n    answers-with:\n      verdict: One of  inside, outside\n")],
+        &[(
+            "tools/refund-window.yaml",
+            ACTION,
+            "    program: check-window\n    answers-with:\n      verdict: One of  inside, outside\n",
+        )],
     );
     let (code, out, err) = run(&["check", &same, "--deny-warnings"]);
-    assert_eq!(code, Some(0), "saying the same is not a mistake:\n{out}{err}");
+    assert_eq!(
+        code,
+        Some(0),
+        "saying the same is not a mistake:\n{out}{err}"
+    );
     let _ = std::fs::remove_dir_all(&same);
 
     for (name, block, names) in [
         ("other-shape", "      verdict: text\n", "`verdict`"),
-        ("other-line", "      verdict: one of inside, outside\n      days: integer\n", "`days`"),
+        (
+            "other-line",
+            "      verdict: one of inside, outside\n      days: integer\n",
+            "`days`",
+        ),
     ] {
         let dst = broken(
             name,
-            &[("tools/refund-window.yaml", ACTION, &format!("{ACTION}    answers-with:\n{block}"))],
+            &[(
+                "tools/refund-window.yaml",
+                ACTION,
+                &format!("{ACTION}    answers-with:\n{block}"),
+            )],
         );
         let (code, out, err) = run(&["check", &dst]);
         let said = format!("{out}{err}");
@@ -217,8 +287,14 @@ fn an_action_that_hands_back_something_its_program_does_not_is_refused() {
             said.contains("rule: loader/an-action-and-its-program-hand-back-different-things"),
             "{said}"
         );
-        assert!(said.contains(names), "it names the line that differs:\n{said}");
-        assert!(said.contains("refund-window.yaml:"), "at the action's own file:\n{said}");
+        assert!(
+            said.contains(names),
+            "it names the line that differs:\n{said}"
+        );
+        assert!(
+            said.contains("refund-window.yaml:"),
+            "at the action's own file:\n{said}"
+        );
         let _ = std::fs::remove_dir_all(&dst);
     }
 }

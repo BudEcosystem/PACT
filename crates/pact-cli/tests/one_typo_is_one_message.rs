@@ -36,14 +36,16 @@ fn example() -> String {
 /// Named per test so two of these can run at once — `cargo test` is threaded,
 /// and a shared directory would make the failures depend on the schedule.
 fn copy_with(name: &str, edits: &[(&str, &str, &str)]) -> std::path::PathBuf {
-    let dst =
-        std::env::temp_dir().join(format!("pact-one-typo-{name}-{}", std::process::id()));
+    let dst = std::env::temp_dir().join(format!("pact-one-typo-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dst);
     copy_dir(std::path::Path::new(&example()), &dst);
     for (file, from, to) in edits {
         let p = dst.join(file);
         let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-        assert!(text.contains(from), "fixture drifted: {from:?} is not in {file}");
+        assert!(
+            text.contains(from),
+            "fixture drifted: {from:?} is not in {file}"
+        );
         std::fs::write(&p, text.replacen(from, to, 1)).unwrap();
     }
     dst
@@ -63,7 +65,10 @@ fn copy_dir(src: &std::path::Path, dst: &std::path::Path) {
 
 /// Everything `pact check` printed about a tree.
 fn check(root: &std::path::Path) -> String {
-    let o = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
+    let o = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
     String::from_utf8_lossy(&o.stdout).into_owned()
 }
 
@@ -100,7 +105,14 @@ fn problems(text: &str) -> Vec<String> {
 
 #[test]
 fn misspelling_a_required_setting_is_one_message_and_not_also_a_complaint_that_it_is_missing() {
-    let root = copy_with("top-level", &[("agents/refund-desk/agent.yaml", "description:", "desription:")]);
+    let root = copy_with(
+        "top-level",
+        &[(
+            "agents/refund-desk/agent.yaml",
+            "description:",
+            "desription:",
+        )],
+    );
     let text = check(&root);
     assert_eq!(
         problems(&text),
@@ -123,7 +135,10 @@ fn misspelling_a_required_setting_inside_a_nested_block_is_one_message_too() {
     // messages landed on the SAME line — which made the pair even harder to read
     // than the top-level case, and is why the fix belongs in `check_group`
     // rather than at the root.
-    let root = copy_with("nested", &[("resources/zendesk-server.yaml", "by-reference:", "byref:")]);
+    let root = copy_with(
+        "nested",
+        &[("resources/zendesk-server.yaml", "by-reference:", "byref:")],
+    );
     let text = check(&root);
     assert_eq!(
         problems(&text),
@@ -141,19 +156,35 @@ fn typing_the_fix_the_one_message_gives_leaves_a_tree_that_checks_clean() {
     // job. So the fix is applied literally — rename the misspelt key to the name
     // the message offered — and the tree is checked again.
     for (name, file, wrong, right) in [
-        ("typed-top-level", "agents/refund-desk/agent.yaml", "desription:", "description:"),
-        ("typed-nested", "resources/zendesk-server.yaml", "byref:", "by-reference:"),
+        (
+            "typed-top-level",
+            "agents/refund-desk/agent.yaml",
+            "desription:",
+            "description:",
+        ),
+        (
+            "typed-nested",
+            "resources/zendesk-server.yaml",
+            "byref:",
+            "by-reference:",
+        ),
     ] {
         let root = copy_with(name, &[(file, right, wrong)]);
         let told = check(&root);
-        assert!(told.contains(&format!("Did you mean '{}'?", right.trim_end_matches(':'))), "{told}");
+        assert!(
+            told.contains(&format!("Did you mean '{}'?", right.trim_end_matches(':'))),
+            "{told}"
+        );
 
         // The author types what they were told, and nothing else.
         let p = root.join(file);
         let text = std::fs::read_to_string(&p).unwrap();
         std::fs::write(&p, text.replacen(wrong, right, 1)).unwrap();
 
-        let after = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
+        let after = pact()
+            .args(["check", root.to_str().unwrap()])
+            .output()
+            .expect("runs");
         assert!(
             after.status.success(),
             "following the fix has to finish the job, not open the next problem:\n{}",
@@ -256,7 +287,10 @@ fn every_fix_that_names_a_setting_leaves_a_tree_that_checks_clean() {
             continue;
         };
         rewrite_key(&dst, &file, line_no, &typo, &suggested);
-        let after = pact().args(["check", dst.to_str().unwrap()]).output().expect("runs");
+        let after = pact()
+            .args(["check", dst.to_str().unwrap()])
+            .output()
+            .expect("runs");
         if !after.status.success() {
             broken.push(format!(
                 "{file}:{}: typed `{suggested}` as told and got:\n{}",
@@ -291,7 +325,9 @@ fn drop_a_letter(key: &str) -> String {
 }
 
 fn sanitise(file: &str) -> String {
-    file.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect()
+    file.chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect()
 }
 
 fn did_you_mean(text: &str) -> Option<String> {
@@ -309,7 +345,9 @@ fn keys_written_under(root: &std::path::Path) -> Vec<(String, usize, String)> {
     files.sort();
     for p in files {
         let rel = p.strip_prefix(root).unwrap().to_string_lossy().to_string();
-        let Ok(text) = std::fs::read_to_string(&p) else { continue };
+        let Ok(text) = std::fs::read_to_string(&p) else {
+            continue;
+        };
         for (i, line) in text.lines().enumerate() {
             let t = line.trim_start();
             let Some(colon) = t.find(':') else { continue };

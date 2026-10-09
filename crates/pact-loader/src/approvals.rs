@@ -53,7 +53,9 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
             continue;
         };
         for rule in rules {
-            let Some(whens) = rule.get("when").and_then(Node::as_list) else { continue };
+            let Some(whens) = rule.get("when").and_then(Node::as_list) else {
+                continue;
+            };
             for when in whens {
                 one(when, tools, diags);
             }
@@ -74,7 +76,9 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
 /// tree can carry, and `<name>` must be one of the `run-inputs:` of an agent that
 /// uses this tool.
 fn bindings_resolve(document: &Node, diags: &mut Diagnostics) {
-    let Some(tools) = document.get("tools").and_then(Node::as_map) else { return };
+    let Some(tools) = document.get("tools").and_then(Node::as_map) else {
+        return;
+    };
     // Every run input any agent supplies, with the agent it came from. A tool
     // may be used by several agents, and a binding is legitimate if ANY of them
     // supplies the name — narrowing it per agent would refuse a shared tool.
@@ -111,16 +115,23 @@ fn bindings_resolve(document: &Node, diags: &mut Diagnostics) {
         }
     }
     for (tool, entry) in tools {
-        let Some(actions) = entry.node.get("actions").and_then(Node::as_map) else { continue };
+        let Some(actions) = entry.node.get("actions").and_then(Node::as_map) else {
+            continue;
+        };
         for (action, a) in actions {
             // What this action keeps, and whether it may. `never-from:` named the
             // sources that may never write to a fact and NOTHING in the format
             // was a write, so the guard could not fire; this is that line.
-            if let Some(kept) = a.node.get("remember-as").and_then(Node::as_str).map(str::trim) {
-                let at = a.node.get("remember-as").map_or_else(
-                    || a.key_span.clone(),
-                    |n| n.span.clone(),
-                );
+            if let Some(kept) = a
+                .node
+                .get("remember-as")
+                .and_then(Node::as_str)
+                .map(str::trim)
+            {
+                let at = a
+                    .node
+                    .get("remember-as")
+                    .map_or_else(|| a.key_span.clone(), |n| n.span.clone());
                 if !remembered.is_empty() && !remembered.contains(kept) {
                     diags.push(Diagnostic::error(
                         "loader/no-such-remembered-fact",
@@ -151,9 +162,13 @@ fn bindings_resolve(document: &Node, diags: &mut Diagnostics) {
                     ));
                 }
             }
-            let Some(bind) = a.node.get("bind").and_then(Node::as_map) else { continue };
+            let Some(bind) = a.node.get("bind").and_then(Node::as_map) else {
+                continue;
+            };
             for (arg, value) in bind {
-                let Some(written) = value.node.as_str().map(str::trim) else { continue };
+                let Some(written) = value.node.as_str().map(str::trim) else {
+                    continue;
+                };
                 // The second namespace, checked against what agents remember.
                 if let Some(fact) = written.strip_prefix("remembers.") {
                     if remembered.is_empty() || remembered.contains(fact) {
@@ -233,8 +248,12 @@ fn bindings_resolve(document: &Node, diags: &mut Diagnostics) {
 }
 
 fn one(when: &Node, tools: Option<&Map>, diags: &mut Diagnostics) {
-    let Some(entry) = when.as_map().and_then(|m| m.get("tool")) else { return };
-    let Some(written) = entry.node.as_str().map(str::trim) else { return };
+    let Some(entry) = when.as_map().and_then(|m| m.get("tool")) else {
+        return;
+    };
+    let Some(written) = entry.node.as_str().map(str::trim) else {
+        return;
+    };
     if written.is_empty() {
         return;
     }
@@ -247,7 +266,9 @@ fn one(when: &Node, tools: Option<&Map>, diags: &mut Diagnostics) {
         None => (written, ""),
     };
 
-    let known: Vec<&str> = tools.map(|m| m.keys().map(String::as_str).collect()).unwrap_or_default();
+    let known: Vec<&str> = tools
+        .map(|m| m.keys().map(String::as_str).collect())
+        .unwrap_or_default();
     let Some(found) = tools.and_then(|m| m.get(tool)) else {
         diags.push(Diagnostic::error(
             "loader/no-such-tool-to-guard",
@@ -263,7 +284,9 @@ fn one(when: &Node, tools: Option<&Map>, diags: &mut Diagnostics) {
     };
 
     let actions = found.node.get("actions").and_then(Node::as_map);
-    let names: Vec<&str> = actions.map(|m| m.keys().map(String::as_str).collect()).unwrap_or_default();
+    let names: Vec<&str> = actions
+        .map(|m| m.keys().map(String::as_str).collect())
+        .unwrap_or_default();
     if action.is_empty() {
         diags.push(Diagnostic::error(
             "loader/rule-names-no-action",
@@ -308,7 +331,13 @@ fn one(when: &Node, tools: Option<&Map>, diags: &mut Diagnostics) {
 
     // The rule resolves. Now: does the argument it looks at exist, and is the
     // rule allowed to look at it?
-    arguments_exist(when, tool, action, actions.and_then(|m| m.get(action)), diags);
+    arguments_exist(
+        when,
+        tool,
+        action,
+        actions.and_then(|m| m.get(action)),
+        diags,
+    );
 }
 
 /// An approval rule reading an argument the action does not declare, or one its
@@ -326,8 +355,12 @@ fn arguments_exist(
     declared: Option<&Entry>,
     diags: &mut Diagnostics,
 ) {
-    let Some(arg_entry) = when.as_map().and_then(|m| m.get("arg")) else { return };
-    let Some(arg) = arg_entry.node.as_str().map(str::trim) else { return };
+    let Some(arg_entry) = when.as_map().and_then(|m| m.get("arg")) else {
+        return;
+    };
+    let Some(arg) = arg_entry.node.as_str().map(str::trim) else {
+        return;
+    };
     let Some(declared) = declared else { return };
 
     let takes: Vec<&str> = declared
@@ -416,7 +449,9 @@ fn offer(field: &str, _wrote: &str, known: &[&str], add: &str) -> String {
 /// The span of a key, so a diagnostic underlines the setting rather than the
 /// whole block.
 fn key_span(node: &Node, field: &str) -> Option<Span> {
-    node.as_map().and_then(|m: &Map| m.get(field)).map(|e: &Entry| e.key_span.clone())
+    node.as_map()
+        .and_then(|m: &Map| m.get(field))
+        .map(|e: &Entry| e.key_span.clone())
 }
 
 // ─────────────────────────────────────────── `needs-a-person: yes` (F17)
@@ -467,8 +502,11 @@ pub fn shipped_question() -> &'static Node {
     static PARSED: std::sync::OnceLock<Node> = std::sync::OnceLock::new();
     PARSED.get_or_init(|| {
         const TEXT: &str = include_str!("../../../spec/questions/is-this-ok.yaml");
-        pact_doc::parse_yaml(TEXT, camino::Utf8Path::new("spec/questions/is-this-ok.yaml"))
-            .expect("the question PACT ships parses — it is checked by a test of its own")
+        pact_doc::parse_yaml(
+            TEXT,
+            camino::Utf8Path::new("spec/questions/is-this-ok.yaml"),
+        )
+        .expect("the question PACT ships parses — it is checked by a test of its own")
     })
 }
 
@@ -512,11 +550,15 @@ impl Desugared {
 /// call. [`shorthand_and_rule_do_not_both_decide`] tells the author where that
 /// happened, so the line they wrote is never silently ignored.
 pub fn desugared(document: &Node) -> Vec<Desugared> {
-    let Some(tools) = document.get("tools").and_then(Node::as_map) else { return Vec::new() };
+    let Some(tools) = document.get("tools").and_then(Node::as_map) else {
+        return Vec::new();
+    };
     let already = ruled_on(document);
     let mut out = Vec::new();
     for (tool, entry) in tools {
-        let Some(actions) = entry.node.get("actions").and_then(Node::as_map) else { continue };
+        let Some(actions) = entry.node.get("actions").and_then(Node::as_map) else {
+            continue;
+        };
         for (action, a) in actions {
             if !asked_for(&a.node) || already.contains(&format!("{tool}/{action}")) {
                 continue;
@@ -551,13 +593,21 @@ pub fn desugared_for(document: &Node, agent: &Node) -> Vec<Desugared> {
             Some(one) => vec![one.trim().to_string()],
             None => n
                 .as_list()
-                .map(|l| l.iter().filter_map(Node::as_str).map(|s| s.trim().to_string()).collect())
+                .map(|l| {
+                    l.iter()
+                        .filter_map(Node::as_str)
+                        .map(|s| s.trim().to_string())
+                        .collect()
+                })
                 .unwrap_or_default(),
         },
         None => Vec::new(),
     };
     reachable.sort();
-    desugared(document).into_iter().filter(|g| reachable.contains(&g.tool)).collect()
+    desugared(document)
+        .into_iter()
+        .filter(|g| reachable.contains(&g.tool))
+        .collect()
 }
 
 /// Does this action's own file say a person has to say yes?
@@ -568,7 +618,9 @@ pub fn desugared_for(document: &Node, agent: &Node) -> Vec<Desugared> {
 /// A tick this did not recognise would be an authored gate that loads clean and
 /// stops nothing.
 pub fn asked_for(action: &Node) -> bool {
-    let Some(written) = action.get("needs-a-person") else { return false };
+    let Some(written) = action.get("needs-a-person") else {
+        return false;
+    };
     matches!(
         pact_schema::coerce::check(written, &pact_schema::Ty::YesNo),
         Some(pact_schema::coerce::Coerced::YesNo(true))
@@ -582,7 +634,11 @@ pub fn asked_for(action: &Node) -> bool {
 /// where the action gets named — and it is named from `description:`, which the
 /// author already wrote for the model to read.
 fn because_of(tool: &str, action: &str, node: &Node) -> String {
-    let described = node.get("description").and_then(Node::as_str).map(str::trim).unwrap_or("");
+    let described = node
+        .get("description")
+        .and_then(Node::as_str)
+        .map(str::trim)
+        .unwrap_or("");
     if described.is_empty() {
         return format!("`{action}` on `{tool}` needs a person before it runs.");
     }
@@ -593,11 +649,20 @@ fn because_of(tool: &str, action: &str, node: &Node) -> String {
 /// Every `<tool>/<action>` a written approval rule already decides.
 fn ruled_on(document: &Node) -> std::collections::BTreeSet<String> {
     let mut out = std::collections::BTreeSet::new();
-    let Some(policies) = document.get("policies").and_then(Node::as_map) else { return out };
+    let Some(policies) = document.get("policies").and_then(Node::as_map) else {
+        return out;
+    };
     for (_, policy) in policies {
-        let Some(rules) = policy.node.get("ask-a-person").and_then(Node::as_list) else { continue };
+        let Some(rules) = policy.node.get("ask-a-person").and_then(Node::as_list) else {
+            continue;
+        };
         for rule in rules {
-            for when in rule.get("when").and_then(Node::as_list).into_iter().flatten() {
+            for when in rule
+                .get("when")
+                .and_then(Node::as_list)
+                .into_iter()
+                .flatten()
+            {
                 let Some(named) = when.get("tool").and_then(Node::as_str).map(str::trim) else {
                     continue;
                 };
@@ -621,15 +686,18 @@ fn shorthand_and_rule_do_not_both_decide(document: &Node, diags: &mut Diagnostic
     if ruled.is_empty() {
         return;
     }
-    let Some(tools) = document.get("tools").and_then(Node::as_map) else { return };
+    let Some(tools) = document.get("tools").and_then(Node::as_map) else {
+        return;
+    };
     for (tool, entry) in tools {
-        let Some(actions) = entry.node.get("actions").and_then(Node::as_map) else { continue };
+        let Some(actions) = entry.node.get("actions").and_then(Node::as_map) else {
+            continue;
+        };
         for (action, a) in actions {
             if !asked_for(&a.node) || !ruled.contains(&format!("{tool}/{action}")) {
                 continue;
             }
-            let span =
-                key_span(&a.node, "needs-a-person").unwrap_or_else(|| a.node.span.clone());
+            let span = key_span(&a.node, "needs-a-person").unwrap_or_else(|| a.node.span.clone());
             diags.push(Diagnostic::warning(
                 "loader/asked-for-twice",
                 span,
@@ -690,24 +758,43 @@ policies:
     #[test]
     fn a_misspelt_tool_on_the_money_path_is_refused_where_the_author_is() {
         let d = check_text(&WORKSPACE.replace("payments/issue-refund", "paymnets/issue-refund"));
-        let e = d.items().iter().find(|x| x.rule == "loader/no-such-tool-to-guard").expect("caught");
+        let e = d
+            .items()
+            .iter()
+            .find(|x| x.rule == "loader/no-such-tool-to-guard")
+            .expect("caught");
         assert!(e.message.contains("paymnets"), "{}", e.message);
-        assert!(e.fix.contains("payments"), "the fix must name what exists: {}", e.fix);
+        assert!(
+            e.fix.contains("payments"),
+            "the fix must name what exists: {}",
+            e.fix
+        );
     }
 
     #[test]
     fn a_misspelt_action_is_refused_and_the_real_ones_are_listed() {
         let d = check_text(&WORKSPACE.replace("issue-refund, arg", "issue-refudn, arg"));
-        let e =
-            d.items().iter().find(|x| x.rule == "loader/no-such-action-to-guard").expect("caught");
+        let e = d
+            .items()
+            .iter()
+            .find(|x| x.rule == "loader/no-such-action-to-guard")
+            .expect("caught");
         assert!(e.fix.contains("issue-refund"), "{}", e.fix);
     }
 
     #[test]
     fn a_rule_that_names_a_tool_and_no_action_is_told_it_gates_nothing() {
         let d = check_text(&WORKSPACE.replace("payments/issue-refund", "payments"));
-        let e = d.items().iter().find(|x| x.rule == "loader/rule-names-no-action").expect("caught");
-        assert!(e.fix.contains("payments/issue-refund"), "the fix is a line to type: {}", e.fix);
+        let e = d
+            .items()
+            .iter()
+            .find(|x| x.rule == "loader/rule-names-no-action")
+            .expect("caught");
+        assert!(
+            e.fix.contains("payments/issue-refund"),
+            "the fix is a line to type: {}",
+            e.fix
+        );
     }
 
     #[test]
@@ -738,7 +825,12 @@ policies:
             .items()
             .iter()
             .find(|x| x.rule == "loader/argument-not-offered-for-inspection")
-            .unwrap_or_else(|| panic!("a gate reading what it may not must be caught:\n{}", d.render()));
+            .unwrap_or_else(|| {
+                panic!(
+                    "a gate reading what it may not must be caught:\n{}",
+                    d.render()
+                )
+            });
         assert_eq!(
             e.severity,
             pact_diag::Severity::Error,
@@ -809,7 +901,11 @@ tools:
         let d = check_text(&TREE.replace("run-inputs.customer-id }", "run-inputs.custommer-id }"));
         let e = d.items().first().expect("caught");
         assert_eq!(e.rule, "loader/no-such-run-input");
-        assert!(e.fix.contains("customer-id"), "the fix must name what exists: {}", e.fix);
+        assert!(
+            e.fix.contains("customer-id"),
+            "the fix must name what exists: {}",
+            e.fix
+        );
     }
 
     #[test]

@@ -46,7 +46,10 @@ fn edited(name: &str, file: &str, from: &str, to: &str) -> String {
     copy(std::path::Path::new(&example()), &dst);
     let p = dst.join(file);
     let text = std::fs::read_to_string(&p).unwrap_or_else(|_| panic!("{file} is there"));
-    assert!(text.contains(from), "fixture drifted: {file} no longer contains `{from}`");
+    assert!(
+        text.contains(from),
+        "fixture drifted: {file} no longer contains `{from}`"
+    );
     std::fs::write(&p, text.replacen(from, to, 1)).unwrap();
     dst.to_string_lossy().into_owned()
 }
@@ -55,13 +58,20 @@ fn copy(src: &std::path::Path, dst: &std::path::Path) {
     std::fs::create_dir_all(dst).unwrap();
     for e in std::fs::read_dir(src).unwrap().flatten() {
         let (s, d) = (e.path(), dst.join(e.file_name()));
-        if s.is_dir() { copy(&s, &d) } else { std::fs::copy(&s, &d).map(|_| ()).unwrap() }
+        if s.is_dir() {
+            copy(&s, &d)
+        } else {
+            std::fs::copy(&s, &d).map(|_| ()).unwrap()
+        }
     }
 }
 
 fn check(root: &str) -> (bool, String) {
     let out = pact().args(["check", root]).output().expect("runs");
-    (out.status.success(), String::from_utf8_lossy(&out.stdout).into_owned())
+    (
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+    )
 }
 
 #[test]
@@ -77,9 +87,18 @@ fn a_rule_looking_outside_the_inspects_line_fails_the_command_the_author_runs() 
     );
     let (ok, text) = check(&root);
 
-    assert!(!ok, "a warning exits 0, and this is the rule that stops a refund:\n{text}");
-    assert!(text.contains("rule: loader/argument-not-offered-for-inspection"), "{text}");
-    assert!(text.contains("policies/approvals.yaml:"), "must name the line: {text}");
+    assert!(
+        !ok,
+        "a warning exits 0, and this is the rule that stops a refund:\n{text}"
+    );
+    assert!(
+        text.contains("rule: loader/argument-not-offered-for-inspection"),
+        "{text}"
+    );
+    assert!(
+        text.contains("policies/approvals.yaml:"),
+        "must name the line: {text}"
+    );
     assert!(
         text.contains("inspects:") && text.contains("tools/payments.yaml"),
         "the fix has to be typeable, and it has to say which file: {text}"
@@ -123,10 +142,27 @@ fn no_sentence_about_inspects_assumes_programming_knowledge() {
     let (_, text) = check(&root);
     let lower = text.to_lowercase();
     for word in [
-        "enum", "variant", "deserialize", "serde", "unwrap", "panic", "trait", "struct",
-        "vec<", "option<", "predicate", "atom", "boolean", "null", "assertion", "invariant",
+        "enum",
+        "variant",
+        "deserialize",
+        "serde",
+        "unwrap",
+        "panic",
+        "trait",
+        "struct",
+        "vec<",
+        "option<",
+        "predicate",
+        "atom",
+        "boolean",
+        "null",
+        "assertion",
+        "invariant",
     ] {
-        assert!(!lower.contains(word), "message assumes programming knowledge ('{word}'):\n{text}");
+        assert!(
+            !lower.contains(word),
+            "message assumes programming knowledge ('{word}'):\n{text}"
+        );
     }
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -137,11 +173,22 @@ fn taking_the_inspects_line_away_altogether_leaves_the_same_rule_alone() {
     // one. An absent `inspects:` must never be read as "no argument may be
     // looked at", or every gate in every workspace that has not written it would
     // start stopping everything.
-    let root = edited("no-line", "tools/payments.yaml", "\n    inspects: [amount]", "");
+    let root = edited(
+        "no-line",
+        "tools/payments.yaml",
+        "\n    inspects: [amount]",
+        "",
+    );
     let (ok, text) = check(&root);
 
-    assert!(ok, "an action that offers nothing for inspection restricts nothing:\n{text}");
-    assert!(!text.contains("argument-not-offered-for-inspection"), "{text}");
+    assert!(
+        ok,
+        "an action that offers nothing for inspection restricts nothing:\n{text}"
+    );
+    assert!(
+        !text.contains("argument-not-offered-for-inspection"),
+        "{text}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -152,5 +199,8 @@ fn the_worked_example_reads_only_what_its_own_tool_file_offers() {
     // example costs an author their trust in every other line the tool prints.
     let (ok, text) = check(&example());
     assert!(ok, "the worked example must load:\n{text}");
-    assert!(!text.contains("argument-not-offered-for-inspection"), "{text}");
+    assert!(
+        !text.contains("argument-not-offered-for-inspection"),
+        "{text}"
+    );
 }

@@ -38,8 +38,8 @@
 
 use pact_diag::Diagnostics;
 use pact_doc::parse_yaml;
-use pact_schema::from_doc::schema_from_yaml;
 use pact_schema::Schema;
+use pact_schema::from_doc::schema_from_yaml;
 
 /// The specification as it actually ships — the same file `pact-cli` embeds.
 const SPEC: &str = include_str!("../../../spec/schema.yaml");
@@ -47,7 +47,11 @@ const SPEC: &str = include_str!("../../../spec/schema.yaml");
 fn spec() -> Schema {
     let mut d = Diagnostics::new();
     let s = schema_from_yaml(SPEC, &mut d);
-    assert!(!d.has_errors(), "the shipped specification does not load:\n{}", d.render());
+    assert!(
+        !d.has_errors(),
+        "the shipped specification does not load:\n{}",
+        d.render()
+    );
     s
 }
 
@@ -98,7 +102,9 @@ fn articled_pairs(sentence: &str) -> Vec<(String, String)> {
     words
         .windows(2)
         .filter_map(|pair| {
-            let article = pair[0].trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase();
+            let article = pair[0]
+                .trim_matches(|c: char| !c.is_alphanumeric())
+                .to_lowercase();
             if article != "a" && article != "an" {
                 return None;
             }
@@ -171,10 +177,20 @@ fn a_plural_or_uncountable_kind_name_is_given_no_article_at_all() {
         );
     }
     for (group, expected) in [
-        ("evals", "'not-a-real-setting' is not something evals can have."),
-        ("teamwork", "'not-a-real-setting' is not something teamwork can have."),
+        (
+            "evals",
+            "'not-a-real-setting' is not something evals can have.",
+        ),
+        (
+            "teamwork",
+            "'not-a-real-setting' is not something teamwork can have.",
+        ),
     ] {
-        assert!(messages(group).contains(&expected.to_string()), "{:?}", messages(group));
+        assert!(
+            messages(group).contains(&expected.to_string()),
+            "{:?}",
+            messages(group)
+        );
     }
 }
 
@@ -212,7 +228,10 @@ fn a_vowel_initial_field_name_gets_the_right_article_too() {
         ("question", "A question must have a 'description'."),
     ] {
         let said = messages(group);
-        assert!(said.contains(&expected.to_string()), "expected \"{expected}\", got {said:?}");
+        assert!(
+            said.contains(&expected.to_string()),
+            "expected \"{expected}\", got {said:?}"
+        );
     }
 }
 
@@ -226,6 +245,10 @@ fn the_fix_still_names_the_setting_and_stays_typeable() {
         .iter()
         .find(|i| i.rule == "schema/missing-field" && i.message.contains("description"))
         .expect("an agent with no description is refused");
-    assert!(e.fix.contains("description: ..."), "the fix must be typeable: {}", e.fix);
+    assert!(
+        e.fix.contains("description: ..."),
+        "the fix must be typeable: {}",
+        e.fix
+    );
     assert!(!e.fix.trim().is_empty());
 }

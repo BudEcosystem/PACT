@@ -173,9 +173,7 @@ fn a_mismatch_is_refused_in_an_approval_rule() {
     );
     assert!(!ok, "{text}");
     assert!(
-        text.contains(
-            "`amount` is an amount of money and `less-than: 2026-01-01` is a date"
-        ),
+        text.contains("`amount` is an amount of money and `less-than: 2026-01-01` is a date"),
         "{text}"
     );
 }

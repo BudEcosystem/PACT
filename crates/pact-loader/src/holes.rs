@@ -83,22 +83,36 @@ fn scan(text: &str) -> Vec<Found> {
             from = after;
             continue;
         }
-        let Some(close) = text[after..].find("}}").map(|i| after + i) else { break };
+        let Some(close) = text[after..].find("}}").map(|i| after + i) else {
+            break;
+        };
         let inner = text[after..close].trim();
         let is_name = !inner.is_empty()
-            && inner.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'));
+            && inner
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'));
         if is_name {
-            out.push(Found { written: inner.to_string(), at: open, almost: false });
+            out.push(Found {
+                written: inner.to_string(),
+                at: open,
+                almost: false,
+            });
             from = close + 2;
             continue;
         }
         // Nearly a hole: it names a namespace and is one pair of braces (a
         // second `{{` inside means this pair closes somewhere else).
-        let names_one = [RUN_INPUTS, REMEMBERS].iter().any(|n| inner.contains(&format!("{n}.")));
+        let names_one = [RUN_INPUTS, REMEMBERS]
+            .iter()
+            .any(|n| inner.contains(&format!("{n}.")));
         if names_one && !inner.contains("{{") {
             // `{{{x}}}` is shown whole: its third brace is part of the mistake.
             let end = close + 2 + usize::from(text[close + 2..].starts_with('}'));
-            out.push(Found { written: text[open..end].to_string(), at: open, almost: true });
+            out.push(Found {
+                written: text[open..end].to_string(),
+                at: open,
+                almost: true,
+            });
         }
         from = after;
     }
@@ -110,7 +124,10 @@ pub fn holes_in(text: &str) -> Vec<Hole> {
     scan(text)
         .into_iter()
         .filter(|f| !f.almost)
-        .map(|f| Hole { line_offset: text[..f.at].matches('\n').count(), written: f.written })
+        .map(|f| Hole {
+            line_offset: text[..f.at].matches('\n').count(),
+            written: f.written,
+        })
         .collect()
 }
 
@@ -141,7 +158,13 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
         // A variant's words are filled like the agent's own, so they are held
         // like them: unchecked, a hole there loaded cleanly and stopped the
         // first run that chose the variant.
-        for (name, variant) in entry.node.get("variants").and_then(Node::as_map).into_iter().flatten() {
+        for (name, variant) in entry
+            .node
+            .get("variants")
+            .and_then(Node::as_map)
+            .into_iter()
+            .flatten()
+        {
             for field in VARIANT_FIELDS {
                 if let Some(node) = variant.node.get(field) {
                     prose(node, &format!("variants.{name}.{field}"), &mut texts);
@@ -152,7 +175,9 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
             let found = scan(text);
             let places = in_the_source(diags, span, &found);
             for (i, one) in found.iter().enumerate() {
-                let at = places.as_ref().map_or_else(|| guessed(span, text, one), |p| p[i].clone());
+                let at = places
+                    .as_ref()
+                    .map_or_else(|| guessed(span, text, one), |p| p[i].clone());
                 if let Some(d) = judge(agent, &field, one, at, &inputs, &remembered) {
                     diags.push(d);
                 }
@@ -191,7 +216,10 @@ fn in_the_source(diags: &Diagnostics, span: &Span, found: &[Found]) -> Option<Ve
     let written = source.get(span.byte_start..)?;
     let there = scan(written);
     let same = there.len() >= found.len()
-        && there.iter().zip(found).all(|(a, b)| a.almost == b.almost && a.written == b.written);
+        && there
+            .iter()
+            .zip(found)
+            .all(|(a, b)| a.almost == b.almost && a.written == b.written);
     if !same {
         return None;
     }
@@ -474,7 +502,11 @@ agents:
         // Braces a model may be meant to read: said, not refused. Refusing it
         // left instructions that tell a model to write a template unwritable.
         assert_eq!(e.severity, pact_diag::Severity::Warning);
-        assert!(e.fix.contains("`\\{{brnd}}`"), "the escape is offered: {}", e.fix);
+        assert!(
+            e.fix.contains("`\\{{brnd}}`"),
+            "the escape is offered: {}",
+            e.fix
+        );
         assert!(
             e.fix.contains("one of: `{{run-inputs.brand}}`"),
             "{}",
@@ -497,27 +529,35 @@ agents:
     #[test]
     fn a_bare_name_the_agent_declares_is_still_refused() {
         let d = check_text(&TREE.replace("{{ run-inputs.brand }}", "{{brand}}"));
-        assert_eq!(d.items().first().expect("caught").severity, pact_diag::Severity::Error);
+        assert_eq!(
+            d.items().first().expect("caught").severity,
+            pact_diag::Severity::Error
+        );
     }
 
     #[test]
     fn braces_said_on_purpose_are_left_alone() {
         // The one escape, for a name that is nothing and for one that would
         // have been a hole.
-        let d = check_text(
-            &TREE.replace("{{ run-inputs.brand }}", "\\{{first_name}} \\{{run-inputs.nobody}}"),
-        );
+        let d = check_text(&TREE.replace(
+            "{{ run-inputs.brand }}",
+            "\\{{first_name}} \\{{run-inputs.nobody}}",
+        ));
         assert!(d.is_empty(), "{}", d.render());
         assert!(holes_in("a \\{{run-inputs.x}} b").is_empty());
     }
 
     #[test]
     fn braces_that_are_nearly_a_hole_are_each_warned_about() {
-        for nearly in
-            ["{{{run-inputs.brand}}}", "{{run-inputs.brand | upper}}", "{{ run-inputs. brand }}"]
-        {
+        for nearly in [
+            "{{{run-inputs.brand}}}",
+            "{{run-inputs.brand | upper}}",
+            "{{ run-inputs. brand }}",
+        ] {
             let d = check_text(&TREE.replace("{{ run-inputs.brand }}", nearly));
-            let [w] = d.items() else { panic!("one warning for {nearly}:\n{}", d.render()) };
+            let [w] = d.items() else {
+                panic!("one warning for {nearly}:\n{}", d.render())
+            };
             assert_eq!(w.rule, "loader/almost-a-hole");
             assert_eq!(w.severity, pact_diag::Severity::Warning);
             assert!(w.message.contains(nearly), "{}", w.message);
@@ -545,11 +585,18 @@ agents:
             .collect();
         assert_eq!(
             rules,
-            [("loader/no-such-run-input", true), ("loader/no-such-remembered-fact", false)],
+            [
+                ("loader/no-such-run-input", true),
+                ("loader/no-such-remembered-fact", false)
+            ],
             "{}",
             d.render()
         );
-        assert!(d.items()[1].message.contains("`variants.terse.instructions:`"));
+        assert!(
+            d.items()[1]
+                .message
+                .contains("`variants.terse.instructions:`")
+        );
     }
 
     #[test]
@@ -567,7 +614,11 @@ agents:
       Use the brand {{run-inputs.band}} by name.
 ";
         let d = check_text(folded);
-        let at: Vec<(usize, usize)> = d.items().iter().map(|e| (e.span.line, e.span.col)).collect();
+        let at: Vec<(usize, usize)> = d
+            .items()
+            .iter()
+            .map(|e| (e.span.line, e.span.col))
+            .collect();
         // `instructions:` is read first, then `description:`.
         assert_eq!(at, [(11, 21), (7, 16)], "{}", d.render());
     }

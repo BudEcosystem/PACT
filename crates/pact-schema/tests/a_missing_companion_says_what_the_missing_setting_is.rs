@@ -36,9 +36,9 @@
 //! below and reading it.
 
 use pact_diag::Diagnostics;
-use pact_doc::{parse_yaml, Node};
-use pact_schema::summary::first_clause;
+use pact_doc::{Node, parse_yaml};
 use pact_schema::Schema;
+use pact_schema::summary::first_clause;
 
 /// The specification as it actually ships.
 const SPEC: &str = include_str!("../../../spec/schema.yaml");
@@ -46,7 +46,11 @@ const SPEC: &str = include_str!("../../../spec/schema.yaml");
 fn spec() -> Schema {
     let mut d = Diagnostics::new();
     let s = pact_schema::from_doc::schema_from_yaml(SPEC, &mut d);
-    assert!(!d.has_errors(), "the shipped specification does not load:\n{}", d.render());
+    assert!(
+        !d.has_errors(),
+        "the shipped specification does not load:\n{}",
+        d.render()
+    );
     s
 }
 
@@ -65,7 +69,9 @@ fn pairs() -> Vec<Pair> {
     let doc = parse_yaml(SPEC, camino::Utf8Path::new("spec/schema.yaml")).expect("parses");
     let mut out = Vec::new();
     for (group, gentry) in doc.get("groups").and_then(Node::as_map).expect("groups:") {
-        let Some(fields) = gentry.node.get("fields").and_then(Node::as_map) else { continue };
+        let Some(fields) = gentry.node.get("fields").and_then(Node::as_map) else {
+            continue;
+        };
         for (field, fentry) in fields {
             let Some(when) = fentry.node.get("needed-when").and_then(Node::as_map) else {
                 continue;
@@ -74,13 +80,21 @@ fn pairs() -> Vec<Pair> {
                 out.push(Pair {
                     group: group.clone(),
                     field: field.clone(),
-                    value: ventry.node.as_str().expect("a value to match").trim().to_string(),
+                    value: ventry
+                        .node
+                        .as_str()
+                        .expect("a value to match")
+                        .trim()
+                        .to_string(),
                     owed: owed.clone(),
                 });
             }
         }
     }
-    assert!(!out.is_empty(), "the specification has no `needed-when:` pairs — this test is blind");
+    assert!(
+        !out.is_empty(),
+        "the specification has no `needed-when:` pairs — this test is blind"
+    );
     out
 }
 
@@ -115,7 +129,9 @@ fn the_refusal(pair: &Pair) -> pact_diag::Diagnostic {
 fn what_nothing_says(message: &str) -> String {
     message
         .split_once("so nothing says ")
-        .unwrap_or_else(|| panic!("the sentence changed shape and this test can no longer read it: {message}"))
+        .unwrap_or_else(|| {
+            panic!("the sentence changed shape and this test can no longer read it: {message}")
+        })
         .1
         .trim_end_matches('.')
         .to_string()
@@ -141,19 +157,39 @@ const SENTENCES: &[(&str, &str, &str)] = &[
     ("context-policy", "asks", "which question to put to them"),
     ("teamwork", "asks", "which question to put to them"),
     ("stage", "asks", "which question to put to them"),
-    ("action", "same-request-key", "which argument makes two calls \"the same call\""),
+    (
+        "action",
+        "same-request-key",
+        "which argument makes two calls \"the same call\"",
+    ),
     ("question", "escalates-to", "who it goes to next"),
-    ("learning", "may-improve-on-its-own", "which safe changes it may make on its own"),
+    (
+        "learning",
+        "may-improve-on-its-own",
+        "which safe changes it may make on its own",
+    ),
     // The help goes on to give an example of a cron line, and the sentence used
     // to give that example back as if it were the missing setting.
     ("port", "every", "when the clock should start a run"),
     // Was "with `enough-of-them`".
-    ("teamwork", "enough-is", "how many good answers count as enough"),
+    (
+        "teamwork",
+        "enough-is",
+        "how many good answers count as enough",
+    ),
     // Was "with `whoever-answers-in-time`".
-    ("teamwork", "gives-up-after", "how long to wait before carrying on"),
+    (
+        "teamwork",
+        "gives-up-after",
+        "how long to wait before carrying on",
+    ),
     // A workflow's stage (02W §2.3): the line each `does:` cannot go without.
     ("stage", "call", "what this stage runs"),
-    ("stage", "chooses-between", "which labels it can pick, and where each one leads"),
+    (
+        "stage",
+        "chooses-between",
+        "which labels it can pick, and where each one leads",
+    ),
     ("stage", "over", "which list to go through"),
     // A wait answered by enough of those asked, and a table's rows (02W §2.8,
     // §2.12).
@@ -163,7 +199,11 @@ const SENTENCES: &[(&str, &str, &str)] = &[
     // `asks:` is the fifth spelling of the one setting above.
     ("if-it-fails", "asks", "which question to put to them"),
     ("if-it-fails", "backup", "what to call instead"),
-    ("if-it-fails", "carry-on-with", "the stage's answer to go on with"),
+    (
+        "if-it-fails",
+        "carry-on-with",
+        "the stage's answer to go on with",
+    ),
     (
         "if-it-fails",
         "new-version-of",
@@ -182,7 +222,9 @@ fn expected(pair: &Pair) -> Option<&'static str> {
 /// The `summary:` and `help:` the specification carries for one field.
 fn field_strings(group: &str, field: &str) -> (String, String) {
     let schema = spec();
-    let g = schema.group(group).unwrap_or_else(|| panic!("no `{group}` kind"));
+    let g = schema
+        .group(group)
+        .unwrap_or_else(|| panic!("no `{group}` kind"));
     let f = g
         .fields
         .iter()
@@ -294,9 +336,18 @@ fn a_setting_with_no_summary_is_named_by_the_opening_of_its_own_help() {
         owed: "escalates-to".into(),
     };
     let (summary, help) = field_strings(&pair.group, &pair.owed);
-    assert!(summary.is_empty(), "`question.escalates-to` has gained a `summary:`; pick another field");
-    assert_eq!(what_nothing_says(&the_refusal(&pair).message), first_clause(&help));
-    assert_eq!(what_nothing_says(&the_refusal(&pair).message), "who it goes to next");
+    assert!(
+        summary.is_empty(),
+        "`question.escalates-to` has gained a `summary:`; pick another field"
+    );
+    assert_eq!(
+        what_nothing_says(&the_refusal(&pair).message),
+        first_clause(&help)
+    );
+    assert_eq!(
+        what_nothing_says(&the_refusal(&pair).message),
+        "who it goes to next"
+    );
 }
 
 #[test]
@@ -329,7 +380,12 @@ groups:
         .items()
         .iter()
         .find(|i| i.rule == "schema/companion-cannot-be-named")
-        .unwrap_or_else(|| panic!("a partner that opens with a condition was accepted:\n{}", d.render()));
+        .unwrap_or_else(|| {
+            panic!(
+                "a partner that opens with a condition was accepted:\n{}",
+                d.render()
+            )
+        });
     assert!(
         e.message.contains("'with'"),
         "the refusal must name the word that broke the sentence: {}",
@@ -340,7 +396,11 @@ groups:
         "the refusal must show the sentence it would have produced: {}",
         e.message
     );
-    assert!(e.fix.contains("summary:"), "the fix must be a line to type: {}", e.fix);
+    assert!(
+        e.fix.contains("summary:"),
+        "the fix must be a line to type: {}",
+        e.fix
+    );
     assert!(
         e.fix.contains("spec/schema.yaml"),
         "the fix must name the file to type it in: {}",
@@ -373,7 +433,12 @@ groups:
         .items()
         .iter()
         .find(|i| i.rule == "schema/companion-cannot-be-named")
-        .unwrap_or_else(|| panic!("a partner with nothing to say was accepted:\n{}", d.render()));
+        .unwrap_or_else(|| {
+            panic!(
+                "a partner with nothing to say was accepted:\n{}",
+                d.render()
+            )
+        });
     assert!(e.message.contains("empty"), "{}", e.message);
 }
 
@@ -406,8 +471,14 @@ fn no_refusal_in_the_shipped_specification_hands_back_the_line_the_author_alread
                 pair.owed
             );
         }
-        assert!(!said.contains('—') && !said.contains(';'), "an aside leaked into: {said}");
-        assert!(said.split_whitespace().count() <= 16, "not a name, a paragraph: {said}");
+        assert!(
+            !said.contains('—') && !said.contains(';'),
+            "an aside leaked into: {said}"
+        );
+        assert!(
+            said.split_whitespace().count() <= 16,
+            "not a name, a paragraph: {said}"
+        );
     }
 }
 

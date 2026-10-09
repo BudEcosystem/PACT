@@ -44,7 +44,10 @@ fn pact() -> Command {
 }
 
 fn seed(name: &str) -> std::path::PathBuf {
-    let src = format!("{}/../../tests/trees/a-desk-with-a-program", env!("CARGO_MANIFEST_DIR"));
+    let src = format!(
+        "{}/../../tests/trees/a-desk-with-a-program",
+        env!("CARGO_MANIFEST_DIR")
+    );
     let dst = std::env::temp_dir().join(format!("pact-finishes-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dst);
     copy_dir(std::path::Path::new(&src), &dst);
@@ -102,7 +105,10 @@ fn within(seconds: u64, args: &[&str]) -> (Option<i32>, String) {
 }
 
 fn mkfifo(at: &std::path::Path) {
-    let ok = Command::new("mkfifo").arg(at).status().expect("mkfifo runs");
+    let ok = Command::new("mkfifo")
+        .arg(at)
+        .status()
+        .expect("mkfifo runs");
     assert!(ok.success(), "could not make a pipe at {}", at.display());
 }
 
@@ -119,7 +125,11 @@ fn a_pipe_named_pactignore_does_not_stop_the_reader_for_ever() {
         vec!["discover", &at],
     ] {
         let (code, said) = within(20, &verb);
-        assert!(code.is_some(), "`pact {}` came back with no code:\n{said}", verb.join(" "));
+        assert!(
+            code.is_some(),
+            "`pact {}` came back with no code:\n{said}",
+            verb.join(" ")
+        );
     }
     let _ = std::fs::remove_dir_all(&dst);
 }
@@ -155,7 +165,9 @@ fn a_pactignore_that_is_not_a_file_is_said_out_loud_once() {
 #[test]
 fn a_pactignore_that_points_outside_the_tree_is_not_read() {
     let dst = seed("link");
-    let outside = dst.join("..").join(format!("pact-outside-{}", std::process::id()));
+    let outside = dst
+        .join("..")
+        .join(format!("pact-outside-{}", std::process::id()));
     std::fs::write(&outside, "programs\n").unwrap();
     std::os::unix::fs::symlink(&outside, dst.join(".pactignore")).unwrap();
     let (code, said) = within(20, &["check", &dst.to_string_lossy()]);
@@ -224,7 +236,11 @@ fn a_payload_file_with_no_ceiling_does_not_become_the_readers_problem() {
         .unwrap_or_else(|| panic!("the file is still carried, by name and size:\n{shown}"));
     let rest = &shown[entry..];
     let ends = rest.find('}').expect("the entry closes");
-    assert!(rest[..ends].contains("8589934592"), "with its size:\n{}", &rest[..ends]);
+    assert!(
+        rest[..ends].contains("8589934592"),
+        "with its size:\n{}",
+        &rest[..ends]
+    );
     assert!(
         !rest[..ends].contains("digest"),
         "and no fingerprint, rather than a guess:\n{}",

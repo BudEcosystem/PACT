@@ -597,10 +597,14 @@ impl Schema {
         if depth > 12 {
             return;
         }
-        let Some(g) = self.groups.get(group) else { return };
+        let Some(g) = self.groups.get(group) else {
+            return;
+        };
         let Some(map) = node.as_map() else { return };
         for field in &g.fields {
-            let Some(entry) = map.get(field.name.as_str()) else { continue };
+            let Some(entry) = map.get(field.name.as_str()) else {
+                continue;
+            };
             if let Some(forms) = &field.forms
                 && !forms.resolve.is_empty()
             {
@@ -610,7 +614,9 @@ impl Schema {
                 };
                 for item in items {
                     let Some(said) = item.as_str() else { continue };
-                    let Some((_, holes)) = forms.capture(said) else { continue };
+                    let Some((_, holes)) = forms.capture(said) else {
+                        continue;
+                    };
                     for (hole, written) in holes {
                         let Some((_, collection)) =
                             forms.resolve.iter().find(|(name, _)| *name == hole)
@@ -695,7 +701,10 @@ impl Schema {
                     noun_for(g),
                     node.value.kind_name()
                 ),
-                format!("Write it as `name: value` lines. For example:\n         {}", example(g)),
+                format!(
+                    "Write it as `name: value` lines. For example:\n         {}",
+                    example(g)
+                ),
             ));
             return;
         };
@@ -704,7 +713,9 @@ impl Schema {
         let known: Vec<&str> = g
             .fields
             .iter()
-            .flat_map(|f| std::iter::once(f.name.as_str()).chain(f.aliases.iter().map(String::as_str)))
+            .flat_map(|f| {
+                std::iter::once(f.name.as_str()).chain(f.aliases.iter().map(String::as_str))
+            })
             .collect();
 
         // The names the author has already been told they probably meant, worked
@@ -802,7 +813,8 @@ impl Schema {
                 [] if f.required
                     && !already_named
                     && !settings_incomplete
-                    && !declares_itself_a_base(map, g) => {
+                    && !declares_itself_a_base(map, g) =>
+                {
                     let noun = noun_for(g);
                     let mut subject = format!("{}{noun}", article(&noun));
                     if let Some(head) = subject.get_mut(..1) {
@@ -891,8 +903,12 @@ impl Schema {
         diags: &mut Diagnostics,
     ) {
         for f in &g.fields {
-            let Some(entry) = map.get(&f.name) else { continue };
-            let Some(written) = entry.node.as_str().map(str::trim) else { continue };
+            let Some(entry) = map.get(&f.name) else {
+                continue;
+            };
+            let Some(written) = entry.node.as_str().map(str::trim) else {
+                continue;
+            };
             for (want, only_when) in &f.needed_when {
                 // Compared through the field's own type, so `spends-money: true`
                 // and `spends-money: yes` are the same answer — the leniency
@@ -951,16 +967,12 @@ impl Schema {
     /// Every message here has a twin in the adapter that executes these rules,
     /// deliberately: the two halves are in different languages and the author
     /// must not be able to tell which one refused them.
-    fn check_sentences(
-        &self,
-        g: &Group,
-        map: &pact_doc::Map,
-        diags: &mut Diagnostics,
-        at: &Where,
-    ) {
+    fn check_sentences(&self, g: &Group, map: &pact_doc::Map, diags: &mut Diagnostics, at: &Where) {
         for f in &g.fields {
             let Some(forms) = &f.forms else { continue };
-            let Some(entry) = map.get(&f.name) else { continue };
+            let Some(entry) = map.get(&f.name) else {
+                continue;
+            };
             // The powers this document may use. Read off the sibling field the
             // vocabulary names — `may:` on an interceptor — unless the KIND
             // fixes them, which is what `always-may:` says. `redaction.yaml`
@@ -1216,7 +1228,10 @@ impl Schema {
                     && !form.needs.is_empty()
                     && !declared.contains(&form.needs.as_str())
                 {
-                    no_power.entry(form.needs.clone()).or_default().push(item.span.clone());
+                    no_power
+                        .entry(form.needs.clone())
+                        .or_default()
+                        .push(item.span.clone());
                 }
                 // A sentence that carries on from another one, with no other one
                 // above it. `do the same for anything that looks like a card
@@ -1245,7 +1260,9 @@ impl Schema {
                         .filter(|f| {
                             !f.continues
                                 && f.needs == form.needs
-                                && (!fixed || f.needs.is_empty() || declared.contains(&f.needs.as_str()))
+                                && (!fixed
+                                    || f.needs.is_empty()
+                                    || declared.contains(&f.needs.as_str()))
                         })
                         .map(sentences::Form::readable)
                         .collect();
@@ -1417,7 +1434,9 @@ impl Schema {
         let Some(f) = g.fields.iter().find(|x| x.name == name) else {
             return false;
         };
-        let Some(entry) = map.get(name) else { return false };
+        let Some(entry) = map.get(name) else {
+            return false;
+        };
         let mut thrown_away = Diagnostics::new();
         self.check_value(&entry.node, &f.ty, f, &mut thrown_away, at);
         !thrown_away.items().is_empty()
@@ -1691,15 +1710,16 @@ impl Schema {
             scalar => {
                 match coerce::check(node, scalar) {
                     None => diags.push(wrong_type(node, &field.name, ty)),
-                    Some(coerce::Coerced::Text(s)) => match spelling(node, &field.name, scalar, &s, at)
-                    {
-                        // A file name with a folder in it and an answer shape
-                        // nothing can read are both text that fits the type and
-                        // breaks the type's one rule, so they are reported here
-                        // rather than resolved as a name.
-                        Some(d) => diags.push(d),
-                        None => self.check_name(node, field, &s, diags, at),
-                    },
+                    Some(coerce::Coerced::Text(s)) => {
+                        match spelling(node, &field.name, scalar, &s, at) {
+                            // A file name with a folder in it and an answer shape
+                            // nothing can read are both text that fits the type and
+                            // breaks the type's one rule, so they are reported here
+                            // rather than resolved as a name.
+                            Some(d) => diags.push(d),
+                            None => self.check_name(node, field, &s, diags, at),
+                        }
+                    }
                     // One door for "the value fits the type and is still not a
                     // usable value", and both ends of every quantity go through
                     // it. Each half returns for the kinds that have no floor
@@ -1813,11 +1833,20 @@ impl Schema {
     /// specification types `money`, validates `NaN USD` into it and requires
     /// `schema/below-the-floor` back, and pins the `may-be-money` set to the one
     /// field `money.rs` reaches by hand.
-    fn check_floor(&self, node: &Node, f: &Field, value: &coerce::Coerced, diags: &mut Diagnostics) {
+    fn check_floor(
+        &self,
+        node: &Node,
+        f: &Field,
+        value: &coerce::Coerced,
+        diags: &mut Diagnostics,
+    ) {
         let (what, fix) = match value {
             coerce::Coerced::Integer(n) => match f.at_least {
                 Some(floor) if *n < floor => (
-                    format!("'{}' is {n}, and the smallest it may be is {floor}.", f.name),
+                    format!(
+                        "'{}' is {n}, and the smallest it may be is {floor}.",
+                        f.name
+                    ),
                     format!("Write `{}: {floor}` or more, or remove the line.", f.name),
                 ),
                 _ => return,
@@ -1862,10 +1891,16 @@ impl Schema {
             // `schema/below-the-floor` and `0.5` without them was `OK — loaded
             // cleanly`.
             coerce::Coerced::Size(0)
-                if as_written(node).chars().any(|c| c.is_ascii_digit() && c != '0') =>
+                if as_written(node)
+                    .chars()
+                    .any(|c| c.is_ascii_digit() && c != '0') =>
             {
                 (
-                    format!("'{}' is {}, which is no tokens at all.", f.name, as_written(node)),
+                    format!(
+                        "'{}' is {}, which is no tokens at all.",
+                        f.name,
+                        as_written(node)
+                    ),
                     format!(
                         "Write `{}: {}`, or any size above zero, or remove the line.",
                         f.name,
@@ -2204,14 +2239,7 @@ impl Schema {
     /// Unless the workspace already has the name somewhere else, in which case
     /// "there is no such entry" is false and "add a file" is harmful advice —
     /// see [`elsewhere`].
-    fn check_name(
-        &self,
-        node: &Node,
-        f: &Field,
-        value: &str,
-        diags: &mut Diagnostics,
-        at: &Where,
-    ) {
+    fn check_name(&self, node: &Node, f: &Field, value: &str, diags: &mut Diagnostics, at: &Where) {
         let value = value.trim();
         let Some(missing) = self.look_up(&f.names, &f.or_one_of, value, at, &f.name) else {
             return;
@@ -2332,7 +2360,11 @@ impl Schema {
         // the SAME message builds its file list with `or_list` one screen down,
         // so the sentence contradicted itself in its own second half.
         let places = or_list(&places);
-        let choices = if known.is_empty() { String::new() } else { known.join(", ") };
+        let choices = if known.is_empty() {
+            String::new()
+        } else {
+            known.join(", ")
+        };
         // A top-level map is a folder in the workspace, so "add a file" is a
         // real instruction. A `^` map is a block inside the document already
         // open, so the instruction is to add an entry to it. A distribution
@@ -2352,8 +2384,10 @@ impl Schema {
         // for a round this printed ``add a file `questions/Is it OK to carry on
         // without the fraud check?.yaml` ``.
         let unnameable = value.contains([' ', '/', '?', '\\']);
-        let files: Vec<String> =
-            roots.iter().map(|dir| format!("`{}`", file_for(dir, value))).collect();
+        let files: Vec<String> = roots
+            .iter()
+            .map(|dir| format!("`{}`", file_for(dir, value)))
+            .collect();
         let add = match (files.is_empty() || unnameable, supplied) {
             (false, _) => format!("add a file {}", or_list(&files)),
             (true, Some(k)) => k.add.replace("{}", value),
@@ -2367,12 +2401,27 @@ impl Schema {
         // by nothing, and says so nowhere. Only the file form is quoted back in
         // the refusal, because it is the only one of the three that damages
         // anything when followed.
-        let consulted: Vec<&str> =
-            wants.iter().map(|w| w.trim_start_matches('^')).collect();
-        let elsewhere =
-            elsewhere::find(&self.groups, at.root, at.root_group, value, &consulted, field);
-        let add_a_file = if files.is_empty() || unnameable { None } else { Some(add.clone()) };
-        Some(NotFound { places, choices, add, elsewhere, add_a_file })
+        let consulted: Vec<&str> = wants.iter().map(|w| w.trim_start_matches('^')).collect();
+        let elsewhere = elsewhere::find(
+            &self.groups,
+            at.root,
+            at.root_group,
+            value,
+            &consulted,
+            field,
+        );
+        let add_a_file = if files.is_empty() || unnameable {
+            None
+        } else {
+            Some(add.clone())
+        };
+        Some(NotFound {
+            places,
+            choices,
+            add,
+            elsewhere,
+            add_a_file,
+        })
     }
 }
 
@@ -2471,13 +2520,21 @@ struct Where<'a> {
 
 impl<'a> Where<'a> {
     fn root(node: &'a Node, group: &'a str) -> Self {
-        Where { root: node, root_group: group, enclosing: vec![node] }
+        Where {
+            root: node,
+            root_group: group,
+            enclosing: vec![node],
+        }
     }
 
     fn inside(&self, node: &'a Node) -> Where<'a> {
         let mut enclosing = self.enclosing.clone();
         enclosing.push(node);
-        Where { root: self.root, root_group: self.root_group, enclosing }
+        Where {
+            root: self.root,
+            root_group: self.root_group,
+            enclosing,
+        }
     }
 
     /// The map `want` refers to, and whether it was found at the workspace root.
@@ -2538,7 +2595,11 @@ fn declares_itself_a_base(map: &Map, g: &Group) -> bool {
 /// article was the whole fix on this side.
 fn not_here(key: &str, g: &Group) -> String {
     if g.describe.is_empty() {
-        format!("'{key}' is not something {}{} can have.", article(&g.name), g.name)
+        format!(
+            "'{key}' is not something {}{} can have.",
+            article(&g.name),
+            g.name
+        )
     } else {
         format!("'{key}' is not {}.", g.describe.trim())
     }
@@ -2586,7 +2647,9 @@ fn not_here(key: &str, g: &Group) -> String {
 /// makes the report plainer, never wrong.
 fn noun_for(g: &Group) -> String {
     let said: Vec<&str> = g.describe.split_whitespace().collect();
-    let Some(head) = said.first() else { return g.name.clone() };
+    let Some(head) = said.first() else {
+        return g.name.clone();
+    };
     // Where the opening noun phrase ends: the next article, or the verb.
     let end = said
         .iter()
@@ -2696,7 +2759,11 @@ fn check_address(
         .filter(|a| a.split('.').nth(1) == Some(subject))
         .collect();
     let offer = if same.is_empty() {
-        reaches.iter().map(String::as_str).collect::<Vec<_>>().join(", ")
+        reaches
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+            .join(", ")
     } else {
         same.join(", ")
     };
@@ -2746,9 +2813,9 @@ fn these_rules(n: usize, one: &str, many: &str) -> String {
 /// The same anchoring `report_companions` uses: the first line the author wrote,
 /// because that is the one they are looking at.
 fn with_the_rest(d: Diagnostic, spans: &[pact_diag::Span]) -> Diagnostic {
-    spans[1..]
-        .iter()
-        .fold(d, |d, s| d.with_related(s.clone(), "and this one, for the same reason"))
+    spans[1..].iter().fold(d, |d, s| {
+        d.with_related(s.clone(), "and this one, for the same reason")
+    })
 }
 
 /// The words written under `name:`, whether the author wrote a list or one line.
@@ -2772,8 +2839,7 @@ fn words_of<'a>(map: &'a Map, name: &str) -> Vec<&'a str> {
 /// it gets long"* the READMEs promise, or a mistake. Every entry text, and at
 /// least one — an empty folder is a field the author meant to write and did not.
 fn is_all_prose(map: &Map) -> bool {
-    !map.is_empty()
-        && map.values().all(|e| matches!(e.node.value, Value::Str(_)))
+    !map.is_empty() && map.values().all(|e| matches!(e.node.value, Value::Str(_)))
 }
 
 /// The rule a scalar type puts on the SPELLING of its text, when it has one.
@@ -2805,7 +2871,11 @@ fn spelling(node: &Node, field: &str, ty: &Ty, written: &str, at: &Where) -> Opt
                 .to_string();
             // `escape.jsonl` must not be offered back as `escape.jsonl.jsonl`.
             let stem = plain.strip_suffix(".jsonl").unwrap_or(&plain);
-            let offer = if stem.is_empty() { "record".to_string() } else { stem.to_string() };
+            let offer = if stem.is_empty() {
+                "record".to_string()
+            } else {
+                stem.to_string()
+            };
             Some(Diagnostic::error(
                 "schema/not-a-file-name",
                 node.span.clone(),
@@ -2838,9 +2908,13 @@ fn spelling(node: &Node, field: &str, ty: &Ty, written: &str, at: &Where) -> Opt
                 Err(shape::Unread::NotAShape(part)) => {
                     let whole = shape::normalised(written);
                     let not = if whole.contains(&part) && whole != part {
-                        format!("'{written}' is not a shape an answer can have: '{part}' is none, so nothing could read it.")
+                        format!(
+                            "'{written}' is not a shape an answer can have: '{part}' is none, so nothing could read it."
+                        )
                     } else {
-                        format!("'{written}' is not a shape an answer can have, so nothing could read it.")
+                        format!(
+                            "'{written}' is not a shape an answer can have, so nothing could read it."
+                        )
                     };
                     let mut known: Vec<&str> = shapes.iter().map(|(n, _)| n.as_str()).collect();
                     known.extend(named.iter().copied());
@@ -2860,7 +2934,10 @@ fn spelling(node: &Node, field: &str, ty: &Ty, written: &str, at: &Where) -> Opt
             }
         }
         Ty::CombineRule(rules) => {
-            if rules.iter().any(|(_, spellings)| spellings.iter().any(|s| spelt_as(written, s))) {
+            if rules
+                .iter()
+                .any(|(_, spellings)| spellings.iter().any(|s| spelt_as(written, s)))
+            {
                 return None;
             }
             Some(Diagnostic::error(
@@ -2999,7 +3076,11 @@ fn as_written(node: &Node) -> String {
         Value::Int(i) => i.to_string(),
         Value::Float(x) => {
             let full = format!("{x}");
-            if full.len() > 21 { format!("{x:e}") } else { full }
+            if full.len() > 21 {
+                format!("{x:e}")
+            } else {
+                full
+            }
         }
         other => other.kind_name().to_string(),
     }
@@ -3025,7 +3106,11 @@ fn wrong_type(node: &Node, field: &str, ty: &Ty) -> Diagnostic {
     Diagnostic::error(
         "schema/wrong-type",
         node.span.clone(),
-        format!("'{field}' should be {}, but it is {}.", ty.describe(), kind_as_written(node)),
+        format!(
+            "'{field}' should be {}, but it is {}.",
+            ty.describe(),
+            kind_as_written(node)
+        ),
         match ty {
             Ty::OneOf(v) => format!("Change it to one of: {}.", v.join(", ")),
             // Every spelling an author can type, because for a round the fix
@@ -3056,8 +3141,9 @@ fn wrong_type(node: &Node, field: &str, ty: &Ty) -> Diagnostic {
             Ty::Size => "Write it like `32k`, `128k`, `1m` or `200000` — a number of words the \
                          model reads at once."
                 .to_string(),
-            Ty::FileName => "Write just a file name, like `tool-calls.jsonl` — no folders in it."
-                .to_string(),
+            Ty::FileName => {
+                "Write just a file name, like `tool-calls.jsonl` — no folders in it.".to_string()
+            }
             Ty::YesNo => "Write `yes` or `no`.".to_string(),
             other => format!("Change it to {}.", other.describe()),
         },
@@ -3098,10 +3184,9 @@ fn note_companions(
             .collect();
         if written.len() != 1 {
             let listed = set.join("`, `");
-            owed.entry(format!("__one_of__{listed}")).or_default().push((
-                f.name.clone(),
-                at.clone(),
-            ));
+            owed.entry(format!("__one_of__{listed}"))
+                .or_default()
+                .push((f.name.clone(), at.clone()));
         }
     }
     for want in &f.needs_also {
@@ -3118,7 +3203,9 @@ fn note_companions(
         if written {
             continue;
         }
-        owed.entry(want.clone()).or_default().push((f.name.clone(), at.clone()));
+        owed.entry(want.clone())
+            .or_default()
+            .push((f.name.clone(), at.clone()));
     }
 }
 
@@ -3202,9 +3289,19 @@ const HELD: &str = "any figure of fifteen digits or fewer";
 
 fn past_counting(n: f64, ty: Ty) -> (&'static str, &'static str, &'static str, Ty) {
     if n.is_sign_positive() {
-        ("schema/too-big-to-count", "more than this can keep track of", HELD, ty)
+        (
+            "schema/too-big-to-count",
+            "more than this can keep track of",
+            HELD,
+            ty,
+        )
     } else {
-        ("schema/too-big-to-count", "further below zero than this can keep track of", HELD, ty)
+        (
+            "schema/too-big-to-count",
+            "further below zero than this can keep track of",
+            HELD,
+            ty,
+        )
     }
 }
 
@@ -3227,7 +3324,10 @@ fn choices_clause(ty: &Ty) -> String {
         // answer allowed — and the leniency that accepts a bare value where a
         // list belongs is what makes the placeholder above typeable either way.
         Ty::ListOf(inner) => match inner.as_ref() {
-            Ty::OneOf(v) => format!(" The choices are: {}, and you may write several.", v.join(", ")),
+            Ty::OneOf(v) => format!(
+                " The choices are: {}, and you may write several.",
+                v.join(", ")
+            ),
             _ => String::new(),
         },
         _ => String::new(),
@@ -3246,9 +3346,10 @@ fn placeholder(ty: &Ty) -> String {
         Ty::Threshold => "> 80".into(),
         Ty::Size => "32k".into(),
         Ty::FileName => "what-happened.jsonl".into(),
-        Ty::AnswerShape(shapes) => {
-            shapes.first().map(|(n, _)| n.clone()).unwrap_or_else(|| "text".into())
-        }
+        Ty::AnswerShape(shapes) => shapes
+            .first()
+            .map(|(n, _)| n.clone())
+            .unwrap_or_else(|| "text".into()),
         Ty::CombineRule(rules) => rules
             .first()
             .and_then(|(_, spellings)| spellings.first().cloned())
@@ -3313,8 +3414,12 @@ mod tests {
                 Field::new("finishes-within", Ty::Duration, "how long it may take"),
                 Field::new("uses", Ty::ListOf(Box::new(Ty::Text)), "what it may use"),
                 Field::new("team", Ty::MapOf(Box::new(Ty::Text)), "who helps"),
-                Field::new("steps-at-most", Ty::Integer, "how many steps before it must stop")
-                    .needs_also("when-it-runs-out"),
+                Field::new(
+                    "steps-at-most",
+                    Ty::Integer,
+                    "how many steps before it must stop",
+                )
+                .needs_also("when-it-runs-out"),
                 Field::new(
                     "when-it-runs-out",
                     Ty::OneOf(vec![
@@ -3351,16 +3456,32 @@ mod tests {
         // D13: "did you mean" is the difference between a fixable error and a
         // dead end for someone who cannot read a schema.
         let d = check("name: X\ndescription: Y\ndescriptoin: Z\n");
-        let e = d.items().iter().find(|x| x.rule == "schema/unknown-field").expect("caught");
-        assert!(e.fix.contains("Did you mean 'description'"), "got: {}", e.fix);
+        let e = d
+            .items()
+            .iter()
+            .find(|x| x.rule == "schema/unknown-field")
+            .expect("caught");
+        assert!(
+            e.fix.contains("Did you mean 'description'"),
+            "got: {}",
+            e.fix
+        );
     }
 
     #[test]
     fn a_missing_required_field_says_what_to_add() {
         let d = check("name: X\n");
-        let e = d.items().iter().find(|x| x.rule == "schema/missing-field").expect("caught");
+        let e = d
+            .items()
+            .iter()
+            .find(|x| x.rule == "schema/missing-field")
+            .expect("caught");
         assert!(e.message.contains("description"));
-        assert!(e.fix.contains("description:"), "the fix must be typeable: {}", e.fix);
+        assert!(
+            e.fix.contains("description:"),
+            "the fix must be typeable: {}",
+            e.fix
+        );
     }
 
     #[test]
@@ -3382,13 +3503,21 @@ mod tests {
             .expect("T7: a discarded value must be reported");
         assert!(e.message.contains("does") && e.message.contains("description"));
         assert_eq!(e.related.len(), 1, "must point at the other spelling");
-        assert!(e.fix.contains("description"), "must name the preferred spelling: {}", e.fix);
+        assert!(
+            e.fix.contains("description"),
+            "must name the preferred spelling: {}",
+            e.fix
+        );
     }
 
     #[test]
     fn a_wrong_word_lists_the_allowed_ones() {
         let d = check("name: X\ndescription: Y\nreasoning: brilliant\n");
-        let e = d.items().iter().find(|x| x.rule == "schema/wrong-type").expect("caught");
+        let e = d
+            .items()
+            .iter()
+            .find(|x| x.rule == "schema/wrong-type")
+            .expect("caught");
         assert!(e.fix.contains("simple"), "must name the choices: {}", e.fix);
         assert!(e.fix.contains("careful"));
     }
@@ -3435,7 +3564,11 @@ mod tests {
     #[test]
     fn the_fix_for_a_missing_action_names_a_value_the_author_can_type() {
         let d = check("name: X\ndescription: Y\nsteps-at-most: 12\n");
-        let e = d.items().iter().find(|x| x.rule == "schema/missing-companion").unwrap();
+        let e = d
+            .items()
+            .iter()
+            .find(|x| x.rule == "schema/missing-companion")
+            .unwrap();
         assert!(
             e.fix.contains("`when-it-runs-out: stop-and-say-so`"),
             "the fix must be a line to type: {}",
@@ -3450,9 +3583,8 @@ mod tests {
 
     #[test]
     fn a_ceiling_with_its_action_set_is_accepted() {
-        let d = check(
-            "name: X\ndescription: Y\nsteps-at-most: 12\nwhen-it-runs-out: ask-a-person\n",
-        );
+        let d =
+            check("name: X\ndescription: Y\nsteps-at-most: 12\nwhen-it-runs-out: ask-a-person\n");
         assert!(!d.has_errors(), "{}", d.render());
     }
 
@@ -3469,8 +3601,20 @@ mod tests {
         let d = check("name: 5\ndescriptoin: Y\nreasoning: nope\nfinishes-within: soon\n");
         assert!(d.error_count() >= 3, "{}", d.render());
         let text = d.render().to_lowercase();
-        for jargon in ["enum", "variant", "deserialize", "expected type", "vec<", "option<", "null pointer"] {
-            assert!(!text.contains(jargon), "diagnostic leaked '{jargon}':\n{}", d.render());
+        for jargon in [
+            "enum",
+            "variant",
+            "deserialize",
+            "expected type",
+            "vec<",
+            "option<",
+            "null pointer",
+        ] {
+            assert!(
+                !text.contains(jargon),
+                "diagnostic leaked '{jargon}':\n{}",
+                d.render()
+            );
         }
         for item in d.items() {
             assert!(!item.fix.trim().is_empty(), "{} had no fix", item.rule);

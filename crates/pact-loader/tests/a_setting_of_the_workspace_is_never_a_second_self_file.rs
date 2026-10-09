@@ -121,9 +121,14 @@ fn adding_one_of_those_names_to_the_kind_stems_stops_the_worked_example_loading(
     let root = repo().join("examples/refund-desk");
 
     let mut clean = Diagnostics::new();
-    Loader::new(root.clone()).load(&root, &mut clean).expect("the worked example loads");
+    Loader::new(root.clone())
+        .load(&root, &mut clean)
+        .expect("the worked example loads");
     assert!(
-        !clean.items().iter().any(|d| d.rule == "loader/two-self-files"),
+        !clean
+            .items()
+            .iter()
+            .any(|d| d.rule == "loader/two-self-files"),
         "as shipped, the worked example has one self file:\n{}",
         clean.render()
     );

@@ -39,7 +39,10 @@ fn pact() -> Command {
 }
 
 fn repo() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().unwrap()
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .unwrap()
 }
 
 fn golden_dir() -> std::path::PathBuf {
@@ -60,7 +63,9 @@ fn shipped_trees() -> Vec<std::path::PathBuf> {
     let mut out = Vec::new();
     let mut stack = vec![repo().join("examples")];
     while let Some(dir) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         for e in entries.flatten() {
             let p = e.path();
             if !p.is_dir() || p.file_name().unwrap().to_string_lossy().starts_with('.') {
@@ -91,12 +96,19 @@ fn slug(tree: &std::path::Path) -> String {
 #[test]
 fn every_shipped_tree_loads_to_the_same_document() {
     let trees = shipped_trees();
-    assert!(trees.len() >= 9, "only {} shipped trees found — the census shrank", trees.len());
+    assert!(
+        trees.len() >= 9,
+        "only {} shipped trees found — the census shrank",
+        trees.len()
+    );
     std::fs::create_dir_all(golden_dir().join("show")).unwrap();
 
     let mut drifted = Vec::new();
     for tree in &trees {
-        let out = pact().args(["show", tree.to_str().unwrap()]).output().expect("runs");
+        let out = pact()
+            .args(["show", tree.to_str().unwrap()])
+            .output()
+            .expect("runs");
         assert!(
             out.status.success(),
             "{} does not even load:\n{}",
@@ -104,7 +116,9 @@ fn every_shipped_tree_loads_to_the_same_document() {
             String::from_utf8_lossy(&out.stderr)
         );
         let now = String::from_utf8_lossy(&out.stdout).into_owned();
-        let path = golden_dir().join("show").join(format!("{}.json", slug(tree)));
+        let path = golden_dir()
+            .join("show")
+            .join(format!("{}.json", slug(tree)));
 
         if blessing() || !path.exists() {
             std::fs::write(&path, &now).unwrap();
@@ -117,7 +131,10 @@ fn every_shipped_tree_loads_to_the_same_document() {
                 tree.display(),
                 was.len(),
                 now.len(),
-                was.bytes().zip(now.bytes()).position(|(a, b)| a != b).unwrap_or(was.len().min(now.len()))
+                was.bytes()
+                    .zip(now.bytes())
+                    .position(|(a, b)| a != b)
+                    .unwrap_or(was.len().min(now.len()))
             ));
         }
     }
@@ -144,14 +161,20 @@ fn field_inventory() -> BTreeMap<String, String> {
     let text = std::fs::read_to_string(repo().join("spec/schema.yaml")).unwrap();
     let doc = pact_doc::parse_yaml(&text, camino::Utf8Path::new("spec/schema.yaml")).unwrap();
     let mut out = BTreeMap::new();
-    let Some(groups) = doc.get("groups").and_then(pact_doc::Node::as_map) else { return out };
+    let Some(groups) = doc.get("groups").and_then(pact_doc::Node::as_map) else {
+        return out;
+    };
     for (kind, entry) in groups {
         let Some(fields) = entry.node.get("fields").and_then(pact_doc::Node::as_map) else {
             continue;
         };
         for (name, f) in fields {
             let at = |k: &str| {
-                f.node.get(k).and_then(pact_doc::Node::as_str).unwrap_or("-").to_owned()
+                f.node
+                    .get(k)
+                    .and_then(pact_doc::Node::as_str)
+                    .unwrap_or("-")
+                    .to_owned()
             };
             let required = match f.node.get("required").and_then(pact_doc::Node::as_str) {
                 Some("yes" | "true") => "required",
@@ -159,7 +182,13 @@ fn field_inventory() -> BTreeMap<String, String> {
             };
             out.insert(
                 format!("{kind}.{name}"),
-                format!("{} | {} | {} | {}", at("type"), at("surface"), at("tier"), required),
+                format!(
+                    "{} | {} | {} | {}",
+                    at("type"),
+                    at("surface"),
+                    at("tier"),
+                    required
+                ),
             );
         }
     }
@@ -182,7 +211,11 @@ fn field_inventory() -> BTreeMap<String, String> {
 #[test]
 fn the_specification_only_ever_grows() {
     let now = field_inventory();
-    assert!(now.len() > 250, "only {} fields parsed — the reader broke, not the schema", now.len());
+    assert!(
+        now.len() > 250,
+        "only {} fields parsed — the reader broke, not the schema",
+        now.len()
+    );
     let path = golden_dir().join("schema-fields.txt");
     std::fs::create_dir_all(golden_dir()).unwrap();
 
@@ -205,13 +238,18 @@ fn the_specification_only_ever_grows() {
             Some(_) => {}
         }
     }
-    let held: std::collections::BTreeSet<&str> =
-        was.lines().filter_map(|l| l.split_once('\t')).map(|(key, _)| key).collect();
+    let held: std::collections::BTreeSet<&str> = was
+        .lines()
+        .filter_map(|l| l.split_once('\t'))
+        .map(|(key, _)| key)
+        .collect();
     let unheld: Vec<String> = now
         .iter()
         .filter(|(key, attrs)| {
             !held.contains(key.as_str())
-                && GOVERNS.iter().any(|surface| attrs.contains(&format!("| {surface} |")))
+                && GOVERNS
+                    .iter()
+                    .any(|surface| attrs.contains(&format!("| {surface} |")))
         })
         .map(|(key, attrs)| format!("{key}\t{attrs}"))
         .collect();
@@ -234,9 +272,17 @@ fn the_specification_only_ever_grows() {
          `surface:` decides the governance zone and the blast-radius class, and `tier:` \
          decides the no-code badge.",
         gone.len(),
-        if gone.is_empty() { "-".into() } else { gone.join(", ") },
+        if gone.is_empty() {
+            "-".into()
+        } else {
+            gone.join(", ")
+        },
         moved.len(),
-        if moved.is_empty() { "  -".into() } else { moved.join("\n") }
+        if moved.is_empty() {
+            "  -".into()
+        } else {
+            moved.join("\n")
+        }
     );
 }
 
@@ -267,17 +313,26 @@ fn checking_a_tree_that_carries_a_body_runs_nothing() {
     std::fs::create_dir_all(&scripts).unwrap();
     std::fs::write(
         scripts.join("hostile.py"),
-        format!("open({:?}, 'w').write('executed')\n", canary.to_str().unwrap()),
+        format!(
+            "open({:?}, 'w').write('executed')\n",
+            canary.to_str().unwrap()
+        ),
     )
     .unwrap();
     std::fs::write(
         scripts.join("hostile.sh"),
-        format!("#!/bin/sh\necho executed > {:?}\n", canary.to_str().unwrap()),
+        format!(
+            "#!/bin/sh\necho executed > {:?}\n",
+            canary.to_str().unwrap()
+        ),
     )
     .unwrap();
 
     for verb in ["check", "show", "waits", "discover"] {
-        let out = pact().args([verb, dst.to_str().unwrap()]).output().expect("runs");
+        let out = pact()
+            .args([verb, dst.to_str().unwrap()])
+            .output()
+            .expect("runs");
         assert!(
             !canary.exists(),
             "`pact {verb}` executed a body it was only ever supposed to record.\n{}",

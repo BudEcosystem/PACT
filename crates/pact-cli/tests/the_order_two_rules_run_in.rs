@@ -99,13 +99,21 @@ fn a_floor_written_as_a_number_is_read_as_one_rather_than_reported_missing() {
 
 #[test]
 fn the_order_rules_run_in_is_a_number_an_author_writes_and_not_a_filename() {
-    assert_eq!(says("type"), "integer", "an order is a number, so a word in it is a mistake");
+    assert_eq!(
+        says("type"),
+        "integer",
+        "an order is a number, so a word in it is a mistake"
+    );
     // The floor, so `runs-at: 0` is caught in the author's editor rather than in
     // another language in a process they never start. The adapter refuses it
     // too — an adapter is handed a document (invariant P-1) that may never have
     // met the checker — but that refusal arrives far too late to be the first
     // one.
-    assert_eq!(says("at-least"), "1", "the earliest a rule can run is the first");
+    assert_eq!(
+        says("at-least"),
+        "1",
+        "the earliest a rule can run is the first"
+    );
 }
 
 #[test]
@@ -118,7 +126,10 @@ fn ordering_rules_against_each_other_is_not_offered_to_a_first_time_author() {
     // their first rule is asking them to decide something they have no way to
     // have an opinion about yet.
     assert_eq!(says("tier"), "expert");
-    assert!(!says("surface").trim().is_empty(), "every field declares a surface");
+    assert!(
+        !says("surface").trim().is_empty(),
+        "every field declares a surface"
+    );
 }
 
 #[test]
@@ -142,7 +153,9 @@ fn the_help_tells_a_non_coder_which_way_the_numbers_go_and_what_must_come_first(
         .split(|c: char| !c.is_ascii_alphanumeric())
         .filter(|w| !w.is_empty())
         .collect();
-    for jargon in ["integer", "int", "u32", "sort", "sorted", "key", "field", "string", "null"] {
+    for jargon in [
+        "integer", "int", "u32", "sort", "sorted", "key", "field", "string", "null",
+    ] {
         assert!(
             !words.contains(&jargon),
             "`{jargon}` is jargon a support lead does not read: {help}"

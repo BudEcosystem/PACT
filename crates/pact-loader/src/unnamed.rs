@@ -56,13 +56,21 @@ const KINDS: &[Kind] = &[
         what: "question",
         attach: "`asks: {}` under `limits:`, `teamwork:` or a context policy, or `question: {}` in a policy rule",
     },
-    Kind { section: "tools", what: "tool", attach: "`uses:` with `- {}` under it, on an agent" },
+    Kind {
+        section: "tools",
+        what: "tool",
+        attach: "`uses:` with `- {}` under it, on an agent",
+    },
     Kind {
         section: "interceptors",
         what: "rule that may change what happens",
         attach: "`interceptors:` with `- {}` under it, on an agent — or `applies-to: every-agent` in the rule itself",
     },
-    Kind { section: "loops", what: "shape of thinking", attach: "`loop: {}` on an agent" },
+    Kind {
+        section: "loops",
+        what: "shape of thinking",
+        attach: "`loop: {}` on an agent",
+    },
     Kind {
         section: "context-policies",
         what: "set of tidying rules",
@@ -122,13 +130,19 @@ const OMITTED: &[(&str, &str)] = &[
         "a set of documents somebody may be about to attach, on the same reading as a \
          skill: the files are there and nobody is misled about a guarantee that is not",
     ),
-    ("agents", "the ordinary shape of a top-level agent, which nothing is supposed to point at"),
+    (
+        "agents",
+        "the ordinary shape of a top-level agent, which nothing is supposed to point at",
+    ),
     (
         "ports",
         "a way in, named by whatever is outside the workspace rather than by anything \
          inside it",
     ),
-    ("bundles", "mounted by `from:`, not named by a line elsewhere in the tree"),
+    (
+        "bundles",
+        "mounted by `from:`, not named by a line elsewhere in the tree",
+    ),
     (
         "workflows",
         "the ordinary shape of a top-level flow, started by a port or a caller rather \
@@ -172,14 +186,15 @@ pub fn nothing_points_at_it(document: &Node, schema: &Schema, diags: &mut Diagno
     // wherever a name happens to appear in prose. It is to read the same holes
     // the resolver reads, from the same parse.
     let in_sentences = schema.names_in_sentences(document);
-    let in_sentences: BTreeSet<&str> =
-        in_sentences.iter().map(|n| n.name.trim()).collect();
+    let in_sentences: BTreeSet<&str> = in_sentences.iter().map(|n| n.name.trim()).collect();
     // Whether anything here needs a locked room and has no line to name one
     // with. Asked once, because it is a fact about the whole workspace.
     let room_wanted = crate::programs::a_room_is_needed_with_no_tool_to_name_it(document, schema);
 
     for kind in KINDS {
-        let Some(entries) = document.get(kind.section).and_then(Node::as_map) else { continue };
+        let Some(entries) = document.get(kind.section).and_then(Node::as_map) else {
+            continue;
+        };
         for (name, entry) in entries {
             if mentioned.contains(name.as_str())
                 || in_sentences.contains(name.as_str())
@@ -196,7 +211,10 @@ pub fn nothing_points_at_it(document: &Node, schema: &Schema, diags: &mut Diagno
                      the file loads, and no run ever reads it.",
                     kind.what
                 ),
-                format!("Add a line: {}. Or delete the file.", kind.attach.replace("{}", name)),
+                format!(
+                    "Add a line: {}. Or delete the file.",
+                    kind.attach.replace("{}", name)
+                ),
             ));
         }
     }
@@ -290,7 +308,11 @@ mod tests {
         const SPEC: &str = include_str!("../../../spec/schema.yaml");
         let mut d = Diagnostics::new();
         let schema = pact_schema::from_doc::schema_from_yaml(SPEC, &mut d);
-        assert!(!d.has_errors(), "the shipped specification does not load:\n{}", d.render());
+        assert!(
+            !d.has_errors(),
+            "the shipped specification does not load:\n{}",
+            d.render()
+        );
         schema
     }
 
@@ -306,11 +328,22 @@ mod tests {
         let d = check(
             "agents:\n  desk:\n    description: x\npolicies:\n  approvals:\n    ask-a-person: []\n",
         );
-        let e = d.items().first().expect("an unattached gate must be said out loud");
+        let e = d
+            .items()
+            .first()
+            .expect("an unattached gate must be said out loud");
         assert_eq!(e.rule, "loader/nothing-points-at-it");
         assert!(e.message.contains("approvals"), "{}", e.message);
-        assert!(e.fix.contains("`policy: approvals`"), "the line to type: {}", e.fix);
-        assert_eq!(e.severity, pact_diag::Severity::Warning, "the tree still runs");
+        assert!(
+            e.fix.contains("`policy: approvals`"),
+            "the line to type: {}",
+            e.fix
+        );
+        assert_eq!(
+            e.severity,
+            pact_diag::Severity::Warning,
+            "the tree still runs"
+        );
     }
 
     #[test]
@@ -355,7 +388,11 @@ mod tests {
         const SPEC: &str = include_str!("../../../spec/schema.yaml");
         let mut d = Diagnostics::new();
         let schema = pact_schema::from_doc::schema_from_yaml(SPEC, &mut d);
-        assert!(!d.has_errors(), "the shipped specification does not load:\n{}", d.render());
+        assert!(
+            !d.has_errors(),
+            "the shipped specification does not load:\n{}",
+            d.render()
+        );
 
         let workspace = schema.group("workspace").expect("a workspace kind");
         let collections: BTreeSet<&str> = workspace
@@ -403,7 +440,10 @@ mod tests {
                 collections.contains(section),
                 "`{section}` is excused from this check and is not a workspace collection"
             );
-            assert!(reason.len() > 20, "`{section}` is excused with no real reason");
+            assert!(
+                reason.len() > 20,
+                "`{section}` is excused with no real reason"
+            );
         }
         for kind in KINDS {
             assert!(

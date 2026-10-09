@@ -33,7 +33,11 @@ fn copy(src: &std::path::Path, dst: &std::path::Path) {
     std::fs::create_dir_all(dst).unwrap();
     for e in std::fs::read_dir(src).unwrap().flatten() {
         let (s, d) = (e.path(), dst.join(e.file_name()));
-        if s.is_dir() { copy(&s, &d) } else { std::fs::copy(&s, &d).map(|_| ()).unwrap() }
+        if s.is_dir() {
+            copy(&s, &d)
+        } else {
+            std::fs::copy(&s, &d).map(|_| ()).unwrap()
+        }
     }
 }
 
@@ -53,11 +57,13 @@ fn saying(name: &str, line: &str) -> String {
 
 /// `(accepted, what a reader sees)` — stdout, where `check` writes both.
 fn check(root: &str) -> (bool, String) {
-    let out = pact().args(["check", root]).output().expect("the binary runs");
+    let out = pact()
+        .args(["check", root])
+        .output()
+        .expect("the binary runs");
     (
         out.status.success(),
-        String::from_utf8_lossy(&out.stdout).into_owned()
-            + &String::from_utf8_lossy(&out.stderr),
+        String::from_utf8_lossy(&out.stdout).into_owned() + &String::from_utf8_lossy(&out.stderr),
     )
 }
 
@@ -72,9 +78,15 @@ fn the_shipped_example_writes_no_version_and_still_loads() {
 
 #[test]
 fn a_workspace_may_say_the_version_this_build_reads() {
-    let root = saying("current", &format!("pact-version: {}", pact_doc::SPEC_VERSION));
+    let root = saying(
+        "current",
+        &format!("pact-version: {}", pact_doc::SPEC_VERSION),
+    );
     let (ok, said) = check(&root);
-    assert!(ok, "stating the current version must change nothing:\n{said}");
+    assert!(
+        ok,
+        "stating the current version must change nothing:\n{said}"
+    );
     assert!(said.contains("loaded cleanly"), "{said}");
 }
 
@@ -82,8 +94,14 @@ fn a_workspace_may_say_the_version_this_build_reads() {
 fn a_version_this_build_cannot_read_is_refused_and_says_both_versions() {
     let root = saying("future", "pact-version: pact.dev/v9");
     let (ok, said) = check(&root);
-    assert!(!ok, "a tree written for a format this build cannot read must be refused");
-    assert!(said.contains("pact.dev/v9"), "it must quote what the tree said: {said}");
+    assert!(
+        !ok,
+        "a tree written for a format this build cannot read must be refused"
+    );
+    assert!(
+        said.contains("pact.dev/v9"),
+        "it must quote what the tree said: {said}"
+    );
     assert!(
         said.contains(pact_doc::SPEC_VERSION),
         "and what this build reads, or the author cannot act on it: {said}"
@@ -108,18 +126,18 @@ fn the_version_lives_in_one_place() {
     // `discover.rs` carried the literal. The index and the document claiming
     // different versions of one format, with nothing comparing them, is the shape
     // of every stale-document defect in this repository.
-    let out = pact().args(["discover", &example()]).output().expect("runs");
+    let out = pact()
+        .args(["discover", &example()])
+        .output()
+        .expect("runs");
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(
         text.contains(&format!("\"apiVersion\": \"{}\"", pact_doc::SPEC_VERSION)),
         "the inventory must publish the same constant the loader enforces: {text:.400}"
     );
 
-    let src = std::fs::read_to_string(format!(
-        "{}/src/discover.rs",
-        env!("CARGO_MANIFEST_DIR")
-    ))
-    .unwrap();
+    let src =
+        std::fs::read_to_string(format!("{}/src/discover.rs", env!("CARGO_MANIFEST_DIR"))).unwrap();
     assert!(
         !src.contains("\"pact.dev/v"),
         "the version is back as a literal in discover.rs — one string, one place"

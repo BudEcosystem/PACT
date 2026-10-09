@@ -49,8 +49,16 @@ fn schema() -> Schema {
     Schema::new().with(Group {
         name: "limits".into(),
         fields: vec![
-            Field::new("finishes-within", Ty::Duration, "how long the whole thing may take"),
-            Field::new("answer-within", Ty::Duration, "how long they have to answer"),
+            Field::new(
+                "finishes-within",
+                Ty::Duration,
+                "how long the whole thing may take",
+            ),
+            Field::new(
+                "answer-within",
+                Ty::Duration,
+                "how long they have to answer",
+            ),
             Field::new("forget-after", Ty::Duration, "when to discard it"),
         ],
         ..Default::default()
@@ -91,7 +99,10 @@ fn quoted(text: &str) -> Vec<String> {
 fn the_duration_spellings_the_help_advertises_are_all_the_ones_that_work() {
     let told = what_the_author_is_told();
     let samples = quoted(&told);
-    assert!(samples.len() >= 5, "the help offers almost no examples: {told}");
+    assert!(
+        samples.len() >= 5,
+        "the help offers almost no examples: {told}"
+    );
 
     for sample in &samples {
         // A sample with a number in it is a whole spelling and must load as
@@ -131,7 +142,11 @@ fn the_spellings_a_non_coder_reaches_for_are_all_named_in_the_help() {
         ("250 milliseconds", "milliseconds"),
     ] {
         let d = check(&format!("finishes-within: \"{spelling}\""));
-        assert!(!d.has_errors(), "`{spelling}` used to work:\n{}", d.render());
+        assert!(
+            !d.has_errors(),
+            "`{spelling}` used to work:\n{}",
+            d.render()
+        );
         assert!(
             told.contains(mentioned),
             "`{spelling}` works and the author is never told — the help says nothing \
@@ -155,7 +170,11 @@ fn a_length_of_time_with_no_unit_is_refused_because_it_could_mean_anything() {
         .iter()
         .find(|x| x.rule == "schema/wrong-type")
         .expect("a number with no unit is not a length of time");
-    assert!(e.fix.contains("`2s`"), "the fix must show the unit: {}", e.fix);
+    assert!(
+        e.fix.contains("`2s`"),
+        "the fix must show the unit: {}",
+        e.fix
+    );
     assert!(
         !e.fix.to_lowercase().contains("on its own"),
         "the help must not offer a spelling whose meaning it has to guess: {}",
@@ -175,10 +194,22 @@ fn every_way_of_writing_no_time_at_all_is_refused() {
             .iter()
             .find(|x| x.rule == "schema/below-the-floor")
             .unwrap_or_else(|| panic!("`{written}` is no time at all and loaded clean"));
-        assert!(e.message.contains("finishes-within"), "must name the field: {}", e.message);
-        assert!(e.message.contains(written), "must quote what was written: {}", e.message);
+        assert!(
+            e.message.contains("finishes-within"),
+            "must name the field: {}",
+            e.message
+        );
+        assert!(
+            e.message.contains(written),
+            "must quote what was written: {}",
+            e.message
+        );
         // The fix has to be a line they can type, not a rule to satisfy.
-        assert!(e.fix.contains("finishes-within: 30s"), "the fix must be typeable: {}", e.fix);
+        assert!(
+            e.fix.contains("finishes-within: 30s"),
+            "the fix must be typeable: {}",
+            e.fix
+        );
     }
 }
 
@@ -195,8 +226,16 @@ fn a_deadline_and_a_forgetting_have_the_same_floor_as_a_promise() {
             .iter()
             .find(|x| x.rule == "schema/below-the-floor")
             .unwrap_or_else(|| panic!("`{field}: 0s` loaded clean"));
-        assert!(e.message.contains(field), "must name the field: {}", e.message);
-        assert!(e.fix.contains(&format!("{field}: 30s")), "must be typeable: {}", e.fix);
+        assert!(
+            e.message.contains(field),
+            "must name the field: {}",
+            e.message
+        );
+        assert!(
+            e.fix.contains(&format!("{field}: 30s")),
+            "must be typeable: {}",
+            e.fix
+        );
     }
 }
 
@@ -239,12 +278,27 @@ fn a_length_of_time_nobody_can_count_is_refused_by_name_rather_than_crashing() {
             .iter()
             .find(|x| x.rule == "schema/too-long-to-count")
             .unwrap_or_else(|| {
-                panic!("`{written}` is longer than can be counted and got through:\n{}", d.render())
+                panic!(
+                    "`{written}` is longer than can be counted and got through:\n{}",
+                    d.render()
+                )
             });
-        assert!(e.message.contains("finishes-within"), "must name the field: {}", e.message);
-        assert!(e.message.contains(written), "must quote what was written: {}", e.message);
+        assert!(
+            e.message.contains("finishes-within"),
+            "must name the field: {}",
+            e.message
+        );
+        assert!(
+            e.message.contains(written),
+            "must quote what was written: {}",
+            e.message
+        );
         // Same shape of fix as the floor's: a line they can type, not a rule.
-        assert!(e.fix.contains("finishes-within: 30s"), "the fix must be typeable: {}", e.fix);
+        assert!(
+            e.fix.contains("finishes-within: 30s"),
+            "the fix must be typeable: {}",
+            e.fix
+        );
         // "not a length of time" would be a lie about a line spelled correctly,
         // and would send the author looking for a typo that is not there.
         assert!(
@@ -268,7 +322,12 @@ fn the_longest_length_of_time_anybody_writes_is_still_a_length_of_time() {
     // which runs `pact waits` on the worked example and requires
     // `"deadline-ms": 360001800000` for the `100000h 30m` below. The
     // millisecond values for the rest are in `coerce`'s own table.
-    for written in ["999999h", "1000000h", "100000h 30m", "9999d 23h 59m 59s 999ms"] {
+    for written in [
+        "999999h",
+        "1000000h",
+        "100000h 30m",
+        "9999d 23h 59m 59s 999ms",
+    ] {
         let d = check(&format!("finishes-within: \"{written}\""));
         assert!(!d.has_errors(), "`{written}` must load:\n{}", d.render());
     }

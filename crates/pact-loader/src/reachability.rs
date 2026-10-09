@@ -135,16 +135,40 @@ const TOO_MANY: &str = "too-many-times";
 /// Takes the loaded document and nothing else — no second pass over the
 /// filesystem, no author code — for the reason `LoadReport::of` gives.
 pub fn every_stage_is_reachable(document: &Node, diags: &mut Diagnostics) {
-    for (name, entry) in document.get("loops").and_then(Node::as_map).into_iter().flatten() {
+    for (name, entry) in document
+        .get("loops")
+        .and_then(Node::as_map)
+        .into_iter()
+        .flatten()
+    {
         one_loop(name, &entry.node, diags);
     }
     // A workflow is a stage loop that belongs to no agent (02W §1), so the same
     // walk holds it — and the inside of each of its `each`, `repeat` and
     // `together` stages, which is a stage loop of its own.
-    for (name, entry) in document.get("workflows").and_then(Node::as_map).into_iter().flatten() {
-        let Some(steps) = entry.node.get("steps").and_then(Node::as_map) else { continue };
-        if let Some(start) = entry.node.get("starts-at").and_then(Node::as_str).map(str::trim) {
-            unreached(&format!("the workflow '{name}'"), "the run", start, steps, true, diags);
+    for (name, entry) in document
+        .get("workflows")
+        .and_then(Node::as_map)
+        .into_iter()
+        .flatten()
+    {
+        let Some(steps) = entry.node.get("steps").and_then(Node::as_map) else {
+            continue;
+        };
+        if let Some(start) = entry
+            .node
+            .get("starts-at")
+            .and_then(Node::as_str)
+            .map(str::trim)
+        {
+            unreached(
+                &format!("the workflow '{name}'"),
+                "the run",
+                start,
+                steps,
+                true,
+                diags,
+            );
         }
         insides(steps, diags);
     }
@@ -154,7 +178,9 @@ pub fn every_stage_is_reachable(document: &Node, diags: &mut Diagnostics) {
 fn insides(steps: &pact_doc::Map, diags: &mut Diagnostics) {
     for (stage, entry) in steps {
         let does = entry.node.get("does").and_then(Node::as_str).map(str::trim);
-        let Some(does @ ("each" | "repeat" | "together")) = does else { continue };
+        let Some(does @ ("each" | "repeat" | "together")) = does else {
+            continue;
+        };
         let Some(inner) = entry.node.get("steps").and_then(Node::as_map) else {
             diags.push(Diagnostic::error(
                 "loader/loop-with-nothing-in-it",
@@ -169,7 +195,12 @@ fn insides(steps: &pact_doc::Map, diags: &mut Diagnostics) {
         };
         // Every inside stage of a `together` starts at once.
         if does != "together" {
-            match entry.node.get("starts-at").and_then(Node::as_str).map(str::trim) {
+            match entry
+                .node
+                .get("starts-at")
+                .and_then(Node::as_str)
+                .map(str::trim)
+            {
                 Some(start) if !start.is_empty() => {
                     unreached(&format!("'{stage}'"), "the run", start, inner, true, diags);
                 }
@@ -180,7 +211,11 @@ fn insides(steps: &pact_doc::Map, diags: &mut Diagnostics) {
                     format!(
                         "Add a line `starts-at: {}` under '{stage}'. Its stages are: {}.",
                         inner.keys().next().map(String::as_str).unwrap_or("work"),
-                        inner.keys().map(String::as_str).collect::<Vec<_>>().join(", ")
+                        inner
+                            .keys()
+                            .map(String::as_str)
+                            .collect::<Vec<_>>()
+                            .join(", ")
                     ),
                 )),
             }
@@ -191,7 +226,11 @@ fn insides(steps: &pact_doc::Map, diags: &mut Diagnostics) {
 
 fn one_loop(name: &str, shape: &Node, diags: &mut Diagnostics) {
     // Half a graph is not a graph — see the module note.
-    if shape.get("based-on").and_then(Node::as_str).is_some_and(|s| !s.trim().is_empty()) {
+    if shape
+        .get("based-on")
+        .and_then(Node::as_str)
+        .is_some_and(|s| !s.trim().is_empty())
+    {
         return;
     }
     let Some(steps) = shape.get("steps").and_then(Node::as_map) else {
@@ -214,7 +253,11 @@ fn one_loop(name: &str, shape: &Node, diags: &mut Diagnostics) {
         ));
         return;
     };
-    let start = shape.get("starts-at").and_then(Node::as_str).map(str::trim).unwrap_or("");
+    let start = shape
+        .get("starts-at")
+        .and_then(Node::as_str)
+        .map(str::trim)
+        .unwrap_or("");
     if start.is_empty() {
         // Which stage runs first is not something PACT may guess: the stages are
         // a map, and picking the first written one would make reordering a file
@@ -226,7 +269,11 @@ fn one_loop(name: &str, shape: &Node, diags: &mut Diagnostics) {
             format!("The loop '{name}' does not say which stage runs first."),
             format!(
                 "Add a line `starts-at: {first}`. The stages here are: {}.",
-                steps.keys().map(String::as_str).collect::<Vec<_>>().join(", ")
+                steps
+                    .keys()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ),
         ));
         return;
@@ -264,7 +311,9 @@ fn unreached(
     let mut reached: BTreeSet<&str> = BTreeSet::from([DONE, start]);
     let mut frontier: Vec<&str> = vec![start];
     while let Some(name) = frontier.pop() {
-        let Some(stage) = steps.get(name) else { continue };
+        let Some(stage) = steps.get(name) else {
+            continue;
+        };
         // Every target is a real stage, `done` or `stop-and-say-so` —
         // `walkable` said so above.
         for target in crate::workflows::successors(&stage.node, in_workflow) {
@@ -366,7 +415,9 @@ fn no_way_to_finish(name: &str, steps: &pact_doc::Map, diags: &mut Diagnostics) 
     // and not a search.
     let mut d = Diagnostic::error(
         "loader/loop-that-never-finishes",
-        answered_line(&entry.node).unwrap_or(&entry.key_span).clone(),
+        answered_line(&entry.node)
+            .unwrap_or(&entry.key_span)
+            .clone(),
         format!(
             // Every claim here is measured on the worked example with this edit
             // applied: 4 model calls became 12, and all three `when-it-runs-out:`
@@ -400,10 +451,9 @@ fn no_way_to_finish(name: &str, steps: &pact_doc::Map, diags: &mut Diagnostics) 
                      happens once a stage has run its `at-most:` times — so add a line \
                      like `at-most: 3` to `{s}` and it will end there."
                 ),
-                None =>
-                    "To go round a fixed number of times first, put a line like \
+                None => "To go round a fixed number of times first, put a line like \
                      `at-most: 3` on a stage and send its `too-many-times:` to `done`."
-                        .to_string(),
+                    .to_string(),
             }
         ),
     );
@@ -440,7 +490,9 @@ fn no_way_to_finish(name: &str, steps: &pact_doc::Map, diags: &mut Diagnostics) 
 /// the vocabulary, and leaving the second one out let `too-many-times: done` on
 /// a stage with no `at-most:` pass as an ending nothing can arrive at.
 fn finishes(stage: &Node) -> bool {
-    let Some(then) = stage.get("then").and_then(Node::as_map) else { return true };
+    let Some(then) = stage.get("then").and_then(Node::as_map) else {
+        return true;
+    };
     if !then.contains_key(ANSWERED) {
         return true;
     }
@@ -452,7 +504,11 @@ fn finishes(stage: &Node) -> bool {
 
 /// Does this stage's `then:` send this outcome to the finish line?
 fn routes_to_done(stage: &Node, outcome: &str) -> bool {
-    stage.get("then").and_then(|t| t.get(outcome)).and_then(Node::as_str).map(str::trim)
+    stage
+        .get("then")
+        .and_then(|t| t.get(outcome))
+        .and_then(Node::as_str)
+        .map(str::trim)
         == Some(DONE)
 }
 
@@ -474,19 +530,27 @@ fn answered_line(stage: &Node) -> Option<&Span> {
 /// module note.
 fn walkable(steps: &pact_doc::Map) -> bool {
     for stage in steps.values() {
-        let Some(fields) = stage.node.as_map() else { return false };
+        let Some(fields) = stage.node.as_map() else {
+            return false;
+        };
         // A workflow's decision routes by label, and `heard:` by port, one
         // level down (02W §2.3, §2.4).
         for key in ["then", "chooses-between"] {
-            let Some(block) = fields.get(key) else { continue };
-            let Some(routes) = block.node.as_map() else { return false };
+            let Some(block) = fields.get(key) else {
+                continue;
+            };
+            let Some(routes) = block.node.as_map() else {
+                return false;
+            };
             for outcome in routes.values() {
                 let targets: Vec<&Node> = match outcome.node.as_map() {
                     Some(heard) if key == "then" => heard.values().map(|e| &e.node).collect(),
                     _ => vec![&outcome.node],
                 };
                 for t in targets {
-                    let Some(target) = t.as_str().map(str::trim) else { return false };
+                    let Some(target) = t.as_str().map(str::trim) else {
+                        return false;
+                    };
                     if target != DONE && target != STOP && !steps.contains_key(target) {
                         return false;
                     }
@@ -520,7 +584,12 @@ mod tests {
     }
 
     fn only(d: &Diagnostics) -> &Diagnostic {
-        assert_eq!(d.items().len(), 1, "one mistake gets one message:\n{}", d.render());
+        assert_eq!(
+            d.items().len(),
+            1,
+            "one mistake gets one message:\n{}",
+            d.render()
+        );
         &d.items()[0]
     }
 
@@ -561,9 +630,14 @@ loops:
         let d = check(&CAREFUL.replace("starts-at: gather", "starts-at: reply"));
         let e = only(&d);
         assert_eq!(e.rule, "loader/stage-nothing-reaches");
-        assert!(e.message.contains("gather") && e.message.contains("re-read"), "{}", e.message);
         assert!(
-            e.message.contains("never sends the agent") || e.message.contains("ever sends the agent"),
+            e.message.contains("gather") && e.message.contains("re-read"),
+            "{}",
+            e.message
+        );
+        assert!(
+            e.message.contains("never sends the agent")
+                || e.message.contains("ever sends the agent"),
             "it has to say plainly that nothing goes there: {}",
             e.message
         );
@@ -575,7 +649,11 @@ loops:
         // complaint the same way: one thing to change is one thing to read.
         let d = check(&CAREFUL.replace("starts-at: gather", "starts-at: reply"));
         let e = only(&d);
-        assert_eq!(e.related.len(), 1, "the second one is a related line, not a second problem");
+        assert_eq!(
+            e.related.len(),
+            1,
+            "the second one is a related line, not a second problem"
+        );
         assert!(e.related[0].message.contains("re-read"), "{:?}", e.related);
     }
 
@@ -586,8 +664,14 @@ loops:
         let e = only(&d);
         // `gather:` is the key of the first stage; the span must underline it
         // rather than the whole loop or the whole file.
-        let line = text.lines().nth(e.span.line.saturating_sub(1)).unwrap_or("");
-        assert!(line.trim_start().starts_with("gather:"), "underlined {line:?}");
+        let line = text
+            .lines()
+            .nth(e.span.line.saturating_sub(1))
+            .unwrap_or("");
+        assert!(
+            line.trim_start().starts_with("gather:"),
+            "underlined {line:?}"
+        );
     }
 
     #[test]
@@ -596,7 +680,11 @@ loops:
         let e = only(&d);
         assert!(e.fix.contains("`starts-at: gather`"), "{}", e.fix);
         assert!(e.fix.contains("`answered: gather`"), "{}", e.fix);
-        assert!(e.fix.contains("delete them"), "and the other honest answer: {}", e.fix);
+        assert!(
+            e.fix.contains("delete them"),
+            "and the other honest answer: {}",
+            e.fix
+        );
     }
 
     #[test]
@@ -736,8 +824,16 @@ loops:
         let d = check(&text);
         let e = only(&d);
         assert_eq!(e.rule, "loader/loop-that-never-finishes");
-        assert!(e.message.contains("'careful'"), "it must name the loop: {}", e.message);
-        assert!(e.message.contains("`done`"), "and the word that is missing: {}", e.message);
+        assert!(
+            e.message.contains("'careful'"),
+            "it must name the loop: {}",
+            e.message
+        );
+        assert!(
+            e.message.contains("`done`"),
+            "and the word that is missing: {}",
+            e.message
+        );
         // What it costs, in the terms the author cares about — not "no terminal
         // state". The answer exists; it is the handing over that never happens.
         assert!(
@@ -761,8 +857,16 @@ loops:
         // the same `then:`, which is a YAML error rather than a fix.
         let d = check(&CAREFUL.replace("answered: done", "answered: reply"));
         let e = only(&d);
-        assert!(e.fix.starts_with("Change one of these lines to `done`"), "{}", e.fix);
-        assert!(e.fix.contains("`answered: done`"), "the line has to be typeable: {}", e.fix);
+        assert!(
+            e.fix.starts_with("Change one of these lines to `done`"),
+            "{}",
+            e.fix
+        );
+        assert!(
+            e.fix.contains("`answered: done`"),
+            "the line has to be typeable: {}",
+            e.fix
+        );
         // Pointed at the stage that gives the answer, which is where an ending
         // belongs and where somebody looking for the missing one would look.
         assert!(e.fix.contains("under `reply`"), "{}", e.fix);
@@ -779,12 +883,24 @@ loops:
         let e = only(&d);
         let lines: Vec<&str> = text.lines().collect();
         let at = e.span.line.saturating_sub(1);
-        assert_eq!(lines[at].trim(), "answered: reply", "underlined {:?}", lines[at]);
+        assert_eq!(
+            lines[at].trim(),
+            "answered: reply",
+            "underlined {:?}",
+            lines[at]
+        );
         // And the one inside `reply`, not the identical line inside `re-read`:
         // both read `answered: reply` after this edit, and only one of them is
         // the ending that is missing.
-        let reply = lines.iter().position(|l| l.trim() == "reply:").expect("the stage is there");
-        assert!(at > reply, "underlined the copy in an earlier stage: line {}", e.span.line);
+        let reply = lines
+            .iter()
+            .position(|l| l.trim() == "reply:")
+            .expect("the stage is there");
+        assert!(
+            at > reply,
+            "underlined the copy in an earlier stage: line {}",
+            e.span.line
+        );
     }
 
     #[test]
@@ -872,7 +988,11 @@ loops:
         );
         let e = only(&d);
         assert_eq!(e.rule, "loader/loop-that-never-finishes");
-        assert!(e.related.is_empty(), "one stage, nothing else to offer: {:?}", e.related);
+        assert!(
+            e.related.is_empty(),
+            "one stage, nothing else to offer: {:?}",
+            e.related
+        );
         assert!(e.fix.contains("under `work`"), "{}", e.fix);
     }
 
@@ -903,11 +1023,16 @@ loops:
         // stage sends the agent to `done`" while looking at a line that says
         // `done` would conclude the tool is broken.
         assert!(
-            e.fix.contains("`work` already sends `too-many-times:` to `done`"),
+            e.fix
+                .contains("`work` already sends `too-many-times:` to `done`"),
             "the fix has to explain the line the author is looking at: {}",
             e.fix
         );
-        assert!(e.fix.contains("add a line like `at-most: 3` to `work`"), "{}", e.fix);
+        assert!(
+            e.fix.contains("add a line like `at-most: 3` to `work`"),
+            "{}",
+            e.fix
+        );
     }
 
     #[test]
@@ -943,6 +1068,10 @@ loops:
         let d = check(&CAREFUL.replace("    starts-at: gather\n", ""));
         let e = only(&d);
         assert_eq!(e.rule, "loader/loop-with-no-first-stage");
-        assert!(e.fix.contains("`starts-at: gather`"), "the fix must be typeable: {}", e.fix);
+        assert!(
+            e.fix.contains("`starts-at: gather`"),
+            "the fix must be typeable: {}",
+            e.fix
+        );
     }
 }

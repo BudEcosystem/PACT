@@ -132,10 +132,11 @@
 
 pub mod approvals;
 pub mod arrivals;
-pub mod bindings;
 pub mod available;
+pub mod bindings;
 pub mod bundles;
 pub mod callable;
+pub mod clauses;
 pub mod conditions;
 pub mod currency;
 pub mod derive;
@@ -147,14 +148,13 @@ pub mod kindfiles;
 pub mod money;
 pub mod policy;
 pub mod ports;
-pub mod clauses;
 pub mod programs;
 pub mod reach;
 pub mod reachability;
 pub mod redaction;
 pub mod report;
-pub mod schedules;
 pub mod review;
+pub mod schedules;
 pub mod teams;
 pub mod teamwork;
 pub mod templates;
@@ -254,7 +254,6 @@ struct Candidate {
     name_only: bool,
 }
 
-
 /// A file's contents, as a fingerprint and never as content.
 ///
 /// EXP-8 asks for this and it was not built, so a body could be swapped for
@@ -336,7 +335,9 @@ fn too_big_to_describe(path: &Utf8Path, size: u64, alone: bool) -> Diagnostic {
 
 fn fingerprint(path: &Utf8Path) -> String {
     use sha2::{Digest, Sha256};
-    let Ok(file) = std::fs::File::open(path) else { return String::new() };
+    let Ok(file) = std::fs::File::open(path) else {
+        return String::new();
+    };
     let mut reader = std::io::BufReader::new(file);
     let mut hasher = Sha256::new();
     let mut buf = [0u8; 64 * 1024];
@@ -549,10 +550,12 @@ impl Loader {
         if kind == FileKind::Opaque {
             // This arm returns BEFORE the `max_text_bytes` guard below, so it was
             // the second way past every byte budget the loader has.
-            let digest = if too_big_to_fingerprint(size)
-                || charged(&self.fingerprinted, size)
-            {
-                diags.push(too_big_to_describe(path, size, too_big_to_fingerprint(size)));
+            let digest = if too_big_to_fingerprint(size) || charged(&self.fingerprinted, size) {
+                diags.push(too_big_to_describe(
+                    path,
+                    size,
+                    too_big_to_fingerprint(size),
+                ));
                 String::new()
             } else {
                 fingerprint(path)
@@ -1138,16 +1141,17 @@ impl Loader {
             // The size was already in hand from `metadata` on the line above,
             // and went unused: a file that says it is 8 GiB was read to the end
             // to be described.
-            let digest = if too_big_to_fingerprint(size_bytes)
-                || charged(&self.fingerprinted, size_bytes)
-            {
-                diags.push(too_big_to_describe(
-                    &path, size_bytes, too_big_to_fingerprint(size_bytes),
-                ));
-                String::new()
-            } else {
-                fingerprint(&path)
-            };
+            let digest =
+                if too_big_to_fingerprint(size_bytes) || charged(&self.fingerprinted, size_bytes) {
+                    diags.push(too_big_to_describe(
+                        &path,
+                        size_bytes,
+                        too_big_to_fingerprint(size_bytes),
+                    ));
+                    String::new()
+                } else {
+                    fingerprint(&path)
+                };
             out.push(FileRef {
                 path: path
                     .strip_prefix(root)
@@ -1193,7 +1197,8 @@ impl Loader {
         // Compared with any trailing slash taken off, because the repository's
         // own gate loop passes `examples/patterns/*/` and a workspace whose
         // root is written with a slash is the same workspace.
-        let at_root = dir.as_str().trim_end_matches('/') == self.root.as_str().trim_end_matches('/');
+        let at_root =
+            dir.as_str().trim_end_matches('/') == self.root.as_str().trim_end_matches('/');
 
         let mut candidates: Vec<Candidate> = Vec::new();
         let mut self_file: Option<Candidate> = None;
@@ -1589,7 +1594,11 @@ fn symlink_skipped(path: &Utf8Path) -> Diagnostic {
 ///
 /// A warning, matching [`symlink_skipped`]: the entry is left out and named,
 /// and the rest of the tree is not made wrong by its absence.
-fn not_a_regular_file(path: &Utf8Path, through_a_shortcut: bool, target_is_dir: bool) -> Diagnostic {
+fn not_a_regular_file(
+    path: &Utf8Path,
+    through_a_shortcut: bool,
+    target_is_dir: bool,
+) -> Diagnostic {
     let what = match (through_a_shortcut, target_is_dir) {
         (true, true) => "is a shortcut to a folder, so it was skipped",
         (true, false) => "is a shortcut to something that is not a file, so it was skipped",

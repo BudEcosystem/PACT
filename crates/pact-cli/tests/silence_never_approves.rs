@@ -74,7 +74,10 @@ fn edited(name: &str, label: &str, file: &str, from: &str, to: &str) -> PathBuf 
     copy(&tree(name), &dst);
     let p = dst.join(file);
     let text = std::fs::read_to_string(&p).unwrap();
-    assert!(text.contains(from), "fixture drifted: {from:?} not in {file}");
+    assert!(
+        text.contains(from),
+        "fixture drifted: {from:?} not in {file}"
+    );
     std::fs::write(&p, text.replacen(from, to, 1)).unwrap();
     dst
 }
@@ -199,13 +202,21 @@ fn silence_may_not_reach_a_call_a_rule_in_the_workflows_policy_names() {
 
 #[test]
 fn silence_may_go_to_another_wait_or_to_a_stage_only_a_no_reaches() {
-    for to in ["controller-approves", "tell-sender", "stop-and-say-so", "done"] {
+    for to in [
+        "controller-approves",
+        "tell-sender",
+        "stop-and-say-so",
+        "done",
+    ] {
         let root = edited(
             "workflows-48-invoices",
             &format!("fine-{to}"),
             "workflows/one-invoice.yaml",
             OWNER_APPROVES,
-            &OWNER_APPROVES.replace("nobody-answered: tell-clerk", &format!("nobody-answered: {to}")),
+            &OWNER_APPROVES.replace(
+                "nobody-answered: tell-clerk",
+                &format!("nobody-answered: {to}"),
+            ),
         );
         let (_, text) = check(&root);
         let _ = std::fs::remove_dir_all(&root);
@@ -319,12 +330,11 @@ impl<'a> Oracle<'a> {
             .get(asks)
             .or_else(|| self.doc["questions"].get(asks));
         let ports = self.doc["ports"].as_object();
-        q.and_then(|q| q["asked-of"].as_array())
-            .is_some_and(|who| {
-                who.iter().filter_map(Value::as_str).any(|w| {
-                    w != "the-clock" && !ports.is_some_and(|p| p.contains_key(w))
-                })
-            })
+        q.and_then(|q| q["asked-of"].as_array()).is_some_and(|who| {
+            who.iter()
+                .filter_map(Value::as_str)
+                .any(|w| w != "the-clock" && !ports.is_some_and(|p| p.contains_key(w)))
+        })
     }
 
     fn next(stage: &Value) -> Vec<String> {
@@ -333,9 +343,9 @@ impl<'a> Oracle<'a> {
             for (_, v) in stage[key].as_object().into_iter().flatten() {
                 match v {
                     Value::String(s) => out.push(s.clone()),
-                    Value::Object(heard) => out.extend(
-                        heard.values().filter_map(Value::as_str).map(str::to_string),
-                    ),
+                    Value::Object(heard) => {
+                        out.extend(heard.values().filter_map(Value::as_str).map(str::to_string))
+                    }
                     _ => {}
                 }
             }
@@ -384,7 +394,9 @@ impl<'a> Oracle<'a> {
             s["call"]
                 .as_str()
                 .and_then(|c| self.action(c))
-                .is_some_and(|a| a["needs-a-person"] == Value::Bool(true) || a["needs-a-person"] == "yes")
+                .is_some_and(|a| {
+                    a["needs-a-person"] == Value::Bool(true) || a["needs-a-person"] == "yes"
+                })
         };
         needs(stage)
             || stage["steps"]
@@ -396,8 +408,11 @@ impl<'a> Oracle<'a> {
     /// answers, only that wait's yes.
     fn yes(&self, wait: &Value) -> BTreeSet<String> {
         let mut out = BTreeSet::new();
-        let mut queue: VecDeque<String> =
-            wait["then"]["answered"].as_str().map(str::to_string).into_iter().collect();
+        let mut queue: VecDeque<String> = wait["then"]["answered"]
+            .as_str()
+            .map(str::to_string)
+            .into_iter()
+            .collect();
         while let Some(here) = queue.pop_front() {
             let Some(stage) = self.steps().get(&here) else {
                 continue;
@@ -502,8 +517,11 @@ fn every_silent_exit_pointed_at_every_stage_is_refused_exactly_when_it_reaches_a
                     let mutated = format!("{}{}{}", &text[..at], to, &text[at + len..]);
                     let root = scratch(&format!("sweep-{flow}-{wait}-{to}"));
                     copy(&src, &root);
-                    std::fs::write(root.join("workflows").join(file.file_name().unwrap()), &mutated)
-                        .unwrap();
+                    std::fs::write(
+                        root.join("workflows").join(file.file_name().unwrap()),
+                        &mutated,
+                    )
+                    .unwrap();
                     let (_, said) = check(&root);
                     let _ = std::fs::remove_dir_all(&root);
                     let expected = oracle.refused(wait_node, &to);
@@ -525,5 +543,8 @@ fn every_silent_exit_pointed_at_every_stage_is_refused_exactly_when_it_reaches_a
     // clock and events answer.
     assert!(refused >= 10, "only {refused} refusals");
     assert!(accepted >= 50, "only {accepted} acceptances");
-    assert!(ungated_waits >= 4, "only {ungated_waits} waits with no gate");
+    assert!(
+        ungated_waits >= 4,
+        "only {ungated_waits} waits with no gate"
+    );
 }

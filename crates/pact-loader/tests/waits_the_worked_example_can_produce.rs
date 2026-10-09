@@ -26,7 +26,9 @@ fn example() -> Utf8PathBuf {
 
 fn read(root: &Utf8PathBuf) -> (Node, LoadReport, Diagnostics) {
     let mut d = Diagnostics::new();
-    let node = Loader::new(root.clone()).load(root, &mut d).expect("the example loads");
+    let node = Loader::new(root.clone())
+        .load(root, &mut d)
+        .expect("the example loads");
     let report = LoadReport::of(&node, &mut d);
     d.sort();
     (node, report, d)
@@ -46,16 +48,26 @@ fn every_question_the_worked_example_writes_is_a_wait_the_report_names() {
     // author's document that a resolved-but-unread field is in the code — so
     // this is asserted over the folder rather than over a list written here.
     let (doc, report, _) = read(&example());
-    let folder = doc.get("questions").and_then(Node::as_map).expect("questions/ became a field");
+    let folder = doc
+        .get("questions")
+        .and_then(Node::as_map)
+        .expect("questions/ became a field");
     let written: Vec<&str> = folder.keys().map(String::as_str).collect();
-    assert!(written.len() >= 4, "the worked example writes four questions: {written:?}");
+    assert!(
+        written.len() >= 4,
+        "the worked example writes four questions: {written:?}"
+    );
 
     for name in &written {
         assert!(
             report.waits.iter().any(|w| w.question == *name),
             "questions/{name}.yaml can never be asked — no line in the tree names it. \
              The report lists: {:?}",
-            report.waits.iter().map(|w| w.question.as_str()).collect::<Vec<_>>()
+            report
+                .waits
+                .iter()
+                .map(|w| w.question.as_str())
+                .collect::<Vec<_>>()
         );
     }
 }
@@ -69,7 +81,11 @@ fn every_wait_carries_the_deadline_its_own_question_declares() {
 
     for wait in &report.waits {
         let q = question(&doc, &wait.question);
-        let written = q.get("answer-within").and_then(Node::as_str).unwrap_or("").trim();
+        let written = q
+            .get("answer-within")
+            .and_then(Node::as_str)
+            .unwrap_or("")
+            .trim();
         assert_eq!(
             wait.answer_within, written,
             "{} reports a deadline the question does not write",
@@ -82,7 +98,10 @@ fn every_wait_carries_the_deadline_its_own_question_declares() {
         );
         assert_eq!(
             wait.if_nobody_answers,
-            q.get("if-nobody-answers").and_then(Node::as_str).unwrap_or("").trim(),
+            q.get("if-nobody-answers")
+                .and_then(Node::as_str)
+                .unwrap_or("")
+                .trim(),
             "{} reports a different timeout action from the one in its file",
             wait.question
         );
@@ -104,17 +123,33 @@ fn the_deadlines_a_scheduler_would_set_are_the_ones_the_files_write() {
             .trim()
             .to_string();
         let expected = plainly(&written).unwrap_or_else(|| {
-            panic!("{} writes `answer-within: {written}`, which this test cannot read back \
-                    a second way — check the report's arithmetic by hand", wait.question)
+            panic!(
+                "{} writes `answer-within: {written}`, which this test cannot read back \
+                    a second way — check the report's arithmetic by hand",
+                wait.question
+            )
         });
-        assert_eq!(wait.deadline_ms, Some(expected), "{} is timed wrongly", wait.question);
+        assert_eq!(
+            wait.deadline_ms,
+            Some(expected),
+            "{} is timed wrongly",
+            wait.question
+        );
     }
 
     // And the questions the example ships today are on the list by name, so a
     // tree that lost one fails here instead of passing an empty loop.
     let awake: Vec<&str> = report.wake_ups().map(|w| w.question.as_str()).collect();
-    for shipped in ["is-this-ok", "how-much-to-refund", "keep-going", "too-long-to-send"] {
-        assert!(awake.contains(&shipped), "{shipped} is not on the scheduler's list: {awake:?}");
+    for shipped in [
+        "is-this-ok",
+        "how-much-to-refund",
+        "keep-going",
+        "too-long-to-send",
+    ] {
+        assert!(
+            awake.contains(&shipped),
+            "{shipped} is not on the scheduler's list: {awake:?}"
+        );
     }
 }
 
@@ -135,7 +170,11 @@ fn the_report_names_the_line_that_can_stop_the_run() {
             })
             .collect()
     };
-    assert!(at("keep-going").contains(&"limits.yaml:18".to_string()), "{:?}", at("keep-going"));
+    assert!(
+        at("keep-going").contains(&"limits.yaml:18".to_string()),
+        "{:?}",
+        at("keep-going")
+    );
     // The teamwork park asks its OWN question now, not the approvals one:
     // `is-this-ok` shows the amount and order number of the CALL being approved,
     // and a teammate who could not answer is not a call, so both lines were
@@ -168,12 +207,14 @@ fn a_policy_with_three_rules_produces_three_waits_and_not_only_the_first() {
         .waits
         .iter()
         .filter(|w| {
-            w.declared_at.file.file_name() == Some("approvals.yaml")
-                && w.agent == "refund-desk"
+            w.declared_at.file.file_name() == Some("approvals.yaml") && w.agent == "refund-desk"
         })
         .map(|w| w.question.as_str())
         .collect();
-    assert_eq!(from_the_policy, vec!["is-this-ok", "how-much-to-refund", "is-this-ok"]);
+    assert_eq!(
+        from_the_policy,
+        vec!["is-this-ok", "how-much-to-refund", "is-this-ok"]
+    );
 
     // And the policy says `applies-to: every-agent`, so all three agents carry
     // it. It used to bind per-agent and opt-in, so `fraud-checker` — which uses
@@ -198,7 +239,11 @@ fn the_report_says_who_may_answer_and_who_it_goes_to_next() {
     // to guess. Both lines travel, or the timeout action is unperformable.
     let (_, report, _) = read(&example());
     for wait in &report.waits {
-        assert!(!wait.asked_of.is_empty(), "{} names nobody who can answer", wait.question);
+        assert!(
+            !wait.asked_of.is_empty(),
+            "{} names nobody who can answer",
+            wait.question
+        );
         if wait.if_nobody_answers == "escalate" {
             assert!(
                 !wait.escalates_to.is_empty(),
@@ -240,7 +285,10 @@ fn a_question_whose_deadline_is_removed_drops_out_of_the_list() {
     let copy = copy_of_the_example("no-deadline");
     let file = copy.join("questions/is-this-ok.yaml");
     let text = std::fs::read_to_string(&file).unwrap();
-    assert!(text.contains("answer-within: 30m"), "the line this test deletes must exist");
+    assert!(
+        text.contains("answer-within: 30m"),
+        "the line this test deletes must exist"
+    );
     std::fs::write(&file, text.replace("answer-within: 30m\n", "")).unwrap();
 
     let (_, report, diags) = read(&copy);
@@ -251,10 +299,16 @@ fn a_question_whose_deadline_is_removed_drops_out_of_the_list() {
         "a wait with no deadline has no moment for a scheduler to wake at: {awake:?}"
     );
     for still_timed in ["keep-going", "too-long-to-send", "how-much-to-refund"] {
-        assert!(awake.contains(&still_timed), "{still_timed} lost its deadline too: {awake:?}");
+        assert!(
+            awake.contains(&still_timed),
+            "{still_timed} lost its deadline too: {awake:?}"
+        );
     }
     assert!(
-        report.waits.iter().any(|w| w.question == "is-this-ok" && !w.wakes()),
+        report
+            .waits
+            .iter()
+            .any(|w| w.question == "is-this-ok" && !w.wakes()),
         "the wait is still real — it just never ends"
     );
 
@@ -266,9 +320,16 @@ fn a_question_whose_deadline_is_removed_drops_out_of_the_list() {
         .find(|d| d.rule == "loader/wait-with-no-deadline")
         .expect("a timeout action nothing can reach must be reported");
     assert_eq!(warn.span.file.file_name(), Some("is-this-ok.yaml"));
-    assert!(warn.span.line > 1, "a diagnostic has to name the line, not just the file");
+    assert!(
+        warn.span.line > 1,
+        "a diagnostic has to name the line, not just the file"
+    );
     assert!(warn.message.contains("is-this-ok") && warn.message.contains("escalate"));
-    assert!(warn.fix.contains("answer-within: 30m"), "the fix has to be typeable: {}", warn.fix);
+    assert!(
+        warn.fix.contains("answer-within: 30m"),
+        "the fix has to be typeable: {}",
+        warn.fix
+    );
 
     let _ = std::fs::remove_dir_all(&copy);
 }
@@ -287,13 +348,21 @@ fn the_connection_wait_is_found_through_the_tool_that_reaches_the_server() {
     // was not: renaming the tool alone removed `may-we-connect` from the report
     // entirely, which is a run parked for an hour on a wait no timer is held for.
     let copy = copy_of_the_example("renamed-tool");
-    std::fs::rename(copy.join("tools/payments.yaml"), copy.join("tools/refunds.yaml")).unwrap();
+    std::fs::rename(
+        copy.join("tools/payments.yaml"),
+        copy.join("tools/refunds.yaml"),
+    )
+    .unwrap();
 
     let agent = copy.join("agents/refund-desk/agent.yaml");
     let text = std::fs::read_to_string(&agent).unwrap();
     std::fs::write(&agent, text.replace("  - payments\n", "  - refunds\n")).unwrap();
     for (file, from, to) in [
-        ("policies/approvals.yaml", "payments/issue-refund", "refunds/issue-refund"),
+        (
+            "policies/approvals.yaml",
+            "payments/issue-refund",
+            "refunds/issue-refund",
+        ),
         ("evals/suite.yaml", "payments/", "refunds/"),
         ("evals/cases/01-clear-approve.yaml", "payments/", "refunds/"),
         ("loops/careful.yaml", "- payments", "- refunds"),
@@ -314,7 +383,11 @@ fn the_connection_wait_is_found_through_the_tool_that_reaches_the_server() {
         asked,
         vec!["may-we-connect"],
         "the tool was renamed and the connection consent fell off the list: {:?}",
-        report.waits.iter().map(|w| (w.reason, w.question.as_str())).collect::<Vec<_>>()
+        report
+            .waits
+            .iter()
+            .map(|w| (w.reason, w.question.as_str()))
+            .collect::<Vec<_>>()
     );
 
     let _ = std::fs::remove_dir_all(&copy);
@@ -330,7 +403,10 @@ fn a_shows_line_naming_something_the_park_cannot_supply_is_reported() {
     let copy = copy_of_the_example("bad-shows");
     let file = copy.join("questions/keep-going.yaml");
     let text = std::fs::read_to_string(&file).unwrap();
-    assert!(text.contains("- spent-so-far"), "the line this test mistypes must exist");
+    assert!(
+        text.contains("- spent-so-far"),
+        "the line this test mistypes must exist"
+    );
     std::fs::write(&file, text.replace("- spent-so-far", "- spent-so-fa")).unwrap();
 
     let (_, _, diags) = read(&copy);
@@ -338,10 +414,19 @@ fn a_shows_line_naming_something_the_park_cannot_supply_is_reported() {
         .items()
         .iter()
         .find(|d| d.rule == "loader/shows-nothing-can-supply")
-        .unwrap_or_else(|| panic!("a value nobody can show must be said out loud:\n{}", diags.render()));
+        .unwrap_or_else(|| {
+            panic!(
+                "a value nobody can show must be said out loud:\n{}",
+                diags.render()
+            )
+        });
     assert_eq!(warn.span.file.file_name(), Some("keep-going.yaml"));
     assert!(warn.message.contains("spent-so-fa"), "{}", warn.message);
-    assert!(warn.fix.contains("spent-so-far"), "the fix has to be typeable: {}", warn.fix);
+    assert!(
+        warn.fix.contains("spent-so-far"),
+        "the fix has to be typeable: {}",
+        warn.fix
+    );
 
     let _ = std::fs::remove_dir_all(&copy);
 }
@@ -360,7 +445,10 @@ fn a_shows_line_naming_an_argument_of_the_action_being_approved_is_left_alone() 
     // closing is proved; this stays as the floor.)
     let (_, _, diags) = read(&example());
     assert!(
-        !diags.items().iter().any(|d| d.rule == "loader/shows-nothing-can-supply"),
+        !diags
+            .items()
+            .iter()
+            .any(|d| d.rule == "loader/shows-nothing-can-supply"),
         "the worked example's own `shows:` lines are all legitimate:\n{}",
         diags.render()
     );
@@ -373,7 +461,11 @@ fn the_list_is_the_same_two_machines_running_it_twice() {
     let (_, a, _) = read(&example());
     let (_, b, _) = read(&example());
     assert_eq!(a, b);
-    assert_eq!(a.to_json(), b.to_json(), "and the same as data, for a runtime that is not Rust");
+    assert_eq!(
+        a.to_json(),
+        b.to_json(),
+        "and the same as data, for a runtime that is not Rust"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────── helpers
@@ -429,7 +521,10 @@ fn the_json_says_which_waits_a_scheduler_can_time() {
     let json = report.to_json();
 
     let waits = json["waits"].as_array().expect("waits is a list");
-    assert!(!waits.is_empty(), "the example must produce waits, or this proves nothing");
+    assert!(
+        !waits.is_empty(),
+        "the example must produce waits, or this proves nothing"
+    );
     for w in waits {
         assert!(
             w["wakes"].is_boolean(),
@@ -439,12 +534,21 @@ fn the_json_says_which_waits_a_scheduler_can_time() {
 
     // The filtered list is exactly the waits that said yes — one derivation, not
     // two that can drift.
-    let named: Vec<&str> = json["wake-ups"].as_array().unwrap()
-        .iter().map(|v| v.as_str().unwrap()).collect();
-    let expected: Vec<&str> = waits.iter()
+    let named: Vec<&str> = json["wake-ups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+    let expected: Vec<&str> = waits
+        .iter()
         .filter(|w| w["wakes"] == true)
         .map(|w| w["question"].as_str().unwrap())
         .collect();
     assert_eq!(named, expected, "the two views of one rule disagree");
-    assert_eq!(named.len(), report.wake_ups().count(), "and neither matches the source");
+    assert_eq!(
+        named.len(),
+        report.wake_ups().count(),
+        "and neither matches the source"
+    );
 }

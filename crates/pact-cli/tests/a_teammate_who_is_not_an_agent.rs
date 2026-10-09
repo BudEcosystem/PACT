@@ -44,13 +44,17 @@ fn example() -> PathBuf {
 /// Once it is in the shipped specification this returns the file untouched, so
 /// the guarantees below go on being held against what really ships rather than
 /// against a copy nobody uses.
-const TEAM_KEYS: (&str, &str) =
-    ("      team:\n        type: map of text\n", "        key-names: agents\n");
+const TEAM_KEYS: (&str, &str) = (
+    "      team:\n        type: map of text\n",
+    "        key-names: agents\n",
+);
 
 /// The same line for `teamwork.shares` — applied only when nothing else already
 /// refuses that name. See `only_one_thing_refuses_a_share_written_for_a_stranger`.
-const SHARE_KEYS: (&str, &str) =
-    ("      shares:\n        type: map of percent\n", "        key-names: ^team\n");
+const SHARE_KEYS: (&str, &str) = (
+    "      shares:\n        type: map of percent\n",
+    "        key-names: ^team\n",
+);
 
 /// Whether a hand-written check in the loader already holds `shares:` to the
 /// team beside it. Read from the source rather than assumed, because the two
@@ -102,7 +106,10 @@ fn copy_of_the_example(name: &str, edits: &[(&str, &str, &str)]) -> PathBuf {
     for (file, from, to) in edits {
         let p = dst.join(file);
         let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-        assert!(text.contains(from), "the worked example drifted: {from:?} not in {file}");
+        assert!(
+            text.contains(from),
+            "the worked example drifted: {from:?} not in {file}"
+        );
         std::fs::write(&p, text.replace(from, to)).unwrap();
     }
     dst
@@ -128,8 +135,8 @@ fn check(root: &Path) -> (bool, String) {
         .args(["check", root.to_str().unwrap()])
         .output()
         .expect("the binary runs");
-    let said = String::from_utf8_lossy(&out.stdout).to_string()
-        + &String::from_utf8_lossy(&out.stderr);
+    let said =
+        String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr);
     (out.status.success(), said)
 }
 
@@ -152,14 +159,29 @@ fn a_teammate_whose_name_has_no_agent_folder_is_refused_at_check_time() {
     // By this mechanism and not by a neighbouring one: `pact check` grew several
     // teamwork rules this round, and a test that only asks "was it refused"
     // would go on passing with `key-names:` deleted.
-    assert!(said.contains("rule: schema/no-such-name"), "the key check must be what fired:\n{said}");
-    assert!(said.contains("polcy-checker"), "name what is wrong:\n{said}");
-    assert!(said.contains("agent.yaml:"), "name the file and the line:\n{said}");
+    assert!(
+        said.contains("rule: schema/no-such-name"),
+        "the key check must be what fired:\n{said}"
+    );
+    assert!(
+        said.contains("polcy-checker"),
+        "name what is wrong:\n{said}"
+    );
+    assert!(
+        said.contains("agent.yaml:"),
+        "name the file and the line:\n{said}"
+    );
     // The fix has to be typeable, and it has to name what does exist — "no such
     // agent" without the list is a dead end for a reader who cannot grep a tree.
     assert!(said.contains("  fix: "), "no fix offered:\n{said}");
-    assert!(said.contains("policy-checker"), "offer the spelling that works:\n{said}");
-    assert!(said.contains("fraud-checker"), "offer every name that works:\n{said}");
+    assert!(
+        said.contains("policy-checker"),
+        "offer the spelling that works:\n{said}"
+    );
+    assert!(
+        said.contains("fraud-checker"),
+        "offer every name that works:\n{said}"
+    );
     // And the shape the kind really takes. The fix used to say
     // `agents/polcy-checker.yaml` — the flat form — while `team:`'s own help says
     // *"Give each one a folder under `agents/`"*, so one question had two
@@ -183,15 +205,31 @@ fn a_share_written_against_a_misspelt_teammate_is_refused_at_check_time() {
     // either way is that the author is told, here, in words they can act on.
     let root = copy_of_the_example(
         "share-for-nobody",
-        &[("agents/refund-desk/teamwork.yaml", "  policy-checker: 60%", "  polcy-checker: 60%")],
+        &[(
+            "agents/refund-desk/teamwork.yaml",
+            "  policy-checker: 60%",
+            "  polcy-checker: 60%",
+        )],
     );
     let (ok, said) = check(&root);
 
-    assert!(!ok, "a share for somebody who is not on the team must be refused:\n{said}");
-    assert!(said.contains("polcy-checker"), "name what is wrong:\n{said}");
-    assert!(said.contains("teamwork.yaml:"), "name the file and the line:\n{said}");
+    assert!(
+        !ok,
+        "a share for somebody who is not on the team must be refused:\n{said}"
+    );
+    assert!(
+        said.contains("polcy-checker"),
+        "name what is wrong:\n{said}"
+    );
+    assert!(
+        said.contains("teamwork.yaml:"),
+        "name the file and the line:\n{said}"
+    );
     assert!(said.contains("  fix: "), "no fix offered:\n{said}");
-    assert!(said.contains("policy-checker"), "offer the spelling that works:\n{said}");
+    assert!(
+        said.contains("policy-checker"),
+        "offer the spelling that works:\n{said}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -249,15 +287,34 @@ fn the_worked_example_still_loads_cleanly_with_both_key_checks_in_force() {
 fn nothing_a_key_check_says_assumes_programming_knowledge() {
     let root = copy_of_the_example(
         "jargon",
-        &[("agents/refund-desk/teamwork.yaml", "  policy-checker: 60%", "  polcy-checker: 60%")],
+        &[(
+            "agents/refund-desk/teamwork.yaml",
+            "  policy-checker: 60%",
+            "  polcy-checker: 60%",
+        )],
     );
     let (_, said) = check(&root);
     let text = said.to_lowercase();
     for word in [
-        "enum", "variant", "deserialize", "serde", "unwrap", "panic", "trait", "struct",
-        "vec<", "option<", "key-value", "hashmap", "stack trace", "null pointer",
+        "enum",
+        "variant",
+        "deserialize",
+        "serde",
+        "unwrap",
+        "panic",
+        "trait",
+        "struct",
+        "vec<",
+        "option<",
+        "key-value",
+        "hashmap",
+        "stack trace",
+        "null pointer",
     ] {
-        assert!(!text.contains(word), "diagnostic assumes programming knowledge ('{word}'):\n{said}");
+        assert!(
+            !text.contains(word),
+            "diagnostic assumes programming knowledge ('{word}'):\n{said}"
+        );
     }
     let _ = std::fs::remove_dir_all(&root);
 }

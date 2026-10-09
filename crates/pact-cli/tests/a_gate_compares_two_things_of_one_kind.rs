@@ -25,7 +25,10 @@ fn pact() -> Command {
 }
 
 fn repo() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().unwrap()
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .unwrap()
 }
 
 /// A copy of the worked example whose `payments` also takes a score, and whose
@@ -41,9 +44,16 @@ fn gated_by(name: &str, rule: &str) -> std::path::PathBuf {
     // `inspects:` has to grow with `takes:`, or the pre-existing check that a
     // rule may only look at what the action offers fires first and this file
     // ends up testing that instead.
-    let text = text.replace("      amount: money", "      amount: money\n      score: number");
+    let text = text.replace(
+        "      amount: money",
+        "      amount: money\n      score: number",
+    );
     assert!(text.contains("inspects: [amount]"), "the fixture drifted");
-    std::fs::write(&tools, text.replace("inspects: [amount]", "inspects: [amount, score]")).unwrap();
+    std::fs::write(
+        &tools,
+        text.replace("inspects: [amount]", "inspects: [amount, score]"),
+    )
+    .unwrap();
 
     let policy = dst.join("policies/approvals.yaml");
     let text = std::fs::read_to_string(&policy).unwrap();
@@ -54,14 +64,27 @@ fn gated_by(name: &str, rule: &str) -> std::path::PathBuf {
 }
 
 fn check(root: &std::path::Path) -> String {
-    let out = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
-    format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr))
+    let out = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
+    format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    )
 }
 
 #[test]
 fn a_gate_can_compare_something_that_is_not_money() {
-    let root = gated_by("is", "{ tool: payments/issue-refund, arg: score, is: high }");
-    let out = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
+    let root = gated_by(
+        "is",
+        "{ tool: payments/issue-refund, arg: score, is: high }",
+    );
+    let out = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
     assert!(
         out.status.success(),
         "a tier, a country, a reason code — none of them is a number:\n{}",
@@ -76,8 +99,15 @@ fn a_gate_can_compare_against_several_values() {
         "isoneof",
         "{ tool: payments/issue-refund, arg: score, is-one-of: [high, urgent] }",
     );
-    let out = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stdout));
+    let out = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -88,16 +118,25 @@ fn a_rule_that_says_what_to_look_at_and_never_what_to_look_for_is_refused() {
     let root = gated_by("bare", "{ tool: payments/issue-refund, arg: amount }");
     let text = check(&root);
     assert!(text.contains("schema/missing-one-of"), "{text}");
-    assert!(text.contains("more-than"), "the fix lists the ways to compare:\n{text}");
+    assert!(
+        text.contains("more-than"),
+        "the fix lists the ways to compare:\n{text}"
+    );
     assert!(text.contains("is-one-of"), "{text}");
     let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
 fn a_score_gated_by_an_amount_of_money_is_refused() {
-    let root = gated_by("scoreusd", "{ tool: payments/issue-refund, arg: score, more-than: 200 USD }");
+    let root = gated_by(
+        "scoreusd",
+        "{ tool: payments/issue-refund, arg: score, more-than: 200 USD }",
+    );
     let text = check(&root);
-    assert!(text.contains("loader/compared-in-the-wrong-shape"), "{text}");
+    assert!(
+        text.contains("loader/compared-in-the-wrong-shape"),
+        "{text}"
+    );
     assert!(text.contains("two different kinds of thing"), "{text}");
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -106,20 +145,35 @@ fn a_score_gated_by_an_amount_of_money_is_refused() {
 fn an_amount_of_money_gated_by_a_bare_number_is_refused_too() {
     // The mirror, and the one a reader-only check would miss: a bare `200`
     // parses as an integer, not a string.
-    let root = gated_by("amountbare", "{ tool: payments/issue-refund, arg: amount, more-than: 200 }");
+    let root = gated_by(
+        "amountbare",
+        "{ tool: payments/issue-refund, arg: amount, more-than: 200 }",
+    );
     let text = check(&root);
-    assert!(text.contains("loader/compared-in-the-wrong-shape"), "{text}");
+    assert!(
+        text.contains("loader/compared-in-the-wrong-shape"),
+        "{text}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
 fn a_figure_written_the_way_its_argument_is_declared_is_left_alone() {
     for (name, rule) in [
-        ("okmoney", "{ tool: payments/issue-refund, arg: amount, more-than: 200 USD }"),
-        ("oknumber", "{ tool: payments/issue-refund, arg: score, more-than: 80 }"),
+        (
+            "okmoney",
+            "{ tool: payments/issue-refund, arg: amount, more-than: 200 USD }",
+        ),
+        (
+            "oknumber",
+            "{ tool: payments/issue-refund, arg: score, more-than: 80 }",
+        ),
     ] {
         let root = gated_by(name, rule);
-        let out = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
+        let out = pact()
+            .args(["check", root.to_str().unwrap()])
+            .output()
+            .expect("runs");
         assert!(
             out.status.success(),
             "{rule} is correct:\n{}",
@@ -132,7 +186,10 @@ fn a_figure_written_the_way_its_argument_is_declared_is_left_alone() {
 #[test]
 fn the_shipped_example_gains_nothing_from_either_half() {
     let path = repo().join("examples/refund-desk");
-    let out = pact().args(["check", path.to_str().unwrap()]).output().expect("runs");
+    let out = pact()
+        .args(["check", path.to_str().unwrap()])
+        .output()
+        .expect("runs");
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),

@@ -19,7 +19,10 @@ fn pact() -> Command {
 }
 
 fn tree() -> String {
-    format!("{}/../../tests/trees/one-line-gate", env!("CARGO_MANIFEST_DIR"))
+    format!(
+        "{}/../../tests/trees/one-line-gate",
+        env!("CARGO_MANIFEST_DIR")
+    )
 }
 
 fn run(verb: &str) -> (bool, String, String) {
@@ -34,8 +37,14 @@ fn run(verb: &str) -> (bool, String, String) {
 #[test]
 fn a_workspace_whose_only_gate_is_one_line_loads_cleanly() {
     let (ok, out, err) = run("check");
-    assert!(ok, "the short form must be a valid thing to write:\n{out}{err}");
-    assert!(out.contains("loaded cleanly"), "and warned about nothing: {out}{err}");
+    assert!(
+        ok,
+        "the short form must be a valid thing to write:\n{out}{err}"
+    );
+    assert!(
+        out.contains("loaded cleanly"),
+        "and warned about nothing: {out}{err}"
+    );
 }
 
 #[test]
@@ -84,12 +93,17 @@ fn the_short_gate_costs_one_line_where_the_long_one_costs_three_files() {
     // rule inside it; the short form is one line, and the tree proves it by
     // having neither folder on disk.
     let root = std::path::PathBuf::from(tree());
-    assert!(!root.join("questions").exists(), "the short form writes no question file");
+    assert!(
+        !root.join("questions").exists(),
+        "the short form writes no question file"
+    );
     assert!(!root.join("policies").exists(), "and no policy file");
 
     let tool = std::fs::read_to_string(root.join("tools/payments.yaml")).unwrap();
-    let gate: Vec<&str> =
-        tool.lines().filter(|l| l.trim_start().starts_with("needs-a-person:")).collect();
+    let gate: Vec<&str> = tool
+        .lines()
+        .filter(|l| l.trim_start().starts_with("needs-a-person:"))
+        .collect();
     assert_eq!(gate.len(), 1, "the whole gate is one line: {gate:?}");
     assert_eq!(gate[0].trim(), "needs-a-person: yes");
 }
@@ -124,21 +138,46 @@ fn the_help_for_the_short_gate_reads_like_something_a_support_lead_could_have_wr
             "`needs-a-person` has no `{column}:`, so it is classified by omission"
         );
     }
-    assert_eq!(field.get("type").and_then(pact_doc::Node::as_str), Some("yes-no"));
+    assert_eq!(
+        field.get("type").and_then(pact_doc::Node::as_str),
+        Some("yes-no")
+    );
 
-    let help = field.get("help").and_then(pact_doc::Node::as_str).unwrap().to_lowercase();
+    let help = field
+        .get("help")
+        .and_then(pact_doc::Node::as_str)
+        .unwrap()
+        .to_lowercase();
     for jargon in [
-        "boolean", "predicate", "null", "enum", "schema", "validate", "desugar", "field",
-        "string", "namespace", "identifier", "invariant", "callback", "hook",
+        "boolean",
+        "predicate",
+        "null",
+        "enum",
+        "schema",
+        "validate",
+        "desugar",
+        "field",
+        "string",
+        "namespace",
+        "identifier",
+        "invariant",
+        "callback",
+        "hook",
     ] {
-        assert!(!help.contains(jargon), "the help leaked '{jargon}':\n{help}");
+        assert!(
+            !help.contains(jargon),
+            "the help leaked '{jargon}':\n{help}"
+        );
     }
     // What it must actually say. A support lead reading this has to learn the
     // three things the shorthand decided on their behalf, or the gate is
     // something that happened to them rather than something they wrote.
     assert!(help.contains("yes"), "it has to say what to write:\n{help}");
     for promise in ["thirty minutes", "stops", "silence is never a yes"] {
-        assert!(help.contains(promise), "the help never mentions '{promise}':\n{help}");
+        assert!(
+            help.contains(promise),
+            "the help never mentions '{promise}':\n{help}"
+        );
     }
     assert!(
         help.contains("`policies/`") || help.contains("policies/"),

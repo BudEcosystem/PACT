@@ -36,7 +36,9 @@ fn example() -> Utf8PathBuf {
 fn load() -> (Node, Diagnostics) {
     let root = example();
     let mut d = Diagnostics::new();
-    let n = Loader::new(root.clone()).load(&root, &mut d).expect("example loads");
+    let n = Loader::new(root.clone())
+        .load(&root, &mut d)
+        .expect("example loads");
     d.sort();
     (n, d)
 }
@@ -52,7 +54,10 @@ fn careful(doc: &Node) -> &Node {
 const DONE: &str = "done";
 
 fn steps_of(shape: &Node) -> &Map {
-    shape.get("steps").and_then(Node::as_map).expect("the loop has `steps:`")
+    shape
+        .get("steps")
+        .and_then(Node::as_map)
+        .expect("the loop has `steps:`")
 }
 
 fn stage_names(shape: &Node) -> Vec<&str> {
@@ -67,9 +72,15 @@ fn a_folder_of_loops_becomes_the_loops_field_without_anything_being_registered()
     // did, and the mechanism cost no Rust change at all (invariant E-3).
     let (doc, _) = load();
     let shape = careful(&doc);
-    assert_eq!(shape.get("starts-at").and_then(Node::as_str), Some("gather"));
+    assert_eq!(
+        shape.get("starts-at").and_then(Node::as_str),
+        Some("gather")
+    );
     assert!(
-        shape.get("description").and_then(Node::as_str).is_some_and(|s| !s.trim().is_empty()),
+        shape
+            .get("description")
+            .and_then(Node::as_str)
+            .is_some_and(|s| !s.trim().is_empty()),
         "a shape with no description is one nobody can choose between"
     );
     assert_eq!(stage_names(shape).len(), 3, "gather, re-read, reply");
@@ -95,7 +106,10 @@ fn every_stage_the_loop_routes_to_is_a_stage_that_exists() {
     let shape = careful(&doc);
     let stages = stage_names(shape);
 
-    let starts_at = shape.get("starts-at").and_then(Node::as_str).unwrap_or_default();
+    let starts_at = shape
+        .get("starts-at")
+        .and_then(Node::as_str)
+        .unwrap_or_default();
     assert!(
         stages.contains(&starts_at),
         "the loop starts at {starts_at:?}, which is not one of its stages: {stages:?}"
@@ -154,7 +168,10 @@ fn a_stage_may_only_narrow_the_tools_the_agent_already_has() {
     // — no skill reached any model at all. It does now, as text in the system
     // message, and naming it on `may-use:` says *read this and touch nothing*.
     let (doc, _) = load();
-    let desk = doc.get("agents").and_then(|a| a.get("refund-desk")).expect("the refund desk");
+    let desk = doc
+        .get("agents")
+        .and_then(|a| a.get("refund-desk"))
+        .expect("the refund desk");
 
     let uses: Vec<&str> = desk
         .get("uses")
@@ -175,7 +192,12 @@ fn a_stage_may_only_narrow_the_tools_the_agent_already_has() {
     offerable.extend(team.keys().map(String::as_str));
 
     for (name, stage) in steps_of(careful(&doc)) {
-        for wanted in stage.node.get("may-use").and_then(Node::as_list).unwrap_or(&[]) {
+        for wanted in stage
+            .node
+            .get("may-use")
+            .and_then(Node::as_list)
+            .unwrap_or(&[])
+        {
             let wanted = wanted.as_str().unwrap_or_default();
             assert!(
                 offerable.contains(&wanted),
@@ -205,20 +227,27 @@ fn the_stage_that_checks_a_refund_cannot_be_the_stage_that_issues_one() {
             continue;
         }
         checked += 1;
-        let may_use = stage.node.get("may-use").and_then(Node::as_list).unwrap_or_else(|| {
-            panic!(
-                "stage {name:?} checks the work but names no tools. A stage that names \
+        let may_use = stage
+            .node
+            .get("may-use")
+            .and_then(Node::as_list)
+            .unwrap_or_else(|| {
+                panic!(
+                    "stage {name:?} checks the work but names no tools. A stage that names \
                  none and is not `use-tools` is given none, which is safe — but say it \
                  out loud, because the next reader cannot tell the two apart"
-            )
-        });
+                )
+            });
         let names: Vec<&str> = may_use.iter().filter_map(Node::as_str).collect();
         assert!(
             !names.contains(&"payments"),
             "stage {name:?} checks a refund decision and can also issue one: {names:?}"
         );
     }
-    assert_eq!(checked, 1, "the point of `careful` is the one stage that re-reads the decision");
+    assert_eq!(
+        checked, 1,
+        "the point of `careful` is the one stage that re-reads the decision"
+    );
 }
 
 #[test]
@@ -269,7 +298,9 @@ fn an_agents_loop_line_names_a_shape_this_workspace_actually_declares() {
 
     let agents = doc.get("agents").and_then(Node::as_map).expect("agents/");
     for (who, agent) in agents {
-        let Some(named) = agent.node.get("loop").and_then(Node::as_str) else { continue };
+        let Some(named) = agent.node.get("loop").and_then(Node::as_str) else {
+            continue;
+        };
         assert!(
             named.starts_with("pact:loop/") || shipped.contains(&named),
             "agent {who:?} thinks in a shape called {named:?}, which this workspace \

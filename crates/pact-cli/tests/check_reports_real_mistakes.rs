@@ -22,7 +22,10 @@ fn broken(name: &str, edits: &[(&str, &str, &str)]) -> String {
     for (file, from, to) in edits {
         let p = dst.join(file);
         let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-        assert!(text.contains(from), "fixture drifted: {from:?} not found in {file}");
+        assert!(
+            text.contains(from),
+            "fixture drifted: {from:?} not found in {file}"
+        );
         std::fs::write(&p, text.replace(from, to)).unwrap();
     }
     dst.to_string_lossy().into_owned()
@@ -52,12 +55,18 @@ fn the_worked_example_passes_cleanly() {
 
 #[test]
 fn a_typo_in_a_field_name_suggests_the_right_one() {
-    let root = broken("typo", &[("workspace.yaml", "description:", "descriptoin:")]);
+    let root = broken(
+        "typo",
+        &[("workspace.yaml", "description:", "descriptoin:")],
+    );
     let out = pact().args(["check", &root]).output().unwrap();
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(!out.status.success(), "must fail");
     assert!(text.contains("Did you mean 'description'?"), "{text}");
-    assert!(text.contains("workspace.yaml:"), "must name the line: {text}");
+    assert!(
+        text.contains("workspace.yaml:"),
+        "must name the line: {text}"
+    );
 }
 
 #[test]
@@ -65,13 +74,21 @@ fn wrong_value_types_are_reported_per_file_with_a_typeable_fix() {
     let root = broken(
         "types",
         &[
-            ("agents/refund-desk/limits.yaml", "finishes-within: 30s", "finishes-within: soon"),
+            (
+                "agents/refund-desk/limits.yaml",
+                "finishes-within: 30s",
+                "finishes-within: soon",
+            ),
             (
                 "agents/refund-desk/limits.yaml",
                 "cost-per-request-under: 0.05 USD",
                 "cost-per-request-under: 0.05",
             ),
-            ("agents/refund-desk/needs.yaml", "reasoning: careful", "reasoning: brilliant"),
+            (
+                "agents/refund-desk/needs.yaml",
+                "reasoning: careful",
+                "reasoning: brilliant",
+            ),
         ],
     );
     let out = pact().args(["check", &root]).output().unwrap();
@@ -81,7 +98,10 @@ fn wrong_value_types_are_reported_per_file_with_a_typeable_fix() {
     // Every one is found in a single pass — an author fixes them all at once.
     assert!(text.contains("Write it like `2s`"), "{text}");
     assert!(text.contains("Write it like `0.05 USD`"), "{text}");
-    assert!(text.contains("Change it to one of: simple, steady, careful, deep"), "{text}");
+    assert!(
+        text.contains("Change it to one of: simple, steady, careful, deep"),
+        "{text}"
+    );
 
     // Nested files are reached: the error is attributed to the file that has it,
     // not to the workspace root.
@@ -97,14 +117,25 @@ fn a_join_policy_written_with_the_wrong_words_lists_the_right_ones() {
     let root = broken(
         "teamwork",
         &[
-            ("agents/refund-desk/teamwork.yaml", "waits-for: everyone", "waits-for: all-of-them"),
-            ("agents/refund-desk/teamwork.yaml", "policy-checker: 60%", "policy-checker: 60"),
+            (
+                "agents/refund-desk/teamwork.yaml",
+                "waits-for: everyone",
+                "waits-for: all-of-them",
+            ),
+            (
+                "agents/refund-desk/teamwork.yaml",
+                "policy-checker: 60%",
+                "policy-checker: 60",
+            ),
         ],
     );
     let out = pact().args(["check", &root]).output().unwrap();
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(!out.status.success(), "{text}");
-    assert!(text.contains("teamwork.yaml:"), "must name the file and line: {text}");
+    assert!(
+        text.contains("teamwork.yaml:"),
+        "must name the file and line: {text}"
+    );
     assert!(
         text.contains("Change it to one of: everyone, anyone, enough-of-them"),
         "must list the words that work: {text}"
@@ -113,14 +144,20 @@ fn a_join_policy_written_with_the_wrong_words_lists_the_right_ones() {
     // `0%..=100%` now — the `%` one was not, so `must-pass: -50%` loaded clean
     // and turned a six-of-six failing suite into a PASS.
     assert!(text.contains("Write it like `90%`"), "{text}");
-    assert!(text.contains("between `0%` and `100%`"), "the range has to be named: {text}");
+    assert!(
+        text.contains("between `0%` and `100%`"),
+        "the range has to be named: {text}"
+    );
 }
 
 #[test]
 fn validation_is_never_silently_skipped() {
     // A tree outside any workspace still gets checked, against the built-in
     // specification. Skipping here is how a broken tree reports itself as fine.
-    let root = broken("nospec", &[("workspace.yaml", "description:", "descriptoin:")]);
+    let root = broken(
+        "nospec",
+        &[("workspace.yaml", "description:", "descriptoin:")],
+    );
     let out = pact().args(["check", &root]).output().unwrap();
     assert!(
         !out.status.success(),
@@ -133,11 +170,24 @@ fn validation_is_never_silently_skipped() {
 fn diagnostics_stay_free_of_programmer_jargon() {
     let root = broken(
         "jargon",
-        &[("agents/refund-desk/needs.yaml", "reasoning: careful", "reasoning: brilliant")],
+        &[(
+            "agents/refund-desk/needs.yaml",
+            "reasoning: careful",
+            "reasoning: brilliant",
+        )],
     );
     let out = pact().args(["check", &root]).output().unwrap();
     let text = String::from_utf8_lossy(&out.stdout).to_lowercase();
-    for word in ["enum", "variant", "deserialize", "unwrap", "panic", "vec<", "option<", "trait"] {
+    for word in [
+        "enum",
+        "variant",
+        "deserialize",
+        "unwrap",
+        "panic",
+        "vec<",
+        "option<",
+        "trait",
+    ] {
         assert!(!text.contains(word), "diagnostic leaked '{word}':\n{text}");
     }
 }
@@ -154,7 +204,11 @@ fn an_interceptor_the_adapter_would_refuse_is_refused_here_first() {
         //     since a rule may name several moments — the refusal has to name
         //     the entry that is wrong wherever in the list it sits, not only a
         //     `when:` line with one address on it.
-        &[("interceptors/redact-card-numbers.yaml", "- step.message.before", "- banana")],
+        &[(
+            "interceptors/redact-card-numbers.yaml",
+            "- step.message.before",
+            "- banana",
+        )],
     );
     std::fs::write(
         std::path::Path::new(&root).join("interceptors/probe.yaml"),
@@ -171,14 +225,24 @@ fn an_interceptor_the_adapter_would_refuse_is_refused_here_first() {
     .unwrap();
     let agent = std::path::Path::new(&root).join("agents/refund-desk/agent.yaml");
     let text = std::fs::read_to_string(&agent).unwrap();
-    std::fs::write(&agent, text.replace("  - stop-runaway-refunds", "  - stop-runaway-refunds\n  - probe")).unwrap();
+    std::fs::write(
+        &agent,
+        text.replace(
+            "  - stop-runaway-refunds",
+            "  - stop-runaway-refunds\n  - probe",
+        ),
+    )
+    .unwrap();
 
     let out = pact().args(["check", &root]).output().unwrap();
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(!out.status.success(), "{text}");
 
     // (a) the address, named position by position.
-    assert!(text.contains("'when' should say when it runs, and 'banana' does not"), "{text}");
+    assert!(
+        text.contains("'when' should say when it runs, and 'banana' does not"),
+        "{text}"
+    );
     assert!(text.contains("`<part>.<thing>.<moment>`"), "{text}");
     // (b) the sentence, with the ones that work printed under it.
     assert!(
@@ -190,7 +254,10 @@ fn an_interceptor_the_adapter_would_refuse_is_refused_here_first() {
         "the forms an author may type must be offered verbatim: {text}"
     );
     // (c) the moment, for a power that only works at one.
-    assert!(text.contains("Change `when:` to one of: step.tool.before"), "{text}");
+    assert!(
+        text.contains("Change `when:` to one of: step.tool.before"),
+        "{text}"
+    );
 }
 
 #[test]
@@ -210,14 +277,24 @@ fn a_power_the_rules_do_not_use_is_refused_naming_what_they_need() {
     // exist.
     let root = broken(
         "power-the-rules-do-not-use",
-        &[("interceptors/redact-card-numbers.yaml", "  - hide-values", "  - change-the-request")],
+        &[(
+            "interceptors/redact-card-numbers.yaml",
+            "  - hide-values",
+            "  - change-the-request",
+        )],
     );
     let out = pact().args(["check", &root]).output().unwrap();
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(!out.status.success(), "{text}");
     assert!(text.contains("schema/rule-without-the-power"), "{text}");
-    assert!(text.contains("hide values"), "name what the rules need: {text}");
-    assert!(text.contains("`- hide-values`"), "and the line to type: {text}");
+    assert!(
+        text.contains("hide values"),
+        "name what the rules need: {text}"
+    );
+    assert!(
+        text.contains("`- hide-values`"),
+        "and the line to type: {text}"
+    );
 }
 
 /// And the other direction: a rewrite power WITH a rewriting sentence loads.
@@ -237,7 +314,11 @@ fn a_rewrite_power_beside_a_rewriting_sentence_is_accepted() {
     let root = broken("rewrite-with-sentence", &[]);
     let at = std::path::Path::new(&root);
     std::fs::create_dir_all(at.join("programs/house-style/body")).unwrap();
-    std::fs::write(at.join("programs/house-style/body/house-style.wasm"), b"placeholder").unwrap();
+    std::fs::write(
+        at.join("programs/house-style/body/house-style.wasm"),
+        b"placeholder",
+    )
+    .unwrap();
     std::fs::write(
         at.join("programs/house-style/program.yaml"),
         "description: Puts an answer into this desk's own words.\n\
@@ -260,7 +341,10 @@ fn a_rewrite_power_beside_a_rewriting_sentence_is_accepted() {
     let text = std::fs::read_to_string(&agent).unwrap();
     std::fs::write(
         &agent,
-        text.replace("  - stop-runaway-refunds", "  - stop-runaway-refunds\n  - in-house-style"),
+        text.replace(
+            "  - stop-runaway-refunds",
+            "  - stop-runaway-refunds\n  - in-house-style",
+        ),
     )
     .unwrap();
 
@@ -270,7 +354,10 @@ fn a_rewrite_power_beside_a_rewriting_sentence_is_accepted() {
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
-    assert!(out.status.success(), "a rewrite backed by a program is writable now:\n{said}");
+    assert!(
+        out.status.success(),
+        "a rewrite backed by a program is writable now:\n{said}"
+    );
 }
 
 #[test]
@@ -291,9 +378,18 @@ fn a_wait_whose_deadline_was_never_written_is_reported_by_the_tool_the_author_ru
     let out = pact().args(["check", &root]).output().unwrap();
     let text = String::from_utf8_lossy(&out.stdout);
 
-    assert!(text.contains("rule: loader/wait-with-no-deadline"), "{text}");
-    assert!(text.contains("questions/is-this-ok.yaml:"), "must name the line: {text}");
-    assert!(text.contains("answer-within: 30m"), "the fix has to be typeable: {text}");
+    assert!(
+        text.contains("rule: loader/wait-with-no-deadline"),
+        "{text}"
+    );
+    assert!(
+        text.contains("questions/is-this-ok.yaml:"),
+        "must name the line: {text}"
+    );
+    assert!(
+        text.contains("answer-within: 30m"),
+        "the fix has to be typeable: {text}"
+    );
     // A warning, not an error: WAIT-8 says waiting forever is what you get when
     // you write nothing, so the tree still loads and the run still runs.
     assert!(out.status.success(), "{text}");
@@ -313,13 +409,29 @@ fn a_shows_line_no_park_can_supply_is_reported_by_the_tool_the_author_runs() {
     // author wrote that reaches nobody — `Question.about_call` filters with
     // `if k in args`, so the name simply vanishes and the person deciding
     // whether to keep spending sees `steps-taken` and nothing else.
-    let root = broken("bad-shows", &[("questions/keep-going.yaml", "- spent-so-far", "- spent-so-fa")]);
+    let root = broken(
+        "bad-shows",
+        &[(
+            "questions/keep-going.yaml",
+            "- spent-so-far",
+            "- spent-so-fa",
+        )],
+    );
     let out = pact().args(["check", &root]).output().unwrap();
     let text = String::from_utf8_lossy(&out.stdout);
 
-    assert!(text.contains("rule: loader/shows-nothing-can-supply"), "{text}");
-    assert!(text.contains("questions/keep-going.yaml:"), "must name the line: {text}");
-    assert!(text.contains("spent-so-far, steps-taken"), "must list what does work: {text}");
+    assert!(
+        text.contains("rule: loader/shows-nothing-can-supply"),
+        "{text}"
+    );
+    assert!(
+        text.contains("questions/keep-going.yaml:"),
+        "must name the line: {text}"
+    );
+    assert!(
+        text.contains("spent-so-far, steps-taken"),
+        "must list what does work: {text}"
+    );
 }
 
 #[test]
@@ -332,7 +444,11 @@ fn the_list_a_scheduler_must_walk_can_be_obtained_without_writing_rust() {
     // walk. `to_json`'s own doc comment says it exists "for a runtime that is
     // not written in Rust"; this is the hop that makes that sentence true.
     let out = pact().args(["waits", &example()]).output().expect("runs");
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("`pact waits` is JSON");
     let waits = v["waits"].as_array().expect("a list of waits");
 
@@ -340,14 +456,28 @@ fn the_list_a_scheduler_must_walk_can_be_obtained_without_writing_rust() {
     // durable record parks under — a scheduler keying a wakeup off a different
     // word would send it to a key nothing is waiting on.
     let reasons: Vec<&str> = waits.iter().filter_map(|w| w["reason"].as_str()).collect();
-    for reason in ["out-of-budget", "needs-approval", "needs-permission", "context-too-long"] {
+    for reason in [
+        "out-of-budget",
+        "needs-approval",
+        "needs-permission",
+        "context-too-long",
+    ] {
         assert!(reasons.contains(&reason), "no {reason} wait in {reasons:?}");
     }
     // And the three things a timer needs: how long, what to do, and who to reach.
     for w in waits {
-        assert!(w["deadline-ms"].as_u64().is_some(), "{w} has no moment to wake at");
-        assert!(!w["if-nobody-answers"].as_str().unwrap_or("").is_empty(), "{w}");
-        assert!(!w["asked-of"].as_array().map(Vec::is_empty).unwrap_or(true), "{w}");
+        assert!(
+            w["deadline-ms"].as_u64().is_some(),
+            "{w} has no moment to wake at"
+        );
+        assert!(
+            !w["if-nobody-answers"].as_str().unwrap_or("").is_empty(),
+            "{w}"
+        );
+        assert!(
+            !w["asked-of"].as_array().map(Vec::is_empty).unwrap_or(true),
+            "{w}"
+        );
     }
 }
 
@@ -355,7 +485,6 @@ fn the_list_a_scheduler_must_walk_can_be_obtained_without_writing_rust() {
 fn show_prints_the_loaded_document() {
     let out = pact().args(["show", &example()]).output().unwrap();
     assert!(out.status.success());
-    let v: serde_json::Value =
-        serde_json::from_slice(&out.stdout).expect("show emits valid JSON");
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("show emits valid JSON");
     assert!(v["agents"]["refund-desk"]["instructions"].is_string());
 }

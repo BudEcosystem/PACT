@@ -35,7 +35,9 @@ use std::collections::{BTreeMap, BTreeSet};
 /// `agent` group does not have.
 pub(crate) fn collections(schema: &Schema) -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
-    let Some(workspace) = schema.group("workspace") else { return out };
+    let Some(workspace) = schema.group("workspace") else {
+        return out;
+    };
     for f in &workspace.fields {
         if let Ty::MapOf(inner) = &f.ty
             && let Ty::Group(kind) = inner.as_ref()
@@ -65,10 +67,14 @@ fn collections_the_agent_reaches(
     let mut queue: Vec<(String, Node)> = vec![("agent".to_owned(), agent.clone())];
 
     while let Some((kind, node)) = queue.pop() {
-        let Some(group) = schema.group(&kind) else { continue };
+        let Some(group) = schema.group(&kind) else {
+            continue;
+        };
         let Some(here) = node.as_map() else { continue };
         for field in &group.fields {
-            let Some(entry) = here.get(&field.name) else { continue };
+            let Some(entry) = here.get(&field.name) else {
+                continue;
+            };
             // A block of settings nested in this one — `agent.limits` holds
             // `asks:`, and that is the only path from an agent to a question.
             if let Ty::Group(inner) = &field.ty {
@@ -80,8 +86,12 @@ fn collections_the_agent_reaches(
                 if target.starts_with('^') || target.contains(':') {
                     continue;
                 }
-                let Some(kind_of) = cols.get(target) else { continue };
-                let Some(defs) = top.get(target).and_then(|e| e.node.as_map()) else { continue };
+                let Some(kind_of) = cols.get(target) else {
+                    continue;
+                };
+                let Some(defs) = top.get(target).and_then(|e| e.node.as_map()) else {
+                    continue;
+                };
                 for name in written_names(&entry.node) {
                     let Some(def) = defs.get(&name) else { continue };
                     reached.insert(target.clone());
@@ -102,30 +112,39 @@ pub fn nothing_waits_on_a_condition_that_cannot_hold(
     diags: &mut Diagnostics,
 ) {
     let Some(top) = root.as_map() else { return };
-    let Some(agents) = top.get("agents").and_then(|e| e.node.as_map()) else { return };
+    let Some(agents) = top.get("agents").and_then(|e| e.node.as_map()) else {
+        return;
+    };
     let cols = collections(schema);
 
     for (agent_name, agent) in agents.iter() {
-        let Some(a) = agent.node.as_map() else { continue };
+        let Some(a) = agent.node.as_map() else {
+            continue;
+        };
         let reaches = collections_the_agent_reaches(top, schema, &agent.node);
 
         for (collection, kind) in &cols {
-            let Some(group) = schema.group(kind) else { continue };
+            let Some(group) = schema.group(kind) else {
+                continue;
+            };
             let Some(field) = group.fields.iter().find(|f| f.name == "available-when") else {
                 continue;
             };
             if !reaches.contains(collection) {
                 continue;
             }
-            let Some(defs) = top.get(collection).and_then(|e| e.node.as_map()) else { continue };
+            let Some(defs) = top.get(collection).and_then(|e| e.node.as_map()) else {
+                continue;
+            };
             for (used, def_entry) in defs.iter() {
-                let Some(def) = def_entry.node.as_map() else { continue };
+                let Some(def) = def_entry.node.as_map() else {
+                    continue;
+                };
                 let Some(cond) = def.get("available-when").and_then(|e| e.node.as_str()) else {
                     continue;
                 };
                 let cond = cond.trim();
-                let Some((_, target)) =
-                    field.satisfied_by.iter().find(|(value, _)| value == cond)
+                let Some((_, target)) = field.satisfied_by.iter().find(|(value, _)| value == cond)
                 else {
                     continue; // `always`, or a value the schema has already refused
                 };
@@ -180,9 +199,10 @@ fn is_satisfied(agent: &pact_doc::Map, reaches: &BTreeSet<String>, target: &str)
 
 fn written_names(node: &Node) -> Vec<String> {
     match &node.value {
-        pact_doc::Value::List(items) => {
-            items.iter().filter_map(|n| n.as_str().map(str::trim).map(str::to_owned)).collect()
-        }
+        pact_doc::Value::List(items) => items
+            .iter()
+            .filter_map(|n| n.as_str().map(str::trim).map(str::to_owned))
+            .collect(),
         pact_doc::Value::Map(m) => m.keys().cloned().collect(),
         pact_doc::Value::Str(s) => vec![s.trim().to_owned()],
         _ => Vec::new(),
@@ -209,7 +229,10 @@ mod tests {
     }
 
     fn e(node: Node) -> Entry {
-        Entry { key_span: span(), node }
+        Entry {
+            key_span: span(),
+            node,
+        }
     }
 
     fn s(v: &str) -> Node {
@@ -238,7 +261,11 @@ mod tests {
         const SPEC: &str = include_str!("../../../spec/schema.yaml");
         let mut d = Diagnostics::new();
         let s = pact_schema::from_doc::schema_from_yaml(SPEC, &mut d);
-        assert!(!d.has_errors(), "the shipped specification does not load:\n{}", d.render());
+        assert!(
+            !d.has_errors(),
+            "the shipped specification does not load:\n{}",
+            d.render()
+        );
         s
     }
 
@@ -263,7 +290,11 @@ mod tests {
         let w = d.items().first().expect("must warn");
         assert_eq!(w.rule, "loader/never-offered");
         assert!(w.message.contains("never shown it"), "{}", w.message);
-        assert!(w.fix.contains("`team:`"), "the fix names the field: {}", w.fix);
+        assert!(
+            w.fix.contains("`team:`"),
+            "the fix names the field: {}",
+            w.fix
+        );
     }
 
     #[test]
@@ -280,7 +311,12 @@ mod tests {
         );
         let mut d = Diagnostics::new();
         nothing_waits_on_a_condition_that_cannot_hold(&root, &spec(), &mut d);
-        assert_eq!(d.items().len(), 0, "{:?}", d.items().first().map(|x| &x.message));
+        assert_eq!(
+            d.items().len(),
+            0,
+            "{:?}",
+            d.items().first().map(|x| &x.message)
+        );
     }
 
     #[test]
@@ -321,7 +357,10 @@ mod tests {
         );
         let mut d = Diagnostics::new();
         nothing_waits_on_a_condition_that_cannot_hold(&root, &spec(), &mut d);
-        assert!(!d.has_errors(), "a tree under construction must still check");
+        assert!(
+            !d.has_errors(),
+            "a tree under construction must still check"
+        );
     }
 
     /// A general tree, so a test can put entries in any collection.
@@ -336,15 +375,24 @@ mod tests {
         // this file passed while one of the three kinds that carries the field
         // was not checked at all.
         let root = workspace(vec![
-            ("agents", map(vec![("desk", map(vec![("uses", list(&["refunds"]))]))])),
+            (
+                "agents",
+                map(vec![("desk", map(vec![("uses", list(&["refunds"]))]))]),
+            ),
             (
                 "skills",
-                map(vec![("refunds", map(vec![("available-when", s("this-agent-has-helpers"))]))]),
+                map(vec![(
+                    "refunds",
+                    map(vec![("available-when", s("this-agent-has-helpers"))]),
+                )]),
             ),
         ]);
         let mut d = Diagnostics::new();
         nothing_waits_on_a_condition_that_cannot_hold(&root, &spec(), &mut d);
-        let w = d.items().first().expect("a skill's condition must be checked");
+        let w = d
+            .items()
+            .first()
+            .expect("a skill's condition must be checked");
         assert_eq!(w.rule, "loader/never-offered");
         assert!(w.message.contains("refunds"), "{}", w.message);
     }
@@ -358,8 +406,13 @@ mod tests {
         // target now has to be a field the agent group really has, or a
         // collection the agent can really reach.
         let schema = spec();
-        let agent_fields: Vec<&str> =
-            schema.group("agent").unwrap().fields.iter().map(|f| f.name.as_str()).collect();
+        let agent_fields: Vec<&str> = schema
+            .group("agent")
+            .unwrap()
+            .fields
+            .iter()
+            .map(|f| f.name.as_str())
+            .collect();
         let sat = schema
             .group("tool")
             .unwrap()
@@ -369,7 +422,10 @@ mod tests {
             .expect("tools carry the condition")
             .satisfied_by
             .clone();
-        assert!(!sat.is_empty(), "the conditions must say what satisfies them");
+        assert!(
+            !sat.is_empty(),
+            "the conditions must say what satisfies them"
+        );
         for (condition, target) in sat {
             let is_agent_field = agent_fields.contains(&target.as_str());
             let is_collection = collections(&schema).contains_key(&target);
@@ -389,15 +445,30 @@ mod tests {
         // say this, which is why its row named `resources` as a field of the
         // agent group and the condition could never hold.
         let root = workspace(vec![
-            ("agents", map(vec![("desk", map(vec![("uses", list(&["search", "lookup"]))]))])),
+            (
+                "agents",
+                map(vec![(
+                    "desk",
+                    map(vec![("uses", list(&["search", "lookup"]))]),
+                )]),
+            ),
             (
                 "tools",
                 map(vec![
                     ("search", map(vec![("connect", s("company-wiki"))])),
-                    ("lookup", map(vec![("available-when", s("this-agent-has-connections"))])),
+                    (
+                        "lookup",
+                        map(vec![("available-when", s("this-agent-has-connections"))]),
+                    ),
                 ]),
             ),
-            ("resources", map(vec![("company-wiki", map(vec![("description", s("the wiki"))]))])),
+            (
+                "resources",
+                map(vec![(
+                    "company-wiki",
+                    map(vec![("description", s("the wiki"))]),
+                )]),
+            ),
         ]);
         let mut d = Diagnostics::new();
         nothing_waits_on_a_condition_that_cannot_hold(&root, &spec(), &mut d);
@@ -412,17 +483,27 @@ mod tests {
     #[test]
     fn an_agent_with_no_connection_at_all_is_still_told() {
         let root = workspace(vec![
-            ("agents", map(vec![("desk", map(vec![("uses", list(&["lookup"]))]))])),
+            (
+                "agents",
+                map(vec![("desk", map(vec![("uses", list(&["lookup"]))]))]),
+            ),
             (
                 "tools",
-                map(vec![("lookup", map(vec![("available-when", s("this-agent-has-connections"))]))]),
+                map(vec![(
+                    "lookup",
+                    map(vec![("available-when", s("this-agent-has-connections"))]),
+                )]),
             ),
         ]);
         let mut d = Diagnostics::new();
         nothing_waits_on_a_condition_that_cannot_hold(&root, &spec(), &mut d);
         let w = d.items().first().expect("must warn");
         assert_eq!(w.rule, "loader/never-offered");
-        assert!(w.fix.contains("resources"), "the fix names what is missing: {}", w.fix);
+        assert!(
+            w.fix.contains("resources"),
+            "the fix names what is missing: {}",
+            w.fix
+        );
     }
 
     #[test]
@@ -433,10 +514,16 @@ mod tests {
         // legal value that no check can see is R24's defect inside the check
         // that exists to catch it.
         let root = workspace(vec![
-            ("agents", map(vec![("desk", map(vec![("uses", list(&["escalate"]))]))])),
+            (
+                "agents",
+                map(vec![("desk", map(vec![("uses", list(&["escalate"]))]))]),
+            ),
             (
                 "tools",
-                map(vec![("escalate", map(vec![("available-when", s("a-person-can-be-asked"))]))]),
+                map(vec![(
+                    "escalate",
+                    map(vec![("available-when", s("a-person-can-be-asked"))]),
+                )]),
             ),
         ]);
         let mut d = Diagnostics::new();
@@ -460,9 +547,15 @@ mod tests {
             ),
             (
                 "tools",
-                map(vec![("escalate", map(vec![("available-when", s("a-person-can-be-asked"))]))]),
+                map(vec![(
+                    "escalate",
+                    map(vec![("available-when", s("a-person-can-be-asked"))]),
+                )]),
             ),
-            ("questions", map(vec![("is-this-ok", map(vec![("asks", s("ok?"))]))])),
+            (
+                "questions",
+                map(vec![("is-this-ok", map(vec![("asks", s("ok?"))]))]),
+            ),
         ]);
         let mut d = Diagnostics::new();
         nothing_waits_on_a_condition_that_cannot_hold(&root, &spec(), &mut d);

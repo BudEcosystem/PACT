@@ -42,7 +42,10 @@ fn pact() -> Command {
 }
 
 fn example() -> PathBuf {
-    PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/refund-desk"))
+    PathBuf::from(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/refund-desk"
+    ))
 }
 
 /// A throwaway copy of the worked example, so every test here starts from the
@@ -51,8 +54,8 @@ struct Copy(PathBuf);
 
 impl Copy {
     fn of_the_worked_example(name: &str) -> Self {
-        let dst = std::env::temp_dir()
-            .join(format!("pact-redaction-{name}-{}", std::process::id()));
+        let dst =
+            std::env::temp_dir().join(format!("pact-redaction-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dst);
         copy_tree(&example(), &dst);
         Self(dst)
@@ -63,7 +66,10 @@ impl Copy {
     fn edit(&self, file: &str, from: &str, to: &str) -> &Self {
         let p = self.0.join(file);
         let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-        assert!(text.contains(from), "fixture drifted: {from:?} is not in {file}");
+        assert!(
+            text.contains(from),
+            "fixture drifted: {from:?} is not in {file}"
+        );
         std::fs::write(&p, text.replace(from, to)).unwrap();
         self
     }
@@ -79,14 +85,20 @@ impl Copy {
 
     fn remove(&self, file: &str) -> &Self {
         let p = self.0.join(file);
-        assert!(p.exists(), "fixture drifted: {file} is not in the worked example");
+        assert!(
+            p.exists(),
+            "fixture drifted: {file} is not in the worked example"
+        );
         std::fs::remove_file(&p).unwrap();
         self
     }
 
     /// What `pact check` prints, and whether it accepted the tree.
     fn checked(&self) -> (bool, String) {
-        let out = pact().args(["check", self.0.to_str().unwrap()]).output().expect("runs");
+        let out = pact()
+            .args(["check", self.0.to_str().unwrap()])
+            .output()
+            .expect("runs");
         let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
         text.push_str(&String::from_utf8_lossy(&out.stderr));
         (out.status.success(), text)
@@ -118,8 +130,14 @@ fn the_worked_example_says_what_must_never_leave_in_one_file_that_nothing_points
     // no line naming it, and the tree loads. If a binding line ever comes back,
     // this fails.
     let root = example();
-    assert!(root.join("redaction.yaml").is_file(), "redaction.yaml is the spelling");
-    assert!(!root.join("redactions").exists(), "the `redactions/` folder is gone with the field");
+    assert!(
+        root.join("redaction.yaml").is_file(),
+        "redaction.yaml is the spelling"
+    );
+    assert!(
+        !root.join("redactions").exists(),
+        "the `redactions/` folder is gone with the field"
+    );
 
     let workspace = std::fs::read_to_string(root.join("workspace.yaml")).unwrap();
     let binding: Vec<&str> = workspace
@@ -132,8 +150,15 @@ fn the_worked_example_says_what_must_never_leave_in_one_file_that_nothing_points
          the setting, the way `learning.yaml` is"
     );
 
-    let out = pact().args(["check", root.to_str().unwrap()]).output().unwrap();
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stdout));
+    let out = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
 }
 
 #[test]
@@ -141,16 +166,21 @@ fn the_rules_in_that_file_reach_the_document_a_runtime_reads() {
     // `pact show` is the door every adapter reads through (R54). A collapsed
     // field that loads and does not appear there would be the same defect one
     // hop along.
-    let out = pact().args(["show", example().to_str().unwrap()]).output().unwrap();
+    let out = pact()
+        .args(["show", example().to_str().unwrap()])
+        .output()
+        .unwrap();
     let text = String::from_utf8_lossy(&out.stdout);
-    let doc: serde_json::Value = serde_json::from_str(&text).expect("`pact show` prints a document");
+    let doc: serde_json::Value =
+        serde_json::from_str(&text).expect("`pact show` prints a document");
     let hide = doc
         .get("redaction")
         .and_then(|r| r.get("hide"))
         .and_then(|h| h.as_array())
         .expect("the document carries `redaction.hide`");
     assert!(
-        hide.iter().any(|s| s.as_str() == Some("anything that looks like a card number")),
+        hide.iter()
+            .any(|s| s.as_str() == Some("anything that looks like a card number")),
         "the sentences the author wrote must be the ones the document carries: {hide:?}"
     );
 }
@@ -163,13 +193,16 @@ fn the_old_two_field_spelling_is_refused_and_the_message_names_the_field_that_su
     // that can be typed — silently ignoring either would leave a workspace whose
     // rules are on disk and out of the document.
     let c = Copy::of_the_worked_example("old-spelling");
-    c.write("redactions/customer-data.yaml", "hide:\n  - anything that looks like a card number\n")
-        .remove("redaction.yaml")
-        .edit(
-            "workspace.yaml",
-            "# fact about the system rather than about one agent.",
-            "# fact about the system rather than about one agent.\nredaction: customer-data",
-        );
+    c.write(
+        "redactions/customer-data.yaml",
+        "hide:\n  - anything that looks like a card number\n",
+    )
+    .remove("redaction.yaml")
+    .edit(
+        "workspace.yaml",
+        "# fact about the system rather than about one agent.",
+        "# fact about the system rather than about one agent.\nredaction: customer-data",
+    );
 
     let (ok, said) = c.checked();
     assert!(!ok, "the two-field spelling must be refused:\n{said}");
@@ -177,7 +210,10 @@ fn the_old_two_field_spelling_is_refused_and_the_message_names_the_field_that_su
         said.contains("'redactions' is not something a workspace can have"),
         "say that the map is gone:\n{said}"
     );
-    assert!(said.contains("Did you mean 'redaction'?"), "name the field that survived:\n{said}");
+    assert!(
+        said.contains("Did you mean 'redaction'?"),
+        "name the field that survived:\n{said}"
+    );
     assert!(
         said.contains("set of redaction settings") && said.contains("hide:"),
         "say what shape the surviving field wants, and name a line to type:\n{said}"
@@ -204,12 +240,18 @@ fn a_second_set_of_rules_can_no_longer_be_written_where_nothing_can_bind_it() {
     );
 
     let (ok, said) = c.checked();
-    assert!(!ok, "a second named set must be refused, not half-read:\n{said}");
+    assert!(
+        !ok,
+        "a second named set must be refused, not half-read:\n{said}"
+    );
     assert!(
         said.contains("customer-data") || said.contains("staff-data"),
         "name the block that cannot be there:\n{said}"
     );
-    assert!(said.contains("  fix: "), "a refusal without a fix is not one:\n{said}");
+    assert!(
+        said.contains("  fix: "),
+        "a refusal without a fix is not one:\n{said}"
+    );
 }
 
 #[test]
@@ -223,8 +265,14 @@ fn a_redaction_file_that_holds_nothing_back_is_refused_rather_than_counted_as_on
     c.write("redaction.yaml", "description: Something, eventually.\n");
 
     let (ok, said) = c.checked();
-    assert!(!ok, "a redaction that hides nothing must be refused:\n{said}");
-    assert!(said.contains("must have a 'hide'"), "name the missing line:\n{said}");
+    assert!(
+        !ok,
+        "a redaction that hides nothing must be refused:\n{said}"
+    );
+    assert!(
+        said.contains("must have a 'hide'"),
+        "name the missing line:\n{said}"
+    );
 }
 
 #[test]
@@ -238,17 +286,31 @@ fn improving_this_system_off_this_machine_is_refused_when_no_file_says_what_to_h
     // failures "with the error text", and failures are the customer's own words,
     // so these three settings together are an export path created by a default.
     let c = Copy::of_the_worked_example("improving-unheld");
-    c.edit("learning.yaml", "enabled: propose-only", "enabled: applies-safe-changes-itself")
-        .edit("workspace.yaml", "allow-egress: []", "allow-egress: [reflector]")
-        .remove("redaction.yaml");
+    c.edit(
+        "learning.yaml",
+        "enabled: propose-only",
+        "enabled: applies-safe-changes-itself",
+    )
+    .edit(
+        "workspace.yaml",
+        "allow-egress: []",
+        "allow-egress: [reflector]",
+    )
+    .remove("redaction.yaml");
 
     let (ok, said) = c.checked();
-    assert!(!ok, "the customer's words must not leave with nothing held back:\n{said}");
+    assert!(
+        !ok,
+        "the customer's words must not leave with nothing held back:\n{said}"
+    );
     assert!(
         said.contains("loader/improving-with-nothing-held-back"),
         "the refusal must be this rule and not an accident of some other check:\n{said}"
     );
-    assert!(said.contains("redaction.yaml"), "name the file to write:\n{said}");
+    assert!(
+        said.contains("redaction.yaml"),
+        "name the file to write:\n{said}"
+    );
     assert!(
         said.contains("propose-only") && said.contains("allow-egress"),
         "offer the other two lines that also settle it — an author who wants the improving \
@@ -265,11 +327,22 @@ fn putting_the_file_back_is_what_makes_that_same_tree_load() {
     // the test above goes green while this one stays green — which is how the
     // pair says "this line, and nothing else, is what reads the field".
     let c = Copy::of_the_worked_example("improving-held");
-    c.edit("learning.yaml", "enabled: propose-only", "enabled: applies-safe-changes-itself")
-        .edit("workspace.yaml", "allow-egress: []", "allow-egress: [reflector]");
+    c.edit(
+        "learning.yaml",
+        "enabled: propose-only",
+        "enabled: applies-safe-changes-itself",
+    )
+    .edit(
+        "workspace.yaml",
+        "allow-egress: []",
+        "allow-egress: [reflector]",
+    );
 
     let (ok, said) = c.checked();
-    assert!(ok, "a workspace that says what must never leave must load:\n{said}");
+    assert!(
+        ok,
+        "a workspace that says what must never leave must load:\n{said}"
+    );
     assert!(
         !said.contains("improving-with-nothing-held-back"),
         "and must not be told otherwise:\n{said}"

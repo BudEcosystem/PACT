@@ -68,7 +68,11 @@ fn names_span(spec: &str, group: &str, field: &str) -> (usize, usize) {
         .find(&format!("\n  {group}:\n"))
         .unwrap_or_else(|| no_such_shape(field));
     let head = format!("      {field}:\n");
-    let mut at = spec[from..].find(&head).unwrap_or_else(|| no_such_shape(field)) + from + head.len();
+    let mut at = spec[from..]
+        .find(&head)
+        .unwrap_or_else(|| no_such_shape(field))
+        + from
+        + head.len();
     let mut typed = false;
     loop {
         let eol = spec[at..].find('\n').map(|i| i + at).unwrap_or(spec.len());
@@ -128,7 +132,10 @@ fn workspace(
     for (file, from, to) in tree_edits {
         let p = root.join("rd").join(file);
         let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
-        assert!(text.contains(from), "the example drifted: {from:?} is no longer in {file}");
+        assert!(
+            text.contains(from),
+            "the example drifted: {from:?} is no longer in {file}"
+        );
         std::fs::write(&p, text.replace(from, to)).unwrap();
     }
     root.join("rd")
@@ -138,7 +145,11 @@ fn copy(src: &Path, dst: &Path) {
     std::fs::create_dir_all(dst).unwrap();
     for e in std::fs::read_dir(src).unwrap().flatten() {
         let (s, d) = (e.path(), dst.join(e.file_name()));
-        if s.is_dir() { copy(&s, &d) } else { std::fs::copy(&s, &d).map(|_| ()).unwrap() }
+        if s.is_dir() {
+            copy(&s, &d)
+        } else {
+            std::fs::copy(&s, &d).map(|_| ()).unwrap()
+        }
     }
 }
 
@@ -149,7 +160,10 @@ fn checked(path: &Path) -> (bool, String) {
         .env("PACT_SPEC", &spec)
         .output()
         .expect("pact runs");
-    (out.status.success(), String::from_utf8_lossy(&out.stdout).into_owned())
+    (
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+    )
 }
 
 /// The `may-use:` list of the stage that re-reads the decision, with the written
@@ -163,8 +177,10 @@ const NARROWS_TO_THE_SKILL: (&str, &str, &str) = (
 
 /// The specification as it was when this bug was found: an agent may use a
 /// skill, a stage of its loop may not name one.
-const THE_ASYMMETRY: [(&str, &str, &str); 2] =
-    [("agent", "uses", "[tools, skills]"), ("stage", "may-use", "[tools, agents]")];
+const THE_ASYMMETRY: [(&str, &str, &str); 2] = [
+    ("agent", "uses", "[tools, skills]"),
+    ("stage", "may-use", "[tools, agents]"),
+];
 
 #[test]
 fn a_stage_that_narrows_to_a_skill_is_understood_rather_than_told_to_make_a_tool() {
@@ -175,7 +191,10 @@ fn a_stage_that_narrows_to_a_skill_is_understood_rather_than_told_to_make_a_tool
     // and no diagnostic anywhere saying which is which.
     let root = workspace("understood", &THE_ASYMMETRY, &[NARROWS_TO_THE_SKILL]);
     let (ok, text) = checked(&root);
-    assert!(!ok, "under this specification the line is still refused:\n{text}");
+    assert!(
+        !ok,
+        "under this specification the line is still refused:\n{text}"
+    );
 
     assert!(
         text.contains("this workspace has that under `skills:`"),
@@ -223,7 +242,10 @@ fn the_line_that_may_name_a_kind_is_read_from_the_specification_and_not_from_the
         &[NARROWS_TO_THE_SKILL],
     );
     let (ok, text) = checked(&root);
-    assert!(!ok, "the line is still refused under this specification:\n{text}");
+    assert!(
+        !ok,
+        "the line is still refused under this specification:\n{text}"
+    );
     assert!(
         text.contains("this workspace has that under `skills:`"),
         "where the name lives is a fact about the tree and does not move:\n{text}"
@@ -244,7 +266,11 @@ fn a_name_the_workspace_has_nowhere_is_still_told_which_file_to_create() {
     let root = workspace(
         "nowhere",
         &THE_ASYMMETRY,
-        &[("loops/careful.yaml", "      - zendesk\n", "      - stripe\n")],
+        &[(
+            "loops/careful.yaml",
+            "      - zendesk\n",
+            "      - stripe\n",
+        )],
     );
     let (ok, text) = checked(&root);
     assert!(!ok, "a tool nobody declared must still be caught:\n{text}");
@@ -274,7 +300,10 @@ fn the_asymmetry_closes_with_one_line_of_specification_and_no_rust() {
     // before loads cleanly after, with the rest of the specification untouched.
     let root = workspace(
         "closed",
-        &[("agent", "uses", "[tools, skills]"), ("stage", "may-use", "[tools, skills, agents]")],
+        &[
+            ("agent", "uses", "[tools, skills]"),
+            ("stage", "may-use", "[tools, skills, agents]"),
+        ],
         &[NARROWS_TO_THE_SKILL],
     );
     let (ok, text) = checked(&root);
@@ -336,15 +365,30 @@ fn narrowing_to_a_kind_a_line_cannot_hold_never_ends_in_two_copies_of_one_docume
     //
     // `then: answered:` is the line used because it can hold exactly one kind
     // (its own loop's stages) and therefore collides with every other.
-    for kind in ["tools", "agents", "skills", "policies", "questions", "loops", "resources"] {
+    for kind in [
+        "tools",
+        "agents",
+        "skills",
+        "policies",
+        "questions",
+        "loops",
+        "resources",
+    ] {
         let name = first_entry_of(kind);
         let root = workspace(
             &format!("copies-{kind}"),
             &THE_ASYMMETRY,
-            &[("loops/careful.yaml", "      answered: reply\n", &format!("      answered: {name}\n"))],
+            &[(
+                "loops/careful.yaml",
+                "      answered: reply\n",
+                &format!("      answered: {name}\n"),
+            )],
         );
         let (ok, text) = checked(&root);
-        assert!(!ok, "[{kind}] routing a stage at a {kind} entry must be caught:\n{text}");
+        assert!(
+            !ok,
+            "[{kind}] routing a stage at a {kind} entry must be caught:\n{text}"
+        );
         assert!(
             text.contains(&format!("this workspace has that under `{kind}:`")),
             "[{kind}] the author is not told where their name actually lives:\n{text}"
@@ -361,13 +405,19 @@ fn narrowing_to_a_kind_a_line_cannot_hold_never_ends_in_two_copies_of_one_docume
 /// this file holds no list of its own to drift.
 fn first_entry_of(kind: &str) -> String {
     let out = pact()
-        .args(["show", repo().join("examples/refund-desk").to_str().unwrap()])
+        .args([
+            "show",
+            repo().join("examples/refund-desk").to_str().unwrap(),
+        ])
         .output()
         .expect("pact show runs");
     let doc: serde_json::Value = serde_json::from_slice(&out.stdout).expect("show prints json");
-    let map = doc.get(kind).and_then(|m| m.as_object()).unwrap_or_else(|| {
-        panic!("the worked example keeps nothing under `{kind}:`, so this case proves nothing")
-    });
+    let map = doc
+        .get(kind)
+        .and_then(|m| m.as_object())
+        .unwrap_or_else(|| {
+            panic!("the worked example keeps nothing under `{kind}:`, so this case proves nothing")
+        });
     map.keys().next().expect("at least one entry").clone()
 }
 
@@ -384,11 +434,21 @@ fn a_workflow_may_not_take_a_name_an_agent_already_has() {
     .unwrap();
     let (ok, text) = loaded(&dst);
     assert!(!ok, "{text}");
-    assert!(text.contains("rule: loader/a-name-the-workspace-already-has"), "{text}");
-    assert!(text.contains("'sorter' is an agent and a workflow"), "{text}");
+    assert!(
+        text.contains("rule: loader/a-name-the-workspace-already-has"),
+        "{text}"
+    );
+    assert!(
+        text.contains("'sorter' is an agent and a workflow"),
+        "{text}"
+    );
     assert!(text.contains("the workflow to `sorter-flow`"), "{text}");
     // Told once, at the workflow — not again at the stage that calls it.
-    assert_eq!(text.matches("a-name-the-workspace-already-has").count(), 1, "{text}");
+    assert_eq!(
+        text.matches("a-name-the-workspace-already-has").count(),
+        1,
+        "{text}"
+    );
 }
 
 /// A program a workflow shares its name with is refused the same way, at the
@@ -399,10 +459,23 @@ fn a_workflow_may_not_take_a_name_a_program_already_has() {
     write_program(&dst, "recheck");
     let (ok, text) = loaded(&dst);
     assert!(!ok, "{text}");
-    assert!(text.contains("rule: loader/a-name-the-workspace-already-has"), "{text}");
-    assert!(text.contains("'recheck' is a program and a workflow"), "{text}");
-    assert!(text.contains("workflows/recheck.yaml"), "told at the workflow:\n{text}");
-    assert_eq!(text.matches("a-name-the-workspace-already-has").count(), 1, "{text}");
+    assert!(
+        text.contains("rule: loader/a-name-the-workspace-already-has"),
+        "{text}"
+    );
+    assert!(
+        text.contains("'recheck' is a program and a workflow"),
+        "{text}"
+    );
+    assert!(
+        text.contains("workflows/recheck.yaml"),
+        "told at the workflow:\n{text}"
+    );
+    assert_eq!(
+        text.matches("a-name-the-workspace-already-has").count(),
+        1,
+        "{text}"
+    );
 }
 
 /// No workflow is involved, so the clash is told where it bites: at the
@@ -413,15 +486,30 @@ fn a_call_to_a_name_an_agent_and_a_program_share_is_refused_at_the_call() {
     write_program(&dst, "sorter");
     let (ok, text) = loaded(&dst);
     assert!(!ok, "{text}");
-    assert!(text.contains("rule: loader/a-name-the-workspace-already-has"), "{text}");
-    assert!(text.contains("'sorter' is an agent and a program"), "{text}");
-    assert!(text.contains("workflows/invoices.yaml"), "told at the call:\n{text}");
+    assert!(
+        text.contains("rule: loader/a-name-the-workspace-already-has"),
+        "{text}"
+    );
+    assert!(
+        text.contains("'sorter' is an agent and a program"),
+        "{text}"
+    );
+    assert!(
+        text.contains("workflows/invoices.yaml"),
+        "told at the call:\n{text}"
+    );
 }
 
 /// `pact check` with the shipped specification.
 fn loaded(root: &Path) -> (bool, String) {
-    let out = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
-    (out.status.success(), String::from_utf8_lossy(&out.stdout).into_owned())
+    let out = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
+    (
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+    )
 }
 
 /// A copy of `tests/trees/a-workflow-of-every-shape`.

@@ -54,7 +54,9 @@ use pact_schema::{Schema, Ty};
 /// missing two that it does (`watch`, `bundles`), so `based-on:` inside a watch
 /// or a nested bundle was read, accepted by the schema, and never resolved.
 fn collections(schema: &Schema) -> Vec<String> {
-    let Some(workspace) = schema.group("workspace") else { return Vec::new() };
+    let Some(workspace) = schema.group("workspace") else {
+        return Vec::new();
+    };
     workspace
         .fields
         .iter()
@@ -77,8 +79,12 @@ pub fn resolve(
 ) {
     let Some(top) = root.as_map_mut() else { return };
     for name in collections(schema) {
-        let Some(slot) = top.get_mut(&name) else { continue };
-        let Some(entries) = slot.node.as_map_mut() else { continue };
+        let Some(slot) = top.get_mut(&name) else {
+            continue;
+        };
+        let Some(entries) = slot.node.as_map_mut() else {
+            continue;
+        };
         resolve_collection(&name, entries, diags, recorded);
     }
 }
@@ -108,9 +114,10 @@ fn resolve_collection(
     // `with` an unknown field, which is true and is not the mistake: the mistake
     // is that the line naming the pattern is missing.
     for name in &names {
-        let Some(entry) = entries.get(name) else { continue };
-        if entry.node.get(crate::templates::WITH).is_some()
-            && entry.node.get("based-on").is_none()
+        let Some(entry) = entries.get(name) else {
+            continue;
+        };
+        if entry.node.get(crate::templates::WITH).is_some() && entry.node.get("based-on").is_none()
         {
             let at = entry
                 .node
@@ -186,11 +193,19 @@ fn derive_one(
     diags: &mut Diagnostics,
     recorded: &mut Vec<crate::report::Substitution>,
 ) -> Result<(), Box<Diagnostic>> {
-    let Some(entry) = entries.get(name) else { return Ok(()) };
-    let Some(map) = entry.node.as_map() else { return Ok(()) };
-    let Some(base_entry) = map.get("based-on") else { return Ok(()) };
+    let Some(entry) = entries.get(name) else {
+        return Ok(());
+    };
+    let Some(map) = entry.node.as_map() else {
+        return Ok(());
+    };
+    let Some(base_entry) = map.get("based-on") else {
+        return Ok(());
+    };
     let base_node = &base_entry.node;
-    let Some(base_name) = base_node.as_str().map(str::to_owned) else { return Ok(()) };
+    let Some(base_name) = base_node.as_str().map(str::to_owned) else {
+        return Ok(());
+    };
     let base_name = base_name.trim().to_owned();
     if base_name.is_empty() || base_name.starts_with("pact:") {
         // A library shape. `loops.rs` owns those; this pass only joins entries
@@ -222,13 +237,19 @@ fn derive_one(
     if !entries.contains_key(&base_name) {
         let mut known: Vec<&String> = entries.keys().filter(|k| *k != name).collect();
         known.sort();
-        let list = known.iter().map(|k| format!("`{k}`")).collect::<Vec<_>>().join(", ");
+        let list = known
+            .iter()
+            .map(|k| format!("`{k}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
         return Err(Box::new(Diagnostic::error(
             "loader/no-such-name",
             span,
             format!("'{name}' is based on '{base_name}', and there is no such entry in `{kind}:`."),
             if list.is_empty() {
-                format!("There is nothing else in `{kind}:` to be based on. Remove the line and write it out in full.")
+                format!(
+                    "There is nothing else in `{kind}:` to be based on. Remove the line and write it out in full."
+                )
             } else {
                 format!("Change it to one of: {list} — or remove the `based-on:` line.")
             },
@@ -248,9 +269,14 @@ fn derive_one(
         let Some(base_node) = entries.get(&base_name).map(|e| e.node.clone()) else {
             return Ok(());
         };
-        let Some(own_node) = entries.get(name).map(|e| e.node.clone()) else { return Ok(()) };
+        let Some(own_node) = entries.get(name).map(|e| e.node.clone()) else {
+            return Ok(());
+        };
         let pattern = crate::templates::is_a_pattern(&base_node);
-        (crate::templates::arguments(kind, name, &base_name, &base_node, &own_node)?, pattern)
+        (
+            crate::templates::arguments(kind, name, &base_name, &base_node, &own_node)?,
+            pattern,
+        )
     };
     if base_is_a_pattern {
         used.insert(base_name.clone());
@@ -354,7 +380,11 @@ mod tests {
         const SPEC: &str = include_str!("../../../spec/schema.yaml");
         let mut d = Diagnostics::new();
         let s = pact_schema::from_doc::schema_from_yaml(SPEC, &mut d);
-        assert!(!d.has_errors(), "the shipped specification does not load:\n{}", d.render());
+        assert!(
+            !d.has_errors(),
+            "the shipped specification does not load:\n{}",
+            d.render()
+        );
         s
     }
     use super::*;
@@ -366,13 +396,19 @@ mod tests {
     }
 
     fn entry(node: Node) -> Entry {
-        Entry { key_span: span(), node }
+        Entry {
+            key_span: span(),
+            node,
+        }
     }
 
     fn map(pairs: &[(&str, &str)]) -> Node {
         let mut m = Map::new();
         for (k, v) in pairs {
-            m.insert((*k).to_owned(), entry(Node::new(Value::Str((*v).to_owned()), span())));
+            m.insert(
+                (*k).to_owned(),
+                entry(Node::new(Value::Str((*v).to_owned()), span())),
+            );
         }
         Node::new(Value::Map(m), span())
     }
@@ -383,13 +419,15 @@ mod tests {
             inner.insert((*k).to_owned(), entry(v.clone()));
         }
         let mut top = Map::new();
-        top.insert("interceptors".to_owned(), entry(Node::new(Value::Map(inner), span())));
+        top.insert(
+            "interceptors".to_owned(),
+            entry(Node::new(Value::Map(inner), span())),
+        );
         Node::new(Value::Map(top), span())
     }
 
     fn interceptors(root: &Node, name: &str) -> Map {
         root.as_map()
-            
             .unwrap()
             .get("interceptors")
             .unwrap()
@@ -407,14 +445,23 @@ mod tests {
     #[test]
     fn what_is_not_restated_is_inherited() {
         let mut root = doc(&[
-            ("base", map(&[("description", "hides cards"), ("may", "hide-values")])),
-            ("derived", map(&[("based-on", "base"), ("description", "same, on tool calls")])),
+            (
+                "base",
+                map(&[("description", "hides cards"), ("may", "hide-values")]),
+            ),
+            (
+                "derived",
+                map(&[("based-on", "base"), ("description", "same, on tool calls")]),
+            ),
         ]);
         let mut d = Diagnostics::default();
         resolve(&mut root, &spec(), &mut d, &mut Vec::new());
         let got = interceptors(&root, "derived");
         assert_eq!(got.get("may").unwrap().node.as_str(), Some("hide-values"));
-        assert_eq!(got.get("description").unwrap().node.as_str(), Some("same, on tool calls"));
+        assert_eq!(
+            got.get("description").unwrap().node.as_str(),
+            Some("same, on tool calls")
+        );
         assert!(!d.has_errors());
     }
 
@@ -426,7 +473,12 @@ mod tests {
             ("base", map(&[("description", "a")])),
             ("derived", map(&[("based-on", "base")])),
         ]);
-        resolve(&mut root, &spec(), &mut Diagnostics::default(), &mut Vec::new());
+        resolve(
+            &mut root,
+            &spec(),
+            &mut Diagnostics::default(),
+            &mut Vec::new(),
+        );
         assert!(interceptors(&root, "derived").get("based-on").is_none());
     }
 
@@ -434,11 +486,23 @@ mod tests {
     fn a_restated_field_replaces_rather_than_merges_so_a_permission_can_be_narrowed() {
         let mut root = doc(&[
             ("base", map(&[("may", "hide-values, stop-the-run")])),
-            ("derived", map(&[("based-on", "base"), ("may", "hide-values")])),
+            (
+                "derived",
+                map(&[("based-on", "base"), ("may", "hide-values")]),
+            ),
         ]);
-        resolve(&mut root, &spec(), &mut Diagnostics::default(), &mut Vec::new());
+        resolve(
+            &mut root,
+            &spec(),
+            &mut Diagnostics::default(),
+            &mut Vec::new(),
+        );
         assert_eq!(
-            interceptors(&root, "derived").get("may").unwrap().node.as_str(),
+            interceptors(&root, "derived")
+                .get("may")
+                .unwrap()
+                .node
+                .as_str(),
             Some("hide-values"),
             "a deep merge would union these and silently keep `stop-the-run`"
         );
@@ -451,7 +515,12 @@ mod tests {
             ("b", map(&[("based-on", "a"), ("description", "middle")])),
             ("c", map(&[("based-on", "b")])),
         ]);
-        resolve(&mut root, &spec(), &mut Diagnostics::default(), &mut Vec::new());
+        resolve(
+            &mut root,
+            &spec(),
+            &mut Diagnostics::default(),
+            &mut Vec::new(),
+        );
         let c = interceptors(&root, "c");
         assert_eq!(c.get("may").unwrap().node.as_str(), Some("hide-values"));
         assert_eq!(c.get("description").unwrap().node.as_str(), Some("middle"));
@@ -480,7 +549,11 @@ mod tests {
         resolve(&mut root, &spec(), &mut d, &mut Vec::new());
         let e = d.items().first().expect("a typo must be refused");
         assert_eq!(e.rule, "loader/no-such-name");
-        assert!(e.fix.contains("`careful`"), "the fix names the real one: {}", e.fix);
+        assert!(
+            e.fix.contains("`careful`"),
+            "the fix names the real one: {}",
+            e.fix
+        );
     }
 
     #[test]
@@ -490,7 +563,11 @@ mod tests {
         resolve(&mut root, &spec(), &mut d, &mut Vec::new());
         assert!(!d.has_errors());
         assert_eq!(
-            interceptors(&root, "mine").get("based-on").unwrap().node.as_str(),
+            interceptors(&root, "mine")
+                .get("based-on")
+                .unwrap()
+                .node
+                .as_str(),
             Some("pact:loop/standard"),
             "`loops.rs` resolves the shipped shapes; this pass must not eat the line"
         );
@@ -500,8 +577,8 @@ mod tests {
     /// helper above cannot spell — so they parse real YAML, the way the
     /// teams tests do.
     fn resolved(text: &str) -> (Node, Diagnostics) {
-        let mut root = pact_doc::parse_yaml(text, camino::Utf8Path::new("derive-test.yaml"))
-            .expect("parses");
+        let mut root =
+            pact_doc::parse_yaml(text, camino::Utf8Path::new("derive-test.yaml")).expect("parses");
         let mut d = Diagnostics::new();
         resolve(&mut root, &spec(), &mut d, &mut Vec::new());
         (root, d)
@@ -538,8 +615,18 @@ mod tests {
              \x20     steps-at-most: 4\n\
              \x20     when-it-runs-out: stop-and-say-so\n",
         );
-        assert_eq!(d.items().len(), 1, "one restated block is one warning:\n{}", d.render());
-        assert_eq!(d.warning_count(), 1, "a warning, not an error:\n{}", d.render());
+        assert_eq!(
+            d.items().len(),
+            1,
+            "one restated block is one warning:\n{}",
+            d.render()
+        );
+        assert_eq!(
+            d.warning_count(),
+            1,
+            "a warning, not an error:\n{}",
+            d.render()
+        );
         let w = &d.items()[0];
         assert_eq!(w.rule, "loader/restating-a-block-drops-the-rest");
         assert!(
@@ -555,7 +642,13 @@ mod tests {
         );
         // The replacement itself still holds — the warning reports it, it
         // does not undo it. \
-        let limits = agent(&root, "desk").get("limits").unwrap().node.as_map().unwrap().clone();
+        let limits = agent(&root, "desk")
+            .get("limits")
+            .unwrap()
+            .node
+            .as_map()
+            .unwrap()
+            .clone();
         assert!(limits.get("steps-at-most").is_some());
         assert!(limits.get("cost-per-request-under").is_none());
     }
@@ -576,7 +669,11 @@ mod tests {
              \x20     finishes-within: 10s\n\
              \x20     when-it-runs-out: stop-and-say-so\n",
         );
-        assert!(d.is_empty(), "nothing fell out, so nothing to say:\n{}", d.render());
+        assert!(
+            d.is_empty(),
+            "nothing fell out, so nothing to say:\n{}",
+            d.render()
+        );
     }
 
     #[test]
@@ -594,9 +691,15 @@ mod tests {
         );
         assert!(d.is_empty(), "{}", d.render());
         let desk = agent(&root, "desk");
-        assert!(desk.get("base").is_none(), "being based on a base must not make you one");
+        assert!(
+            desk.get("base").is_none(),
+            "being based on a base must not make you one"
+        );
         assert!(desk.get("based-on").is_none());
-        assert_eq!(desk.get("description").unwrap().node.as_str(), Some("a pattern"));
+        assert_eq!(
+            desk.get("description").unwrap().node.as_str(),
+            Some("a pattern")
+        );
         assert!(
             agent(&root, "house").get("base").is_some(),
             "the base itself still carries the line"

@@ -149,7 +149,10 @@ mod tests {
         // arrives at from `agents/<n>/agent.yaml`, and the author who guessed
         // `tool.yaml` instead was told to remove a filename.
         let policy = Policy::default();
-        assert_eq!(to_start(p("/w"), &policy, p("/w/tools/weather")), p("/w/tools/weather/tool.yaml"));
+        assert_eq!(
+            to_start(p("/w"), &policy, p("/w/tools/weather")),
+            p("/w/tools/weather/tool.yaml")
+        );
         assert_eq!(
             to_start(p("/w"), &policy, p("/w/resources/payments-server")),
             p("/w/resources/payments-server/resource.yaml")
@@ -176,7 +179,11 @@ mod tests {
             let dir = p(dir);
             let file = to_start(root, &policy, dir);
             let stem = file.file_stem().expect("a file was named");
-            assert_eq!(file.parent(), Some(dir), "{dir} must be told to create the file in itself");
+            assert_eq!(
+                file.parent(),
+                Some(dir),
+                "{dir} must be told to create the file in itself"
+            );
             assert!(
                 policy.is_self_file(dir.file_name().unwrap_or_default(), stem),
                 "{dir} was told to create {file}, which the loader would read as a field"

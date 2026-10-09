@@ -104,8 +104,11 @@ then:
   answered: done
 ";
 
-const STAGES: [(&str, &str); 3] =
-    [("gather", STAGE_GATHER), ("re-read", STAGE_RE_READ), ("reply", STAGE_REPLY)];
+const STAGES: [(&str, &str); 3] = [
+    ("gather", STAGE_GATHER),
+    ("re-read", STAGE_RE_READ),
+    ("reply", STAGE_REPLY),
+];
 
 const CONTEXT_POLICY: &str = "\
 description: Keeps a long back-and-forth inside what the model can hold.
@@ -143,7 +146,9 @@ fn indent(body: &str, spaces: usize) -> String {
 
 /// `[(name, body)]` → the `name:` / body map an author would type.
 fn entries(of: &[(&str, &str)]) -> String {
-    of.iter().map(|(name, body)| format!("{name}:\n{}", indent(body, 2))).collect()
+    of.iter()
+        .map(|(name, body)| format!("{name}:\n{}", indent(body, 2)))
+        .collect()
 }
 
 /// The loop's stages folded back into one document, for the two forms that do
@@ -178,7 +183,10 @@ fn build_folders(root: &Utf8Path) {
     put(&root.join("ports/slack.yaml"), PORT_SLACK);
     put(&root.join("ports/email.yaml"), PORT_EMAIL);
     put(&root.join("loops/careful.yaml"), &loop_careful());
-    put(&root.join("context-policies/long-threads.yaml"), CONTEXT_POLICY);
+    put(
+        &root.join("context-policies/long-threads.yaml"),
+        CONTEXT_POLICY,
+    );
 }
 
 /// **A folder per entry, too.** `ports/slack/port.yaml` and
@@ -196,7 +204,10 @@ fn build_folders_of_folders(root: &Utf8Path) {
     for (name, body) in STAGES {
         put(&root.join(format!("loops/careful/steps/{name}.yaml")), body);
     }
-    put(&root.join("context-policies/long-threads/context-policy.yaml"), CONTEXT_POLICY);
+    put(
+        &root.join("context-policies/long-threads/context-policy.yaml"),
+        CONTEXT_POLICY,
+    );
 }
 
 // ── Plumbing ─────────────────────────────────────────────────────────────────
@@ -210,8 +221,10 @@ fn put(path: &Utf8Path, body: &str) {
 /// test in `example_refund_desk.rs` is, and on the test's name as well: the
 /// tests in one binary share a process, and cargo runs them at the same time.
 fn workdir(name: &str) -> Utf8PathBuf {
-    let base = Utf8PathBuf::from(std::env::temp_dir().to_string_lossy().to_string())
-        .join(format!("pact-new-kind-digest-{}-{name}", std::process::id()));
+    let base = Utf8PathBuf::from(std::env::temp_dir().to_string_lossy().to_string()).join(format!(
+        "pact-new-kind-digest-{}-{name}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&base);
     std::fs::create_dir_all(&base).unwrap();
     base
@@ -221,7 +234,9 @@ fn workdir(name: &str) -> Utf8PathBuf {
 /// taken from a tree that half-failed compares two accidents, not two forms.
 fn load(root: &Utf8Path) -> Node {
     let mut d = Diagnostics::new();
-    let n = Loader::new(root.to_owned()).load(root, &mut d).expect("the tree loads");
+    let n = Loader::new(root.to_owned())
+        .load(root, &mut d)
+        .expect("the tree loads");
     assert!(!d.has_errors(), "{}", d.render());
     assert_eq!(d.warning_count(), 0, "{}", d.render());
     n
@@ -241,7 +256,11 @@ fn assert_the_new_kinds_really_arrived(doc: &Node, form: &str) {
     names.sort_unstable();
     assert_eq!(names, ["email", "slack"], "{form}: both ports");
     assert_eq!(
-        ports.get("slack").map(|e| &e.node).and_then(|s| s.get("kind")).and_then(Node::as_str),
+        ports
+            .get("slack")
+            .map(|e| &e.node)
+            .and_then(|s| s.get("kind"))
+            .and_then(Node::as_str),
         Some("conversation"),
         "{form}: a port's settings, not just its name"
     );
@@ -252,12 +271,19 @@ fn assert_the_new_kinds_really_arrived(doc: &Node, form: &str) {
         .and_then(|c| c.get("steps"))
         .and_then(|s| s.get("re-read"))
         .unwrap_or_else(|| panic!("{form}: the loop's `re-read` stage"));
-    assert_eq!(re_read.get("does").and_then(Node::as_str), Some("check-its-work"), "{form}");
+    assert_eq!(
+        re_read.get("does").and_then(Node::as_str),
+        Some("check-its-work"),
+        "{form}"
+    );
     // The same `2`, reached through four map keys in one form and through three
     // directories in another. A number that survives both journeys unchanged is
     // a digest taken over the settings rather than over the shape of the tree.
     assert_eq!(
-        re_read.get("at-most").map(pact_doc::canonical_string).as_deref(),
+        re_read
+            .get("at-most")
+            .map(pact_doc::canonical_string)
+            .as_deref(),
         Some("2"),
         "{form}: the stage's own ceiling"
     );

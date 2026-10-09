@@ -32,8 +32,8 @@
 
 use pact_diag::Diagnostics;
 use pact_doc::parse_yaml;
-use pact_schema::from_doc::schema_from_yaml;
 use pact_schema::Schema;
+use pact_schema::from_doc::schema_from_yaml;
 
 /// The specification as it actually ships.
 const SPEC: &str = include_str!("../../../spec/schema.yaml");
@@ -44,7 +44,11 @@ const STRANGER: &str = "not-a-real-setting";
 fn spec() -> Schema {
     let mut d = Diagnostics::new();
     let s = schema_from_yaml(SPEC, &mut d);
-    assert!(!d.has_errors(), "the shipped specification does not load:\n{}", d.render());
+    assert!(
+        !d.has_errors(),
+        "the shipped specification does not load:\n{}",
+        d.render()
+    );
     s
 }
 
@@ -91,18 +95,23 @@ fn said_about(group: &str) -> Said {
     let wrong_shape = validated("a line of text where a block belongs\n", group);
 
     let find = |d: &Diagnostics, rule: &str| -> Option<String> {
-        d.items().iter().find(|i| i.rule == rule).map(|i| i.message.clone())
+        d.items()
+            .iter()
+            .find(|i| i.rule == rule)
+            .map(|i| i.message.clone())
     };
 
     let unknown = find(&settings, "schema/unknown-field").and_then(|m| {
         m.strip_prefix(&format!("'{STRANGER}' is not "))
             .map(|rest| rest.trim_end_matches('.').to_string())
     });
-    let subject =
-        find(&settings, "schema/missing-field").and_then(|m| m.split(" must have ").next().map(str::to_string));
+    let subject = find(&settings, "schema/missing-field")
+        .and_then(|m| m.split(" must have ").next().map(str::to_string));
     let shape = find(&wrong_shape, "schema/wrong-shape").and_then(|m| {
         let after = m.split_once("a set of ")?.1;
-        after.split_once(" settings").map(|(noun, _)| noun.to_string())
+        after
+            .split_once(" settings")
+            .map(|(noun, _)| noun.to_string())
     });
 
     let fixes = settings
@@ -112,7 +121,12 @@ fn said_about(group: &str) -> Said {
         .map(|i| i.fix.clone())
         .collect();
 
-    Said { unknown, subject, shape, fixes }
+    Said {
+        unknown,
+        subject,
+        shape,
+        fixes,
+    }
 }
 
 /// A subject with its indefinite article taken off: `A credential reference` →
@@ -157,7 +171,10 @@ fn a_call_order_is_not_called_a_call_order_rule_in_one_sentence_and_a_call_order
     // meaning a slightly different thing — which is harder to notice and just
     // as much a second name for one group.
     let said = said_about("call-order");
-    assert_eq!(said.unknown.as_deref(), Some("something a call-order rule can have"));
+    assert_eq!(
+        said.unknown.as_deref(),
+        Some("something a call-order rule can have")
+    );
     assert_eq!(said.subject.as_deref(), Some("A call-order rule"));
     assert_eq!(said.shape.as_deref(), Some("call-order rule"));
 }
@@ -187,7 +204,10 @@ fn no_group_in_the_shipped_specification_is_given_two_names_by_one_report() {
         // way. Whole words, so `call-order` does not pass by sitting inside
         // `call-order rule`.
         assert!(
-            unknown.split_whitespace().collect::<Vec<_>>().windows(shape.split_whitespace().count())
+            unknown
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .windows(shape.split_whitespace().count())
                 .any(|w| w.join(" ") == shape),
             "'{group}' is \"{shape}\" in two sentences and \"{unknown}\" in the third"
         );
@@ -203,18 +223,25 @@ fn a_group_the_specification_describes_as_something_x_can_have_is_called_x_every
     // straight after pins the whole noun phrase.
     for group in group_names() {
         let said = said_about(&group);
-        let Some(unknown) = said.unknown.as_deref() else { continue };
+        let Some(unknown) = said.unknown.as_deref() else {
+            continue;
+        };
         if !unknown.starts_with("something ") {
             // `outcome:` describes itself the other way round — *"an outcome a
             // stage can end in"* — where the group is the LEAD noun and `can`
             // belongs to the stage. Nothing is owed by that shape here.
             continue;
         }
-        for name in [said.subject.as_deref().map(bare), said.shape.map(|s| bare(&s))]
-            .into_iter()
-            .flatten()
+        for name in [
+            said.subject.as_deref().map(bare),
+            said.shape.map(|s| bare(&s)),
+        ]
+        .into_iter()
+        .flatten()
         {
-            let full = unknown.split_once(" can ").map(|(owner, _)| bare(owner.trim_start_matches("something").trim()));
+            let full = unknown
+                .split_once(" can ")
+                .map(|(owner, _)| bare(owner.trim_start_matches("something").trim()));
             assert_eq!(
                 Some(name.clone()),
                 full,

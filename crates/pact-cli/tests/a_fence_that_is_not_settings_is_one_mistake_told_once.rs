@@ -85,7 +85,10 @@ fn example_with(name: &str, file: &str, body: &str) -> String {
     let _ = std::fs::remove_dir_all(&dst);
     copy_dir(std::path::Path::new(&example()), &dst);
     let p = dst.join(file);
-    assert!(p.exists(), "fixture drifted: {file} is not in the worked example");
+    assert!(
+        p.exists(),
+        "fixture drifted: {file} is not in the worked example"
+    );
     std::fs::write(&p, body).unwrap();
     dst.to_string_lossy().into_owned()
 }
@@ -133,13 +136,19 @@ fn problems(rendered: &str) -> Vec<String> {
 ///   a line that is not in their file.
 fn one_mistake_told_once(root: &str, file: &str, kind: &str) {
     let (ok, text) = run("check", root);
-    assert!(!ok, "a file with nowhere to put its settings must be refused:\n{text}");
+    assert!(
+        !ok,
+        "a file with nowhere to put its settings must be refused:\n{text}"
+    );
     assert!(
         text.contains("doc/front-matter-not-settings"),
         "the rule id has to be in the report:\n{text}"
     );
 
-    let mine: Vec<String> = problems(&text).into_iter().filter(|b| b.contains(file)).collect();
+    let mine: Vec<String> = problems(&text)
+        .into_iter()
+        .filter(|b| b.contains(file))
+        .collect();
     assert_eq!(
         mine.len(),
         1,
@@ -147,7 +156,10 @@ fn one_mistake_told_once(root: &str, file: &str, kind: &str) {
         mine.len()
     );
     let block = &mine[0];
-    assert!(block.contains(kind), "and it says what the fences held ({kind}):\n{block}");
+    assert!(
+        block.contains(kind),
+        "and it says what the fences held ({kind}):\n{block}"
+    );
     assert!(
         block.contains("Delete both '---' lines"),
         "and gives a fix a non-coder can carry out:\n{block}"
@@ -157,13 +169,19 @@ fn one_mistake_told_once(root: &str, file: &str, kind: &str) {
         "'content' is the loader's own word for the body of a prose file; the author never \
          typed it:\n{block}"
     );
-    assert!(!block.contains("Remove it"), "nothing in their file is named 'content':\n{block}");
+    assert!(
+        !block.contains("Remove it"),
+        "nothing in their file is named 'content':\n{block}"
+    );
 
     // Nothing acts on a tree that has been refused, and each door says so in the
     // one way a script can read.
     for cmd in ["show", "waits", "card"] {
         let (ok, text) = run(cmd, root);
-        assert!(!ok, "`pact {cmd}` must refuse the same tree, not print a document:\n{text}");
+        assert!(
+            !ok,
+            "`pact {cmd}` must refuse the same tree, not print a document:\n{text}"
+        );
     }
 }
 
@@ -196,7 +214,10 @@ fn a_list_above_the_line_of_a_field_file_is_told_once() {
 fn a_stray_sentence_above_the_line_of_a_self_file_is_told_once() {
     // The shape that used to arrive as FOUR errors, one of them naming a setting
     // the author never wrote.
-    let root = example_with_agent_md("self-scalar", &format!("---\nBe brief.\n---\n\n{SENTENCE}\n"));
+    let root = example_with_agent_md(
+        "self-scalar",
+        &format!("---\nBe brief.\n---\n\n{SENTENCE}\n"),
+    );
     one_mistake_told_once(&root, "agent.md", "some text");
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -217,14 +238,23 @@ fn a_fence_pair_holding_nothing_still_loads_clean() {
     // `.github/workflows/shared/*.md` whose fences hold only `#` comments.
     for (name, md) in [
         ("empty-fences", format!("---\n---\n\n{SENTENCE}\n")),
-        ("comment-fences", format!("---\n# a note to myself\n---\n\n{SENTENCE}\n")),
+        (
+            "comment-fences",
+            format!("---\n# a note to myself\n---\n\n{SENTENCE}\n"),
+        ),
     ] {
         let root = example_with(name, "agents/fraud-checker/instructions.md", &md);
         let (ok, text) = run("check", &root);
-        assert!(ok, "{name}: nothing is lost here, so nothing is refused:\n{text}");
+        assert!(
+            ok,
+            "{name}: nothing is lost here, so nothing is refused:\n{text}"
+        );
         // And the words arrive: the one door that prints the document agrees.
         let (ok, doc) = run("show", &root);
-        assert!(ok, "{name}: `pact show` prints a tree with no problems:\n{doc}");
+        assert!(
+            ok,
+            "{name}: `pact show` prints a tree with no problems:\n{doc}"
+        );
         assert!(
             doc.contains("NEVER approve a refund over 100 USD"),
             "{name}: the body of the file is in the document:\n{doc}"

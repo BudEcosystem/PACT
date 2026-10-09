@@ -191,7 +191,11 @@ fn nothing_vanished(case: &Case) {
             "{}: settings above the line still arrive.\ndocument: {document}\n{rendered}",
             case.name
         );
-        assert!(diags.is_empty(), "{}: nothing to complain about here.\n{rendered}", case.name);
+        assert!(
+            diags.is_empty(),
+            "{}: nothing to complain about here.\n{rendered}",
+            case.name
+        );
         return;
     };
 
@@ -256,10 +260,12 @@ fn nothing_vanished(case: &Case) {
         "{}: the caret belongs under what was refused, on line 2.\n{rendered}",
         case.name
     );
-    let note = d
-        .related
-        .first()
-        .unwrap_or_else(|| panic!("{}: the prose that was kept is pointed at too\n{rendered}", case.name));
+    let note = d.related.first().unwrap_or_else(|| {
+        panic!(
+            "{}: the prose that was kept is pointed at too\n{rendered}",
+            case.name
+        )
+    });
     let sentence_line = line_of(&case.md, SENTENCE);
     assert_eq!(
         note.span.line, sentence_line,
@@ -308,7 +314,9 @@ fn cases() -> Vec<Case> {
             // The same file saved by an editor that puts no blank line there.
             // Both layouts, because one of them was all the test used to see.
             name: "scalar-tight",
-            md: format!("---\nBe brief, and {TOP}\n---\nYou are a careful refund desk. {SENTENCE}.\n"),
+            md: format!(
+                "---\nBe brief, and {TOP}\n---\nYou are a careful refund desk. {SENTENCE}.\n"
+            ),
             top: TOP,
             kind: Some("some text"),
         },
@@ -357,10 +365,15 @@ fn a_fence_pair_holding_nothing_loses_nothing_and_says_nothing() {
         // Byte-for-byte the opencode fixture at
         // research/repos/filedef/opencode/packages/opencode/test/config/fixtures/empty-frontmatter.md
         // with this file's own sentence as the body.
-        ("opencode-shape", format!("---\n---\n\nYou are a careful refund desk. {SENTENCE}.\n")),
+        (
+            "opencode-shape",
+            format!("---\n---\n\nYou are a careful refund desk. {SENTENCE}.\n"),
+        ),
         (
             "comments-only",
-            format!("---\n# {TOP}, and log every refund\n---\n\nYou are a careful refund desk. {SENTENCE}.\n"),
+            format!(
+                "---\n# {TOP}, and log every refund\n---\n\nYou are a careful refund desk. {SENTENCE}.\n"
+            ),
         ),
     ] {
         let t = Tree::with_instructions(name, &md);
@@ -370,7 +383,11 @@ fn a_fence_pair_holding_nothing_loses_nothing_and_says_nothing() {
             "{name}: the body is the whole of a file with no front matter.\n{}",
             diags.render()
         );
-        assert!(diags.is_empty(), "{name}: this file is not a mistake.\n{}", diags.render());
+        assert!(
+            diags.is_empty(),
+            "{name}: this file is not a mistake.\n{}",
+            diags.render()
+        );
     }
 }
 
@@ -404,7 +421,12 @@ fn a_self_file_whose_fences_are_not_settings_invents_no_setting_to_hold_its_pros
         desk.to_json()
     );
     let reported: Vec<_> = diags.items().iter().filter(|d| d.rule == RULE).collect();
-    assert_eq!(reported.len(), 1, "and the one mistake is reported once:\n{}", diags.render());
+    assert_eq!(
+        reported.len(),
+        1,
+        "and the one mistake is reported once:\n{}",
+        diags.render()
+    );
     assert_eq!(
         diags.items().len(),
         1,
@@ -422,7 +444,11 @@ fn an_unfinished_file_with_no_text_below_the_fences_is_left_alone() {
     // fails if the quiet arm starts eating whole files rather than merely staying
     // silent.
     for (case, md, must_survive) in [
-        ("blank-scalar", "---\nBe brief.\n---\n\n   \n", Some("Be brief.")),
+        (
+            "blank-scalar",
+            "---\nBe brief.\n---\n\n   \n",
+            Some("Be brief."),
+        ),
         ("blank-empty", "---\n---\n\n", None),
     ] {
         let t = Tree::with_instructions(case, md);
@@ -436,7 +462,12 @@ fn an_unfinished_file_with_no_text_below_the_fences_is_left_alone() {
             .get("agents")
             .and_then(|a| a.get("desk"))
             .and_then(|d| d.get("instructions"))
-            .unwrap_or_else(|| panic!("{case}: the file still contributes its field: {}", node.to_json()));
+            .unwrap_or_else(|| {
+                panic!(
+                    "{case}: the file still contributes its field: {}",
+                    node.to_json()
+                )
+            });
         if let Some(words) = must_survive {
             assert!(
                 instructions.to_json().to_string().contains(words),
@@ -466,9 +497,17 @@ fn the_body_and_field_conflict_is_refused_once_and_the_discard_is_pinned() {
         &format!("---\ncontent: from the top\n---\n\n{SENTENCE}.\n"),
     );
     let (node, diags) = t.load();
-    let conflicts: Vec<_> =
-        diags.items().iter().filter(|d| d.rule == "doc/body-and-field").collect();
-    assert_eq!(conflicts.len(), 1, "expected exactly one conflict report.\n{}", diags.render());
+    let conflicts: Vec<_> = diags
+        .items()
+        .iter()
+        .filter(|d| d.rule == "doc/body-and-field")
+        .collect();
+    assert_eq!(
+        conflicts.len(),
+        1,
+        "expected exactly one conflict report.\n{}",
+        diags.render()
+    );
     assert_eq!(
         conflicts[0].severity,
         Severity::Error,

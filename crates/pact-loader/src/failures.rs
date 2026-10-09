@@ -74,7 +74,13 @@ pub fn check(document: &Node, schema: &Schema, diags: &mut Diagnostics) {
                 inputs: lines(&shapes, w.get("accepts")),
                 answers: lines(&shapes, w.get("answers-with")),
             };
-            undone_by(&flow, &format!("the workflow '{name}'"), Some(&gives), undo, diags);
+            undone_by(
+                &flow,
+                &format!("the workflow '{name}'"),
+                Some(&gives),
+                undo,
+                diags,
+            );
         }
         flow.own_limits(diags);
         if let Some(steps) = w.get("steps").and_then(Node::as_map) {
@@ -275,9 +281,7 @@ fn undone_by(flow: &Flow, who: &str, gives: Option<&Gives>, undo: &Entry, diags:
                  back.",
                 capital(who)
             ),
-            format!(
-                "Name a write that reverses it, whose `takes:` is filled from {given}."
-            ),
+            format!("Name a write that reverses it, whose `takes:` is filled from {given}."),
         ));
         return;
     }
@@ -843,9 +847,9 @@ impl<'a> Flow<'a> {
         made: &BTreeSet<String>,
     ) -> Option<&'a str> {
         let waits = || {
-            steps
-                .iter()
-                .filter(|(n, e)| n.as_str() != wait && workflows::does(&e.node) == Some("ask-someone"))
+            steps.iter().filter(|(n, e)| {
+                n.as_str() != wait && workflows::does(&e.node) == Some("ask-someone")
+            })
         };
         let quiet = waits().filter_map(|(_, e)| {
             e.node

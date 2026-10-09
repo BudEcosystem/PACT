@@ -134,13 +134,25 @@ pub fn parse_yaml_at(text: &str, file: &Utf8Path, offset: Offset) -> Result<Node
         return Err(Box::new(d));
     }
 
-    Ok(builder.root.take().unwrap_or_else(|| Node::null(Span::whole_file(file))))
+    Ok(builder
+        .root
+        .take()
+        .unwrap_or_else(|| Node::null(Span::whole_file(file))))
 }
 
 /// One frame of the parse stack: a container being filled.
 enum Frame {
-    Seq { items: Vec<Node>, start: Marker, anchor: usize },
-    Map { map: Map, start: Marker, anchor: usize, pending_key: Option<(String, Span)> },
+    Seq {
+        items: Vec<Node>,
+        start: Marker,
+        anchor: usize,
+    },
+    Map {
+        map: Map,
+        start: Marker,
+        anchor: usize,
+        pending_key: Option<(String, Span)>,
+    },
 }
 
 /// A defined `&name` shortcut, and the only two places a copy of it can be
@@ -200,7 +212,11 @@ mod shortcut {
 
     impl Priced {
         pub(super) fn of(node: &Node) -> Self {
-            Self { size: node.node_count(), depth: node.depth(), text: node.text_bytes() }
+            Self {
+                size: node.node_count(),
+                depth: node.depth(),
+                text: node.text_bytes(),
+            }
         }
     }
 
@@ -218,7 +234,10 @@ mod shortcut {
         pub(super) fn kept(node: &Node, priced: Priced) -> Self {
             #[cfg(test)]
             COPIES_MADE.with(|c| c.set(c.get() + 1));
-            Self { node: node.clone(), priced }
+            Self {
+                node: node.clone(),
+                priced,
+            }
         }
 
         /// Make the copy that **using** `*name` takes. Same rule: every limit
@@ -408,7 +427,10 @@ impl<'a> Builder<'a> {
             return None;
         }
         match self.stack.last() {
-            Some(Frame::Map { pending_key: Some((_, key_span)), .. }) => Some(key_span.clone()),
+            Some(Frame::Map {
+                pending_key: Some((_, key_span)),
+                ..
+            }) => Some(key_span.clone()),
             _ => None,
         }
     }
@@ -509,7 +531,9 @@ impl<'a> Builder<'a> {
         match self.stack.last_mut() {
             None => self.root = Some(node),
             Some(Frame::Seq { items, .. }) => items.push(node),
-            Some(Frame::Map { map, pending_key, .. }) => match pending_key.take() {
+            Some(Frame::Map {
+                map, pending_key, ..
+            }) => match pending_key.take() {
                 None => {
                     // This node is a key. Only text keys are supported: a
                     // non-coder never needs a complex key, and allowing them
@@ -602,10 +626,22 @@ impl MarkedEventReceiver for Builder<'_> {
             }
 
             Event::SequenceStart(anchor, _) => {
-                self.push(Frame::Seq { items: Vec::new(), start: mark, anchor }, mark);
+                self.push(
+                    Frame::Seq {
+                        items: Vec::new(),
+                        start: mark,
+                        anchor,
+                    },
+                    mark,
+                );
             }
             Event::SequenceEnd => {
-                if let Some(Frame::Seq { items, start, anchor }) = self.stack.pop() {
+                if let Some(Frame::Seq {
+                    items,
+                    start,
+                    anchor,
+                }) = self.stack.pop()
+                {
                     let span = self.container_span(start, mark);
                     self.emit(Node::list(items, span), anchor);
                 }
@@ -613,18 +649,31 @@ impl MarkedEventReceiver for Builder<'_> {
 
             Event::MappingStart(anchor, _) => {
                 self.push(
-                    Frame::Map { map: Map::new(), start: mark, anchor, pending_key: None },
+                    Frame::Map {
+                        map: Map::new(),
+                        start: mark,
+                        anchor,
+                        pending_key: None,
+                    },
                     mark,
                 );
             }
             Event::MappingEnd => {
-                if let Some(Frame::Map { map, start, anchor, pending_key }) = self.stack.pop() {
+                if let Some(Frame::Map {
+                    map,
+                    start,
+                    anchor,
+                    pending_key,
+                }) = self.stack.pop()
+                {
                     if let Some((key, key_span)) = pending_key {
                         self.fail(Diagnostic::error(
                             "doc/missing-value",
                             key_span,
                             format!("'{key}' was named but never given a value."),
-                            format!("Write a value after the colon, like `{key}: your value here`."),
+                            format!(
+                                "Write a value after the colon, like `{key}: your value here`."
+                            ),
                         ));
                         return;
                     }
@@ -716,7 +765,13 @@ impl Builder<'_> {
     fn container_span(&self, start: Marker, end: Marker) -> Span {
         let s = start.index() + self.offset.byte;
         let e = (end.index() + self.offset.byte).max(s + 1);
-        Span::new(self.file, start.line() + self.offset.line, start.col() + 1, s, e)
+        Span::new(
+            self.file,
+            start.line() + self.offset.line,
+            start.col() + 1,
+            s,
+            e,
+        )
     }
 }
 
@@ -952,7 +1007,10 @@ pub fn whole_number_written(text: &str) -> Option<String> {
         // back past is a zero: `2.50e1` is 25, and `2.55e1` is not a whole
         // number.
         let cut = usize::try_from(-shift).ok()?;
-        if cut > digits.len() || !digits.as_bytes()[digits.len() - cut..].iter().all(|b| *b == b'0')
+        if cut > digits.len()
+            || !digits.as_bytes()[digits.len() - cut..]
+                .iter()
+                .all(|b| *b == b'0')
         {
             return None;
         }
@@ -966,7 +1024,11 @@ pub fn whole_number_written(text: &str) -> Option<String> {
         digits.push_str(&"0".repeat(shift as usize));
     }
     let trimmed = digits.trim_start_matches('0');
-    Some(if trimmed.is_empty() { "0".to_string() } else { trimmed.to_string() })
+    Some(if trimmed.is_empty() {
+        "0".to_string()
+    } else {
+        trimmed.to_string()
+    })
 }
 
 /// True when `text` spells a whole number and the `f64` it parses to would not
@@ -1030,7 +1092,10 @@ mod tests {
     fn spans_point_at_the_line_the_author_sees() {
         let n = parse("name: refund\ndescription: handles refunds\n");
         let desc = n.get("description").unwrap();
-        assert_eq!(desc.span.line, 2, "line numbers must match the editor's gutter");
+        assert_eq!(
+            desc.span.line, 2,
+            "line numbers must match the editor's gutter"
+        );
         assert_eq!(desc.as_str(), Some("handles refunds"));
     }
 
@@ -1200,24 +1265,50 @@ mod tests {
             "-9223372036854775809",
             "999999999999999999990e-1",
         ] {
-            assert!(whole_number_past_holding(written), "`{written}` does not survive an f64");
-            assert!(whole_number_written(written).is_some(), "`{written}` spells a whole number");
+            assert!(
+                whole_number_past_holding(written),
+                "`{written}` does not survive an f64"
+            );
+            assert!(
+                whole_number_written(written).is_some(),
+                "`{written}` spells a whole number"
+            );
         }
         // `1.5e30` is on this side of the line and belongs there: it spells the
         // whole number 1500000000000000000000000000000 and an `f64` writes that
         // back digit for digit.
-        for held in ["1e10", "1e20", "10000000000000000000", "42", "0", "-0.0e5", "1.5e30"] {
-            assert!(!whole_number_past_holding(held), "`{held}` survives an f64 exactly");
+        for held in [
+            "1e10",
+            "1e20",
+            "10000000000000000000",
+            "42",
+            "0",
+            "-0.0e5",
+            "1.5e30",
+        ] {
+            assert!(
+                !whole_number_past_holding(held),
+                "`{held}` survives an f64 exactly"
+            );
         }
         // A figure that is not a whole number is not this rule's business, at
         // either scale: ordinary rounding near one is what every double does.
         for fraction in ["1.5", "0.7", "0.1000000000000000055511151231257827", "1e-5"] {
-            assert!(whole_number_written(fraction).is_none(), "`{fraction}` is not a whole number");
-            assert!(!whole_number_past_holding(fraction), "`{fraction}` is not this rule's");
+            assert!(
+                whole_number_written(fraction).is_none(),
+                "`{fraction}` is not a whole number"
+            );
+            assert!(
+                !whole_number_past_holding(fraction),
+                "`{fraction}` is not this rule's"
+            );
         }
         // And a figure no double can hold at all belongs to the `is_finite`
         // arm, which keeps the text for its own reasons.
-        assert!(!whole_number_past_holding("1e999"), "`1e999` is the other arm's");
+        assert!(
+            !whole_number_past_holding("1e999"),
+            "`1e999` is the other arm's"
+        );
         assert_eq!(whole_number_written("2.50e1").as_deref(), Some("25"));
         assert_eq!(whole_number_written("2.55e1"), None);
         assert_eq!(whole_number_written("nan"), None);
@@ -1228,7 +1319,11 @@ mod tests {
         let err = parse_yaml("model: a\nmodel: b\n", Utf8Path::new("t.yaml")).unwrap_err();
         assert_eq!(err.rule, "doc/duplicate-key");
         assert_eq!(err.span.line, 2);
-        assert_eq!(err.related.len(), 1, "must point at the first occurrence too");
+        assert_eq!(
+            err.related.len(),
+            1,
+            "must point at the first occurrence too"
+        );
         assert_eq!(err.related[0].span.line, 1);
     }
 
@@ -1236,7 +1331,10 @@ mod tests {
     fn missing_value_is_reported_against_the_key() {
         let err = parse_yaml("agents:\n  a: 1\n  b:\n", Utf8Path::new("t.yaml"));
         // `b:` with nothing after it is a null value in YAML, which is legal.
-        assert!(err.is_ok(), "an empty value is legal YAML and means 'nothing'");
+        assert!(
+            err.is_ok(),
+            "an empty value is legal YAML and means 'nothing'"
+        );
     }
 
     #[test]
@@ -1244,7 +1342,10 @@ mod tests {
         let err = parse_yaml("name: [unclosed\n", Utf8Path::new("t.yaml")).unwrap_err();
         assert_eq!(err.rule, "doc/yaml-syntax");
         assert!(err.fix.contains("indentation") || err.fix.contains("quote"));
-        assert!(!err.message.contains("Token"), "parser jargon must not leak to the author");
+        assert!(
+            !err.message.contains("Token"),
+            "parser jargon must not leak to the author"
+        );
     }
 
     #[test]
@@ -1257,7 +1358,10 @@ mod tests {
     #[test]
     fn anchors_and_aliases_resolve() {
         let n = parse("base: &b\n  model: fast\nuse: *b\n");
-        assert_eq!(n.get("use").unwrap().get("model").unwrap().as_str(), Some("fast"));
+        assert_eq!(
+            n.get("use").unwrap().get("model").unwrap().as_str(),
+            Some("fast")
+        );
     }
 
     /// The alias bomb, as small as it can be written: a nine-item list, then
@@ -1265,7 +1369,8 @@ mod tests {
     /// Every level multiplies by nine, so `levels` of 5 is 597,871 settings in
     /// seven lines of text.
     fn alias_bomb(levels: usize) -> String {
-        let mut s = String::from("n0: &n0 [\"x\",\"x\",\"x\",\"x\",\"x\",\"x\",\"x\",\"x\",\"x\"]\n");
+        let mut s =
+            String::from("n0: &n0 [\"x\",\"x\",\"x\",\"x\",\"x\",\"x\",\"x\",\"x\",\"x\"]\n");
         for i in 1..=levels {
             let prev = i - 1;
             let refs = vec![format!("*n{prev}"); 9].join(",");
@@ -1312,8 +1417,14 @@ mod tests {
         // read and once as it is kept. So the budget now runs out on the
         // *first* of n5's nine copies of n4, at line 6 column 10, where before
         // it lasted until the second copy at column 14.
-        assert_eq!(err.span.line, 6, "point at the line whose shortcut went over");
-        assert_eq!(err.span.col, 10, "at the copy that went over, not at the start of the line");
+        assert_eq!(
+            err.span.line, 6,
+            "point at the line whose shortcut went over"
+        );
+        assert_eq!(
+            err.span.col, 10,
+            "at the copy that went over, not at the start of the line"
+        );
         assert!(
             err.message.contains("shortcut") && err.message.contains("200000 settings"),
             "say what went over and by what: {}",
@@ -1374,18 +1485,34 @@ mod tests {
     #[test]
     fn the_size_limit_names_something_the_author_can_actually_do() {
         let err = parse_yaml(&alias_bomb(5), Utf8Path::new("t.yaml")).unwrap_err();
-        assert!(err.fix.contains("Write the values you need here out in full"), "{}", err.fix);
-        assert!(err.fix.contains("split them across several files"), "{}", err.fix);
+        assert!(
+            err.fix
+                .contains("Write the values you need here out in full"),
+            "{}",
+            err.fix
+        );
+        assert!(
+            err.fix.contains("split them across several files"),
+            "{}",
+            err.fix
+        );
 
         // Both ways of being too big have to read as English, not just the one
         // that was fixed first.
         let big = parse_yaml(&text_bomb(150_000, 60), Utf8Path::new("t.yaml")).unwrap_err();
-        assert!(big.fix.contains("Write the values you need here out in full"), "{}", big.fix);
+        assert!(
+            big.fix
+                .contains("Write the values you need here out in full"),
+            "{}",
+            big.fix
+        );
 
         // The reader is a support lead, not a programmer.
         for d in [&err, &big] {
             let all = format!("{} {}", d.message, d.fix).to_lowercase();
-            for jargon in ["alias", "anchor", "node", "yaml", "expand", "allocat", "recurs"] {
+            for jargon in [
+                "alias", "anchor", "node", "yaml", "expand", "allocat", "recurs",
+            ] {
                 assert!(!all.contains(jargon), "diagnostic leaked '{jargon}': {all}");
             }
         }
@@ -1405,8 +1532,16 @@ mod tests {
         let err = parse_yaml(&s, Utf8Path::new("t.yaml")).unwrap_err();
         assert_eq!(err.rule, "doc/too-large");
         assert!(err.message.contains("too much writing"), "{}", err.message);
-        assert!(err.fix.contains("files of their own beside this one"), "{}", err.fix);
-        assert!(!err.message.contains("shortcut"), "no shortcut is involved: {}", err.message);
+        assert!(
+            err.fix.contains("files of their own beside this one"),
+            "{}",
+            err.fix
+        );
+        assert!(
+            !err.message.contains("shortcut"),
+            "no shortcut is involved: {}",
+            err.message
+        );
     }
 
     #[test]
@@ -1445,11 +1580,18 @@ mod tests {
         for i in 0..40 {
             doc.push_str(&format!("z{i}: 1\n"));
         }
-        assert!(doc.len() < 1000, "a file this small must not be called too large: {}", doc.len());
+        assert!(
+            doc.len() < 1000,
+            "a file this small must not be called too large: {}",
+            doc.len()
+        );
 
         let err = parse_yaml(&doc, Utf8Path::new("t.yaml")).unwrap_err();
         assert_eq!(err.rule, "doc/too-large");
-        let blamed = doc.lines().nth(err.span.line - 1).expect("the caret lands inside the file");
+        let blamed = doc
+            .lines()
+            .nth(err.span.line - 1)
+            .expect("the caret lands inside the file");
         assert!(
             blamed.contains("*n"),
             "the caret is on an ordinary line the author cannot act on: `{blamed}`"
@@ -1494,7 +1636,10 @@ mod tests {
             nested = format!("&n{i} [{nested}]");
         }
         let doc = format!("d: {nested}\n");
-        assert!(!doc.contains('*'), "no shortcut is used anywhere in this document");
+        assert!(
+            !doc.contains('*'),
+            "no shortcut is used anywhere in this document"
+        );
 
         let err = parse_yaml(&doc, Utf8Path::new("t.yaml")).unwrap_err();
         assert_eq!(err.rule, "doc/too-large");
@@ -1506,7 +1651,9 @@ mod tests {
         // The reader is a support lead, not a programmer — the same bar the two
         // wordings either side of this one are held to.
         let all = format!("{} {}", err.message, err.fix).to_lowercase();
-        for jargon in ["alias", "anchor", "node", "yaml", "expand", "allocat", "recurs"] {
+        for jargon in [
+            "alias", "anchor", "node", "yaml", "expand", "allocat", "recurs",
+        ] {
             assert!(!all.contains(jargon), "diagnostic leaked '{jargon}': {all}");
         }
     }
@@ -1562,7 +1709,10 @@ mod tests {
             let n = parse_yaml("small: &s [1,2]\nuse: *s\n", Utf8Path::new("t.yaml"));
             assert!(n.is_ok(), "a two-item shortcut is not a bomb");
         });
-        assert_eq!(honest_use, 2, "one copy kept where it is defined, one taken where it is used");
+        assert_eq!(
+            honest_use, 2,
+            "one copy kept where it is defined, one taken where it is used"
+        );
 
         // Refused at the USE. The block fits, and fits again as the copy `&big`
         // keeps — 70,002 settings, then 70,001 more — so one `*big` is what
@@ -1573,7 +1723,11 @@ mod tests {
             let doc = format!("big: &big [{fits_once}]\nuse: *big\n");
             let e = parse_yaml(&doc, Utf8Path::new("t.yaml")).unwrap_err();
             assert_eq!(e.rule, "doc/too-large", "one more copy is over the limit");
-            assert!(e.message.contains("shortcut"), "the use is what went over: {}", e.message);
+            assert!(
+                e.message.contains("shortcut"),
+                "the use is what went over: {}",
+                e.message
+            );
         });
         assert_eq!(
             refused_at_the_use, 1,
@@ -1587,9 +1741,15 @@ mod tests {
         let items = vec!["\"x\""; 150_000].join(",");
         let refused_at_the_definition = copies_made_by(|| {
             let doc = format!("big: &big [{items}]\n");
-            assert!(!doc.contains('*'), "this document uses no shortcut, it only defines one");
+            assert!(
+                !doc.contains('*'),
+                "this document uses no shortcut, it only defines one"
+            );
             let e = parse_yaml(&doc, Utf8Path::new("t.yaml")).unwrap_err();
-            assert_eq!(e.rule, "doc/too-large", "keeping the copy is over the limit");
+            assert_eq!(
+                e.rule, "doc/too-large",
+                "keeping the copy is over the limit"
+            );
             assert!(
                 e.message.contains("Naming this for reuse"),
                 "say that naming it is what costs: {}",
@@ -1662,7 +1822,10 @@ mod tests {
             refused_any |= literal.is_err();
             loaded_any |= literal.is_ok();
         }
-        assert!(refused_any && loaded_any, "the sweep never crossed the limit, so it proved nothing");
+        assert!(
+            refused_any && loaded_any,
+            "the sweep never crossed the limit, so it proved nothing"
+        );
     }
 
     #[test]
@@ -1686,8 +1849,12 @@ mod tests {
 
     #[test]
     fn offset_shifts_spans_for_embedded_fragments() {
-        let n = parse_yaml_at("name: x\n", Utf8Path::new("t.md"), Offset { line: 3, byte: 40 })
-            .unwrap();
+        let n = parse_yaml_at(
+            "name: x\n",
+            Utf8Path::new("t.md"),
+            Offset { line: 3, byte: 40 },
+        )
+        .unwrap();
         assert_eq!(n.get("name").unwrap().span.line, 4);
         assert!(n.get("name").unwrap().span.byte_start >= 40);
     }
@@ -1699,8 +1866,15 @@ mod tests {
         // value underlined the following line — which was correct.
         let n = parse("description:\nkind: conversation\n");
         let desc = n.get("description").unwrap();
-        assert_eq!(desc.value, Value::Null, "nothing after the colon means nothing");
-        assert_eq!(desc.span.line, 1, "the line the author left empty, not the one after it");
+        assert_eq!(
+            desc.value,
+            Value::Null,
+            "nothing after the colon means nothing"
+        );
+        assert_eq!(
+            desc.span.line, 1,
+            "the line the author left empty, not the one after it"
+        );
         assert_eq!(desc.span.col, 1);
         assert_eq!(
             &"description:\nkind: conversation\n"[desc.span.byte_start..desc.span.byte_end],
@@ -1719,7 +1893,10 @@ mod tests {
         let desc = n.get("description").unwrap();
         assert_eq!(desc.span.line, 2, "line 3 of a two-line file is nowhere");
         assert!(desc.span.byte_end <= text.len());
-        assert!(desc.span.byte_end > desc.span.byte_start, "an empty span underlines nothing");
+        assert!(
+            desc.span.byte_end > desc.span.byte_start,
+            "an empty span underlines nothing"
+        );
     }
 
     #[test]
@@ -1730,7 +1907,11 @@ mod tests {
         let desc = n.get("description").unwrap();
         assert_eq!(desc.value, Value::Str(String::new()));
         assert_eq!(desc.span.line, 1);
-        assert_eq!(desc.span.col, "description: ".len() + 1, "at the quotes, not at the name");
+        assert_eq!(
+            desc.span.col,
+            "description: ".len() + 1,
+            "at the quotes, not at the name"
+        );
     }
 
     #[test]
@@ -1740,7 +1921,11 @@ mod tests {
         // borrow, and asking for one would panic or point at the wrong entry.
         let n = parse("a:\nb: 1\n");
         assert_eq!(n.get("a").unwrap().span.line, 1);
-        assert_eq!(n.get("b").unwrap().span.line, 2, "the next setting is untouched");
+        assert_eq!(
+            n.get("b").unwrap().span.line,
+            2,
+            "the next setting is untouched"
+        );
     }
 
     #[test]

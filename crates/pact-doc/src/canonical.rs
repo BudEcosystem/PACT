@@ -165,14 +165,22 @@ mod tests {
     fn field_order_does_not_move_the_digest() {
         let a = doc("name: X\ndescription: Y\nmodel: fast\n");
         let b = doc("model: fast\nname: X\ndescription: Y\n");
-        assert_eq!(digest(&a), digest(&b), "field order is serialisation, not meaning");
+        assert_eq!(
+            digest(&a),
+            digest(&b),
+            "field order is serialisation, not meaning"
+        );
     }
 
     #[test]
     fn list_order_does_move_the_digest() {
         let a = doc("steps: [fetch, summarise]\n");
         let b = doc("steps: [summarise, fetch]\n");
-        assert_ne!(digest(&a), digest(&b), "a pipeline's order is authored intent");
+        assert_ne!(
+            digest(&a),
+            digest(&b),
+            "a pipeline's order is authored intent"
+        );
     }
 
     #[test]

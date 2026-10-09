@@ -37,8 +37,11 @@ fn asking(name: &str, question: &str) -> std::path::PathBuf {
     std::fs::create_dir_all(dst.join("agents/desk")).unwrap();
     std::fs::create_dir_all(dst.join("agents/checker")).unwrap();
     std::fs::create_dir_all(dst.join("questions")).unwrap();
-    std::fs::write(dst.join("workspace.yaml"), "name: Probe\ndescription: A probe workspace.\n")
-        .unwrap();
+    std::fs::write(
+        dst.join("workspace.yaml"),
+        "name: Probe\ndescription: A probe workspace.\n",
+    )
+    .unwrap();
     std::fs::write(
         dst.join("agents/desk/agent.yaml"),
         "name: Desk\ndescription: Decides refunds.\ninstructions: Decide, then pay.\n\
@@ -68,8 +71,15 @@ fn question(asked_of: &str, escalates_to: &str) -> String {
 }
 
 fn check(root: &std::path::Path) -> String {
-    let out = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
-    format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr))
+    let out = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
+    format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    )
 }
 
 #[test]
@@ -107,14 +117,20 @@ fn escalating_to_an_agent_is_refused_too() {
         text.contains("loader/approves-its-own-work"),
         "escalation is where a gate ends up when the first person is away:\n{text}"
     );
-    assert!(text.contains("escalates to"), "the message names which field:\n{text}");
+    assert!(
+        text.contains("escalates to"),
+        "the message names which field:\n{text}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
 fn an_audience_that_is_not_an_agent_is_left_alone() {
     let root = asking("people", &question("support-leads", "duty-manager"));
-    let out = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
+    let out = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
     assert!(
         out.status.success(),
         "naming people is the whole point of the field:\n{}",
@@ -128,10 +144,20 @@ fn the_fix_is_a_line_that_leaves_a_tree_that_checks_clean() {
     // R24. The fix says to name an audience; typing one has to finish the job.
     let root = asking("typed", &question("desk", ""));
     let told = check(&root);
-    assert!(told.contains("support-leads"), "the fix offers something typeable:\n{told}");
+    assert!(
+        told.contains("support-leads"),
+        "the fix offers something typeable:\n{told}"
+    );
 
-    std::fs::write(root.join("questions/is-this-ok.yaml"), question("support-leads", "")).unwrap();
-    let after = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
+    std::fs::write(
+        root.join("questions/is-this-ok.yaml"),
+        question("support-leads", ""),
+    )
+    .unwrap();
+    let after = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
     assert!(
         after.status.success(),
         "following the fix has to finish the job:\n{}",

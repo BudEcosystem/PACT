@@ -43,10 +43,16 @@ fn with_rule(name: &str, body: &str) -> std::path::PathBuf {
     std::fs::write(dst.join(format!("interceptors/{name}.yaml")), body).unwrap();
     let agent = dst.join("agents/refund-desk/agent.yaml");
     let text = std::fs::read_to_string(&agent).unwrap();
-    assert!(text.contains("  - stop-runaway-refunds"), "fixture drifted: {agent:?}");
+    assert!(
+        text.contains("  - stop-runaway-refunds"),
+        "fixture drifted: {agent:?}"
+    );
     std::fs::write(
         &agent,
-        text.replace("  - stop-runaway-refunds", &format!("  - stop-runaway-refunds\n  - {name}")),
+        text.replace(
+            "  - stop-runaway-refunds",
+            &format!("  - stop-runaway-refunds\n  - {name}"),
+        ),
     )
     .unwrap();
     dst
@@ -65,7 +71,10 @@ fn copy_dir(src: &std::path::Path, dst: &std::path::Path) {
 }
 
 fn checking(root: &std::path::Path) -> String {
-    let out = pact().args(["check", root.to_str().unwrap()]).output().expect("runs");
+    let out = pact()
+        .args(["check", root.to_str().unwrap()])
+        .output()
+        .expect("runs");
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
 
@@ -108,8 +117,7 @@ fn a_moment_that_is_not_one_is_refused_wherever_in_the_list_it_sits() {
         ("head", "- step.message.before", "- step.banana.before"),
         ("tail", "- step.tool.before\n", "- step.banana.before\n"),
     ] {
-        let dst =
-            std::env::temp_dir().join(format!("pact-moments-{name}-{}", std::process::id()));
+        let dst = std::env::temp_dir().join(format!("pact-moments-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dst);
         copy_dir(&example(), &dst);
         let p = dst.join("interceptors/redact-card-numbers.yaml");
@@ -122,8 +130,14 @@ fn a_moment_that_is_not_one_is_refused_wherever_in_the_list_it_sits() {
             said.contains("'banana' is not a thing PACT knows about"),
             "the {name} of the list must be checked too:\n{said}"
         );
-        assert!(said.contains("redact-card-numbers.yaml:"), "must name the file and line:\n{said}");
-        assert!(said.contains("Change it to one of: message, reasoning, tool"), "{said}");
+        assert!(
+            said.contains("redact-card-numbers.yaml:"),
+            "must name the file and line:\n{said}"
+        );
+        assert!(
+            said.contains("Change it to one of: message, reasoning, tool"),
+            "{said}"
+        );
         let _ = std::fs::remove_dir_all(&dst);
     }
 }
@@ -149,14 +163,20 @@ fn a_rule_no_named_moment_can_carry_out_is_still_refused_when_when_is_a_list() {
          \x20 - if payments is called more than 1 time in one run, stop and say \"twice\"\n",
     );
     let said = checking(&root);
-    assert!(said.contains("rule: schema/rule-at-the-wrong-moment"), "{said}");
+    assert!(
+        said.contains("rule: schema/rule-at-the-wrong-moment"),
+        "{said}"
+    );
     // Both moments named, so the author can see which lines are the problem
     // rather than being told the file is wrong somewhere.
     assert!(
         said.contains("`step.message.before`, `turn.message.after`"),
         "the refusal must name every moment the rule was bound to:\n{said}"
     );
-    assert!(said.contains("Change `when:` to one of: step.tool.before"), "{said}");
+    assert!(
+        said.contains("Change `when:` to one of: step.tool.before"),
+        "{said}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -204,7 +224,10 @@ fn one_moment_written_on_the_when_line_with_no_dash_still_loads() {
          \x20 - replace anything that looks like a phone number with \"[gone]\"\n",
     );
     let said = checking(&root);
-    assert!(said.contains("rule: schema/nothing-happens-there"), "{said}");
+    assert!(
+        said.contains("rule: schema/nothing-happens-there"),
+        "{said}"
+    );
     // The wording says "no rule is handed the run at X" and not "nothing in a
     // run ever reaches X", because the second is false wherever a WATCH binds
     // at an address an interceptor may not — `step.tool.completed` was exactly
@@ -281,10 +304,9 @@ fn the_moments_a_rule_may_name_are_the_ones_the_harness_really_hands_it() {
         .filter_map(|n| n.as_str().map(str::to_string))
         .collect();
 
-    let python = std::fs::read_to_string(
-        repo().join("adapters/python/src/pact_adapters/interceptors.py"),
-    )
-    .unwrap();
+    let python =
+        std::fs::read_to_string(repo().join("adapters/python/src/pact_adapters/interceptors.py"))
+            .unwrap();
     let block = python
         .split_once("WIRED: Mapping[str, Carries] = {")
         .expect("interceptors.py declares WIRED")
@@ -292,12 +314,19 @@ fn the_moments_a_rule_may_name_are_the_ones_the_harness_really_hands_it() {
         .split_once("\n}")
         .unwrap()
         .0;
-    let mut wired: Vec<String> =
-        block.split('"').skip(1).step_by(2).map(str::to_string).collect();
+    let mut wired: Vec<String> = block
+        .split('"')
+        .skip(1)
+        .step_by(2)
+        .map(str::to_string)
+        .collect();
 
     listed.sort();
     wired.sort();
-    assert!(!wired.is_empty(), "nothing parsed out of WIRED — it changed shape");
+    assert!(
+        !wired.is_empty(),
+        "nothing parsed out of WIRED — it changed shape"
+    );
     assert_eq!(
         listed, wired,
         "the schema and the harness disagree about which moments hand a rule the run"

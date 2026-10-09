@@ -107,10 +107,13 @@ fn holes_in(text: &str) -> Vec<String> {
         }
         let start = i + 1;
         let mut j = start;
-        while j < bytes.len() && (bytes[j].is_ascii_lowercase() || bytes[j].is_ascii_digit() || bytes[j] == b'-') {
+        while j < bytes.len()
+            && (bytes[j].is_ascii_lowercase() || bytes[j].is_ascii_digit() || bytes[j] == b'-')
+        {
             j += 1;
         }
-        if j > start && j < bytes.len() && bytes[j] == b'>' && bytes[start].is_ascii_alphanumeric() {
+        if j > start && j < bytes.len() && bytes[j] == b'>' && bytes[start].is_ascii_alphanumeric()
+        {
             out.push(text[start..j].to_owned());
             i = j + 1;
         } else {
@@ -140,8 +143,10 @@ fn unescape(text: &str) -> String {
     if !text.contains("<<") {
         return text.to_owned();
     }
-    text.replace("<<", "\u{1}").replace(">>", "\u{2}")
-        .replace('\u{1}', "<").replace('\u{2}', ">")
+    text.replace("<<", "\u{1}")
+        .replace(">>", "\u{2}")
+        .replace('\u{1}', "<")
+        .replace('\u{2}', ">")
 }
 
 /// Every hole anywhere in a document, so a pattern can be held to its own
@@ -206,7 +211,9 @@ pub(crate) fn arguments(
         if supplied.is_some() {
             return Err(Box::new(Diagnostic::error(
                 "loader/arguments-with-no-pattern",
-                caller.get(WITH).map_or_else(|| caller.span.clone(), |n| n.span.clone()),
+                caller
+                    .get(WITH)
+                    .map_or_else(|| caller.span.clone(), |n| n.span.clone()),
                 format!(
                     "'{name}' supplies arguments, and '{base_name}' takes none — it has no \
                      `expects:` line, so there is nothing for them to fill."
@@ -234,7 +241,10 @@ pub(crate) fn arguments(
                 "loader/a-pattern-takes-only-what-it-expects",
                 entry.key_span.clone(),
                 format!("'{base_name}' does not take an argument called '{given}'."),
-                format!("It takes: {}. Change the name, or add it to `expects:`.", names.join(", ")),
+                format!(
+                    "It takes: {}. Change the name, or add it to `expects:`.",
+                    names.join(", ")
+                ),
             )));
         }
     }
@@ -279,8 +289,10 @@ pub(crate) fn arguments(
             )));
         }
         if let Some(text) = entry.node.as_str() {
-            let loose: Vec<String> =
-                holes_in(text).into_iter().filter(|h| !forwards.contains(h)).collect();
+            let loose: Vec<String> = holes_in(text)
+                .into_iter()
+                .filter(|h| !forwards.contains(h))
+                .collect();
             if !loose.is_empty() {
                 return Err(Box::new(Diagnostic::error(
                     "loader/an-argument-is-not-a-pattern",
@@ -288,7 +300,11 @@ pub(crate) fn arguments(
                     format!(
                         "'{given}' here carries {}, and an argument is a figure rather than \
                          something with holes left in it.",
-                        loose.iter().map(|h| format!("`<{h}>`")).collect::<Vec<_>>().join(", ")
+                        loose
+                            .iter()
+                            .map(|h| format!("`<{h}>`"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
                     ),
                     "Write the words out. A hole is only passed on when this entry declares it \
                      under its own `expects:` — that is how one pattern hands a figure down to \
@@ -309,7 +325,9 @@ pub(crate) fn arguments(
                 .unwrap_or_default();
             return Err(Box::new(Diagnostic::error(
                 "loader/a-pattern-needs-what-it-expects",
-                caller.get(WITH).map_or_else(|| caller.span.clone(), |n| n.span.clone()),
+                caller
+                    .get(WITH)
+                    .map_or_else(|| caller.span.clone(), |n| n.span.clone()),
                 format!(
                     "'{name}' is based on the pattern '{base_name}', which needs an argument \
                      called '{want}'{what}, and nothing supplies one."
@@ -329,10 +347,9 @@ pub(crate) fn arguments(
         {
             return Err(Box::new(Diagnostic::error(
                 "loader/not-a-shape-a-figure-can-have",
-                spec.node.get("shape").map_or_else(
-                    || spec.key_span.clone(),
-                    |n| n.span.clone(),
-                ),
+                spec.node
+                    .get("shape")
+                    .map_or_else(|| spec.key_span.clone(), |n| n.span.clone()),
                 format!(
                     "'{base_name}' says '{want}' is `{written}`, and that is not a kind of \
                      figure this format knows."
@@ -340,7 +357,11 @@ pub(crate) fn arguments(
                 format!("Use one of: {}.", crate::values::SHAPES.join(", ")),
             )));
         }
-        if let Some(ty) = spec.node.get("shape").and_then(Node::as_str).and_then(crate::values::ty_of)
+        if let Some(ty) = spec
+            .node
+            .get("shape")
+            .and_then(Node::as_str)
+            .and_then(crate::values::ty_of)
             && pact_schema::coerce::check(&given.node, &ty).is_none()
         {
             return Err(Box::new(Diagnostic::error(
@@ -350,7 +371,10 @@ pub(crate) fn arguments(
                     "'{base_name}' says '{want}' is {}, and this is not one.",
                     ty.describe()
                 ),
-                format!("Write {} here, or change `shape:` on the pattern.", ty.describe()),
+                format!(
+                    "Write {} here, or change `shape:` on the pattern.",
+                    ty.describe()
+                ),
             )));
         }
         let _ = kind;
@@ -413,10 +437,7 @@ pub(crate) fn fill(node: &mut Node, args: &BTreeMap<String, Node>) {
 /// Refused at the pattern, because the alternative is that the hole survives
 /// into every document the pattern makes as literal text — the "loads and does
 /// nothing" failure, one level up and multiplied by the number of callers.
-pub(crate) fn holes_match_declarations(
-    name: &str,
-    pattern: &Node,
-) -> Result<(), Box<Diagnostic>> {
+pub(crate) fn holes_match_declarations(name: &str, pattern: &Node) -> Result<(), Box<Diagnostic>> {
     if let Some(key) = a_key_with_a_hole(pattern) {
         return Err(Box::new(Diagnostic::error(
             "loader/a-hole-nothing-fills",
@@ -448,7 +469,11 @@ pub(crate) fn holes_match_declarations(
     if loose.is_empty() {
         return Ok(());
     }
-    let named = loose.iter().map(|h| format!("`<{h}>`")).collect::<Vec<_>>().join(", ");
+    let named = loose
+        .iter()
+        .map(|h| format!("`<{h}>`"))
+        .collect::<Vec<_>>()
+        .join(", ");
     Err(Box::new(Diagnostic::error(
         "loader/a-hole-nothing-fills",
         pattern.span.clone(),
@@ -458,7 +483,11 @@ pub(crate) fn holes_match_declarations(
         ),
         format!(
             "Add {} under `expects:`, or write the words out.",
-            loose.iter().map(|h| format!("`{h}:`")).collect::<Vec<_>>().join(" and ")
+            loose
+                .iter()
+                .map(|h| format!("`{h}:`"))
+                .collect::<Vec<_>>()
+                .join(" and ")
         ),
     )))
 }
