@@ -1,6 +1,7 @@
-"""The core installs with three packages, and imports with only them.
+"""The core installs with three Python packages and the loader, and imports with only them.
 
-`pact-adapters` core is `pydantic-ai-slim`, `pyyaml` and `httpx`. Everything
+`pact-adapters` core is `pydantic-ai-slim`, `pyyaml` and `httpx`, and `pact-loader`, the wheel
+that carries the `pact` binary (no Python code) at exactly this package's version. Everything
 else — the five other frameworks' SDKs, the eval metrics, the test runner — is an
 optional extra named by the transport that binds it. A host running PACT on
 Pydantic AI (Bud Flow) installs the core and must be able to import every module
@@ -96,10 +97,10 @@ def test_every_core_module_imports_without_any_extra() -> None:
     assert not still, f"{still} import without their extra: they belong in the core"
 
 
-def test_the_core_is_three_packages_and_each_extra_exists() -> None:
+def test_the_core_is_three_packages_and_the_loader_and_each_extra_exists() -> None:
     project = tomllib.loads(MANIFEST.read_text())["project"]
     core = {d.split(">")[0].split("=")[0].split("<")[0].strip() for d in project["dependencies"]}
-    assert core == {"pydantic-ai-slim", "pyyaml", "httpx"}, core
+    assert core == {"pydantic-ai-slim", "pyyaml", "httpx", "pact-loader"}, core
     extras = project["optional-dependencies"]
     for module, extra in NEEDS_AN_EXTRA.items():
         assert extra in extras, f"{module} names the extra {extra!r}, which does not exist"
@@ -127,3 +128,22 @@ def test_the_report_names_the_extra_when_it_reaches_for_a_missing_framework() ->
     assert done.returncode == 0, done.stderr
     said = json.loads(done.stdout)
     assert "LangGraphTransport" in said and "pact-adapters[all]" in said, said
+
+
+def test_the_loader_is_pinned_at_the_version_both_are_released_at() -> None:
+    """`pact-adapters` reads the document `pact` writes, so it depends on exactly the loader of
+    its own version, and both are the Cargo workspace's version: one number to move per release.
+    A pin left behind would install last release's loader under this release's adapters."""
+    repo = ADAPTER.parents[1]
+    project = tomllib.loads(MANIFEST.read_text())["project"]
+    workspace = tomllib.loads((repo / "Cargo.toml").read_text())["workspace"]["package"]["version"]
+    assert project["version"] == workspace, (project["version"], workspace)
+    assert f"pact-loader=={workspace}" in project["dependencies"], project["dependencies"]
+    loader = tomllib.loads((repo / "pyproject.toml").read_text())
+    assert loader["project"]["name"] == "pact-loader"
+    assert loader["project"]["dynamic"] == ["version"], "the wheel's version is the crate's, never typed twice"
+    assert loader["tool"]["maturin"]["bindings"] == "bin"
+    assert loader["tool"]["maturin"]["manifest-path"] == "crates/pact-cli/Cargo.toml"
+    assert tomllib.loads((ADAPTER / "pyproject.toml").read_text())["tool"]["uv"]["sources"]["pact-loader"] == {
+        "path": "../.."
+    }

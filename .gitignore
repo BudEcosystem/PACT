@@ -30,3 +30,6 @@ __pycache__/
 # One-off HTML reports generated while reviewing. `docs/` is where a finding
 # that matters is written down; a rendered copy of one is not source.
 /site-report
+
+# What `scripts/build-wheels.sh` builds: the wheels and source distributions to publish.
+/dist

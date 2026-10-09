@@ -33,6 +33,7 @@ as an attachment; delete it and you still have a working agent.
 |---|---|
 | [Why PACT](#why-pact) | The problem, and why translation between frameworks fails |
 | [The idea](#the-idea) | Contract + strategy, and why that split is the whole design |
+| [Install](#install) | The loader and the adapters from wheels, or from source |
 | [Tutorial](#tutorial-from-nothing-to-a-governed-agent) | Nothing → a governed agent, in four steps you can run |
 | [The one rule](#the-one-rule) | A directory is a field; a field may be a directory |
 | [What you can express](#what-you-can-express) | The full feature surface, by tier |
@@ -117,6 +118,33 @@ oracle for framework portability, model substitution and self-improvement alike.
 > declares the agent's *what*; the resolver plans the *how* against a model
 > catalogue and an SLO cost model; and evals replace relational algebra as the
 > correctness oracle.
+
+---
+
+## Install
+
+```bash
+pip install pact-adapters        # the adapters and, through `pact-loader`, the `pact` binary
+pact check path/to/workspace     # the loader, on the PATH of the environment
+```
+
+Two distributions, released together at one version:
+
+| Distribution | What it is | Wheels |
+|---|---|---|
+| `pact-loader` | the `pact` binary (`crates/pact-cli`), no Python code | Linux, manylinux 2.28, x86_64 and aarch64; elsewhere `pip` builds it from the source distribution, which needs a Rust toolchain |
+| `pact-adapters` | the Python harness, the loader boundary, the Pydantic AI bridge, the commands; depends on `pact-loader` at its own version | one wheel for every platform |
+
+The core of `pact-adapters` is three Python packages (`pydantic-ai-slim`, `pyyaml`, `httpx`) and
+the loader; every other framework is an extra (`adapters/python/README.md`). The adapters find
+the loader by `PACT_BIN`, then a checkout's own build, then the `pact` the wheel installed beside
+the interpreter (whether or not that folder is on the `PATH`), then `pact` on the `PATH`.
+
+From a checkout, `cargo build --release -p pact-cli` builds the loader, and
+`./scripts/build-wheels.sh` builds every file that is published, checks it with `twine`, and
+proves the wheels installed in a fresh environment. `.github/workflows/wheels.yml` runs that
+script on x86_64 and on aarch64, and publishes to PyPI on a tag `v<version>`, through trusted
+publishing, once the owner approves the `pypi` environment.
 
 ---
 
@@ -615,8 +643,8 @@ nothing. The Python adapters now run on **Pydantic AI 2.54**, import none of its
 never hand it a ceiling nobody wrote, and keep one table (`pydantic_ai_registry.yaml`) of what
 each field becomes there, held by a parity suite (`tests/parity/`) that fails on any Pydantic AI
 name the table has never seen. Two calls to one tool in one step are answered one by one; a
-pattern a bundle brings is checked as a pattern; `tools/catalog.yaml` is the tool `catalog`. The core installs with three packages, and every other framework is an
-extra.
+pattern a bundle brings is checked as a pattern; `tools/catalog.yaml` is the tool `catalog`. The core installs with three Python packages and the loader's wheel, and every other
+framework is an extra.
 
 ---
 
@@ -626,11 +654,11 @@ extra.
 |---|---|
 | **Design** | Thesis, 28 binding decisions, FRD (120 requirements), 60-row refusal ledger — complete |
 | **Research** | 14 source-grounded studies, ~15,750 lines, over 140 repos (~15 GB) + 57 papers |
-| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **3624 tests (1147 Rust + 2477 adapter), clippy clean, TypeScript type-checked** |
+| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **3634 tests (1147 Rust + 2487 adapter), clippy clean, TypeScript type-checked** |
 | **Adapters** | **All 7 named targets**, proven against one shared conformance suite |
 
 ```bash
-./scripts/test-all.sh          # 3624 tests, Rust + 7 adapters, fully offline
+./scripts/test-all.sh          # 3634 tests, Rust + 7 adapters, fully offline
 ```
 
 **What is still owed** is not hidden — it lives in
@@ -666,6 +694,7 @@ crates/              Rust core
   pact-loader/       the Expansion Rule, and every check a schema cannot make
   pact-schema/       validation; the schema is data, not code
   pact-cli/          check · show · waits · discover · card — never runs your code
+pyproject.toml       the `pact-loader` wheel: `pact-cli`'s binary, built by maturin
 adapters/python/     reference harness, six transports, resolver, evals, learning
 adapters/typescript/ the second port — Node, smaller on purpose, and says so
 spec/schema.yaml     the specification, written in PACT (4,792 lines)

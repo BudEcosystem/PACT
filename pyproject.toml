@@ -1,0 +1,56 @@
+# `pact-loader`: the `pact` binary (`crates/pact-cli`) as a Python wheel, so `pip install
+# pact-adapters` puts the loader on the machine with no Rust toolchain and no checkout. maturin's
+# `bin` bindings build the crate in release and install the executable into the environment's
+# scripts folder (`<venv>/bin/pact`), where `pact_adapters.loader.pact_binary` looks for it.
+#
+# It sits at the root of the repository, not in the crate, because the source distribution is the
+# Cargo workspace and must also carry what the binary compiles in from outside the crates
+# (`include_str!` of `spec/` and `models/catalog.yaml`). `scripts/build-wheels.sh` builds it.
+#
+# The version is the Cargo workspace's (`Cargo.toml` `[workspace.package]`), and `pact-adapters`
+# depends on exactly it: a loader and the adapters that read its output are released together.
+
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
+[project]
+name = "pact-loader"
+description = "The PACT loader, `pact`: checks a PACT tree and prints the one document every runtime reads."
+readme = "crates/pact-cli/README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+dynamic = ["version"]
+classifiers = [
+    "Programming Language :: Rust",
+    "Operating System :: POSIX :: Linux",
+    "License :: OSI Approved :: Apache Software License",
+]
+
+[project.urls]
+Repository = "https://github.com/BudEcosystem/PACT"
+
+[tool.maturin]
+manifest-path = "crates/pact-cli/Cargo.toml"
+bindings = "bin"
+# The oldest glibc the wheel runs on: RHEL 8, Debian 10 and Ubuntu 18.10 onwards, on x86_64 and
+# aarch64 alike.
+compatibility = "manylinux_2_28"
+include = [
+    { path = "spec/**/*", format = "sdist" },
+    { path = "models/catalog.yaml", format = "sdist" },
+    { path = "LICENSE", format = "sdist" },
+]
+
+# A development install (the `[tool.uv.sources]` path entry in `adapters/python` and in Bud Agent
+# Flow) is rebuilt when the Rust, or what it compiles in, changes, not only when this file does.
+[tool.uv]
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "Cargo.toml" },
+    { file = "Cargo.lock" },
+    { file = "crates/*/Cargo.toml" },
+    { file = "crates/*/src/**/*.rs" },
+    { file = "spec/**/*" },
+    { file = "models/catalog.yaml" },
+]

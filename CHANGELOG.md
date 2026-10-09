@@ -8,7 +8,26 @@ holds that did not; the commits are listed under it for whoever wants the detail
 Running PACT trees in production on Pydantic AI 2.54, through
 [Bud Agent Flow](https://github.com/BudEcosystem/Bud-Agent-Flow), drove these changes. Every
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
-runs offline: 3624 tests, 1147 Rust and 2477 adapter.
+runs offline: 3634 tests, 1147 Rust and 2487 adapter.
+
+### The loader as a wheel (9 October)
+
+- **`pip install pact-adapters` brings the `pact` binary.** A new distribution, `pact-loader`
+  (`pyproject.toml` at the root, maturin `bin` bindings over `crates/pact-cli`), installs the
+  loader into the environment's scripts folder; `pact-adapters` depends on it at exactly its own
+  version. Wheels are manylinux 2.28 for x86_64 and aarch64, linked with zig so a newer build
+  machine asks for no newer glibc; the source distribution carries `spec/` and
+  `models/catalog.yaml`, which the binary compiles in.
+- **The loader is found beside the interpreter.** `pact_binary()` looks, after `PACT_BIN`, at a
+  checkout's own build, then at the `pact` the wheel installed beside this interpreter (with its
+  folder on no `PATH`), then on the `PATH`. A checkout's build now comes before anything on the
+  `PATH`: a development environment has the wheel installed too, built from the source as it was
+  at the last sync.
+- **One script builds and proves what is published.** `scripts/build-wheels.sh` builds the
+  wheels and the loader's source distribution, runs `twine check`, builds the loader from its
+  source distribution alone, and runs `pact check` from the installed wheels outside the
+  checkout. `.github/workflows/wheels.yml` runs it on both architectures and publishes on a tag,
+  through PyPI trusted publishing, after the owner approves.
 
 ### Review fixes to the parity round (9 October)
 

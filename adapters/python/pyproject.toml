@@ -10,8 +10,8 @@ license = "Apache-2.0"
 
 # The CORE: what `harness`, `ir`, the loader boundary, the Pydantic AI
 # bridge and every command need. Nothing else. A host that runs PACT on
-# Pydantic AI installs these three and gets no LangGraph, no AutoGen and no
-# DeepEval it never asked for; `test_the_core_needs_no_extra.py` imports every
+# Pydantic AI installs these three Python packages and the loader, and gets no
+# LangGraph, no AutoGen and no DeepEval it never asked for; `test_the_core_needs_no_extra.py` imports every
 # core module with the extras made unimportable, so a heavy import that creeps
 # into one fails the suite rather than somebody's install.
 dependencies = [
@@ -26,6 +26,12 @@ dependencies = [
     # imports it directly, and a dependency the source uses but the manifest
     # does not name is one that disappears on the next re-lock.
     "pyyaml>=6.0",
+    # The `pact` loader binary every command here shells out to, as a wheel
+    # (`pyproject.toml` at the repository root, built from `crates/pact-cli`).
+    # Exactly this package's own version: the loader writes the document these
+    # adapters read, and the two are released together.
+    # `test_the_core_needs_no_extra.py` holds the pin to the Cargo workspace's version.
+    "pact-loader==0.1.0",
 ]
 
 # One extra per transport, named by the framework it binds, so a workspace that
@@ -76,6 +82,11 @@ pact-improve = "pact_adapters.optimising:main"
 # The one table from PACT field to Pydantic AI construct (02P §4), written out
 # as a page a person reads.
 pact-mapping = "pact_adapters.pydantic_ai_registry:main"
+
+# A checkout builds the loader from the Rust beside it (maturin, through uv); a release
+# installs the published wheel.
+[tool.uv.sources]
+pact-loader = { path = "../.." }
 
 [build-system]
 requires = ["hatchling"]

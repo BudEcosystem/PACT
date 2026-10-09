@@ -68,17 +68,21 @@ def test_the_built_wheel_installed_alone_resolves_a_shipped_model_and_finds_the_
         return done.stdout
 
     do(uv, "build", "--wheel", "--offline", "--out-dir", str(tmp_path / "dist"), ".")
-    (wheel,) = (tmp_path / "dist").glob("*.whl")
+    # And the loader's wheel, which the adapters depend on at their own version (maturin builds
+    # `pact` from the Rust at the repository root).
+    do(uv, "build", "--wheel", "--offline", "--out-dir", str(tmp_path / "dist"), str(ADAPTER.parents[1]))
+    wheels = sorted(str(w) for w in (tmp_path / "dist").glob("*.whl"))
+    assert len(wheels) == 2, wheels
     venv = tmp_path / "venv"
     do(uv, "venv", "--offline", "-q", str(venv))
     python = str(venv / "bin" / "python")
-    do(uv, "pip", "install", "--offline", "-q", "--python", python, str(wheel))
+    do(uv, "pip", "install", "--offline", "-q", "--python", python, *wheels)
     asked = (
         "import json; from pact_adapters import loader, resolve\n"
         "c = resolve.load_catalogue()\n"
         "print(json.dumps({'default': resolve.default_model(), 'rows': len(c.entries),\n"
         "  'problems': [p.rule for p in c.problems], 'schema': loader.schema_path().is_file(),\n"
-        "  'from': str(resolve.BUILTIN_CATALOGUE)}))\n"
+        "  'from': str(resolve.BUILTIN_CATALOGUE), 'pact': str(loader.pact_binary())}))\n"
     )
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
@@ -87,3 +91,4 @@ def test_the_built_wheel_installed_alone_resolves_a_shipped_model_and_finds_the_
     assert said["rows"] > 0 and said["problems"] == [], said
     assert said["default"], "the shipped catalogue names a default model and none was resolved"
     assert said["schema"] is True
+    assert said["pact"] == str(venv / "bin" / "pact"), f"the loader found is not the wheel's: {said['pact']}"

@@ -1,0 +1,86 @@
+# The wheels PACT publishes, built and proven on both Linux architectures, and published only
+# when the owner approves.
+#
+# **It runs the script, it does not re-list the steps** (the same rule as `gate.yml`):
+# `scripts/build-wheels.sh` builds `pact-loader` (the `pact` binary, manylinux 2.28) for the
+# runner's architecture, its source distribution and the `pact-adapters` wheel, runs
+# `twine check`, builds the loader from its source distribution alone, and installs the wheels
+# into a fresh environment where `pact check examples/refund-desk` runs. A contributor runs the
+# same command.
+#
+# **Publishing** is the `publish` job: on a tag `v<version>` only, inside the GitHub environment
+# `pypi`, whose required reviewer is the owner, through PyPI trusted publishing (OpenID Connect).
+# No token is stored anywhere. Before the first release the owner registers this repository and
+# this workflow as the trusted publisher of `pact-loader` and `pact-adapters` on PyPI, and creates
+# the `pypi` environment with themselves as its required reviewer.
+
+name: wheels
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - "pyproject.toml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**"
+      - "spec/**"
+      - "models/**"
+      - "adapters/python/pyproject.toml"
+      - "scripts/build-wheels.sh"
+      - ".github/workflows/wheels.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Each architecture is built and installed on its own kind of runner. The arm64 runner
+          # is GitHub's hosted `ubuntu-24.04-arm` (free for public repositories; a private one
+          # needs a plan that has it).
+          - runner: ubuntu-latest
+            files: dist/*
+          - runner: ubuntu-24.04-arm
+            # The source distribution and the adapters' wheel are the same on both; one copy.
+            files: dist/*_aarch64.whl
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        # `rust-toolchain.toml` chooses the version.
+        run: rustup show
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Build, check and install the wheels
+        run: ./scripts/build-wheels.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.runner }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
