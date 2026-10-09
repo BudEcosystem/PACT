@@ -23,9 +23,13 @@ What the move broke, and how each was fixed:
 
 ## The parity suite holds the pin
 
-`tests/test_parity.py` is 02P §6's suite. Its completeness check (S4) reads, by
-introspecting the installed packages' public members only, every capability
-class and `CAPABILITY_TYPES` entry, every `AgentSpec` field, every
+`tests/test_parity.py` is 02P §6's suite. Its completeness check (S4) reads
+public names only: every capability class anywhere in the installed
+`pydantic_ai` (read from its source, so a capability in a provider module whose
+optional dependency is not installed is found too, such as
+`models.openai.OpenAICompaction`, `models.anthropic.AnthropicCompaction` and
+`durable_exec.*Durability`), every `pydantic_ai.capabilities` member and
+`CAPABILITY_TYPES` entry, every `AgentSpec` field, every
 `ModelSettings` key, every message part (`ModelRequestPart`,
 `ModelResponsePart`), every `AgentStreamEvent` member, every `ToolDefinition`
 field and every public `GraphBuilder` member, and fails on any name

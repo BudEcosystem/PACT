@@ -8,6 +8,15 @@ model:
 expect:
   instructions-have:
   - You answer for Lumen Lamps, and only for it.
+check:
+# `pact check` refuses a hole naming a run input the agent does not declare.
+- files:
+    agents/desk/agent.yaml: |
+      description: Answers order questions.
+      instructions: You answer for {{run-inputs.colour}}, and only for it.
+      run-inputs:
+        brand: text
+  refused: loader/no-such-run-input
 import:
   mapped:
   - description

@@ -18,6 +18,10 @@ expect:
       order-number: A-1
   model-saw:
   - shipped
+  # FR-4.1.14: the export names the MCP wire shape the host's install decides.
+  export-not-carried:
+    'resources (resource-kind: mcp-server)':
+    - FR-4.1.14 requires
 import:
   mapped:
   - description

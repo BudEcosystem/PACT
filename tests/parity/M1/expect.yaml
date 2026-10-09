@@ -5,6 +5,8 @@ model:
 - say: ok
 expect:
   model-id: ollama:qwen2.5:14b-instruct
+held-elsewhere:
+  every catalogue row resolves: adapters/python/tests/test_parity.py::test_m1_every_catalogue_row_resolves_to_a_pydantic_ai_model_id
 import:
   mapped:
   - description

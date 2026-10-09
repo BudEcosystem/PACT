@@ -17,6 +17,12 @@
 //! the document, gives such a file back its name: the settings it carried
 //! become ONE entry named after the file, as any other file in that folder is.
 //! `tools/catalog.yaml` is the tool `catalog`.
+//!
+//! A collection folder still has its own self file (FR-1.1.3), holding several
+//! entries at once: `<dirname>.*` (`tools/tools.yaml`, `watch/watch.yaml`) or
+//! the kind the collection holds (`tools/tool.yaml`, `agents/agent.yaml`), as
+//! well as `_index.*`. Those are left alone; only a file named after some
+//! OTHER kind (`tools/catalog.yaml`, `tools/agent.yaml`) is an entry.
 
 use pact_doc::{Map, Node};
 use pact_schema::Schema;
@@ -26,7 +32,7 @@ use crate::policy::Policy;
 /// Give every kind-named file in a collection's folder back its name, in the
 /// workspace and in what each bundle contributes.
 pub fn read_as_entries(root: &mut Node, schema: &Schema) {
-    let collections = crate::derive::collections(schema);
+    let collections = crate::available::collections(schema);
     let stems = Policy::default().kind_stems;
     in_collections(root, &collections, &stems);
     let Some(bundles) = root.as_map_mut().and_then(|m| m.get_mut("bundles")) else {
@@ -48,27 +54,35 @@ pub fn read_as_entries(root: &mut Node, schema: &Schema) {
     }
 }
 
-fn in_collections(holder: &mut Node, collections: &[String], stems: &[String]) {
+fn in_collections(
+    holder: &mut Node,
+    collections: &std::collections::BTreeMap<String, String>,
+    stems: &[String],
+) {
     let Some(map) = holder.as_map_mut() else {
         return;
     };
-    for kind in collections {
-        if let Some(entry) = map.get_mut(kind) {
-            give_back_its_name(kind, &mut entry.node, stems);
+    for (collection, kind) in collections {
+        if let Some(entry) = map.get_mut(collection) {
+            give_back_its_name(collection, kind, &mut entry.node, stems);
         }
     }
 }
 
-/// When `collection` was built from a file named after a kind that sits
-/// directly in the collection's own folder, move that file's settings into
-/// one entry named after the file.
-fn give_back_its_name(kind: &str, collection: &mut Node, stems: &[String]) {
+/// When the collection `name` (holding entries of `kind`) was built from a
+/// file named after some other kind that sits directly in the collection's own
+/// folder, move that file's settings into one entry named after the file. The
+/// folder's self file (`<dirname>.*`, or the kind the collection holds) is not
+/// touched.
+fn give_back_its_name(name: &str, kind: &str, collection: &mut Node, stems: &[String]) {
     let file = collection.span.file.clone();
     let (Some(stem), Some(folder)) = (file.file_stem(), file.parent().and_then(|p| p.file_name()))
     else {
         return;
     };
-    if !folder.eq_ignore_ascii_case(kind) || !stems.iter().any(|s| s.eq_ignore_ascii_case(stem)) {
+    let is = |a: &str, b: &str| a.eq_ignore_ascii_case(b);
+    if !is(folder, name) || is(stem, folder) || is(stem, kind) || !stems.iter().any(|s| is(s, stem))
+    {
         return;
     }
     let stem = stem.to_string();

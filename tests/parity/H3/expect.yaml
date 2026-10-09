@@ -24,6 +24,25 @@ expect:
       order-number: A-1
       amount: 25.00 USD
   output: Refunded.
+variants:
+# The denial reaches the model in the person's own words, and nothing runs.
+- model:
+  - call: payments
+    args:
+      action: refund
+      order-number: A-1
+      amount: 40.00 USD
+  - say: Not refunded.
+  answers:
+    payments:
+      deny: Not without the receipt, please ask for it first.
+  expect:
+    waiting:
+    - payments
+    calls: []
+    model-saw:
+    - Not without the receipt, please ask for it first.
+    output: Not refunded.
 import:
   mapped:
   - description

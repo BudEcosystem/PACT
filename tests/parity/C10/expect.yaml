@@ -10,7 +10,10 @@ expect:
     tool_calls_limit: null
     total_tokens_limit: null
   export-not-carried:
-  - limits
+    limits:
+    - '`cost-per-request-under: 0.05 USD`'
+    - '`runs-for-at-most: 2m`'
+    - '`when-it-runs-out: stop-and-say-so`'
 import:
   mapped:
   - description

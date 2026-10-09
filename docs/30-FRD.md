@@ -21,7 +21,7 @@ recorded in the fidelity report. **MAY** — optional.
 |---|---|---|---|
 | **FR-1.1.1** | A directory MUST load as a set of fields, one per entry, keyed by the entry name with extension and ordinal prefix removed. | T5, D2 | ▣ |
 | **FR-1.1.2** | A field MUST be writable either inline or as a directory entry, and both forms MUST produce the identical document. | T5, AC-1.4 | ▣ |
-| **FR-1.1.3** | A directory MAY contain a *self file* (`_index.*`, `<dirname>.*`, or a kind name such as `agent.*`) supplying the directory's own fields. | D13 usability | ▣ |
+| **FR-1.1.3** | A directory MAY contain a *self file* (`_index.*`, `<dirname>.*`, or a kind name such as `agent.*`) supplying the directory's own fields. Directly in a collection's folder (a workspace field typed `map of group:<kind>`), the self file is `_index.*`, `<dirname>.*` or the kind the collection holds (`tools/tool.yaml`, `watch/watch.yaml`); a file named after any other kind there is one entry of that collection, named after the file (`tools/catalog.yaml` is the tool `catalog`). | D13 usability | ▣ |
 | **FR-1.1.4** | Defining the same field twice MUST be an error naming both locations. Precedence MUST NOT be used to resolve it. | T7 | ▣ |
 | **FR-1.1.5** | Entry order MUST be deterministic: ordinal prefixes ascending, then byte-order by name. Filesystem read order MUST NOT be observable. `localeCompare`-style collation MUST NOT be used. | O1.2, `eve-teardown.md` L15 | ▣ |
 | **FR-1.1.6** | Names differing only by case MUST be an error, so a tree authored on Linux loads identically on macOS and Windows. | P-5 | ▣ |

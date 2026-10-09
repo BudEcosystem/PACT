@@ -80,3 +80,26 @@ def test_the_new_thing_works_beside_the_others_in_one_file() -> None:
     )
     said = _said(chain, "card 4111 1111 1111 1111, ssn 123-45-6789")
     assert "4111" not in said and "6789" not in said, said
+
+
+@pytest.mark.parametrize(
+    "kept",
+    [
+        "ab12f9e8d7c6b5a4e3d2c1b0a9f8e7d6",  # a UUID written without its dashes
+        "de34a1b2c3d4e5f6a7b8",  # a commit hash
+        "ab12cdefgh1234",  # a URL segment
+        "GB82WEST12345698765431",  # an IBAN's shape whose check digits are wrong
+    ],
+)
+def test_an_id_that_only_starts_like_an_iban_stays(kept: str) -> None:
+    """Either case, run together, also fits a hex digest: a candidate is hidden
+    only when it passes the ISO 13616 check, so the ids a run needs survive."""
+    chain = _hidden("anything that looks like a bank account")
+    text = f"look up {kept} and refund to gb82west12345698765432 please"
+    assert _said(chain, text) == f"look up {kept} and refund to [removed] please"
+
+
+def test_an_iban_in_fours_followed_by_a_number_is_hidden_and_the_number_kept() -> None:
+    chain = _hidden("anything that looks like a bank account")
+    said = _said(chain, "pay GB29 NWBK 6016 1331 9268 19 1234 now")
+    assert said == "pay [removed] 1234 now", said

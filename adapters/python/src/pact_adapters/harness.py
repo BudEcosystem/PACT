@@ -112,6 +112,12 @@ def slots_of(calls: "tuple[ToolCall, ...] | list[ToolCall]") -> list[str]:
     return slots
 
 
+def slots_named(name: str, calls: "tuple[ToolCall, ...] | list[ToolCall]") -> list[str]:
+    """The slot of every call to `name` in a step. A teammate is asked once per
+    step however many calls name it, so its one answer is every such call's."""
+    return [slot for slot, c in zip(slots_of(calls), calls) if c.name == name]
+
+
 @dataclass(frozen=True)
 class Step:
     """One turn of the loop, recorded so two runs can be compared exactly."""
@@ -1476,7 +1482,8 @@ async def run(
             # them, so it lands as a completed call rather than as a clearance.
             for name, value in given.items():
                 if gated.get(name) == WAITING_FOR_ANOTHER_AGENT and value:
-                    already.setdefault(name, value)
+                    for slot in slots_named(name, resume.awaiting):
+                        already.setdefault(slot, value)
 
             if resume.reason == ASKED_A_PERSON:
                 said = _said(resume, given, "answer")
@@ -1502,7 +1509,8 @@ async def run(
                     )
                     is Ruling.CLEARED
                 ):
-                    already.setdefault(name, carried_on_without(name))
+                    for slot in slots_named(name, resume.awaiting):
+                        already.setdefault(slot, carried_on_without(name))
                 else:
                     gated[name] = NEEDS_APPROVAL
 
@@ -2295,10 +2303,11 @@ async def run(
         # three are separate authored fields, so a race costs the fastest
         # member's latency rather than the slowest's.
         replies: dict[str, str] = {}
-        to_ask = [
-            c for slot, c in zip(slots, calls)
+        asking_now = [
+            (slot, c) for slot, c in zip(slots, calls)
             if c.name in delegates and slot not in already and c.name not in refused
         ]
+        to_ask = [c for _, c in asking_now]
         if to_ask:
             _, decision = chain.run(
                 "step.delegate.before", {"members": [c.name for c in to_ask]}
@@ -2330,7 +2339,8 @@ async def run(
                 # nobody a second run.
                 for a in handoff.answers:
                     if a.ok:
-                        already[a.member] = a.text
+                        for slot in slots_named(a.member, calls):
+                            already[slot] = a.text
                 for slot, call in zip(slots, calls):
                     if slot in step_gated or call.name in delegates or slot in already:
                         continue
@@ -2390,7 +2400,7 @@ async def run(
                     "step.approval.requested", at=(i,), reason=NEEDS_APPROVAL, waiting_on=[who]
                 )
                 return result
-            replies = {a.member: handoff.said(a.member) for a in handoff.answers}
+            replies = {slot: handoff.said(c.name) for slot, c in asking_now}
 
         outputs: list[str] = []
         ran: list[ToolCall] = []
@@ -2407,8 +2417,8 @@ async def run(
                 outputs.append(refused[call.name])
                 ran.append(call)
                 continue
-            if call.name in replies:
-                outputs.append(replies[call.name])
+            if slot in replies:
+                outputs.append(replies[slot])
                 ran.append(call)
                 continue
             if slot in already:

@@ -1,6 +1,39 @@
 # 02P N1: a provider's own tool imports as a tool to write under `uses:`.
 row: N1
 says: a provider's own tool imports as a tool to write under `uses:`
+check:
+# Refused offline: the tool written for it reaches a hosted service and the
+# workspace allows no egress.
+- files:
+    workspace.yaml: "name: parity\nallow-egress: []\n"
+    agents/desk/agent.yaml: |
+      description: Answers with what the web says.
+      instructions: Search the web before you answer.
+      uses: [web-search]
+    tools/web-search.yaml: |
+      description: Searches the web.
+      url: https://search.example.com/q
+      method: get
+  refused: loader/reaches-outside-the-box
+# ... unless the tool runs locally: the same tool reaching a server on the box loads.
+- files:
+    workspace.yaml: "name: parity\nallow-egress: []\n"
+    agents/desk/agent.yaml: |
+      description: Answers with what the web says.
+      instructions: Search the web before you answer.
+      uses: [web-search]
+    tools/web-search.yaml: |
+      description: Searches the web.
+      connect: search-server
+      actions:
+        search:
+          description: Search the web.
+          reads-only: yes
+          takes:
+            query: text
+    resources/search-server.yaml: |
+      resource-kind: mcp-server
+      endpoint: host/search
 import:
   mapped:
   - capabilities

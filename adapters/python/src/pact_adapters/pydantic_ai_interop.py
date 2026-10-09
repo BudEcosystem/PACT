@@ -1406,13 +1406,14 @@ def to_pydantic_ai_spec(
     if len(chain) > 1:
         # 02P A2. `AgentSpec.model` is `str | None` (pydantic_ai/agent/spec.py:38),
         # so a spec file holds one model and the fallbacks cannot ride in it.
-        # `build_agent(..., model=FallbackModel(...))` is where they go.
+        # `build_agent(..., models={...})` is where they go.
         report.not_carried["model.fallbacks"] = (
             f"`model:` lists {len(chain)} models and a Pydantic AI spec file holds "
             f"one, so only `{chain[0]}` is carried and the fallbacks "
             + ", ".join(f"`{m}`" for m in chain[1:])
             + " are not tried when it fails. fix: build the agent with "
-            "`model=FallbackModel(...)` over the same models, in this order"
+            "`build_agent(..., models={id: model, ...})`, which makes the "
+            "`FallbackModel` over them in this order"
         )
     if model := (chain[0] if chain else ""):
         # Translated through the catalogue, not copied. A PACT `model:` is a
@@ -1487,6 +1488,15 @@ def to_pydantic_ai_spec(
             continue
         report.not_carried[key] = _SPEC_CANNOT_TAKE.get(key) or (
             "no field in a Pydantic AI agent spec for this"
+        )
+    # 02P C10: the report names EACH ceiling, so a reader sees which of theirs
+    # stop being enforced, not only that a block called `limits` did.
+    if "limits" in report.not_carried and isinstance(block.get("limits"), Mapping):
+        written = "; ".join(f"`{k}: {v}`" for k, v in block["limits"].items())
+        report.not_carried["limits"] += (
+            f". Not enforced by this file: {written}. Of these, `cost-per-request-under`, "
+            "`runs-for-at-most` and a `when-it-runs-out:` other than stopping have no "
+            "Pydantic AI counterpart at all"
         )
 
     # The tools on `uses:` are already reported as not carried; WHERE they reach
@@ -1782,6 +1792,7 @@ def build_agent(
     *,
     call_tool: Any = None,
     model: Any = None,
+    models: "Mapping[str, Any] | None" = None,
     run_inputs: "Mapping[str, Any] | None" = None,
     remembered: "Mapping[str, Any] | None" = None,
     judge: Any = None,
@@ -1887,12 +1898,18 @@ def build_agent(
     # than passing a name `infer_model` will reject: `Agent(None)` is legal and
     # defers the choice to `run(model=...)`, which is a caller who still has
     # options, where a bad id is a `UserError` at construction.
-    # A fallback list (`spec.models`, 02P A2) binds its FIRST model here and
-    # nothing more: `FallbackModel.__init__` calls `infer_model` on every entry
-    # at construction (pydantic_ai/models/fallback.py:131), which is exactly the
-    # credentials check `defer_model_check=True` below exists to put off. A host
-    # that wants the chain passes `model=FallbackModel(...)` itself.
+    # `models` is the host's model for each id the author wrote (a configured
+    # `Model` or a Pydantic AI id), and with it `model: [a, b]` is a
+    # `FallbackModel` over them in the author's order (02P A2, M3), falling over
+    # on a provider error only (`ModelAPIError`, the class's own default made
+    # explicit: pydantic_ai/models/fallback.py:111): never because an answer was
+    # wrong. Without `models`, a list binds its FIRST model through the
+    # catalogue and nothing more: `FallbackModel.__init__` calls `infer_model`
+    # on every entry at construction (fallback.py:131), which is the
+    # credentials check `defer_model_check=True` below exists to put off.
     bound: Any = model
+    if bound is None and models is not None:
+        bound = _chain_of(spec, models)
     if bound is None and spec.model:
         said, _ = pydantic_ai_model_id(spec.model, spec.workspace)
         bound = said or None
@@ -1935,6 +1952,27 @@ def build_agent(
     if spec.checked_by:
         agent.output_validator(_answer_checks(spec, judge))
     return agent
+
+
+def _chain_of(spec: PactAgentSpec, models: Mapping[str, Any]) -> Any:
+    """The author's `model:` (one id or a fallback list) as the host's models."""
+    from pydantic_ai.exceptions import ModelAPIError
+    from pydantic_ai.models.fallback import FallbackModel
+
+    written = spec.models or ((spec.model,) if spec.model else ())
+    if not written:
+        return None
+    missing = [m for m in written if m not in models]
+    if missing:
+        raise ValueError(
+            f"{spec.key or 'this agent'}'s `model:` names `{missing[0]}`, and `models=` "
+            f"has no model for it. fix: pass `models={{{missing[0]!r}: <a Model or a "
+            "Pydantic AI id>, ...}}` with one entry for each model `model:` names."
+        )
+    chain = [models[m] for m in written]
+    if len(chain) == 1:
+        return chain[0]
+    return FallbackModel(chain[0], *chain[1:], fallback_on=(ModelAPIError,))
 
 
 #: How a failed `checked-by:` check opens its retry prompt, and how earlier ones are counted.

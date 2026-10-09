@@ -8,7 +8,26 @@ holds that did not; the commits are listed under it for whoever wants the detail
 Running PACT trees in production on Pydantic AI 2.54, through
 [Bud Agent Flow](https://github.com/BudEcosystem/Bud-Agent-Flow), drove these changes. Every
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
-runs offline: 3602 tests, 1145 Rust and 2457 adapter.
+runs offline: 3624 tests, 1147 Rust and 2477 adapter.
+
+### Review fixes to the parity round (9 October)
+
+- **A collection folder's own file still holds several entries.** `watch/watch.yaml` and
+  `tools/tool.yaml` (the folder's name, or the kind the collection holds) are the folder's self
+  file again; only a file named after another kind (`tools/catalog.yaml`) is one entry
+  (FR-1.1.3 says so now).
+- **`model: [a, b]` is a `FallbackModel` on PACT's own Pydantic AI path**:
+  `build_agent(spec, models={id: model, ...})` makes the chain from the host's models, in the
+  author's order, falling over on a provider error only.
+- **The completeness test reads every capability in the installed Pydantic AI**, from its source,
+  not only `pydantic_ai.capabilities`: `OpenAICompaction`, `AnthropicCompaction` and
+  `BaseDurabilityCapability` have rows now.
+- **Each parity row asserts its whole test column**, or `tests/parity/README.md` says why not;
+  the export report names each ceiling it cannot carry.
+- **A teammate asked twice in one step keeps its answer across a park** for another member that
+  failed: the record is keyed by each call's slot.
+- **A bank account is hidden only when it passes the IBAN check** (ISO 13616), so a hex digest, a
+  dashless UUID or a URL segment that merely starts like one is left alone.
 
 ### The parity suite, and five defects the corpus hit (9 October)
 

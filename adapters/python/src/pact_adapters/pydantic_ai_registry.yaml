@@ -393,6 +393,21 @@ capabilities:
     outcome: loss
     rows: [D1]
     why: *the-engine-is-the-hosts
+  BaseDurabilityCapability:
+    outcome: loss
+    rows: [D1]
+    why: *the-engine-is-the-hosts
+  OpenAICompaction:
+    outcome: loss
+    rows: [C4]
+    why: &provider-compaction >-
+      a provider shortening the conversation on its own servers (hosted only, so
+      unusable air-gapped). PACT shortens a conversation with `context-policy:`
+      (`summarise-older` with `summarised-by:`), which any model can do
+  AnthropicCompaction:
+    outcome: loss
+    rows: [C4]
+    why: *provider-compaction
 
 # Pydantic AI's own names that are not capabilities, and what PACT says of
 # each, read by the two importers and the exporter. `spec.<key>` is a key of an

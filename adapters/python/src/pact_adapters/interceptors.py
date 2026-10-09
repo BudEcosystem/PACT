@@ -848,7 +848,11 @@ RECOGNISES: Mapping[str, str] = {
         #
         # Either case. People type an IBAN in lower case (`gb82west1234...`), and
         # the pattern read capitals only, so a lowercase one reached the model
-        # whole (Bud Flow's complex live scenario 42).
+        # whole (Bud Flow's complex live scenario 42). Either case also fits a
+        # hex digest, a dashless UUID or a URL segment that starts with two
+        # letters and two digits, so a candidate counts only when it passes the
+        # ISO 13616 check (`_is_iban`, applied by `_substitute`), as a card
+        # number would with Luhn.
         r"(?i:\b[A-Z]{2}\d{2}(?:[ ][A-Z0-9]{4}){2,7}(?:[ ][A-Z0-9]{1,3})?\b)"
         r"|(?i:\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b)"        # IBAN, run together
         r"|\b\d{2}[- ]\d{2}[- ]\d{2}\b"                   # UK sort code
@@ -863,6 +867,37 @@ RECOGNISES: Mapping[str, str] = {
     # pattern into one expression, where a group number would mean another's.
     "social security number": r"\b(?:\d{3}-\d{2}-\d{4}|\d{3} \d{2} \d{4}|\d{9})\b",
 }
+
+
+#: Starts the way an IBAN does: a country's two letters and two check digits.
+_LOOKS_LIKE_IBAN = re.compile(r"[A-Za-z]{2}\d{2}")
+
+
+def _is_iban(text: str) -> bool:
+    """ISO 13616: the first four characters moved to the end, each letter read
+    as its number (A is 10), the whole is 1 modulo 97."""
+    compact = text.replace(" ", "").upper()
+    if not compact.isalnum() or not 15 <= len(compact) <= 34:
+        return False
+    moved = compact[4:] + compact[:4]
+    return int("".join(str(int(ch, 36)) for ch in moved)) % 97 == 1
+
+
+def _hides(pattern: str, found: str) -> int:
+    """How much of `found`, which `pattern` matched, is the thing it recognises.
+
+    All of it, except for an IBAN that fails its check: then the longest run of
+    its leading groups that passes (an IBAN written in fours with a number after
+    it), or nothing, so a hex digest or an id that merely starts like one stays.
+    """
+    if pattern != RECOGNISES["bank account"] or not _LOOKS_LIKE_IBAN.match(found):
+        return len(found)
+    groups = found.split(" ")
+    for keep in range(len(groups), 0, -1):
+        head = " ".join(groups[:keep])
+        if _is_iban(head):
+            return len(head)
+    return 0
 
 
 @dataclass(frozen=True)
@@ -1571,12 +1606,13 @@ def _substitute(text: str, patterns: Sequence[tuple[re.Pattern[str], str]]) -> s
         end, replacement = start, ""
         for rx, repl in patterns:
             m = rx.match(text, start)
-            if m is not None and m.end() > end:
-                end, replacement = m.end(), repl
+            stop = start + _hides(rx.pattern, m.group()) if m is not None else start
+            if stop > end:
+                end, replacement = stop, repl
         if end <= start:
-            # The alternation matched where no single pattern does, which cannot
-            # happen — written out anyway so the loop always advances rather
-            # than hanging on a value someone put in a tool result.
+            # Nothing here is a thing to hide after all (an id that only starts
+            # like an IBAN): step past this character, so the loop always
+            # advances rather than hanging on a value someone put in a tool result.
             out.append(text[i : start + 1])
             i = start + 1
             continue

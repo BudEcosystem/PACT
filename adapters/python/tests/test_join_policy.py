@@ -1151,3 +1151,54 @@ def test_a_member_runs_under_the_share_it_was_granted_and_never_a_larger_one(
 
     assert ceilings["Policy Checker"] == pytest.approx(0.03)
     assert ceilings["Fraud Checker"] == pytest.approx(0.02)
+
+
+def test_two_calls_to_one_teammate_keep_its_answer_across_a_park_for_another() -> None:
+    """A step with two calls to `policy-checker` and one to `fraud-checker`,
+    which fails under `ask-a-person`. The park keeps `policy-checker`'s answer
+    for BOTH its calls (each call's slot), so carrying on asks nobody again and
+    both calls read the answer it gave before the park."""
+    asked: list[str] = []
+
+    def counting(failing: set[str]):
+        async def ask(grant: Grant) -> str:
+            asked.append(grant.member)
+            if grant.member in failing:
+                raise RuntimeError("down")
+            return f"{grant.member} says yes, round {len(asked)}"
+
+        return ask
+
+    def script() -> Script:
+        return Script(
+            [
+                Turn("Consulting the team.",
+                     (ToolCall("policy-checker", {"question": "is this covered?"}),
+                      ToolCall("policy-checker", {"question": "and the fee?"}),
+                      ToolCall("fraud-checker", {"question": "does this look real?"}))),
+                Turn("Approved."),
+            ]
+        )
+
+    team = Teamwork(if_someone_fails=OnFailure.ASK_A_PERSON)
+    first = asyncio.run(
+        run(SPEC, ReferenceTransport(script()), "refund?", TOOLS,
+            ask_member=counting({"fraud-checker"}), teamwork=team)
+    )
+    assert first.halted == "suspended"
+    before = first.suspension.completed["policy-checker"]
+    assert first.suspension.completed["policy-checker#1"] == before
+
+    from pact_adapters.suspension import Suspension
+
+    parked = Suspension.from_json(first.suspension.to_json())
+    resumed = asyncio.run(
+        run(SPEC, ReferenceTransport(script()), "refund?", TOOLS,
+            ask_member=counting(set()), teamwork=team,
+            resume=parked, answer=parked.answer(**{"fraud-checker": "approve"}))
+    )
+    assert resumed.halted == "final", resumed.halted
+    assert asked.count("policy-checker") == 1, f"asked again: {asked}"
+    said = resumed.steps[0].tool_results
+    assert said[0] == before and said[1] == before, said
+    assert "carry on without fraud-checker" in said[2], said

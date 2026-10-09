@@ -10,6 +10,16 @@ expect:
   requests: 2
   model-saw:
   - the customer must hear about the order
+variants:
+# ... then fails the step: three broken answers at `checks-at-most: 3`.
+- model:
+  - say: Hello.
+  - say: Hello again.
+  - say: Hi.
+  - say: Your order has shipped.
+  expect:
+    raises: UnexpectedModelBehavior
+    model-asked: 3
 import:
   mapped:
   - description

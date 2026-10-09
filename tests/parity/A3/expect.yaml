@@ -6,6 +6,8 @@ model:
 expect:
   instructions-have:
   - Answer the customer briefly.
+held-elsewhere:
+  joined text is byte-equal to the folder form: adapters/python/tests/test_parity.py::test_a3_the_folder_form_of_instructions_reaches_the_model_byte_for_byte
 import:
   mapped:
   - description

@@ -100,7 +100,6 @@ def _document(root: Path) -> dict:
 
 
 def test_holes_fallback_a_typed_action_and_a_checked_answer_on_a_live_model(tmp_path: Path) -> None:
-    from pydantic_ai.models.fallback import FallbackModel
     from pydantic_ai.models.openai import OpenAIChatModel
     from pydantic_ai.providers.openai import OpenAIProvider
 
@@ -129,7 +128,7 @@ def test_holes_fallback_a_typed_action_and_a_checked_answer_on_a_live_model(tmp_
     agent = build_agent(
         spec,
         call_tool=call_tool,
-        model=FallbackModel(*(served[m] for m in spec.models)),
+        models=served,
         run_inputs={"brand": "Lumen Lamps"},
     )
     assert agent.description == "Answers order questions for Lumen Lamps."

@@ -53,7 +53,7 @@ use pact_schema::{Schema, Ty};
 /// workspace has (`watches`, `schedules`, `evals`, `redactions`) and were
 /// missing two that it does (`watch`, `bundles`), so `based-on:` inside a watch
 /// or a nested bundle was read, accepted by the schema, and never resolved.
-pub(crate) fn collections(schema: &Schema) -> Vec<String> {
+fn collections(schema: &Schema) -> Vec<String> {
     let Some(workspace) = schema.group("workspace") else { return Vec::new() };
     workspace
         .fields

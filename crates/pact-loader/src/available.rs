@@ -33,7 +33,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// collection is any workspace field typed `map of group:<kind>`. The list this
 /// replaces was three rows of hand-written pairs, two of which named a field the
 /// `agent` group does not have.
-fn collections(schema: &Schema) -> BTreeMap<String, String> {
+pub(crate) fn collections(schema: &Schema) -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
     let Some(workspace) = schema.group("workspace") else { return out };
     for f in &workspace.fields {

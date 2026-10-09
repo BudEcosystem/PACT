@@ -2,11 +2,16 @@
 row: A14
 says: '`checks-at-most: 1`: a second answer that breaks a `checked-by:` rule fails
   the run'
+# PACT's `checks-at-most:` counts attempts in all (spec/schema.yaml), so at n = 1
+# the first broken answer fails the step and no second attempt is asked for;
+# the script would pass on the third.
 model:
 - say: Hello.
 - say: Hello again.
+- say: Your order has shipped.
 expect:
   raises: UnexpectedModelBehavior
+  model-asked: 1
 import:
   mapped:
   - description
