@@ -3,24 +3,27 @@
 //!
 //! | Rule | 02W | Fires when |
 //! |---|---|---|
-//! | `loader/silence-reaches-a-gated-step` | WF-20 | a `nobody-answered` exit of a wait a person answers reaches, before another wait, a stage guarded by a policy rule or `needs-a-person`, or a write the wait's `answered` exit also leads to |
+//! | `loader/silence-reaches-a-gated-step` | WF-20 | a `nobody-answered` exit of a wait a person answers reaches, before another wait a person answers, a stage guarded by a policy rule or `needs-a-person`, or a stage making a write (the same `<tool>/<action>`, agent or workflow) the wait's `answered` exit also makes |
 //! | `loader/cannot-be-undone-and-nobody-asked` *(note)* | WF-25 | a workflow stage calls a tool's write that has no `undone-by:` and no *Ask before* |
 //! | `loader/an-undo-that-does-not-fit` | WF-26 | an `undone-by:` (an action's, a stage's, a workflow's) names a read, or an undo whose inputs the write's inputs and answer cannot fill |
 //! | `loader/a-status-check-that-does-not-fit` | new | an action's `status-check:` names a write, or a read whose inputs the call's own cannot fill |
 //! | `loader/a-check-nothing-can-run` | WF-34 | a workflow has a `judged:` check and its evals name no `graded-by:` model |
-//! | `loader/a-call-that-does-not-fit` | WF-39 | an `if-it-fails.backup:` needs an input the stage's `bind:` does not fill |
-//! | `loader/a-binding-to-nothing` | WF-4 | `carry-on-with:` fills a field the stage does not answer with |
 //! | `loader/a-line-this-stage-never-reads` | WF-3 | `undo-where:` when `undo:` names a stage that is not an `each` |
 //! | `schema/missing-companion` | §2.10 | a workflow's `when-it-runs-out:` says `use-a-backup`, `wait-for-a-new-version` or `undo` with no companion under the stage's `if-it-fails:` |
 //! | `loader/no-such-name` | shipped | an `undone-by:`, `status-check:` or `backup:` names nothing here |
 //!
+//! How the stage's `bind:` fits its `backup:`, and what `carry-on-with:` reads
+//! and stands in for, are bindings, held in `bindings.rs` (WF-4 to WF-7, WF-39).
+//!
 //! **Silence never approves** (WAIT-4, R13, R50). A wait only the clock and
 //! events answer has no gate, so its one exit may lead anywhere. A wait a person
-//! answers may not, by its silence, do what its yes would have done: reach a
-//! write the `answered` exit also leads to (*Changes* or *Can't be undone*: the
-//! undo of a write runs only on a failure plan, never by itself), or a stage
-//! whose call a person must allow first. The walk stays in the `steps:` the wait
-//! is written in and stops at the next wait, at `done` and at `stop-and-say-so`.
+//! answers may not, by its silence, do what its yes would have done: make a
+//! write the `answered` exit also makes, by whichever stage (*Changes* or
+//! *Can't be undone*: the undo of a write runs only on a failure plan, never by
+//! itself), or reach a stage whose call a person must allow first. The walk
+//! stays in the `steps:` the wait is written in, goes on through every exit of
+//! a wait only the clock or events answer (it is no gate), and stops at the next
+//! wait a person answers, at `done` and at `stop-and-say-so`.
 
 use crate::bindings::{self, Shapes};
 use crate::conditions::{self, Position};
@@ -383,8 +386,8 @@ struct Flow<'a> {
 
 /// What a silent exit reached that only a yes may reach.
 enum Reached {
-    /// A write the `answered` exit also leads to.
-    Write,
+    /// A write the `answered` exit also makes: the call that makes it.
+    Write(String),
     /// A stage whose call a person must allow first: the call, and why.
     Guarded(String, String),
 }
@@ -402,7 +405,7 @@ impl<'a> Flow<'a> {
                 undone_by(self, &format!("'{stage}'"), gives.as_ref(), undo, diags);
             }
             if let Some(plan) = fields.get("if-it-fails").and_then(|e| e.node.as_map()) {
-                self.plan(steps, stage, fields, plan, diags);
+                self.plan(steps, stage, plan, diags);
             }
             self.companions(stage, fields, diags);
             match does {
@@ -433,41 +436,12 @@ impl<'a> Flow<'a> {
         })
     }
 
-    /// A stage's `if-it-fails:`: its backup, what it carries on with, and what
-    /// it undoes.
-    fn plan(&self, steps: &Map, stage: &str, fields: &Map, plan: &Map, diags: &mut Diagnostics) {
+    /// A stage's `if-it-fails:`: what its backup names, and what it undoes.
+    /// How the stage's `bind:` fits the backup, and what `carry-on-with:`
+    /// reads, are bindings (`bindings.rs`).
+    fn plan(&self, steps: &Map, stage: &str, plan: &Map, diags: &mut Diagnostics) {
         if let Some(backup) = plan.get("backup") {
-            self.backup(stage, fields, backup, diags);
-        }
-        if let Some(carry) = plan.get("carry-on-with").and_then(|e| e.node.as_map()) {
-            let target = fields
-                .get("call")
-                .and_then(|e| e.node.as_str())
-                .map(str::trim);
-            let answers = target.and_then(|t| bindings::answers_of(self.document, self.shapes, t));
-            if let (Some(target), Some(answers)) = (target, answers) {
-                let have: Vec<&str> = answers.iter().map(|(n, _)| n.as_str()).collect();
-                for (key, e) in carry {
-                    if have.contains(&key.as_str()) {
-                        continue;
-                    }
-                    diags.push(Diagnostic::error(
-                        "loader/a-binding-to-nothing",
-                        e.key_span.clone(),
-                        format!(
-                            "'{stage}' carries on with `{key}`, and '{target}' does not answer \
-                             with `{key}` — so nothing after it reads that value."
-                        ),
-                        format!(
-                            "Use one of the fields '{target}' answers with: {}.",
-                            have.iter()
-                                .map(|n| format!("`{n}`"))
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        ),
-                    ));
-                }
-            }
+            self.backup(stage, backup, diags);
         }
         let Some(lines) = plan.get("undo-where") else {
             return;
@@ -496,15 +470,14 @@ impl<'a> Flow<'a> {
         }
     }
 
-    /// `backup:` names something here, and takes no input the stage's own
-    /// `bind:` leaves empty (it is called "with the same `bind:`").
-    fn backup(&self, stage: &str, fields: &Map, backup: &Entry, diags: &mut Diagnostics) {
+    /// `backup:` names a tool's action, an agent, a program or a workflow.
+    fn backup(&self, stage: &str, backup: &Entry, diags: &mut Diagnostics) {
         let Some(said) = backup.node.as_str().map(str::trim) else {
             return;
         };
         let sentence = |s: &str| format!("'{stage}' falls back on '{s}'");
         let every = [Kind::Action, Kind::Agent, Kind::Program, Kind::Workflow];
-        if !resolves(
+        resolves(
             self.document,
             said,
             backup,
@@ -512,42 +485,7 @@ impl<'a> Flow<'a> {
             &sentence,
             "a backup is a tool's action, an agent, a program or a workflow",
             diags,
-        ) {
-            return;
-        }
-        let Some(takes) = required(self.document, self.shapes, said) else {
-            return;
-        };
-        let bound = bound(fields);
-        let unfilled: Vec<String> = takes
-            .into_iter()
-            .filter(|(n, _)| !bound.contains(&n.as_str()))
-            .map(|(n, _)| n)
-            .collect();
-        if unfilled.is_empty() {
-            return;
-        }
-        diags.push(Diagnostic::error(
-            "loader/a-call-that-does-not-fit",
-            backup.node.span.clone(),
-            format!(
-                "'{stage}' falls back on '{said}', which needs {}, and a backup is given only \
-                 '{stage}''s own `bind:` — so it could not be called.",
-                quoted(&unfilled)
-            ),
-            format!(
-                "Name a backup that takes only what '{stage}' binds ({}).",
-                if bound.is_empty() {
-                    "nothing".to_string()
-                } else {
-                    bound
-                        .iter()
-                        .map(|n| format!("`{n}`"))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                }
-            ),
-        ));
+        );
     }
 
     /// 02W §2.10: a stage's `when-it-runs-out:` that needs a companion line
@@ -649,7 +587,7 @@ impl<'a> Flow<'a> {
             _ => body.keys().map(String::as_str).collect(),
         };
         for start in starts {
-            for name in reach(body, start, true) {
+            for name in reach(body, start, &|n| self.a_person_answers(n)) {
                 if let Some(found) = body
                     .get(name)
                     .and_then(|e| self.guarded_inside(name, &e.node))
@@ -715,7 +653,8 @@ impl<'a> Flow<'a> {
             return;
         };
         let yes = self.yes_of(steps, node);
-        let Some((path, reached)) = self.first_reached(steps, to, &yes) else {
+        let made = self.writes_on(steps, &yes);
+        let Some((path, reached)) = self.first_reached(steps, to, &made) else {
             return;
         };
         let here = path.last().cloned().unwrap_or_default();
@@ -732,16 +671,20 @@ impl<'a> Flow<'a> {
             String::new()
         };
         let message = match reached {
-            Reached::Write => format!(
+            Reached::Write(_) if yes.contains(here.as_str()) => format!(
                 "'{here}' can be reached when nobody answered '{wait}'{through}, and '{here}' is \
                  what a yes would have done — so silence would act as a yes."
+            ),
+            Reached::Write(target) => format!(
+                "'{here}' can be reached when nobody answered '{wait}'{through}, and it makes \
+                 `{target}`, the write a yes would have made — so silence would act as a yes."
             ),
             Reached::Guarded(target, why) => format!(
                 "'{here}' can be reached when nobody answered '{wait}'{through}, and it calls \
                  `{target}`, which {why} — so silence would stand where a yes must."
             ),
         };
-        let fix = match self.somewhere_quiet(steps, wait, to, &yes) {
+        let fix = match self.somewhere_quiet(steps, wait, to, &yes, &made) {
             Some(other) => format!(
                 "Send this exit somewhere that asks again or only tells someone — \
                  `nobody-answered: {other}` — or to `stop-and-say-so`."
@@ -810,13 +753,43 @@ impl<'a> Flow<'a> {
                 })
     }
 
+    /// Every write the stages `on` make ([`Flow::writes_made`]).
+    fn writes_on(&self, steps: &Map, on: &BTreeSet<&str>) -> BTreeSet<String> {
+        on.iter()
+            .filter_map(|s| steps.get(*s))
+            .flat_map(|e| self.writes_made(&e.node))
+            .collect()
+    }
+
+    /// The writes a stage makes, by what it calls: each `<tool>/<action>`,
+    /// agent or workflow it (or a stage inside it) calls or may call that
+    /// writes. Two stages calling the same write do the same thing.
+    fn writes_made(&self, node: &Node) -> BTreeSet<String> {
+        let mut out: BTreeSet<String> = calls(node)
+            .into_iter()
+            .filter(|t| workflows::writes(self.document, t, &mut BTreeSet::new()))
+            .map(str::to_string)
+            .collect();
+        for e in node
+            .get("steps")
+            .and_then(Node::as_map)
+            .into_iter()
+            .flatten()
+        {
+            out.extend(self.writes_made(&e.1.node));
+        }
+        out
+    }
+
     /// The first stage a silent exit to `from` reaches that only a yes may
-    /// reach, with the way there.
+    /// reach, with the way there: one guarded, or one making a write in
+    /// `made` (what the yes makes). The walk goes on through every exit of a
+    /// wait only the clock or events answer, and stops at one a person does.
     fn first_reached(
         &self,
         steps: &'a Map,
         from: &'a str,
-        yes: &BTreeSet<&str>,
+        made: &BTreeSet<String>,
     ) -> Option<(Vec<String>, Reached)> {
         let mut came_from: BTreeMap<&str, &str> = BTreeMap::new();
         let mut seen: BTreeSet<&str> = BTreeSet::from([from]);
@@ -825,7 +798,7 @@ impl<'a> Flow<'a> {
             let Some(node) = steps.get(here).map(|e| &e.node) else {
                 continue;
             };
-            if workflows::does(node) == Some("ask-someone") {
+            if self.a_person_answers(node) {
                 continue;
             }
             let path = || {
@@ -845,12 +818,8 @@ impl<'a> Flow<'a> {
                 }
                 return Some((p, Reached::Guarded(target, why)));
             }
-            if yes.contains(here)
-                && node.as_map().is_some_and(|f| {
-                    workflows::stage_writes(self.document, f, &mut BTreeSet::new())
-                })
-            {
-                return Some((path(), Reached::Write));
+            if let Some(write) = self.writes_made(node).intersection(made).next() {
+                return Some((path(), Reached::Write(write.clone())));
             }
             for next in workflows::successors(node, true) {
                 if !ENDS.contains(&next) && steps.contains_key(next) && seen.insert(next) {
@@ -871,6 +840,7 @@ impl<'a> Flow<'a> {
         wait: &str,
         to: &str,
         yes: &BTreeSet<&str>,
+        made: &BTreeSet<String>,
     ) -> Option<&'a str> {
         let waits = || {
             steps
@@ -891,7 +861,7 @@ impl<'a> Flow<'a> {
                 && !ENDS.contains(c)
                 && steps.contains_key(*c)
                 && !yes.contains(c)
-                && self.first_reached(steps, c, yes).is_none()
+                && self.first_reached(steps, c, made).is_none()
         })
     }
 
@@ -991,8 +961,8 @@ fn bound(fields: &Map) -> Vec<&str> {
 }
 
 /// The stages of `steps` reached from `from`, in the order a walk finds them;
-/// `stop_at_waits` ends the walk at a wait (which is itself left out).
-fn reach<'m>(steps: &'m Map, from: &str, stop_at_waits: bool) -> Vec<&'m str> {
+/// the walk ends at a stage `stops` says (which is itself left out).
+fn reach<'m>(steps: &'m Map, from: &str, stops: &dyn Fn(&Node) -> bool) -> Vec<&'m str> {
     let Some((start, _)) = steps.get_key_value(from) else {
         return Vec::new();
     };
@@ -1003,7 +973,7 @@ fn reach<'m>(steps: &'m Map, from: &str, stop_at_waits: bool) -> Vec<&'m str> {
         let Some(node) = steps.get(here).map(|e| &e.node) else {
             continue;
         };
-        if stop_at_waits && workflows::does(node) == Some("ask-someone") {
+        if stops(node) {
             continue;
         }
         out.push(here);
@@ -1035,9 +1005,10 @@ mod tests {
              c:\n  does: call\n  then: {answered: done}\n",
         );
         let steps = d.as_map().expect("a map");
-        assert_eq!(reach(steps, "a", true), vec!["a"]);
-        assert_eq!(reach(steps, "a", false), vec!["a", "b", "c"]);
-        assert!(reach(steps, "nowhere", false).is_empty());
+        let waits = |n: &Node| workflows::does(n) == Some("ask-someone");
+        assert_eq!(reach(steps, "a", &waits), vec!["a"]);
+        assert_eq!(reach(steps, "a", &|_| false), vec!["a", "b", "c"]);
+        assert!(reach(steps, "nowhere", &|_| false).is_empty());
     }
 
     #[test]

@@ -85,10 +85,13 @@ pub struct Wait {
     pub agent: String,
     /// The workflow whose run stops, for a workflow's wait; empty for an agent's.
     pub workflow: String,
-    /// The `ask-someone` stage that waits, in a workflow.
+    /// The stage that waits, in a workflow: an `ask-someone` stage, or one
+    /// whose failure plan or ceiling parks the run. Empty for a park on the
+    /// workflow's own ceiling.
     pub stage: String,
     /// Where a workflow's run goes when the time is up: the stage's
-    /// `then.nobody-answered:`, or `stop-and-say-so` when it says none.
+    /// `then.nobody-answered:`, or `stop-and-say-so` when it says none (and
+    /// always for a park).
     pub nobody_answered: String,
     /// `answer-within:` written as a moment (`{at: input.starts-at, before:
     /// 24h}`), as written: when it comes is the runtime's to work out from the
@@ -330,7 +333,10 @@ impl LoadReport {
                     said["agent"] = serde_json::json!(w.agent);
                 } else {
                     said["workflow"] = serde_json::json!(w.workflow);
-                    said["stage"] = serde_json::json!(w.stage);
+                    // A park on the workflow's own ceiling is no stage's.
+                    if !w.stage.is_empty() {
+                        said["stage"] = serde_json::json!(w.stage);
+                    }
                     said["nobody-answered"] = serde_json::json!(w.nobody_answered);
                     if let Some(m) = &w.moment {
                         said["moment"] = m.clone();
@@ -1018,9 +1024,13 @@ fn read_wait(
     }
 }
 
-/// Every wait a workflow can produce (02W §2.8): one per `ask-someone` stage, at
-/// any depth, read off the question it asks (the workflow's own, then the
-/// workspace's), in document order. `pact waits` lists them with the agents'.
+/// Every wait a workflow can produce (02W §2.8), in document order: one per
+/// `ask-someone` stage, at any depth, and one per question a run parks on
+/// when a failure plan or a ceiling says `ask-a-person` (`if-it-fails.asks:`,
+/// a stage's or the workflow's `limits.asks:`), each read off the question it
+/// asks (the workflow's own, then the workspace's). A park has no
+/// `nobody-answered:` exit, so silence there stops the run and says so.
+/// `pact waits` lists them with the agents'.
 fn workflow_waits(document: &Node) -> Vec<Wait> {
     use crate::waits::{self, Answerer};
     let mut out = Vec::new();
@@ -1030,10 +1040,30 @@ fn workflow_waits(document: &Node) -> Vec<Wait> {
         .into_iter()
         .flatten()
     {
+        // (stage, the line that asks, where silence goes)
+        let mut asking: Vec<(&str, &Node, String)> = Vec::new();
+        if let Some(limits) = entry.node.get("limits") {
+            asking.push(("", limits, STOP.to_string()));
+        }
         for (stage, node) in waits::every_stage(&entry.node) {
-            if crate::workflows::does(node) != Some("ask-someone") {
-                continue;
+            if crate::workflows::does(node) == Some("ask-someone") {
+                let quiet = node
+                    .get("then")
+                    .and_then(|t| t.get("nobody-answered"))
+                    .and_then(Node::as_str)
+                    .unwrap_or(STOP)
+                    .trim()
+                    .to_string();
+                asking.push((stage, node, quiet));
             }
+            for park in [node.get("if-it-fails"), node.get("limits")]
+                .into_iter()
+                .flatten()
+            {
+                asking.push((stage, park, STOP.to_string()));
+            }
+        }
+        for (stage, node, nobody_answered) in asking {
             let Some((question, declared_at)) = named(node, "asks") else {
                 continue;
             };
@@ -1068,13 +1098,6 @@ fn workflow_waits(document: &Node) -> Vec<Wait> {
                         .collect(),
                 )
             });
-            let nobody_answered = node
-                .get("then")
-                .and_then(|t| t.get("nobody-answered"))
-                .and_then(Node::as_str)
-                .unwrap_or("stop-and-say-so")
-                .trim()
-                .to_string();
             out.push(Wait {
                 reason,
                 agent: String::new(),
@@ -1094,6 +1117,9 @@ fn workflow_waits(document: &Node) -> Vec<Wait> {
     }
     out
 }
+
+/// Where a workflow's run goes when nobody answers and nothing says where.
+const STOP: &str = "stop-and-say-so";
 
 // ─────────────────────────────────────────────────────────────────────── reading
 

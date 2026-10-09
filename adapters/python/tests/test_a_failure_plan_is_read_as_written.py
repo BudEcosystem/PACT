@@ -67,15 +67,13 @@ def test_carrying_on_is_read_with_the_answer_it_goes_on_with(tmp_path: Path) -> 
         INVOICES,
         tmp_path / "tree",
         {
-            "workflows/ap-inbox.yaml": (
-                "        bind: { file: item.file }\n",
-                "        bind: { file: item.file }\n        if-it-fails:\n          after-that: carry-on\n"
-                "          carry-on-with: { invoice: values.unread-invoice }\n",
+            "workflows/one-invoice.yaml": (
+                "      after-that: ask-a-person       # the vendor-master queue creates it, then resumes here\n"
+                "      asks: create-the-vendor\n",
+                "      after-that: carry-on\n      carry-on-with: { payment-terms: values.net-30 }\n",
             )
         },
-        {"values/unread-invoice.yaml": "description: d\nshape: text\nvalue: unread\n"},
+        {"values/net-30.yaml": "description: d\nshape: text\nvalue: net 30\n"},
     )
-    flow = WorkflowSpec.from_workflow(shown(root), "ap-inbox")
-    (each,) = [s for s in flow.steps if s.name == "each-attachment"]
-    (read,) = [s for s in each.steps if s.name == "read"]
-    assert read.if_it_fails == FailurePlan(after_that="carry-on", carry_on_with={"invoice": "values.unread-invoice"})
+    vendor = WorkflowSpec.from_workflow(shown(root), "one-invoice").stage_named("vendor")
+    assert vendor.if_it_fails == FailurePlan(after_that="carry-on", carry_on_with={"payment-terms": "values.net-30"})

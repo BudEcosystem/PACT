@@ -8,7 +8,8 @@
 //! stage that runs after the reader. WF-7: `item.` outside an `each`. WF-9: a
 //! target picked from a binding with no `may-call:`. WF-39: a call that leaves
 //! a required input empty, names one its target does not take, or binds a
-//! value of another shape.
+//! value of another shape; an `answer`'s `bind:` is held the same way to its
+//! workflow's `answers-with:` (over #16's `parent-contact`).
 //!
 //! The fixture is #60's interconnection case (02W §5.5), the stages its
 //! bindings read, in `tests/trees/an-interconnection-case/`. It loads clean;
@@ -477,6 +478,69 @@ fn a_shape_made_of_itself_is_refused() {
     let text = refused(&root, "loader/a-shape-made-of-itself");
     assert!(
         text.contains("The shape 'agreement-terms' is made of itself"),
+        "{text}"
+    );
+}
+
+const CONTACT: &str = "workflows/parent-contact.yaml";
+
+#[test]
+fn an_answer_is_held_to_what_its_workflow_answers_with() {
+    // #16's `parent-contact` answers `contact-id: text`. An answer naming
+    // another field leaves the one it has empty.
+    let root = edited(
+        "workflows-16-trial-booking",
+        "answer-key",
+        &[(
+            CONTACT,
+            "bind: { contact-id: steps.upsert.id }",
+            "bind: { contact-number: steps.upsert.id }",
+        )],
+    );
+    let (ok, text) = check(&root);
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(!ok, "{text}");
+    assert!(
+        text.contains(
+            "'reply' fills `contact-number:` of the answer of 'parent-contact', and the answer \
+             of 'parent-contact' has no field by that name."
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains(
+            "'reply' gives the answer of 'parent-contact' and leaves its field 'contact-id' \
+             empty, so the answer of 'parent-contact' would go out without it."
+        ),
+        "{text}"
+    );
+    assert_eq!(
+        text.matches("rule: loader/a-call-that-does-not-fit")
+            .count(),
+        2,
+        "{text}"
+    );
+}
+
+#[test]
+fn an_answer_is_given_in_the_shape_its_workflow_answers_with() {
+    let root = edited(
+        "workflows-16-trial-booking",
+        "answer-shape",
+        &[(
+            CONTACT,
+            "answers-with: { contact-id: text }",
+            "answers-with: { contact-id: number }",
+        )],
+    );
+    let text = refused(&root, "loader/a-call-that-does-not-fit");
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(
+        text.contains(
+            "'reply' fills `contact-id:` of the answer of 'parent-contact' from \
+             'steps.upsert.id', which is `text`, and the answer of 'parent-contact' has `number` \
+             there"
+        ),
         "{text}"
     );
 }

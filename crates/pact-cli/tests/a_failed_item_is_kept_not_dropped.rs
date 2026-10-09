@@ -78,10 +78,72 @@ fn every_item_is_kept_when_one_fails_and_the_tree_says_so() {
     assert!(flow.contains("      if-someone-fails: carry-on"), "{flow}");
 }
 
+/// #48's `vendor` stage, whose failure plan asks the vendor-master queue.
+const VENDOR: (&str, &str) = (
+    "workflows/one-invoice.yaml",
+    "      after-that: ask-a-person       # the vendor-master queue creates it, then resumes here\n      asks: create-the-vendor\n",
+);
+
+const NET_30: (&str, &str) = (
+    "values/net-30.yaml",
+    "description: The payment terms a vendor nobody found is given.\nshape: text\nvalue: net 30\n",
+);
+
+/// `vendor` carrying on with `payment-terms` read from `from`.
+fn vendor_carries_on(label: &str, from: &str) -> (bool, String) {
+    check(
+        label,
+        &[(
+            VENDOR.0,
+            VENDOR.1,
+            &format!(
+                "      after-that: carry-on\n      carry-on-with: {{ payment-terms: {from} }}\n"
+            ),
+        )],
+        &[NET_30],
+    )
+}
+
 #[test]
 fn carrying_on_with_what_the_stage_answers_loads() {
+    let (ok, text) = vendor_carries_on("carry-on", "values.net-30");
+    assert!(ok, "{text}");
+}
+
+#[test]
+fn what_a_stage_carries_on_with_is_a_binding_to_something() {
+    for (label, from, said) in [
+        (
+            "carry-on-nowhere",
+            "steps.nowhere.at-all",
+            "'vendor' reads 'steps.nowhere.at-all', and this workflow has no stage called 'nowhere'",
+        ),
+        (
+            "carry-on-no-input",
+            "input.nothing-like-this",
+            "'vendor' reads 'input.nothing-like-this', and the workflow 'one-invoice' accepts no \
+             'nothing-like-this'",
+        ),
+        (
+            "carry-on-no-value",
+            "values.net-60",
+            "`values.net-60` names no value",
+        ),
+    ] {
+        let (ok, text) = vendor_carries_on(label, from);
+        assert!(!ok, "{from}: {text}");
+        assert!(text.contains(said), "{from}: {text}");
+        assert!(
+            text.contains("rule: loader/a-binding-to-nothing"),
+            "{from}: {text}"
+        );
+    }
+}
+
+#[test]
+fn what_a_stage_carries_on_with_is_in_the_shape_of_its_answer() {
     let (ok, text) = check(
-        "carry-on",
+        "carry-on-shape",
         &[(
             FLOW,
             READ,
@@ -89,7 +151,19 @@ fn carrying_on_with_what_the_stage_answers_loads() {
         )],
         &[UNREAD],
     );
-    assert!(ok, "{text}");
+    assert!(!ok, "{text}");
+    assert!(
+        text.contains(
+            "'read' fills `invoice:` of the answer of 'invoice-reader' from \
+             'values.unread-invoice', which is `text`, and the answer of 'invoice-reader' has \
+             `invoice-data` there"
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains("rule: loader/a-call-that-does-not-fit"),
+        "{text}"
+    );
 }
 
 #[test]
@@ -156,12 +230,19 @@ fn a_backup_is_called_with_the_stages_own_bind() {
     assert!(!ok, "{text}");
     assert!(
         text.contains(
-            "'read' falls back on 'netsuite/get-vendor', which needs `tax-id`, `name`, and a \
-             backup is given only 'read''s own `bind:`"
+            "'read' falls back on 'netsuite/get-vendor' and leaves its inputs 'tax-id', 'name' \
+             empty, so 'netsuite/get-vendor' would run without them."
         ),
         "{text}"
     );
-    assert!(text.contains("rule: loader/a-call-that-does-not-fit"), "{text}");
+    assert!(
+        text.contains(
+            "'read' fills `file:` of 'netsuite/get-vendor', and 'netsuite/get-vendor' takes no \
+             input by that name."
+        ),
+        "{text}"
+    );
+    assert_eq!(text.matches("rule: loader/a-call-that-does-not-fit").count(), 2, "{text}");
     let (ok, text) = check(
         "backup-missing",
         &[(
@@ -172,6 +253,53 @@ fn a_backup_is_called_with_the_stages_own_bind() {
         &[],
     );
     assert!(!ok && text.contains("rule: loader/no-such-name"), "{text}");
+}
+
+#[test]
+fn a_backup_is_held_to_the_stages_bind_as_a_call_is() {
+    // The same `bind:` written as a direct call to the backup is refused the
+    // same two ways: a shape that does not fit, and an input it does not take.
+    let by_number = (
+        "tools/netsuite.yaml",
+        "  find-po-and-receipts:\n",
+        "  find-vendor-by-number:\n    description: Find a vendor by its tax number.\n    \
+         reads-only: yes\n    takes:\n      tax-id: whole number\n    answers-with:\n      \
+         id: text\n      payment-terms: text\n  find-po-and-receipts:\n",
+    );
+    let (ok, text) = check(
+        "backup-shape",
+        &[
+            by_number,
+            (
+                VENDOR.0,
+                VENDOR.1,
+                "      after-that: use-a-backup\n      backup: netsuite/find-vendor-by-number\n",
+            ),
+        ],
+        &[],
+    );
+    assert!(!ok, "{text}");
+    assert!(
+        text.contains(
+            "'vendor' fills `tax-id:` of 'netsuite/find-vendor-by-number' from \
+             'input.invoice.vendor-tax-id', which is `text`, and \
+             'netsuite/find-vendor-by-number' takes `whole number` there"
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains(
+            "'vendor' fills `name:` of 'netsuite/find-vendor-by-number', and \
+             'netsuite/find-vendor-by-number' takes no input by that name."
+        ),
+        "{text}"
+    );
+    assert_eq!(
+        text.matches("rule: loader/a-call-that-does-not-fit")
+            .count(),
+        2,
+        "{text}"
+    );
 }
 
 #[test]

@@ -25,7 +25,8 @@
 //! a role or a team, reached the way they chose.
 //!
 //! **Which questions a workflow asks**: its own `questions:`, and every
-//! workspace question an `asks:` inside it names (a stage's, or a limit's).
+//! workspace question an `asks:` inside it names (a stage's, a limit's, or a
+//! failure plan's).
 //! Every other workspace question is an agent's, and keeps the lines an
 //! agent's runtime reads.
 
@@ -195,6 +196,7 @@ fn asked_by_workflows(document: &Node) -> BTreeMap<String, String> {
             for n in [
                 stage.get("asks"),
                 stage.get("limits").and_then(|l| l.get("asks")),
+                stage.get("if-it-fails").and_then(|f| f.get("asks")),
             ]
             .into_iter()
             .flatten()

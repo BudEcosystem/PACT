@@ -1,15 +1,18 @@
 //! Silence never approves (02W §3 WF-20, §8; WAIT-4, R13, R50).
 //!
 //! A wait a person answers may not, by its silence, reach a stage whose call a
-//! person must allow first, or a write its own yes leads to, before another
-//! wait. A wait only the clock and events answer has no gate, so its one exit
-//! may lead anywhere.
+//! person must allow first, or a stage making a write its own yes makes, before
+//! another wait a person answers. A wait only the clock and events answer has
+//! no gate: its one exit may lead anywhere, and silence walks on through it.
 //!
 //! Three things are held here, over the five worked trees of 02W §5
 //! (`tests/trees/workflows-*`):
 //!
 //! - the first diagnostic 02W §3 prints, from its mutated copy of §5.2;
-//! - a silent exit that reaches a call needing a person's yes;
+//! - a silent exit that reaches a call needing a person's yes, or one a rule in
+//!   the workflow's policy names;
+//! - silence that walks through a clock's wait, or reaches the yes's write by
+//!   another stage's name;
 //! - the mutation sweep: every `nobody-answered:` in the fixtures pointed at
 //!   every stage beside it. WF-20 refuses exactly the mutations a small,
 //!   separate reading of the tree (`pact show`'s document, walked here) says
@@ -142,6 +145,59 @@ fn silence_may_not_reach_a_call_a_person_must_allow() {
 }
 
 #[test]
+fn silence_may_not_reach_a_call_a_rule_in_the_workflows_policy_names() {
+    // The same, said by the workflow's policy rather than by the action. A
+    // write its policy guards is asked about, so WF-25 has nothing to note.
+    let root = edited(
+        "workflows-48-invoices",
+        "policy",
+        "workflows/one-invoice.yaml",
+        "starts-at: vendor\n",
+        "starts-at: vendor\npolicy: clerk-messages\n",
+    );
+    for (file, text) in [
+        (
+            "policies/clerk-messages.yaml",
+            "ask-a-person:\n  - when:\n      - { tool: teams/post-message }\n    because: a \
+             message to the clerks' channel is seen by a person first\n    question: may-we-post\n",
+        ),
+        (
+            "questions/may-we-post.yaml",
+            "description: A person sees a message before it goes to the clerks' channel.\nsays: \
+             May this message be posted?\nanswer: { approved: yes or no }\nasked-of: \
+             [ap-clerks]\nanswer-within: 1 day\nif-nobody-answers: stop-and-say-so\n",
+        ),
+    ] {
+        let p = root.join(file);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, text).unwrap();
+    }
+    let (ok, text) = check(&root);
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(!ok, "{text}");
+    for wait in ["owner-approves", "owner-first", "controller-approves"] {
+        assert!(
+            text.contains(&format!(
+                "'tell-clerk' can be reached when nobody answered '{wait}', and it calls \
+                 `teams/post-message`, which a rule in this workflow's policy asks a person \
+                 about — so silence would stand where a yes must."
+            )),
+            "{wait}:\n{text}"
+        );
+    }
+    assert_eq!(text.matches(&format!("rule: {RULE}")).count(), 3, "{text}");
+    // Only `ap-inbox`, which names no policy, is still told its message
+    // cannot be undone.
+    let notes: Vec<&str> = text
+        .split("\n\n")
+        .filter(|d| d.contains("rule: loader/cannot-be-undone-and-nobody-asked"))
+        .filter(|d| d.contains("`teams/post-message`"))
+        .collect();
+    assert_eq!(notes.len(), 1, "{text}");
+    assert!(notes[0].contains("workflows/ap-inbox.yaml"), "{text}");
+}
+
+#[test]
 fn silence_may_go_to_another_wait_or_to_a_stage_only_a_no_reaches() {
     for to in ["controller-approves", "tell-sender", "stop-and-say-so", "done"] {
         let root = edited(
@@ -155,6 +211,79 @@ fn silence_may_go_to_another_wait_or_to_a_stage_only_a_no_reaches() {
         let _ = std::fs::remove_dir_all(&root);
         assert!(!text.contains(RULE), "{to}:\n{text}");
     }
+}
+
+/// #48 with `owner-approves`' silence sent to `to`, and `extra` stages and
+/// workflow questions written in.
+fn owner_silence_to(label: &str, to: &str, stages: &str, questions: &str) -> PathBuf {
+    let root = edited(
+        "workflows-48-invoices",
+        label,
+        "workflows/one-invoice.yaml",
+        OWNER_APPROVES,
+        &format!(
+            "{}\n{stages}",
+            OWNER_APPROVES.replace(
+                "nobody-answered: tell-clerk",
+                &format!("nobody-answered: {to}")
+            )
+        ),
+    );
+    let p = root.join("workflows/one-invoice.yaml");
+    let text = std::fs::read_to_string(&p).unwrap();
+    std::fs::write(
+        &p,
+        text.replacen("questions:\n", &format!("questions:\n{questions}"), 1),
+    )
+    .unwrap();
+    root
+}
+
+#[test]
+fn a_wait_only_the_clock_answers_is_no_gate_on_the_way() {
+    // Silence that waits a day and then posts still posts.
+    let root = owner_silence_to(
+        "cool-off",
+        "cool-off",
+        "  cool-off:\n    does: ask-someone\n    asks: cool-off\n    then: { nobody-answered: post }\n",
+        "  cool-off:\n    description: A day to cool off.\n    asked-of: [the-clock]\n    answer-within: 1 day\n",
+    );
+    let (ok, text) = check(&root);
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(!ok, "{text}");
+    assert!(
+        text.contains(
+            "'post' can be reached when nobody answered 'owner-approves' (through 'cool-off'), \
+             and 'post' is what a yes would have done — so silence would act as a yes."
+        ),
+        "{text}"
+    );
+    assert_eq!(text.matches(&format!("rule: {RULE}")).count(), 1, "{text}");
+}
+
+#[test]
+fn another_stage_making_the_write_a_yes_makes_is_what_a_yes_would_have_done() {
+    // A stage of another name that makes the same NetSuite bill.
+    let root = owner_silence_to(
+        "post-anyway",
+        "post-anyway",
+        "  post-anyway:\n    does: call\n    call: netsuite/create-vendor-bill\n    bind:\n      \
+         vendor-id: steps.vendor.id\n      invoice: input.invoice\n      attachment: input.file\n    \
+         then: { answered: pay }\n",
+        "",
+    );
+    let (ok, text) = check(&root);
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(!ok, "{text}");
+    assert!(
+        text.contains(
+            "'post-anyway' can be reached when nobody answered 'owner-approves', and it makes \
+             `netsuite/create-vendor-bill`, the write a yes would have made — so silence would \
+             act as a yes."
+        ),
+        "{text}"
+    );
+    assert_eq!(text.matches(&format!("rule: {RULE}")).count(), 1, "{text}");
 }
 
 // ──────────────────────────────────────────────────────────── the sweep
@@ -220,25 +349,34 @@ impl<'a> Oracle<'a> {
         self.doc["tools"].get(tool)?["actions"].get(action)
     }
 
-    fn writes(&self, stage: &Value, depth: usize) -> bool {
+    /// The writes a stage makes, named by what it calls: a tool's action
+    /// that is not `reads-only`, or a workflow that makes one.
+    fn made(&self, stage: &Value, depth: usize) -> BTreeSet<String> {
+        let mut out = BTreeSet::new();
         if depth > 8 {
-            return false;
+            return out;
         }
-        if let Some(body) = stage["steps"].as_object()
-            && body.values().any(|s| self.writes(s, depth + 1))
+        for s in stage["steps"]
+            .as_object()
+            .into_iter()
+            .flat_map(|b| b.values())
         {
-            return true;
+            out.extend(self.made(s, depth + 1));
         }
         let Some(call) = stage["call"].as_str() else {
-            return false;
+            return out;
         };
-        if let Some(a) = self.action(call) {
-            return a["reads-only"] != Value::Bool(true) && a["reads-only"] != "yes";
+        let writes = match self.action(call) {
+            Some(a) => a["reads-only"] != Value::Bool(true) && a["reads-only"] != "yes",
+            None => self.doc["workflows"]
+                .get(call)
+                .and_then(|w| w["steps"].as_object())
+                .is_some_and(|steps| steps.values().any(|s| !self.made(s, depth + 1).is_empty())),
+        };
+        if writes {
+            out.insert(call.to_string());
         }
-        self.doc["workflows"]
-            .get(call)
-            .and_then(|w| w["steps"].as_object())
-            .is_some_and(|steps| steps.values().any(|s| self.writes(s, depth + 1)))
+        out
     }
 
     fn guarded(&self, stage: &Value) -> bool {
@@ -281,17 +419,24 @@ impl<'a> Oracle<'a> {
         if !self.person_answers(wait) || ENDS.contains(&to) {
             return false;
         }
-        let yes = self.yes(wait);
+        let made: BTreeSet<String> = self
+            .yes(wait)
+            .iter()
+            .filter_map(|s| self.steps().get(s))
+            .flat_map(|s| self.made(s, 0))
+            .collect();
         let mut seen = BTreeSet::from([to.to_string()]);
         let mut queue = VecDeque::from([to.to_string()]);
         while let Some(here) = queue.pop_front() {
             let Some(stage) = self.steps().get(&here) else {
                 continue;
             };
-            if stage["does"] == "ask-someone" {
+            // A wait a person answers ends the walk; one only the clock or an
+            // event answers is no gate, and every exit of it goes on.
+            if self.person_answers(stage) {
                 continue;
             }
-            if self.guarded(stage) || (yes.contains(&here) && self.writes(stage, 0)) {
+            if self.guarded(stage) || !self.made(stage, 0).is_disjoint(&made) {
                 return true;
             }
             for n in Self::next(stage) {

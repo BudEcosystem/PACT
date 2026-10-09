@@ -8,16 +8,18 @@ holds that did not; the commits are listed under it for whoever wants the detail
 Running PACT trees in production on Pydantic AI 2.54, through
 [Bud Agent Flow](https://github.com/BudEcosystem/Bud-Agent-Flow), drove these changes. Every
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
-runs offline: 3912 tests, 1335 Rust and 2577 adapter.
+runs offline: 3922 tests, 1345 Rust and 2577 adapter.
 
 ### Workflows: failure plans, undo, silence, and the five worked trees (9 October)
 
 - **What happens after a failure is one record** (02W §2.7, F2). A workflow stage writes
   `if-it-fails:` with `after-that:` (`use-a-backup`, `carry-on`, `ask-a-person`,
   `wait-for-a-new-version`, `undo`, `stop-and-say-so`) and the line each choice needs:
-  `backup:` (called with the stage's own `bind:`; a backup that needs more is
+  `backup:` (called with the stage's own `bind:`, held to the backup exactly as a `call:` is:
+  an input left empty, one it does not take, or one of another shape is
   `loader/a-call-that-does-not-fit`), `carry-on-with:` (fields the stage answers with, else
-  `loader/a-binding-to-nothing`), `asks:`, `new-version-of:`, `undo:` and `undo-where:` (only
+  `loader/a-binding-to-nothing`; each value a binding read like any other, in the shape of
+  the field it stands in for), `asks:` (the workflow's question, wherever it is written), `new-version-of:`, `undo:` and `undo-where:` (only
   when `undo:` names an `each`). `gives-up-after:` is a moment. A stage's `when-it-runs-out:`
   of `use-a-backup`, `wait-for-a-new-version` or `undo` takes its companion from the same
   record (`schema/missing-companion`), and a workflow's own ceiling cannot use a backup or a
@@ -31,10 +33,20 @@ runs offline: 3912 tests, 1335 Rust and 2577 adapter.
   calling a write with no undo and no *Ask before* gets the note
   `loader/cannot-be-undone-and-nobody-asked` (WF-25).
 - **Silence never approves, by structure** (02W §3 WF-20, WAIT-4, R13, R50). The
-  `nobody-answered` exit of a wait a person answers may not reach, before another wait, a stage
-  whose call needs a person's yes (`needs-a-person:` or a rule in the workflow's policy), or a
-  write the wait's `answered` exit leads to (`loader/silence-reaches-a-gated-step`, with a
-  quiet place to send it instead). A wait only the clock or events answer has no gate.
+  `nobody-answered` exit of a wait a person answers may not reach, before another wait a person
+  answers, a stage whose call needs a person's yes (`needs-a-person:` or a rule in the
+  workflow's policy), or a stage making a write (the same `<tool>/<action>`, agent or
+  workflow) the wait's `answered` exit makes (`loader/silence-reaches-a-gated-step`, with a
+  quiet place to send it instead). A wait only the clock or events answer has no gate, and
+  silence walks on through every exit of it.
+- **An `answer` is held to what its workflow answers with**: its `bind:` (in the workflow's
+  own `steps:`) names only fields of `answers-with:`, fills every required one, each in its
+  shape (`loader/a-call-that-does-not-fit`). A `values.<name>` binding is read in the
+  value's `shape:`.
+- **`pact waits` lists every workflow wait**: besides each `ask-someone` stage, each park a
+  failure plan or a ceiling asks (`if-it-fails.asks:`, a stage's or the workflow's
+  `limits.asks:`), whose silence stops the run and says so; a park on the workflow's own
+  ceiling names no stage.
 - **A judged check has a judge** (WF-34): a workflow's `judged:` check with no `graded-by:` on
   the checks it names is `loader/a-check-nothing-can-run`.
 - **The five worked trees of 02W §5 load clean** — `tests/trees/workflows-16-trial-booking`

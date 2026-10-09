@@ -14,7 +14,8 @@
 //! | `loader/a-target-picked-from-nowhere` | WF-9 | `call:` is a binding with no `may-call:` |
 //! | `loader/remembered-from-nowhere` | WF-13 | a repeat's `remembers:` entry has no `comes-from:`, or one that reads outside the round |
 //! | `loader/until-that-cannot-change` | WF-14 | `until:`'s `value:` lines read nothing the round writes (an `until:` of `tool:` lines only asks its tool each round) |
-//! | `loader/a-call-that-does-not-fit` | WF-39 | a call's `bind:` leaves a required input (or a required part of one filled part by part, `fills.first-name`) of its target empty, names one it does not take or a part its shape does not have, or binds the wrong shape |
+//! | `loader/a-call-that-does-not-fit` | WF-39 | a call's `bind:` leaves a required input (or a required part of one filled part by part, `fills.first-name`) of its target empty, names one it does not take or a part its shape does not have, or binds the wrong shape; the same for the stage's `bind:` against its `if-it-fails.backup:`, and for an `answer`'s `bind:` (in the workflow's own `steps:`) against the workflow's `answers-with:`; a `carry-on-with:` value in another shape than the answer field it stands in for |
+//! | `loader/a-binding-to-nothing` *(also)* | WF-4 | `carry-on-with:` names a field the stage does not answer with (its values are bindings, read as any other) |
 //! | `loader/a-shape-made-of-itself` | new | a shape under `workspace.shapes` is, through its parts, made of itself |
 //! | `loader/a-line-this-stage-never-reads` | WF-3 | `comes-from:`, `combines-by:` or `lasts: one-run` on memory that is not a repeat's, or `kept-per:` on an agent's or a port's |
 //!
@@ -29,9 +30,9 @@
 //! `schema/not-an-answer-shape` uses too, so a line means the same thing to the
 //! check that admits it and to the rule that fits a binding to it.
 //!
-//! `values.<name>` is not resolved here: `values:` is put in place and removed
-//! before any check reads the tree (`values.rs`), and a value table read when
-//! a stage starts is the value-table work that follows.
+//! `values.<name>` is resolved in `values.rs` (WF-4 when it names no value); a
+//! value read by name stays in the document with its `shape:`, so WF-39 holds
+//! it as it holds any other binding.
 
 use crate::conditions::{self, Kind, Position};
 use crate::workflows::{self, Kind as Called, Resolved};
@@ -367,6 +368,60 @@ struct Filling<'b> {
     target: &'b str,
 }
 
+/// What a `bind:` (or a failure plan's `carry-on-with:`) is held to by WF-39,
+/// and how its diagnostics name it: a call's target, a backup, or the
+/// workflow's own answer.
+struct Against {
+    /// `'netsuite/get-vendor'`, `the answer of 'parent-contact'`.
+    name: String,
+    /// What the stage does with it: `calls`, `falls back on`, `gives`.
+    verb: &'static str,
+    /// What its lines are: `input`, `field`.
+    noun: &'static str,
+    /// How it holds a line: `takes`, `has`.
+    takes: &'static str,
+    /// What it would do short of a line: `run`, `go out`.
+    runs: &'static str,
+}
+
+impl Against {
+    fn call(target: &str) -> Self {
+        Against {
+            name: format!("'{target}'"),
+            verb: "calls",
+            noun: "input",
+            takes: "takes",
+            runs: "run",
+        }
+    }
+
+    fn backup(target: &str) -> Self {
+        Against {
+            verb: "falls back on",
+            ..Against::call(target)
+        }
+    }
+
+    /// The answer a stage's `carry-on-with:` stands in for, or a workflow's.
+    fn answer(of: &str) -> Self {
+        Against {
+            name: format!("the answer of '{of}'"),
+            verb: "gives",
+            noun: "field",
+            takes: "has",
+            runs: "go out",
+        }
+    }
+
+    /// "takes no input", "has no field".
+    fn has_no(&self) -> String {
+        match self.takes {
+            "takes" => format!("takes no {}", self.noun),
+            _ => format!("has no {}", self.noun),
+        }
+    }
+}
+
 impl<'a> Flow<'a> {
     fn stages(&self, frames: &mut Vec<Frame<'a>>, diags: &mut Diagnostics) {
         let steps = frames.last().expect("a frame").steps;
@@ -379,10 +434,10 @@ impl<'a> Flow<'a> {
                 self.call(frames, stage, fields, diags);
             }
             if does == "answer" {
-                let bind = fields.get("bind").and_then(|e| e.node.as_map());
-                for value in bind.into_iter().flatten().map(|(_, v)| &v.node) {
-                    self.read(frames, stage, value, None, Reading::At, diags);
-                }
+                self.answer(frames, stage, fields, diags);
+            }
+            if let Some(plan) = fields.get("if-it-fails").and_then(|e| e.node.as_map()) {
+                self.plan(frames, stage, &entry.node, fields, plan, diags);
             }
             if does == "decide" {
                 conditions::decides(stage, fields, &entry.node, diags);
@@ -488,22 +543,192 @@ impl<'a> Flow<'a> {
             );
         }
         if let (Some(target), Some(inputs)) = (target, inputs) {
-            self.fits(frames, stage, target, &inputs, call, bind, diags);
+            self.fits(
+                frames,
+                stage,
+                &Against::call(target),
+                &inputs,
+                call,
+                bind,
+                diags,
+            );
         }
     }
 
-    /// WF-39: a call's `bind:` against what its target takes.
+    /// An `answer` stage: each value it hands back is a binding (WF-4 to
+    /// WF-7), and, written in the workflow's own `steps:`, its `bind:` fits
+    /// the workflow's `answers-with:` (WF-39). One inside a stage's body
+    /// answers for that body, not for the workflow.
+    fn answer(&self, frames: &[Frame<'a>], stage: &str, fields: &Map, diags: &mut Diagnostics) {
+        let bind = fields.get("bind");
+        for value in bind
+            .and_then(|e| e.node.as_map())
+            .into_iter()
+            .flatten()
+            .map(|(_, v)| &v.node)
+        {
+            self.read(frames, stage, value, None, Reading::At, diags);
+        }
+        let answers = self.node.get("answers-with").and_then(Node::as_map);
+        let (Some(bind), Some(answers), 1) = (bind, answers, frames.len()) else {
+            return;
+        };
+        let fields: Vec<(String, Option<Line>, String)> = answers
+            .iter()
+            .map(|(k, e)| {
+                (
+                    k.clone(),
+                    self.shapes.line(&e.node),
+                    e.node.as_str().unwrap_or("").to_string(),
+                )
+            })
+            .collect();
+        self.fits(
+            frames,
+            stage,
+            &Against::answer(self.name),
+            &fields,
+            Some(bind),
+            bind.node.as_map(),
+            diags,
+        );
+    }
+
+    /// A stage's `if-it-fails:`: its `backup:` is called with the stage's own
+    /// `bind:`, so that `bind:` fits the backup as it would a `call:` (WF-39);
+    /// each `carry-on-with:` value is a binding (WF-4 to WF-7) standing in for
+    /// the field of the stage's answer it names (WF-4), in that field's shape.
+    fn plan(
+        &self,
+        frames: &[Frame<'a>],
+        stage: &str,
+        node: &Node,
+        fields: &Map,
+        plan: &Map,
+        diags: &mut Diagnostics,
+    ) {
+        let bind = fields.get("bind").and_then(|e| e.node.as_map());
+        if let Some(backup) = plan.get("backup")
+            && let Some(said) = backup.node.as_str().map(str::trim)
+            && !is_binding(said)
+            && let Some(inputs) = self.inputs_of(said)
+        {
+            self.fits(
+                frames,
+                stage,
+                &Against::backup(said),
+                &inputs,
+                Some(backup),
+                bind,
+                diags,
+            );
+        }
+        let Some(carry) = plan.get("carry-on-with").and_then(|e| e.node.as_map()) else {
+            return;
+        };
+        for (_, value) in carry {
+            self.read(frames, stage, &value.node, None, Reading::At, diags);
+        }
+        let Some(answers) = self.answer_of(node) else {
+            return;
+        };
+        let target = fields
+            .get("call")
+            .and_then(|e| e.node.as_str())
+            .map(str::trim)
+            .filter(|t| !is_binding(t))
+            .unwrap_or(stage);
+        let against = Against::answer(target);
+        let have: Vec<&str> = answers.iter().map(|(n, _)| n.as_str()).collect();
+        for (key, value) in carry {
+            let Some((_, line)) = answers.iter().find(|(n, _)| n == key.trim()) else {
+                diags.push(Diagnostic::error(
+                    "loader/a-binding-to-nothing",
+                    value.key_span.clone(),
+                    format!(
+                        "'{stage}' carries on with `{key}`, and '{target}' does not answer with \
+                         `{key}` — so nothing after it reads that value."
+                    ),
+                    if have.is_empty() {
+                        format!("Delete it: '{target}' answers with no fields.")
+                    } else {
+                        format!(
+                            "Use one of the fields '{target}' answers with: {}.",
+                            have.iter()
+                                .map(|n| format!("`{n}`"))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
+                    },
+                ));
+                continue;
+            };
+            if let Some(want) = line {
+                let written = want.shape.written();
+                self.unlike(
+                    frames,
+                    stage,
+                    &against,
+                    key.trim(),
+                    (want, &written),
+                    value,
+                    diags,
+                );
+            }
+        }
+    }
+
+    /// WF-39's shape half: the value `entry` binds for `key` is in a shape
+    /// `want` takes, when both are known here.
+    #[allow(clippy::too_many_arguments)]
+    fn unlike(
+        &self,
+        frames: &[Frame<'a>],
+        stage: &str,
+        against: &Against,
+        key: &str,
+        (want, written): (&Line, &str),
+        entry: &Entry,
+        diags: &mut Diagnostics,
+    ) {
+        let Some((have, have_written)) = self.shape_of(frames, &entry.node) else {
+            return;
+        };
+        if self.shapes.fits(&have.shape, &want.shape) {
+            return;
+        }
+        let (name, takes) = (&against.name, against.takes);
+        let read = entry.node.as_str().unwrap_or("").trim();
+        diags.push(Diagnostic::error(
+            "loader/a-call-that-does-not-fit",
+            entry.node.span.clone(),
+            format!(
+                "'{stage}' fills `{key}:` of {name} from '{read}', which is `{have_written}`, \
+                 and {name} {takes} `{}` there, so the value could not be read as what it is \
+                 given for.",
+                written.trim()
+            ),
+            format!(
+                "Bind a value that is `{}` here, or change what {name} {takes}.",
+                want.shape.written()
+            ),
+        ));
+    }
+
+    /// WF-39: a `bind:` against what `against` takes: no line it does not
+    /// take, each in a shape it takes, and none it needs left empty.
     #[allow(clippy::too_many_arguments)]
     fn fits(
         &self,
         frames: &[Frame<'a>],
         stage: &str,
-        target: &str,
+        against: &Against,
         inputs: &[(String, Option<Line>, String)],
         call: Option<&Entry>,
         bind: Option<&Map>,
         diags: &mut Diagnostics,
     ) {
+        let name = &against.name;
         let bound: BTreeSet<String> = bind.into_iter().flatten().map(|(k, _)| dotted(k)).collect();
         let names: Vec<&str> = inputs.iter().map(|(k, _, _)| k.as_str()).collect();
         for (key, entry) in bind.into_iter().flatten() {
@@ -517,11 +742,11 @@ impl<'a> Flow<'a> {
                         "loader/a-call-that-does-not-fit",
                         at,
                         format!(
-                            "'{stage}' fills `{input}:` of '{target}', and '{target}' takes no \
-                             input by that name."
+                            "'{stage}' fills `{input}:` of {name}, and {name} {} by that name.",
+                            against.has_no()
                         ),
                         if names.is_empty() {
-                            format!("Delete it: '{target}' takes no inputs.")
+                            format!("Delete it: {name} {}s.", against.has_no())
                         } else {
                             format!(
                                 "Change it to one of: {} — or delete it.",
@@ -543,12 +768,12 @@ impl<'a> Flow<'a> {
                         at,
                         if parts.is_empty() {
                             format!(
-                                "'{stage}' fills `{key}:` of '{target}', and `{whole}` is \
+                                "'{stage}' fills `{key}:` of {name}, and `{whole}` is \
                                  `{shape}`, which has no parts."
                             )
                         } else {
                             format!(
-                                "'{stage}' fills `{key}:` of '{target}', and `{whole}` is the \
+                                "'{stage}' fills `{key}:` of {name}, and `{whole}` is the \
                                  shape '{shape}', which has no part '{part}'."
                             )
                         },
@@ -568,29 +793,17 @@ impl<'a> Flow<'a> {
                     continue;
                 }
             };
-            let (Some(want), Some((have, have_written))) =
-                (line, self.shape_of(frames, &entry.node))
-            else {
-                continue;
-            };
-            let input = key.as_str();
-            if self.shapes.fits(&have.shape, &want.shape) {
-                continue;
+            if let Some(want) = line {
+                self.unlike(
+                    frames,
+                    stage,
+                    against,
+                    &key,
+                    (&want, &written),
+                    entry,
+                    diags,
+                );
             }
-            let read = entry.node.as_str().unwrap_or("").trim();
-            diags.push(Diagnostic::error(
-                "loader/a-call-that-does-not-fit",
-                entry.node.span.clone(),
-                format!(
-                    "'{stage}' fills `{input}:` of '{target}' from '{read}', which is \
-                     `{have_written}`, and '{target}' takes `{written}` there, so the value \
-                     could not be read as what it is given for."
-                ),
-                format!(
-                    "Bind a value that is `{}` here, or change what '{target}' takes.",
-                    want.shape.written()
-                ),
-            ));
         }
         let empty: Vec<String> = inputs
             .iter()
@@ -623,17 +836,16 @@ impl<'a> Flow<'a> {
             "loader/a-call-that-does-not-fit",
             at,
             format!(
-                "'{stage}' calls '{target}' and leaves {} {listed} empty, so '{target}' would \
-                 run without {}.",
-                if empty.len() == 1 {
-                    "its input"
-                } else {
-                    "its inputs"
-                },
+                "'{stage}' {} {name} and leaves its {}{} {listed} empty, so {name} would {} \
+                 without {}.",
+                against.verb,
+                against.noun,
+                if empty.len() == 1 { "" } else { "s" },
+                against.runs,
                 if empty.len() == 1 { "it" } else { "them" },
             ),
             format!(
-                "Fill {} under `bind:` — {example} — or, if '{target}' can do without {}, mark \
+                "Fill {} under `bind:` — {example} — or, if {name} can do without {}, mark \
                  {} `, optional` there.",
                 if empty.len() == 1 { "it" } else { "each" },
                 if empty.len() == 1 { "it" } else { "one" },
@@ -1461,6 +1673,15 @@ impl<'a> Flow<'a> {
                 (
                     answers.into_iter().find(|(k, _)| k == field)?.1?,
                     &rest[2..],
+                )
+            }
+            // A value read by name keeps its `shape:` in the document (N62).
+            "values" => {
+                let name = rest.first()?;
+                (
+                    self.shapes
+                        .line(self.document.get("values")?.get(name)?.get("shape")?)?,
+                    &rest[1..],
                 )
             }
             _ => return None,

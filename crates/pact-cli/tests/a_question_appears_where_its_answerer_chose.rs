@@ -3,7 +3,9 @@
 //! contact, because a person, a role or a team is reached the way they chose;
 //! and a question a workflow asks has no `if-nobody-answers:`, because the
 //! asking stage's `nobody-answered:` exit is the one place silence goes. Over
-//! mutations of #48's tree (`tests/trees/an-invoice-case/`).
+//! mutations of #48's tree (`tests/trees/an-invoice-case/`), and of the worked
+//! #48 (`tests/trees/workflows-48-invoices/`) for the question a failure plan
+//! asks, which is the workflow's too.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -151,4 +153,84 @@ fn carrying_on_is_spelled_carry_on_in_a_workflow() {
         "limits:\n  finishes-within: 7 days\n  when-it-runs-out: carry-on\nstarts-at: match",
     );
     assert!(ok, "{text}");
+}
+
+/// #48 with the question its `vendor` stage's failure plan asks moved out of
+/// the workflow into `questions/`, written as given.
+fn a_failure_plans_question_in_the_workspace(name: &str, extra: &str) -> PathBuf {
+    let dst = std::env::temp_dir().join(format!("pact-plan-asks-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dst);
+    copy(&repo().join("tests/trees/workflows-48-invoices"), &dst);
+    let flow = dst.join("workflows/one-invoice.yaml");
+    let text = std::fs::read_to_string(&flow).unwrap();
+    let start = text
+        .find("  create-the-vendor:\n")
+        .expect("fixture drifted");
+    let end = start
+        + text[start..]
+            .find("  posting-failed:\n")
+            .expect("fixture drifted");
+    let question: String = text[start..end]
+        .lines()
+        .skip(1)
+        .map(|l| format!("{}\n", l.strip_prefix("    ").unwrap_or(l)))
+        .collect();
+    std::fs::write(&flow, format!("{}{}", &text[..start], &text[end..])).unwrap();
+    std::fs::create_dir_all(dst.join("questions")).unwrap();
+    std::fs::write(
+        dst.join("questions/create-the-vendor.yaml"),
+        format!("{question}{extra}"),
+    )
+    .unwrap();
+    dst
+}
+
+fn pact_on(verb: &str, root: &Path) -> (bool, String) {
+    let out = pact()
+        .args([verb, root.to_str().unwrap()])
+        .output()
+        .expect("runs");
+    (
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+    )
+}
+
+#[test]
+fn a_question_a_failure_plan_asks_is_the_workflows() {
+    // Asked by `if-it-fails.asks:`, it is the workflow's question: written
+    // without `if-nobody-answers:`, it loads, and `pact waits` lists the park.
+    let root = a_failure_plans_question_in_the_workspace("as-a-workflows", "");
+    let (ok, text) = pact_on("check", &root);
+    let (_, waits) = pact_on("waits", &root);
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(ok, "{text}");
+    let waits: serde_json::Value = serde_json::from_str(&waits).expect("JSON");
+    let park = waits["waits"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|w| w["question"] == "create-the-vendor")
+        .unwrap_or_else(|| panic!("{waits}"));
+    assert_eq!(park["workflow"], "one-invoice", "{park}");
+    assert_eq!(park["stage"], "vendor", "{park}");
+    assert_eq!(park["nobody-answered"], "stop-and-say-so", "{park}");
+    assert_eq!(park["reason"], "waiting-for-a-person", "{park}");
+}
+
+#[test]
+fn a_question_a_failure_plan_asks_is_held_as_the_workflows() {
+    // WF-40 runs on it: `if-nobody-answers:` is refused there.
+    let root = a_failure_plans_question_in_the_workspace(
+        "with-silence",
+        "if-nobody-answers: stop-and-say-so\n",
+    );
+    let (ok, text) = pact_on("check", &root);
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(!ok, "{text}");
+    assert!(
+        text.contains("rule: loader/an-agent-only-spelling"),
+        "{text}"
+    );
+    assert!(!text.contains("schema/missing-field"), "{text}");
 }
