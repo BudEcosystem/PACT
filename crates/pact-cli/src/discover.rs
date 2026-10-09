@@ -66,10 +66,10 @@ fn walk(
         out.push(dir.to_owned());
         return; // a workspace is not nested inside another workspace
     }
-    let Ok(entries) = std::fs::read_dir(dir) else {
+    let Ok(entries) = pact_loader::entries_by_name(dir) else {
         return;
     };
-    for e in entries.flatten() {
+    for e in entries {
         let Ok(name) = e.file_name().into_string() else {
             continue;
         };

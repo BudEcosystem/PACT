@@ -237,8 +237,14 @@ fn a_named_pipe_at_the_top_of_an_ordinary_folder_does_not_hang_the_command() {
     // Measured before the fix: `timeout 20 pact check ws` → EXIT=124, no
     // output, 20s of wall clock. Run with a deadline and killed, because the
     // failure mode is a hang and `output()` would hang this test process too.
+    //
+    // The pipe's name clashes with nothing. It was `agents/keeper.yaml`, beside
+    // the `agents/keeper/` folder, so two rules applied and the one reported
+    // was whichever entry the filesystem listed second: green here, red on
+    // GitHub's runner. The loader now reads folders sorted by name, which
+    // made that clash report `loader/duplicate-field` every time.
     let ws = Ws::new("fifo-ordinary");
-    if !ws.fifo("agents/keeper.yaml") {
+    if !ws.fifo("agents/stuck.yaml") {
         return;
     }
 
@@ -274,7 +280,7 @@ fn a_named_pipe_at_the_top_of_an_ordinary_folder_does_not_hang_the_command() {
         let _ = o.read_to_string(&mut said);
     }
     assert!(
-        said.contains("loader/not-a-regular-file") && said.contains("keeper.yaml"),
+        said.contains("loader/not-a-regular-file") && said.contains("stuck.yaml"),
         "and the entry it would not read is NAMED, like every other one.\n{said}"
     );
 }

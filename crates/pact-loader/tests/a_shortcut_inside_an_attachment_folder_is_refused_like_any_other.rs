@@ -1115,8 +1115,12 @@ fn a_named_pipe_at_the_top_of_an_ordinary_folder_does_not_stop_the_loader() {
     // Loaded on a worker thread with a deadline, because the failure mode of
     // the bug this pins is a HANG: called directly, the wrong version does not
     // fail this test, it stops the whole suite.
+    //
+    // The pipe's name clashes with nothing: `agents/keeper.yaml` beside the
+    // tree's `agents/keeper/` is also `loader/duplicate-field`, which the
+    // loader (reading folders by name) reports instead.
     let t = Tree::new("fifo-ordinary");
-    if !t.fifo("agents/keeper.yaml") {
+    if !t.fifo("agents/stuck.yaml") {
         return;
     }
     let root = t.0.clone();
@@ -1138,7 +1142,7 @@ fn a_named_pipe_at_the_top_of_an_ordinary_folder_does_not_stop_the_loader() {
     drop(worker);
     assert!(loaded, "the rest of the workspace still loads.\n{rendered}");
     assert!(
-        rendered.contains(NOT_A_FILE) && rendered.contains("keeper.yaml"),
+        rendered.contains(NOT_A_FILE) && rendered.contains("stuck.yaml"),
         "and the entry it would not read is NAMED, like every other one.\n{rendered}"
     );
 }

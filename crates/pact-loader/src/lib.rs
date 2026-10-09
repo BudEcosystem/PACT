@@ -964,7 +964,7 @@ impl Loader {
             ));
             return;
         }
-        let Ok(read) = std::fs::read_dir(dir) else {
+        let Ok(read) = entries_by_name(dir) else {
             diags.push(Diagnostic::error(
                 "loader/unreadable",
                 Span::whole_file(dir),
@@ -1001,7 +1001,7 @@ impl Loader {
         let ignore = Ignore::inherited(&self.root, dir);
         self.say_which_ignore_files_were_skipped(&ignore, diags);
 
-        for entry in read.flatten() {
+        for entry in read {
             let Ok(name) = entry.file_name().into_string() else {
                 continue;
             };
@@ -1167,7 +1167,7 @@ impl Loader {
         dir_name: &str,
         diags: &mut Diagnostics,
     ) -> (Vec<Candidate>, Option<Candidate>) {
-        let read = match std::fs::read_dir(dir) {
+        let read = match entries_by_name(dir) {
             Ok(r) => r,
             Err(e) => {
                 diags.push(Diagnostic::error(
@@ -1198,7 +1198,7 @@ impl Loader {
         let mut candidates: Vec<Candidate> = Vec::new();
         let mut self_file: Option<Candidate> = None;
 
-        for entry in read.flatten() {
+        for entry in read {
             let Ok(name) = entry.file_name().into_string() else {
                 continue;
             };
@@ -1533,6 +1533,23 @@ fn unloaded(at: &Span) -> Node {
         },
     );
     Node::map(m, at.clone())
+}
+
+/// Every entry of `dir`, sorted by name: the one way the loader (and
+/// `pact discover`) reads a folder.
+///
+/// `read_dir` lists entries in whatever order the filesystem keeps them, and
+/// that order is not the same from one machine to the next (ext4 lists by a
+/// hash seeded per filesystem). Anything decided while walking a folder took
+/// that order with it: with `agents/keeper/` and `agents/keeper.yaml` side by
+/// side, the entry read second is the one `loader/duplicate-field` reports,
+/// so the same tree gave one diagnostic on one computer and another on a CI
+/// runner. Sorted here, once, nothing the loader says depends on the disk.
+/// An entry that cannot be read is left out, as before.
+pub fn entries_by_name(dir: &Utf8Path) -> std::io::Result<Vec<std::fs::DirEntry>> {
+    let mut entries: Vec<std::fs::DirEntry> = std::fs::read_dir(dir)?.flatten().collect();
+    entries.sort_by_key(std::fs::DirEntry::file_name);
+    Ok(entries)
 }
 
 /// The one refusal for a shortcut, wherever in the tree it is found.
