@@ -231,3 +231,103 @@ fn an_agent_waits_for_people_and_not_for_the_clock() {
     assert!(!out.status.success(), "{said}");
     assert!(said.contains("loader/a-workflow-only-spelling"), "{said}");
 }
+
+#[test]
+fn a_line_named_at_is_not_a_moment() {
+    // With no `time-zone:` anywhere, an input, an answer, a bound key and a
+    // question's answer line named `at` are fields, not moments: only the lines
+    // whose type is a moment are read so.
+    let dst = std::env::temp_dir().join(format!("pact-clock-named-at-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dst);
+    copy(&repo().join(TREE), &dst);
+    let ws = dst.join("workspace.yaml");
+    let w = std::fs::read_to_string(&ws).unwrap();
+    std::fs::write(&ws, w.replacen("time-zone: America/Chicago\n", "", 1)).unwrap();
+    std::fs::write(
+        dst.join("workflows/stamp.yaml"),
+        "description: x\naccepts: { at: text }\nanswers-with: { at: text }\n\
+         starts-at: reply\nsteps:\n  reply:\n    does: answer\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dst.join("workflows/stamp-caller.yaml"),
+        "description: x\naccepts: { when: text }\nstarts-at: ask\nsteps:\n  ask:\n    \
+         does: ask-someone\n    asks: when-was-it\n    then: { answered: stamp, \
+         nobody-answered: stamp }\n  stamp:\n    does: call\n    call: stamp\n    \
+         bind: { at: input.when }\n    then: { answered: reply }\n  reply:\n    \
+         does: answer\nquestions:\n  when-was-it:\n    description: x\n    \
+         asked-of: [front-desk]\n    says: When was it?\n    answer: { at: date }\n    \
+         answer-within: 2 days\n",
+    )
+    .unwrap();
+    let out = pact()
+        .args(["check", dst.to_str().unwrap()])
+        .output()
+        .unwrap();
+    let said = String::from_utf8_lossy(&out.stdout).into_owned();
+    let _ = std::fs::remove_dir_all(&dst);
+    assert!(out.status.success(), "{said}");
+    assert!(!said.contains("loader/a-time-with-no-zone"), "{said}");
+}
+
+#[test]
+fn a_question_an_agent_asks_is_not_also_a_workflows() {
+    // refund-desk's `is-this-ok` is asked by its approval policy; a workflow
+    // asking it too, written the workflow's way, leaves the agent's run with
+    // nothing to do on silence. Refused once, with the fix to split it.
+    let dst = std::env::temp_dir().join(format!("pact-clock-shared-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dst);
+    copy(&repo().join("examples/refund-desk"), &dst);
+    let p = dst.join("questions/is-this-ok.yaml");
+    let text = std::fs::read_to_string(&p).unwrap();
+    std::fs::write(&p, text.replacen("if-nobody-answers: escalate\n", "", 1)).unwrap();
+    std::fs::create_dir_all(dst.join("workflows")).unwrap();
+    std::fs::write(
+        dst.join("workflows/review.yaml"),
+        "description: x\nstarts-at: check\nsteps:\n  check:\n    does: ask-someone\n    \
+         asks: is-this-ok\n    then: { nobody-answered: done }\n",
+    )
+    .unwrap();
+    let out = pact()
+        .args(["check", dst.to_str().unwrap()])
+        .output()
+        .unwrap();
+    let said = String::from_utf8_lossy(&out.stdout).into_owned();
+    let _ = std::fs::remove_dir_all(&dst);
+    assert!(!out.status.success(), "{said}");
+    assert_eq!(
+        said.matches("loader/a-workflow-only-spelling").count(),
+        1,
+        "{said}"
+    );
+    assert!(said.contains("Give each its own question"), "{said}");
+}
+
+#[test]
+fn a_clock_wait_before_the_answer_is_a_path_that_answers() {
+    // A wait only the clock answers never ends `answered`, so its one exit is
+    // the way on: a workflow that answers may wait for the clock before it does.
+    let (ok, text) = run(
+        "before-the-answer",
+        "check",
+        &[
+            (
+                "workflows/parent-contact.yaml",
+                "    then: { answered: reply }\n",
+                "    then: { answered: pause }\n  pause:\n    does: ask-someone\n    asks: a-moment\n    \
+             then: { nobody-answered: reply }\n",
+            ),
+            (
+                "workflows/parent-contact.yaml",
+                "    does: answer\n",
+                "    does: answer\nquestions:\n  a-moment:\n    description: x\n    \
+             asked-of: [the-clock]\n    answer-within: 1 minute\n",
+            ),
+        ],
+    );
+    assert!(ok, "{text}");
+    assert!(
+        !text.contains("loader/a-path-that-answers-nothing"),
+        "{text}"
+    );
+}

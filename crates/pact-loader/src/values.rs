@@ -158,14 +158,25 @@ pub fn resolve(
         }
         let ty = workspace
             .as_ref()
-            .and_then(|g| g.fields.iter().find(|f| f.name == *key || f.aliases.contains(key)))
+            .and_then(|g| {
+                g.fields
+                    .iter()
+                    .find(|f| f.name == *key || f.aliases.contains(key))
+            })
             .map(|f| f.ty.clone());
         // A key the specification does not know is left alone: `x-` blocks
         // round-trip untouched (AD-14), and an unknown field is the schema's
         // refusal to make, not this pass's. \
         if let Some(ty) = ty {
             substitute(
-                &mut entry.node, &ty, schema, &figures, &mut used, diags, recorded, 0,
+                &mut entry.node,
+                &ty,
+                schema,
+                &figures,
+                &mut used,
+                diags,
+                recorded,
+                0,
             );
         }
     }
@@ -203,9 +214,7 @@ pub fn resolve(
                     "'{name}' is a figure nothing here uses, so changing it changes \
                      nothing — the file loads, and no line reads it."
                 ),
-                format!(
-                    "Write `{{use: {name}}}` where the figure belongs, or delete it."
-                ),
+                format!("Write `{{use: {name}}}` where the figure belongs, or delete it."),
             ));
         }
     }
@@ -362,7 +371,8 @@ fn a_table_where_one_is_read(
                 read.at.clone(),
                 format!("`{line}: {name}` reads a table, and '{name}' is not one: it has no `shape: table`."),
                 format!(
-                    "Make '{name}' a table — `shape: table`, `rows-are: <a shape>` and one row per                      line under `value:` — or name a table here."
+                    "Make '{name}' a table — `shape: table`, `rows-are: <a shape>` and one row per \
+                     line under `value:` — or name a table here."
                 ),
             )
             .with_related(entry.key_span.clone(), "this is the value it names"),
@@ -385,7 +395,9 @@ fn a_table_where_one_is_read(
                 "loader/a-table-that-is-not-one",
                 read.at.clone(),
                 format!(
-                    "`calendar: {name}` lists the days off that `business-days` skips, and the                      rows of '{name}' ('{shape}') have no part that is a date, so no row says                      which day it is."
+                    "`calendar: {name}` lists the days off that `business-days` skips, and the \
+                     rows of '{name}' ('{shape}') have no part that is a date, so no row says \
+                     which day it is."
                 ),
                 format!("Give '{shape}' a part in shape `date` — `day: date`."),
             ));
@@ -517,7 +529,8 @@ fn table(name: &str, definition: &Node, held: &Node, rows: &Rows) -> Result<(), 
         return wrong(
             definition.span.start_of_block(),
             format!("'{name}' is a table and does not say what its rows are."),
-            "Add a line: `rows-are: <a shape>` — one of the names under `shapes:` in              `workspace.yaml`."
+            "Add a line: `rows-are: <a shape>` — one of the names under `shapes:` in \
+             `workspace.yaml`."
                 .to_string(),
         );
     };
@@ -684,13 +697,21 @@ fn figure(
 
     let resolved = if let Some(target) = names_a_value(held) {
         let inner = figure(defs, &target, &held.span, seen, rows)?;
-        Node { value: inner.value, span: held.span.clone() }
+        Node {
+            value: inner.value,
+            span: held.span.clone(),
+        }
     } else {
         held.clone()
     };
     seen.pop();
 
-    if definition.get("shape").and_then(Node::as_str).map(str::trim) == Some(TABLE) {
+    if definition
+        .get("shape")
+        .and_then(Node::as_str)
+        .map(str::trim)
+        == Some(TABLE)
+    {
         table(name, definition, &resolved, rows)?;
         return Ok(resolved);
     }
@@ -712,18 +733,26 @@ fn figure(
     {
         return Err(Box::new(Diagnostic::error(
             "loader/not-a-shape-a-figure-can-have",
-            definition.get("shape").map_or_else(|| entry.key_span.clone(), |n| n.span.clone()),
+            definition
+                .get("shape")
+                .map_or_else(|| entry.key_span.clone(), |n| n.span.clone()),
             format!("'{written}' is not a kind of figure this format knows."),
             format!("Use one of: {}.", SHAPES.join(", ")),
         )));
     }
-    if let Some(ty) = definition.get("shape").and_then(Node::as_str).and_then(ty_of)
+    if let Some(ty) = definition
+        .get("shape")
+        .and_then(Node::as_str)
+        .and_then(ty_of)
         && pact_schema::coerce::check(&resolved, &ty).is_none()
     {
-            return Err(Box::new(Diagnostic::error(
+        return Err(Box::new(Diagnostic::error(
             "loader/value-is-not-its-shape",
             resolved.span.clone(),
-            format!("'{name}' says it is {}, and its figure is not one.", ty.describe()),
+            format!(
+                "'{name}' says it is {}, and its figure is not one.",
+                ty.describe()
+            ),
             format!(
                 "Write a figure that is {}, or change `shape:` to what this really is.",
                 ty.describe()
@@ -863,8 +892,11 @@ fn substitute(
         let map = node.as_map().expect("checked");
         let keys: Vec<String> = map.keys().cloned().collect();
         if keys.len() != 1 {
-            let extra: Vec<String> =
-                keys.iter().filter(|k| k.as_str() != USE).map(|k| format!("`{k}`")).collect();
+            let extra: Vec<String> = keys
+                .iter()
+                .filter(|k| k.as_str() != USE)
+                .map(|k| format!("`{k}`"))
+                .collect();
             diags.push(Diagnostic::error(
                 "loader/a-use-carries-only-a-name",
                 node.span.clone(),
@@ -883,8 +915,7 @@ fn substitute(
             diags.push(Diagnostic::error(
                 "loader/a-use-carries-only-a-name",
                 node.span.clone(),
-                "a `{use: ...}` names a figure, and this one does not name anything."
-                    .to_string(),
+                "a `{use: ...}` names a figure, and this one does not name anything.".to_string(),
                 "Write the name of a figure from `values/` — `{use: <name>}`.".to_string(),
             ));
             return;
@@ -903,11 +934,13 @@ fn substitute(
                 // The USE SITE's span is kept, not the definition's. Whatever
                 // this figure turns out to be wrong for, the line to change is
                 // the one that asked for it here.
-                *node = Node { value: figure.value.clone(), span: node.span.clone() };
+                *node = Node {
+                    value: figure.value.clone(),
+                    span: node.span.clone(),
+                };
             }
             None => {
-                let mut there: Vec<String> =
-                    figures.keys().map(|k| format!("`{k}`")).collect();
+                let mut there: Vec<String> = figures.keys().map(|k| format!("`{k}`")).collect();
                 there.sort();
                 diags.push(Diagnostic::error(
                     "loader/no-such-value",
@@ -932,7 +965,9 @@ fn substitute(
     // an author's own keys are read exactly as written.
     match (&mut node.value, ty) {
         (Value::Map(map), Ty::Group(kind)) => {
-            let Some(group) = schema.group(kind).cloned() else { return };
+            let Some(group) = schema.group(kind).cloned() else {
+                return;
+            };
             for (key, entry) in map.iter_mut() {
                 // A pattern's arguments. `with:` is not a field of any group —
                 // it is stripped before the schema sees it, like `based-on:` —
@@ -958,20 +993,34 @@ fn substitute(
                     if let Some(args) = entry.node.as_map_mut() {
                         for (_, arg) in args.iter_mut() {
                             substitute(
-                                &mut arg.node, &Ty::Text, schema, figures, used, diags,
-                                recorded, depth + 1,
+                                &mut arg.node,
+                                &Ty::Text,
+                                schema,
+                                figures,
+                                used,
+                                diags,
+                                recorded,
+                                depth + 1,
                             );
                         }
                     }
                     continue;
                 }
-                let Some(field) =
-                    group.fields.iter().find(|f| f.name == *key || f.aliases.contains(key))
+                let Some(field) = group
+                    .fields
+                    .iter()
+                    .find(|f| f.name == *key || f.aliases.contains(key))
                 else {
                     continue;
                 };
                 substitute(
-                    &mut entry.node, &field.ty, schema, figures, used, diags, recorded,
+                    &mut entry.node,
+                    &field.ty,
+                    schema,
+                    figures,
+                    used,
+                    diags,
+                    recorded,
                     depth + 1,
                 );
             }
@@ -979,14 +1028,28 @@ fn substitute(
         (Value::Map(map), Ty::MapOf(inner)) => {
             for (_, entry) in map.iter_mut() {
                 substitute(
-                    &mut entry.node, inner, schema, figures, used, diags, recorded, depth + 1,
+                    &mut entry.node,
+                    inner,
+                    schema,
+                    figures,
+                    used,
+                    diags,
+                    recorded,
+                    depth + 1,
                 );
             }
         }
         (Value::List(items), Ty::ListOf(inner)) => {
             for item in items.iter_mut() {
                 substitute(
-                    item, inner, schema, figures, used, diags, recorded, depth + 1,
+                    item,
+                    inner,
+                    schema,
+                    figures,
+                    used,
+                    diags,
+                    recorded,
+                    depth + 1,
                 );
             }
         }
@@ -994,7 +1057,14 @@ fn substitute(
         // this format (FR-1.4.7), so a figure may stand there too.
         (_, Ty::ListOf(inner)) => {
             substitute(
-                node, inner, schema, figures, used, diags, recorded, depth + 1,
+                node,
+                inner,
+                schema,
+                figures,
+                used,
+                diags,
+                recorded,
+                depth + 1,
             );
         }
         _ => {}

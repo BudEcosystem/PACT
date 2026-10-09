@@ -84,6 +84,17 @@ fn check(name: &str, port: &str, edits: &[(&str, &str, &str)]) -> (bool, String)
     )
 }
 
+/// One mistake, one diagnostic: the port is named at `heard:` and in
+/// `asked-of:`, and it is said once.
+fn said_once(text: &str) {
+    assert_eq!(
+        text.matches("rule: loader/an-event-the-wait-will-never-hear")
+            .count(),
+        1,
+        "{text}"
+    );
+}
+
 #[test]
 fn a_port_that_joins_with_the_runs_key_is_heard() {
     let (ok, text) = check("clean", PORT, &[]);
@@ -113,6 +124,7 @@ fn a_port_of_another_workflow_never_reaches_this_run() {
         "{text}"
     );
     assert!(text.contains("fix: Add `answers: trial-booking`"), "{text}");
+    said_once(&text);
 }
 
 #[test]
@@ -127,6 +139,7 @@ fn a_port_that_does_not_join_never_reaches_the_open_run() {
         text.contains("does not hand what arrives to the open run (`if-still-running: queue`)"),
         "{text}"
     );
+    said_once(&text);
 }
 
 #[test]
@@ -150,6 +163,7 @@ fn a_port_keyed_otherwise_finds_another_case() {
         text.contains("`same-conversation-when: [invitee-uri]`"),
         "{text}"
     );
+    said_once(&text);
 }
 
 #[test]

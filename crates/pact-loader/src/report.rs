@@ -274,7 +274,10 @@ impl LoadReport {
         }
 
         waits.extend(workflow_waits(document));
-        LoadReport { waits, substitutions: Vec::new() }
+        LoadReport {
+            waits,
+            substitutions: Vec::new(),
+        }
     }
 
     /// The waits a scheduler sets a timer for.
@@ -375,7 +378,7 @@ impl LoadReport {
 /// rule naming a tool this document does not have. Concluding from an incomplete
 /// picture is how a correct `shows:` line comes to be refused, and refusing a
 /// legitimate name is worse than the silence this check exists to end.
-enum Shown {
+pub(crate) enum Shown {
     /// No list to hold a name against, so no name may be called wrong.
     Anything,
     /// Exactly these, and a name outside them is shown to nobody.
@@ -532,7 +535,10 @@ fn what_the_rule_is_about(document: &Node, rule: &Node) -> Shown {
 /// deadline governing it. A report may not do that. A policy with three
 /// `ask-a-person` rules can park showing any of their questions, and a scheduler
 /// told only about the first has no timer for the other two.
-fn asking_lines(document: &Node, agent: &Node) -> Vec<(&'static str, String, Span, Shown)> {
+pub(crate) fn asking_lines(
+    document: &Node,
+    agent: &Node,
+) -> Vec<(&'static str, String, Span, Shown)> {
     let mut found = Vec::new();
 
     // out-of-budget — `limits.asks`
@@ -1018,15 +1024,26 @@ fn read_wait(
 fn workflow_waits(document: &Node) -> Vec<Wait> {
     use crate::waits::{self, Answerer};
     let mut out = Vec::new();
-    for (flow, entry) in document.get("workflows").and_then(Node::as_map).into_iter().flatten() {
+    for (flow, entry) in document
+        .get("workflows")
+        .and_then(Node::as_map)
+        .into_iter()
+        .flatten()
+    {
         for (stage, node) in waits::every_stage(&entry.node) {
             if crate::workflows::does(node) != Some("ask-someone") {
                 continue;
             }
-            let Some((question, declared_at)) = named(node, "asks") else { continue };
-            let Some(q) = waits::question_of(document, &entry.node, &question) else { continue };
-            let who: Vec<Answerer> =
-                waits::answerers(document, q).into_iter().map(|(_, a)| a).collect();
+            let Some((question, declared_at)) = named(node, "asks") else {
+                continue;
+            };
+            let Some(q) = waits::question_of(document, &entry.node, &question) else {
+                continue;
+            };
+            let who: Vec<Answerer> = waits::answerers(document, q)
+                .into_iter()
+                .map(|(_, a)| a)
+                .collect();
             let reason = if who.iter().any(|a| a.reads()) {
                 WAITING_FOR_A_PERSON
             } else if who.contains(&Answerer::Port) {
@@ -1035,12 +1052,18 @@ fn workflow_waits(document: &Node) -> Vec<Wait> {
                 WAITING_FOR_A_TIME
             };
             let within = q.get("answer-within");
-            let answer_within = within.and_then(Node::as_str).unwrap_or("").trim().to_string();
+            let answer_within = within
+                .and_then(Node::as_str)
+                .unwrap_or("")
+                .trim()
+                .to_string();
             let moment = within.and_then(Node::as_map).map(|m| {
                 serde_json::Value::Object(
                     m.iter()
                         .filter_map(|(k, e)| {
-                            e.node.as_str().map(|v| (k.clone(), serde_json::json!(v.trim())))
+                            e.node
+                                .as_str()
+                                .map(|v| (k.clone(), serde_json::json!(v.trim())))
                         })
                         .collect(),
                 )

@@ -78,6 +78,19 @@ fn run(name: &str, verb: &str, table: &str, edits: &[(&str, &str, &str)]) -> (bo
     (out.status.success(), said)
 }
 
+/// Every message and fix reads as one sentence: no run of spaces inside it,
+/// which a lost `\` line continuation in a literal leaves behind.
+fn reads_as_english(text: &str) {
+    for line in text.lines().map(str::trim_start) {
+        if ["error:", "warning:", "note:", "fix:"]
+            .iter()
+            .any(|p| line.starts_with(p))
+        {
+            assert!(!line.contains("  "), "two spaces in a row: {line}");
+        }
+    }
+}
+
 #[test]
 fn a_calendar_of_holidays_loads_and_stays_for_a_run_to_read() {
     let (ok, text) = run("clean", "check", TABLE, &[]);
@@ -119,6 +132,7 @@ fn every_row_is_held_to_its_shape() {
             "[{name}] {text}"
         );
         assert!(text.contains(says), "[{name}] {text}");
+        reads_as_english(&text);
     }
 }
 
@@ -135,6 +149,7 @@ fn a_table_says_what_its_rows_are_and_only_a_table_does() {
         text.contains("is a table and does not say what its rows are"),
         "{text}"
     );
+    reads_as_english(&text);
     let (ok, text) = run(
         "rows-on-a-figure",
         "check",
@@ -169,6 +184,7 @@ fn a_calendar_names_a_table_of_days() {
         text.contains("`calendar: lead-stage` reads a table, and 'lead-stage' is not one"),
         "{text}"
     );
+    reads_as_english(&text);
     let undated = TABLE
         .replace("day: 2026-12-25", "when: 2026-12-25")
         .replace("day: 2027-01-01", "when: 2027-01-01");
@@ -180,6 +196,7 @@ fn a_calendar_names_a_table_of_days() {
     );
     assert!(!ok, "{text}");
     assert!(text.contains("have no part that is a date"), "{text}");
+    reads_as_english(&text);
 }
 
 #[test]

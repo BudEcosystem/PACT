@@ -438,7 +438,7 @@ fn heard(
         .filter(|p| p.text("answers") == Some(flow_name))
         .filter(|p| p.overlap() != Some(JOIN) && can_start(document, shapes, p, flow))
         .collect();
-    let mut told: BTreeSet<(String, usize)> = BTreeSet::new();
+    let mut told: BTreeSet<(String, usize, String)> = BTreeSet::new();
     for (stage, node) in waits::every_stage(flow) {
         if workflows::does(node) != Some("ask-someone") {
             continue;
@@ -452,17 +452,20 @@ fn heard(
         let asked: Vec<(&Node, Answerer)> = question
             .map(|q| waits::answerers(document, q))
             .unwrap_or_default();
-        let mut listened: Vec<(&str, Span)> = asked
+        // Each port this wait hears once, however many places name it: at its
+        // `heard:` key when written, else at its `asked-of:` entry, with the
+        // other place as a related span. One mistake, one diagnostic.
+        let mut listened: Vec<(&str, Span, Option<Span>)> = asked
             .iter()
             .filter(|(_, a)| *a == Answerer::Port)
-            .filter_map(|(n, _)| n.as_str().map(|s| (s.trim(), n.span.clone())))
+            .filter_map(|(n, _)| n.as_str().map(|s| (s.trim(), n.span.clone(), None)))
             .collect();
         let heard = node
             .get("then")
             .and_then(|t| t.as_map())
             .and_then(|t| t.get("heard"));
         for (port, e) in heard.and_then(|h| h.node.as_map()).into_iter().flatten() {
-            if question.is_some() && !listened.iter().any(|(p, _)| p == port) {
+            if question.is_some() && !listened.iter().any(|(p, _, _)| p == port) {
                 diags.push(Diagnostic::error(
                     "loader/an-event-the-wait-will-never-hear",
                     e.key_span.clone(),
@@ -474,10 +477,20 @@ fn heard(
                 ));
                 continue;
             }
-            listened.push((port.as_str(), e.key_span.clone()));
+            match listened.iter_mut().find(|(p, _, _)| p == port) {
+                Some(entry) => {
+                    let asked_at = std::mem::replace(&mut entry.1, e.key_span.clone());
+                    entry.2 = Some(asked_at);
+                }
+                None => listened.push((port.as_str(), e.key_span.clone(), None)),
+            }
         }
-        for (port_name, at) in listened {
-            if !told.insert((at.file.to_string(), at.byte_start)) {
+        for (port_name, at, also) in listened {
+            if !told.insert((
+                node.span.file.to_string(),
+                node.span.byte_start,
+                port_name.to_string(),
+            )) {
                 continue;
             }
             // A port the workspace lacks is the schema's (`key-names: ports`).
@@ -510,7 +523,7 @@ fn heard(
             let key = starter
                 .map(|s| s.key().into_iter().collect::<Vec<_>>().join(", "))
                 .unwrap_or_else(|| "<its key>".to_string());
-            diags.push(Diagnostic::error(
+            let d = Diagnostic::error(
                 "loader/an-event-the-wait-will-never-hear",
                 at,
                 format!(
@@ -521,7 +534,11 @@ fn heard(
                     "Add `answers: {flow_name}`, `if-still-running: join` and \
                      `same-conversation-when: [{key}]` to '{port_name}'."
                 ),
-            ));
+            );
+            diags.push(match also {
+                Some(span) => d.with_related(span, format!("'{port_name}' is asked of here too")),
+                None => d,
+            });
         }
     }
 }

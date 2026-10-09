@@ -116,7 +116,7 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
         no_items_here(&format!("The workflow '{name}'"), w, diags);
         if let Some(steps) = w.get("steps").and_then(Node::as_map) {
             stages(document, &Scope::Workflow, steps, diags);
-            answers_on_every_path(name, w, steps, diags);
+            answers_on_every_path(document, name, w, steps, diags);
         }
         if let Some(undo) = w.as_map().and_then(|m| m.get("undone-by")) {
             undo_names_something(document, name, undo, diags);
@@ -595,7 +595,13 @@ fn action_writes(document: &Node, tool: &str, action: &str) -> bool {
 /// WF-38: with `answers-with:` declared, every way to the end passes an `answer`
 /// stage. A run ends at `done`, or where a stage that answered has nowhere to
 /// go (the shipped rule); an `answer` stage ends it with the answer.
-fn answers_on_every_path(name: &str, w: &Node, steps: &Map, diags: &mut Diagnostics) {
+fn answers_on_every_path(
+    document: &Node,
+    name: &str,
+    w: &Node,
+    steps: &Map,
+    diags: &mut Diagnostics,
+) {
     if w.get("answers-with")
         .and_then(Node::as_map)
         .is_none_or(|m| m.is_empty())
@@ -615,7 +621,7 @@ fn answers_on_every_path(name: &str, w: &Node, steps: &Map, diags: &mut Diagnost
         if does(stage) == Some("answer") {
             continue;
         }
-        if let Some(at) = ends_here(stage) {
+        if let Some(at) = ends_here(document, w, stage) {
             let mut path = vec![here];
             while let Some(before) = came_from.get(path[path.len() - 1]) {
                 path.push(before);
@@ -659,8 +665,9 @@ fn answers_on_every_path(name: &str, w: &Node, steps: &Map, diags: &mut Diagnost
 
 /// Where a stage ends the run, if it can: the line that sends it to `done`, or
 /// the stage itself when it answers and has nowhere to go. Only outcomes its
-/// `does:` can end in count (02W §2.4).
-fn ends_here(stage: &Node) -> Option<Span> {
+/// `does:` can end in count (02W §2.4), and a wait only the clock and events
+/// answer never ends `answered` (N59), so it has no answered way to the end.
+fn ends_here(document: &Node, workflow: &Node, stage: &Node) -> Option<Span> {
     let kind = does(stage)?;
     if kind == "decide" {
         let labels = stage.as_map()?.get("chooses-between")?.node.as_map()?;
@@ -670,7 +677,14 @@ fn ends_here(stage: &Node) -> Option<Span> {
             .map(|e| e.node.span.clone());
     }
     let routed = routes(stage, true);
-    if !routed.iter().any(|(outcome, _)| *outcome == "answered") {
+    let answers = kind != "ask-someone"
+        || stage
+            .get("asks")
+            .and_then(Node::as_str)
+            .and_then(|asks| crate::waits::question_of(document, workflow, asks.trim()))
+            .map(|q| crate::waits::answerers(document, q))
+            .is_none_or(|who| who.is_empty() || who.iter().any(|(_, a)| a.reads()));
+    if answers && !routed.iter().any(|(outcome, _)| *outcome == "answered") {
         return Some(stage.span.start_of_block());
     }
     routed.into_iter().find_map(|(_, to)| match &to.value {

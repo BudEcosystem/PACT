@@ -15,6 +15,7 @@
 //! | `loader/an-agent-only-spelling` | WF-40 | in a workflow, `if-nobody-answers:` on a question it asks, or `when-it-runs-out: answer-with-what-it-has` |
 //! | `loader/a-workflow-only-spelling` | new | what only a workflow reads, written where an agent reads it: a question no workflow asks that is asked of the clock or a port, or whose `answer-within:` is a moment; an agent's `finishes-within:` written as a moment, or a `when-it-runs-out:` choice only a workflow has |
 //! | `loader/a-line-this-stage-never-reads` | WF-3 | an `ask-someone` stage's `then.answered`/`declined` when only the clock or events answer it, or `then.heard` when no port does; an agent's `limits:` line only a workflow reads |
+//! | `loader/an-agent-only-spelling`, `loader/a-workflow-only-spelling` | N58 | a workspace question both an agent and a workflow ask, whichever way it is written: once, at `if-nobody-answers:` when written, else at the question |
 //! | `schema/missing-field` | shipped | `if-nobody-answers:` missing on a question no workflow asks (the schema's `required: yes`, moved here) |
 //!
 //! **Who answers** is told by spelling alone, since people are the host's to
@@ -32,7 +33,7 @@ use crate::bindings::is_binding;
 use crate::workflows;
 use pact_diag::{Diagnostic, Diagnostics, Span};
 use pact_doc::{Map, Node, Value};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 /// The answerer that is the clock: a time-only wait (02W §2.8).
 pub(crate) const THE_CLOCK: &str = "the-clock";
@@ -118,6 +119,7 @@ pub(crate) fn question_of<'d>(
 /// Every check on waits and time, over the loaded document.
 pub fn check(document: &Node, diags: &mut Diagnostics) {
     let asked = asked_by_workflows(document);
+    let agents_ask = asked_by_agents(document);
     let workflows_map = document.get("workflows").and_then(Node::as_map);
     for (flow, entry) in workflows_map.into_iter().flatten() {
         for (name, q) in entry
@@ -127,7 +129,7 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
             .into_iter()
             .flatten()
         {
-            a_workflows_question(document, name, &q.node, flow, diags);
+            a_workflows_question(document, name, &q.node, flow, true, diags);
         }
         limits_of_a_workflow(flow, &entry.node, diags);
         exits(document, &entry.node, diags);
@@ -138,9 +140,13 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
         .into_iter()
         .flatten()
     {
-        match asked.get(name.as_str()) {
-            Some(flow) => a_workflows_question(document, name, &q.node, flow, diags),
-            None => an_agents_question(document, name, &q.node, diags),
+        match (asked.get(name.as_str()), agents_ask.get(name.as_str())) {
+            (Some(flow), Some(agent)) => {
+                asked_by_both(name, &q.node, flow, agent, diags);
+                a_workflows_question(document, name, &q.node, flow, false, diags);
+            }
+            (Some(flow), None) => a_workflows_question(document, name, &q.node, flow, true, diags),
+            (None, _) => an_agents_question(document, name, &q.node, diags),
         }
     }
     for (_, q) in every_question(document) {
@@ -205,6 +211,66 @@ fn asked_by_workflows(document: &Node) -> BTreeMap<String, String> {
         }
     }
     out
+}
+
+/// Workspace questions an agent's run can stop at (the lines `pact waits`
+/// lists for it), with the first agent that asks each and where.
+fn asked_by_agents(document: &Node) -> BTreeMap<String, (String, Span)> {
+    let mut out = BTreeMap::new();
+    for (agent, entry) in document
+        .get("agents")
+        .and_then(Node::as_map)
+        .into_iter()
+        .flatten()
+    {
+        for (_, question, span, _) in crate::report::asking_lines(document, &entry.node) {
+            out.entry(question).or_insert_with(|| (agent.clone(), span));
+        }
+    }
+    out
+}
+
+/// N58: a workspace question both an agent and a workflow ask. The agent's
+/// runtime needs `if-nobody-answers:` and the workflow refuses it, so no way
+/// of writing it serves both; whichever way it is written, it is refused once.
+fn asked_by_both(
+    name: &str,
+    q: &Node,
+    flow: &str,
+    (agent, asked_at): &(String, Span),
+    diags: &mut Diagnostics,
+) {
+    if unloaded(q) {
+        return;
+    }
+    let both = format!("'{name}' is asked by the workflow '{flow}' and by the agent '{agent}'");
+    let fix = format!(
+        "Give each its own question: keep '{name}' for '{agent}', with `if-nobody-answers:`, \
+         and write the one '{flow}' asks under its own `questions:`, without it — its stage's \
+         `nobody-answered:` exit says what silence does."
+    );
+    let d = match key_span(q, "if-nobody-answers") {
+        Some(at) => Diagnostic::error(
+            "loader/an-agent-only-spelling",
+            at,
+            format!(
+                "{both}, and says what to do when nobody answers with `if-nobody-answers:`, \
+                 which the workflow refuses: in a workflow, silence goes where the asking \
+                 stage's `nobody-answered:` exit says."
+            ),
+            fix,
+        ),
+        None => Diagnostic::error(
+            "loader/a-workflow-only-spelling",
+            q.span.start_of_block(),
+            format!(
+                "{both}, and has no `if-nobody-answers:`, as a workflow's question is written, \
+                 so the agent's run would not know what to do when nobody answers."
+            ),
+            fix,
+        ),
+    };
+    diags.push(d.with_related(asked_at.clone(), format!("'{agent}' asks '{name}' here")));
 }
 
 /// Every question in the tree: the workspace's and each workflow's own.
@@ -294,12 +360,13 @@ fn a_workflows_question(
     name: &str,
     q: &Node,
     flow: &str,
+    only_a_workflow: bool,
     diags: &mut Diagnostics,
 ) {
     if unloaded(q) {
         return;
     }
-    if let Some(at) = key_span(q, "if-nobody-answers") {
+    if only_a_workflow && let Some(at) = key_span(q, "if-nobody-answers") {
         diags.push(Diagnostic::error(
             "loader/an-agent-only-spelling",
             at,
@@ -707,7 +774,6 @@ fn limits_of_an_agent(agent: &str, node: &Node, diags: &mut Diagnostics) {
 /// WF-30: with no `time-zone:` on the workspace, every moment a workflow reads
 /// from a date, or counts in business days, names its own zone.
 fn no_zone(document: &Node, asked: &BTreeMap<String, String>, diags: &mut Diagnostics) {
-    let mut seen: BTreeSet<(String, usize)> = BTreeSet::new();
     let mut found: Vec<&Node> = Vec::new();
     for (_, w) in document
         .get("workflows")
@@ -715,7 +781,7 @@ fn no_zone(document: &Node, asked: &BTreeMap<String, String>, diags: &mut Diagno
         .into_iter()
         .flatten()
     {
-        zoneless(&w.node, &mut found, 0);
+        moments_of_a_workflow(&w.node, &mut found);
     }
     for (name, q) in document
         .get("questions")
@@ -724,14 +790,19 @@ fn no_zone(document: &Node, asked: &BTreeMap<String, String>, diags: &mut Diagno
         .flatten()
     {
         if asked.contains_key(name.as_str()) {
-            zoneless(&q.node, &mut found, 0);
+            moments_of_a_question(&q.node, &mut found);
         }
     }
     for moment in found {
-        if !seen.insert((moment.span.file.to_string(), moment.span.byte_start)) {
+        let Some(m) = moment.as_map() else { continue };
+        let at = m.get("at").and_then(|e| e.node.as_str()).map(str::trim);
+        let business = m
+            .get("counted-in")
+            .and_then(|e| e.node.as_str())
+            .is_some_and(|c| c.trim() == "business-days");
+        if m.contains_key("in-time-zone") || (at.is_none() && !business) {
             continue;
         }
-        let at = moment.get("at").and_then(Node::as_str).map(str::trim);
         diags.push(Diagnostic::error(
             "loader/a-time-with-no-zone",
             moment.span.clone(),
@@ -750,34 +821,49 @@ fn no_zone(document: &Node, asked: &BTreeMap<String, String>, diags: &mut Diagno
     }
 }
 
-/// Every moment below `node` read from a date or counted in business days,
-/// with no `in-time-zone:` of its own.
-fn zoneless<'n>(node: &'n Node, found: &mut Vec<&'n Node>, depth: usize) {
-    if depth > 32 {
-        return;
-    }
-    match &node.value {
-        Value::Map(m) => {
-            let a_moment = m.keys().all(|k| {
-                matches!(
-                    k.as_str(),
-                    "at" | "after" | "before" | "counted-in" | "in-time-zone"
-                )
-            });
-            let dated = m.get("at").is_some_and(|e| e.node.as_str().is_some());
-            let business = m
-                .get("counted-in")
-                .and_then(|e| e.node.as_str())
-                .is_some_and(|c| c.trim() == "business-days");
-            if a_moment && (dated || business) && !m.contains_key("in-time-zone") {
-                found.push(node);
-            }
-            for e in m.values() {
-                zoneless(&e.node, found, depth + 1);
+/// The lines of a workflow whose schema type is `moment` (02W §2.0): its own
+/// and each stage's `limits.finishes-within:` and milestones' `at:`, its
+/// `kept-for:` and every `remembers:` entry's, and its own questions'. Only
+/// these positions are read, so an input, a binding or an answer that happens
+/// to be named `at` is never taken for one.
+fn moments_of_a_workflow<'n>(workflow: &'n Node, found: &mut Vec<&'n Node>) {
+    let stages = every_stage(workflow).into_iter().map(|(_, s)| s);
+    for holder in std::iter::once(workflow).chain(stages) {
+        if let Some(limits) = holder.get("limits") {
+            found.extend(limits.get("finishes-within"));
+            for milestone in limits
+                .get("milestones")
+                .map(workflows::list)
+                .unwrap_or_default()
+            {
+                found.extend(milestone.get("at"));
             }
         }
-        Value::List(items) => items.iter().for_each(|i| zoneless(i, found, depth + 1)),
-        _ => {}
+        found.extend(holder.get("kept-for"));
+        for (_, state) in holder
+            .get("remembers")
+            .and_then(Node::as_map)
+            .into_iter()
+            .flatten()
+        {
+            found.extend(state.node.get("kept-for"));
+        }
+    }
+    for (_, q) in workflow
+        .get("questions")
+        .and_then(Node::as_map)
+        .into_iter()
+        .flatten()
+    {
+        moments_of_a_question(&q.node, found);
+    }
+}
+
+/// A question's moments: `answer-within:` and each reminder's `at:`.
+fn moments_of_a_question<'n>(q: &'n Node, found: &mut Vec<&'n Node>) {
+    found.extend(q.get("answer-within"));
+    for reminder in q.get("reminds-at").map(workflows::list).unwrap_or_default() {
+        found.extend(reminder.get("at"));
     }
 }
 
@@ -860,6 +946,88 @@ workflows:
                 "after: 2 days, in-time-zone: input.zone }",
             );
         assert_eq!(rules(&zoned), vec![], "a zone on the line will do");
+    }
+
+    #[test]
+    fn only_a_moment_line_is_read_as_a_moment() {
+        // An input, an answer, a binding and a remembered value each named `at`,
+        // with no zone anywhere: none of them is a moment.
+        let text = CASE.replace("time-zone: America/Chicago\n", "").replace(
+            "    starts-at: paid\n",
+            "    accepts: { at: text }\n    answers-with: { at: date and time }\n    \
+             remembers:\n      seen: { shape: { at: text } }\n    starts-at: paid\n",
+        );
+        let text = text
+            .replace("call: t/a\n", "call: t/a\n        bind: { at: input.at }\n")
+            .replace(
+                "asked-of: [the-clock]\n",
+                "asked-of: [the-clock]\n        answer: { at: date }\n",
+            );
+        let zones: Vec<_> = rules(&text)
+            .into_iter()
+            .filter(|(r, _)| *r == "loader/a-time-with-no-zone")
+            .collect();
+        assert_eq!(zones.len(), 3, "only the three real moments: {zones:?}");
+    }
+
+    /// A workspace question an agent's limits ask and a workflow's stage asks.
+    const SHARED: &str = "
+agents:
+  desk:
+    description: x
+    limits:
+      cost-per-request-under: 1 USD
+      when-it-runs-out: ask-a-person
+      asks: is-this-ok
+questions:
+  is-this-ok:
+    description: x
+    asked-of: [ap-clerks]
+    says: May this go on?
+    answer: { approved: yes or no }
+    if-nobody-answers: decline
+workflows:
+  flow:
+    description: x
+    starts-at: check
+    steps:
+      check:
+        does: ask-someone
+        asks: is-this-ok
+        then: { nobody-answered: done }
+";
+
+    #[test]
+    fn a_question_an_agent_and_a_workflow_both_ask_is_refused_either_way() {
+        for (text, rule) in [
+            (SHARED.to_string(), "loader/an-agent-only-spelling"),
+            (
+                SHARED.replace("    if-nobody-answers: decline\n", ""),
+                "loader/a-workflow-only-spelling",
+            ),
+        ] {
+            let node = parse_yaml(&text, camino::Utf8Path::new("workspace.yaml")).unwrap();
+            let mut d = Diagnostics::new();
+            check(&node, &mut d);
+            assert_eq!(d.items().len(), 1, "{:?}", d.items());
+            let one = &d.items()[0];
+            assert_eq!(one.rule, rule);
+            assert!(
+                one.message
+                    .contains("asked by the workflow 'flow' and by the agent 'desk'"),
+                "{}",
+                one.message
+            );
+            assert!(
+                one.fix.starts_with("Give each its own question"),
+                "{}",
+                one.fix
+            );
+            assert_eq!(one.related.len(), 1, "points at the agent's line");
+        }
+        // Asked by the agent alone, it loads as it is.
+        let alone = SHARED.split("workflows:").next().unwrap();
+        assert_eq!(rules(alone), vec![]);
     }
 
     #[test]
