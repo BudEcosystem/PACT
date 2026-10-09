@@ -76,7 +76,11 @@ def test_the_built_wheel_installed_alone_resolves_a_shipped_model_and_finds_the_
     venv = tmp_path / "venv"
     do(uv, "venv", "--offline", "-q", str(venv))
     python = str(venv / "bin" / "python")
-    do(uv, "pip", "install", "--offline", "-q", "--python", python, *wheels)
+    # Offline when uv's cache already holds the wheels' dependencies; a fresh machine (a CI
+    # runner) fetches them. Either way only these two wheels are installed from this checkout.
+    install = (uv, "pip", "install", "-q", "--python", python, *wheels)
+    if subprocess.run((*install, "--offline"), capture_output=True).returncode != 0:
+        do(*install)
     asked = (
         "import json; from pact_adapters import loader, resolve\n"
         "c = resolve.load_catalogue()\n"
