@@ -1,0 +1,13 @@
+# Memory the workspace keeps, which any agent here may read as
+# `remembers.<name>` (in its words, or in a tool's `bind:`), and which only the
+# stock actions `bud/remember` and `bud/forget` write.
+name: an-agent-that-reads-the-workspace-memory
+workspace-id: 01JEQ8Z3M4N5P6Q7R8S9T0W7M1
+description: A desk that reads the house style the workspace remembers, and proposes changes to it.
+owner: platform
+allow-egress: []
+remembers:
+  house-style:
+    description: How this workspace writes to customers.
+    lasts: forever
+    starts-as: plain and brief

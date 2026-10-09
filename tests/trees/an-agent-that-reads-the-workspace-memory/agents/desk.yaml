@@ -1,0 +1,10 @@
+description: Answers questions about an order in the house style.
+instructions: >
+  Look the order up and answer in this style: {{remembers.house-style}}.
+uses:
+  - orders
+  - bud
+remembers:
+  last-order-seen:
+    description: The last order this conversation looked at.
+    lasts: one-conversation

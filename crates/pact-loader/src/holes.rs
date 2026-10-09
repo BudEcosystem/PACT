@@ -137,6 +137,13 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
     let Some(agents) = document.get("agents").and_then(Node::as_map) else {
         return;
     };
+    // The workspace's own `remembers:` is memory any agent here may read as
+    // `remembers.<name>` (its help says so), so a hole may name it too.
+    let workspace: BTreeSet<String> = document
+        .get(REMEMBERS)
+        .and_then(Node::as_map)
+        .map(|m| m.keys().cloned().collect())
+        .unwrap_or_default();
     for (agent, entry) in agents {
         let declared = |field: &str| -> BTreeSet<String> {
             entry
@@ -147,7 +154,7 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
                 .unwrap_or_default()
         };
         let inputs = declared(RUN_INPUTS);
-        let remembered = declared(REMEMBERS);
+        let remembered: BTreeSet<String> = declared(REMEMBERS).union(&workspace).cloned().collect();
         // Each text that becomes this agent's words, with what to call it.
         let mut texts: Vec<(String, &str, &Span)> = Vec::new();
         for field in FIELDS {

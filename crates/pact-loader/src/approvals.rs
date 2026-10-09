@@ -92,6 +92,14 @@ fn bindings_resolve(document: &Node, diags: &mut Diagnostics) {
     // The ones a tool's answer may never be written into, by the author's own
     // `never-from:` line.
     let mut refuses_tool_output: std::collections::BTreeSet<String> = Default::default();
+    // The workspace's own `remembers:` is memory any agent here may read, so a
+    // binding may be filled from it; only `bud/remember` and `bud/forget` write
+    // it, so no `remember-as:` may.
+    let workspace: std::collections::BTreeSet<String> = document
+        .get("remembers")
+        .and_then(Node::as_map)
+        .map(|m| m.keys().cloned().collect())
+        .unwrap_or_default();
     if let Some(agents) = document.get("agents").and_then(Node::as_map) {
         for (_, agent) in agents {
             if let Some(m) = agent.node.get("run-inputs").and_then(Node::as_map) {
@@ -114,6 +122,8 @@ fn bindings_resolve(document: &Node, diags: &mut Diagnostics) {
             }
         }
     }
+    let readable: std::collections::BTreeSet<String> =
+        remembered.union(&workspace).cloned().collect();
     for (tool, entry) in tools {
         let Some(actions) = entry.node.get("actions").and_then(Node::as_map) else {
             continue;
@@ -132,7 +142,22 @@ fn bindings_resolve(document: &Node, diags: &mut Diagnostics) {
                     .node
                     .get("remember-as")
                     .map_or_else(|| a.key_span.clone(), |n| n.span.clone());
-                if !remembered.is_empty() && !remembered.contains(kept) {
+                if workspace.contains(kept) && !remembered.contains(kept) {
+                    diags.push(Diagnostic::error(
+                        "loader/a-tool-may-not-write-there",
+                        at.clone(),
+                        format!(
+                            "`{tool}/{action}` keeps what it answered as '{kept}', and '{kept}' \
+                             is the workspace's own memory, which only the stock actions \
+                             `bud/remember` and `bud/forget` write."
+                        ),
+                        format!(
+                            "Call `bud/remember` with `memory: remembers.{kept}` to keep it \
+                             there, or add `{kept}:` under `remembers:` in the agent that uses \
+                             this tool."
+                        ),
+                    ));
+                } else if !remembered.is_empty() && !remembered.contains(kept) {
                     diags.push(Diagnostic::error(
                         "loader/no-such-remembered-fact",
                         at.clone(),
@@ -171,7 +196,7 @@ fn bindings_resolve(document: &Node, diags: &mut Diagnostics) {
                 };
                 // The second namespace, checked against what agents remember.
                 if let Some(fact) = written.strip_prefix("remembers.") {
-                    if remembered.is_empty() || remembered.contains(fact) {
+                    if readable.is_empty() || readable.contains(fact) {
                         continue;
                     }
                     diags.push(Diagnostic::error(
@@ -179,14 +204,14 @@ fn bindings_resolve(document: &Node, diags: &mut Diagnostics) {
                         value.node.span.clone(),
                         format!(
                             "`{tool}/{action}` fills `{arg}:` from a remembered fact called \
-                             '{fact}', and no agent here remembers one by that name — so the \
+                             '{fact}', and neither the workspace nor any agent here remembers one by that name — so the \
                              model would choose that value after all, which is the one thing \
                              `bind:` exists to stop."
                         ),
                         format!(
                             "Change it to one of: {} — or add `{fact}:` under `remembers:` in \
                              the agent that uses this tool.",
-                            remembered.iter().cloned().collect::<Vec<_>>().join(", ")
+                            readable.iter().cloned().collect::<Vec<_>>().join(", ")
                         ),
                     ));
                     continue;
@@ -209,7 +234,7 @@ fn bindings_resolve(document: &Node, diags: &mut Diagnostics) {
                             let mut both: Vec<String> = inputs
                                 .iter()
                                 .map(|n| format!("`run-inputs.{n}`"))
-                                .chain(remembered.iter().map(|n| format!("`remembers.{n}`")))
+                                .chain(readable.iter().map(|n| format!("`remembers.{n}`")))
                                 .collect();
                             both.sort();
                             if both.is_empty() {

@@ -732,6 +732,11 @@ class AgentSpec:
     #: argument, every test passed one, and nothing on the authored path ever
     #: did, so `survives-shortening:` loaded and did nothing for a round.
     facts: Facts = field(default_factory=Facts)
+    #: The workspace's own `remembers:`, which every agent here may read as
+    #: `remembers.<name>` and only `bud/remember` and `bud/forget` write (the
+    #: field's help). Kept apart from `facts`: the agent's own `remember` is
+    #: not one of those two actions, so it never writes here.
+    workspace_remembers: Facts = field(default_factory=Facts)
 
     #: The written procedures this agent may use — its own `uses:` line filtered
     #: to entries that are `skills:` rather than `tools:`. Carried beside `tools`
@@ -952,6 +957,7 @@ class AgentSpec:
             asking=questions_for(doc, agent_key, root),
             request_keys=RequestKeys.from_document(doc, agent_key),
             facts=Facts.from_document(doc, agent_key),
+            workspace_remembers=Facts.of(doc.get("remembers")),
             # `model:` is in the schema and the loader emits it; until this line
             # existed the adapter boundary dropped it, so no host could pass the
             # author's pin on even if it wanted to. Nothing pinned is "" and (),

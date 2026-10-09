@@ -1,0 +1,12 @@
+description: The workspace's own memory.
+connect: bud-server
+actions:
+  remember:
+    description: Keep a value in the workspace's memory; a model's value waits for review under learning.yaml.
+    takes:
+      memory: text
+      value: text
+  forget:
+    description: Forget a value the workspace's memory keeps.
+    takes:
+      memory: text

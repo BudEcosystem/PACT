@@ -1,0 +1,13 @@
+description: Looks orders up.
+connect: orders-server
+actions:
+  look-up:
+    description: Finds an order, written in the house style.
+    takes:
+      order-number: text
+      style: text
+    reads-only: yes
+    # Filled from the workspace's memory, never by the model.
+    bind:
+      style: remembers.house-style
+    remember-as: last-order-seen
