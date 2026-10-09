@@ -569,8 +569,12 @@ impl<'a> Flow<'a> {
         {
             self.read(frames, stage, value, None, Reading::At, diags);
         }
+        // An `answer` hands back its `bind:` and nothing else: one with no `bind:` hands back
+        // nothing, so it is held like one that binds no field (each required field left empty),
+        // the caret on its `does:` line.
         let answers = self.node.get("answers-with").and_then(Node::as_map);
-        let (Some(bind), Some(answers), 1) = (bind, answers, frames.len()) else {
+        let (Some(at), Some(answers), 1) = (bind.or(fields.get("does")), answers, frames.len())
+        else {
             return;
         };
         let fields: Vec<(String, Option<Line>, String)> = answers
@@ -588,8 +592,8 @@ impl<'a> Flow<'a> {
             stage,
             &Against::answer(self.name),
             &fields,
-            Some(bind),
-            bind.node.as_map(),
+            Some(at),
+            bind.and_then(|b| b.node.as_map()),
             diags,
         );
     }

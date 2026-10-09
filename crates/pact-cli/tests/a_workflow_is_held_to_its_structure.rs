@@ -220,7 +220,7 @@ fn a_path_that_answers_nothing_is_refused_when_the_workflow_answers() {
         "nobody-waits",
         &[
             (FLOW, "      other: reply\n", "      other: done\n"),
-            (FLOW, "answers-with:\n  posted: yes or no\n", ""),
+            (FLOW, "answers-with:\n  posted: yes or no, optional\n", ""),
         ],
         &[],
     ));

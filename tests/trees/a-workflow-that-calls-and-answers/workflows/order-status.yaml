@@ -14,3 +14,5 @@ steps:
       answered: reply
   reply:
     does: answer
+    bind:
+      status: steps.look.status

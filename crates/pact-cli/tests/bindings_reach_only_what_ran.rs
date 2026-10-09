@@ -8,7 +8,8 @@
 //! stage that runs after the reader. WF-7: `item.` outside an `each`. WF-9: a
 //! target picked from a binding with no `may-call:`. WF-39: a call that leaves
 //! a required input empty, names one its target does not take, or binds a
-//! value of another shape; an `answer`'s `bind:` is held the same way to its
+//! value of another shape; an `answer`'s `bind:` (an `answer` with none hands
+//! back nothing) is held the same way to its
 //! workflow's `answers-with:` (over #16's `parent-contact`).
 //!
 //! The fixture is #60's interconnection case (02W §5.5), the stages its
@@ -520,6 +521,28 @@ fn an_answer_is_held_to_what_its_workflow_answers_with() {
         2,
         "{text}"
     );
+}
+
+#[test]
+fn an_answer_that_binds_nothing_hands_back_nothing() {
+    // An `answer` hands back its `bind:` and nothing else, so one with no
+    // `bind:` leaves every field its workflow answers with empty: held as one
+    // that binds no field, the caret on its `does:` line.
+    let root = edited(
+        "workflows-16-trial-booking",
+        "answer-unbound",
+        &[(CONTACT, "    bind: { contact-id: steps.upsert.id }\n", "")],
+    );
+    let text = refused(&root, "loader/a-call-that-does-not-fit");
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(
+        text.contains(
+            "'reply' gives the answer of 'parent-contact' and leaves its field 'contact-id' \
+             empty, so the answer of 'parent-contact' would go out without it."
+        ),
+        "{text}"
+    );
+    assert!(text.contains("does: answer"), "the caret is on its `does:` line:\n{text}");
 }
 
 #[test]

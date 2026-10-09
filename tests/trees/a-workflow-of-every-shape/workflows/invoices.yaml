@@ -3,7 +3,7 @@ accepts:
   attachments: text
   received-on: text
 answers-with:
-  posted: yes or no
+  posted: yes or no, optional
 kept-for:
   at: input.received-on
   after: 7 days

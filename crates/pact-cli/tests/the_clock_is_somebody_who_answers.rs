@@ -246,7 +246,7 @@ fn a_line_named_at_is_not_a_moment() {
     std::fs::write(
         dst.join("workflows/stamp.yaml"),
         "description: x\naccepts: { at: text }\nanswers-with: { at: text }\n\
-         starts-at: reply\nsteps:\n  reply:\n    does: answer\n",
+         starts-at: reply\nsteps:\n  reply:\n    does: answer\n    bind: { at: input.at }\n",
     )
     .unwrap();
     std::fs::write(

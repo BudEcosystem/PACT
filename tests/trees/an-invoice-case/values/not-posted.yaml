@@ -1,0 +1,3 @@
+description: The answer of an invoice that was not posted.
+shape: yes-or-no
+value: no

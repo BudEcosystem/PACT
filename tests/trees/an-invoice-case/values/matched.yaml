@@ -1,0 +1,3 @@
+description: The answer once the purchase order has matched.
+shape: yes-or-no
+value: yes

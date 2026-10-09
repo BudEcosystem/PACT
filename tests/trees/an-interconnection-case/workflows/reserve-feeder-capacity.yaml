@@ -18,3 +18,4 @@ steps:
       answered: reply
   reply:
     does: answer
+    bind: { reservation-id: steps.reserve.reservation-id }

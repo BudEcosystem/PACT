@@ -17,3 +17,4 @@ steps:
       answered: reply
   reply:
     does: answer
+    bind: { upgrade-cost: values.supplemental-upgrade-cost }

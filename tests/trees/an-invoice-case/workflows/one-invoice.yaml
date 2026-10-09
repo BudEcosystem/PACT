@@ -48,6 +48,8 @@ steps:
 
   posted:
     does: answer
+    bind: { posted: steps.post.posted }
 
   tell-clerk:
     does: answer
+    bind: { posted: values.not-posted }

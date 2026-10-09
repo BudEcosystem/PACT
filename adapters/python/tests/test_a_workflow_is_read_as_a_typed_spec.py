@@ -37,7 +37,7 @@ def test_the_workflow_lines_are_read_as_written(flow: WorkflowSpec) -> None:
     assert flow.description.startswith("Goes through an email's attachments")
     assert flow.starts_at == "sort"
     assert flow.accepts == {"attachments": "text", "received-on": "text"}
-    assert flow.answers_with == {"posted": "yes or no"}
+    assert flow.answers_with == {"posted": "yes or no, optional"}
     assert flow.kept_for == Moment(at="input.received-on", after="7 days")
     assert flow.hides == {"input.attachments": ("logs",)}
     assert flow.published_as == ("tool",)
