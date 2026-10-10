@@ -2366,6 +2366,12 @@ async def run(
                 # uses, so "carry on without the fraud check?" can be a written
                 # question rather than a hardcoded yes/no pair (G7).
                 team_rule = rule_for(spec.pauses, NEEDS_APPROVAL)
+                # WHAT is asked is the question's, carried under the member's
+                # name (`<member>.<field>`), as a gate's park does above: the
+                # rule's bare field names would leave the resume nothing that
+                # names the member, so an answer could never carry on past it.
+                if asking.for_call(who, {}) is not None and team_rule is not None:
+                    team_rule = replace(team_rule, asks_for=())
                 parked = suspend(
                     NEEDS_APPROVAL,
                     _asks_about(NEEDS_APPROVAL, who, asking.for_call(who, {})),

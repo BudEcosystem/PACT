@@ -14,7 +14,8 @@ same closed list is used, one rule per field:
                       or money with a bare number, are refused
     vote              the most common answer, with the share that agreed;
                       `vote, everyone agreeing` has an answer only when all agree
-    top-n             the n best by a field, highest or lowest; top 1 is the item.
+    top-n             the n best by a field, highest or lowest; top 1 is the item
+                      (bound to a `list of` field, a list of one: the auto-map rung).
                       Ranked as a condition orders (`conditions.ordered_as`): a
                       date as a date, a time as a time, money as its figure. A
                       list among the items (what an earlier `top <n>` gave, a

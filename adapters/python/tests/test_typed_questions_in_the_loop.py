@@ -744,6 +744,42 @@ def test_a_teammates_own_words_reach_the_approver_as_quoted_data(document: dict)
     assert line.count('"') == 2, line
 
 
+def test_answering_the_teamwork_question_carries_on_without_the_member() -> None:
+    """`examples/patterns/escalation`: the valuer fails and the claims team is
+    asked what the item is worth, a question with no `yes or no`, so it is
+    cleared by being answered. The park asked the question's bare fields, and
+    the resume looks for an answer that names the member, so no answer could
+    ever carry on: it parked again and asked the valuer again. The fields are
+    carried under the member's name, as a gate's are."""
+    doc = _a_team_that_can_fail()
+    doc["questions"]["carry-on-without-them"]["answer"] = {"amount": "money", "because": "text"}
+    spec = AgentSpec.from_document(doc, "desk")
+    asked: list[str] = []
+
+    async def ask(grant):
+        asked.append(grant.member)
+        raise RuntimeError("no basis for a figure")
+
+    def calls_them() -> Script:
+        return Script([
+            Turn("Consulting.", (ToolCall("fraud-checker", {"question": "worth?"}),)),
+            Turn("Approved at 400 USD."),
+        ])
+
+    parked = asyncio.run(
+        run(spec, ReferenceTransport(calls_them()), "value it", {}, ask_member=ask)
+    ).suspension
+    assert parked is not None
+    assert sorted(e.name for e in parked.asks) == ["fraud-checker.amount", "fraud-checker.because"]
+    answer = parked.answer(**{"fraud-checker.amount": "400 USD", "fraud-checker.because": "a collector's price"})
+    resumed = asyncio.run(
+        run(spec, ReferenceTransport(calls_them()), "value it", {}, ask_member=ask,
+            resume=parked, answer=answer)
+    )
+    assert resumed.halted == "final", resumed.halted
+    assert asked == ["fraud-checker"], f"asked again: {asked}"
+
+
 def test_the_stage_that_asks_shows_what_its_question_asked_to_be_shown() -> None:
     """A stage has no pending action, which is why this park rendered an
     author's question with no values under it even when it named one. What it

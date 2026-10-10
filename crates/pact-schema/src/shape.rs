@@ -156,6 +156,8 @@ impl Shape {
                 .iter()
                 .all(|h| want.iter().any(|w| w.eq_ignore_ascii_case(h))),
             (Shape::ListOf(have), Shape::ListOf(want)) => have.fits_within(want, parts, depth + 1),
+            // One value into a list of one; a list is fitted item by item above.
+            (_, Shape::ListOf(want)) => self.fits_within(want, parts, depth + 1),
             (Shape::Named(have), Shape::Named(want)) => {
                 let (Some(have), Some(want)) = (parts(have), parts(want)) else {
                     return true;
@@ -267,6 +269,10 @@ mod tests {
         let list = |s: Shape| Shape::ListOf(Box::new(s));
         assert!(list(p("whole-number")).fits(&list(p("number")), &none));
         assert!(!list(p("text")).fits(&p("text"), &none));
+        // One value into a list of one, as `top 1` gives the item `top <n>`
+        // gives a list of.
+        assert!(p("whole-number").fits(&list(p("number")), &none));
+        assert!(!p("date").fits(&list(p("number")), &none));
     }
 
     #[test]
