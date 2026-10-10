@@ -207,6 +207,9 @@ pub fn inventory(found: &Found) -> J {
     root_obj.insert("root".into(), J::String(root.to_string()));
     root_obj.insert("agents".into(), J::Array(list));
     root_obj.insert("digest".into(), J::String(pact_doc::digest(doc)));
+    // Each workflow's two digests (02W §7.2): what a waiting run is pinned to,
+    // so an edit elsewhere in the workspace leaves it free to resume.
+    root_obj.insert("workflows".into(), crate::digests::of(doc));
     J::Object(root_obj)
 }
 

@@ -9,6 +9,7 @@
 //! validated is not validation, it is a supply-chain hazard (D17, D23) — and it
 //! is precisely why Eve's build step cannot run air-gapped or unprivileged.
 
+mod digests;
 mod discover;
 mod egress;
 mod suites;

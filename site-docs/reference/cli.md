@@ -64,6 +64,27 @@ forever — which is exactly as long as one without a deadline waits.
 Every workspace under a path, as an inventory a runtime can index. No build
 step, so a host can find and load agents without executing anything.
 
+Each workspace carries its `digest` (the canonical document's), and each of
+its workflows under `workflows` carries two more, the ones a waiting run is
+pinned to:
+
+- `doc-digest` moves when anything the workflow's run relies on changes: the
+  workflow itself, a workflow it calls, or anything of the workspace outside
+  its workflows (tools, agents, programs, policies, settings). An edit to a
+  workflow it never reaches, or to the owners and release settings, leaves it
+  as it was, so a run waiting on this workflow can still be resumed.
+- `contract-digest` moves only with what its callers rely on: `accepts:`,
+  `answers-with:`, `published-as:`, and each port that answers it with its
+  `same-conversation-when:` and `if-still-running:`.
+
+```console
+$ pact discover tests/trees/workflows-16-trial-booking
+[{ …, "digest": "sha256:…",
+   "workflows": [
+     { "name": "parent-contact", "doc-digest": "sha256:…", "contract-digest": "sha256:…" },
+     { "name": "trial-booking", "doc-digest": "sha256:…", "contract-digest": "sha256:…" } ] }]
+```
+
 ## `pact card`
 
 One agent's **A2A Agent Card** — the interoperability protocol Vercel Eve does
