@@ -11,6 +11,7 @@
 //! | `loader/a-stage-an-agent-cannot-have` | — | an agent's loop does `call`, `decide`, `each`, `repeat` or `together` (WF-2 turned round), or one of its stages writes a line or an outcome only a workflow's stage reads |
 //! | `loader/a-line-this-stage-never-reads` | WF-3 | a line written beside a `does:` it does not belong to, an outcome under `then:` its `does:` never ends in (02W §2.4), or `items-at-most:` anywhere but an `each`'s own `limits:` |
 //! | `loader/workflows-that-call-each-other` | WF-8 | the workflow call graph has a circle |
+//! | `loader/a-workflow-its-own-agent-starts` | N123 | the circle runs through an agent: a stage calls an agent whose `uses:` names a workflow that leads back |
 //! | `loader/for-each-with-no-ceiling` | WF-10 | an `each` with no `limits.items-at-most` |
 //! | `loader/items-told-apart-by-position` | WF-11 | an `each` whose body writes and has no `identified-by:` |
 //! | `loader/repeat-with-no-bottom` | WF-12 | a `repeat` with no `at-most:` |
@@ -763,21 +764,36 @@ pub(crate) fn next_stages(stage: &Node, in_workflow: bool) -> Vec<(&str, &str)> 
     out
 }
 
-/// WF-8: a circle in which workflow calls workflow.
+/// WF-8: a circle in which workflow calls workflow, and the same circle run
+/// through an agent: a stage that calls an agent whose `uses:` names a workflow
+/// is one more hop, since the agent's model may start that workflow as a tool
+/// (N2). Workflows and agents never share a name (`one_name_one_thing`), so
+/// one graph over both names holds every such hop.
 fn calls_go_round(document: &Node, diags: &mut Diagnostics) {
     let Some(workflows) = document.get("workflows").and_then(Node::as_map) else {
         return;
     };
+    let agents = document.get("agents").and_then(Node::as_map);
     let mut edges: BTreeMap<&str, Vec<(&str, Span)>> = BTreeMap::new();
     for (name, entry) in workflows {
         let mut out = Vec::new();
         if let Some(steps) = entry.node.get("steps").and_then(Node::as_map) {
-            called_workflows(workflows, steps, &mut out);
+            called_workflows(workflows, agents, steps, &mut out);
         }
         edges.insert(name.as_str(), out);
     }
+    for (name, entry) in agents.into_iter().flatten() {
+        let uses = entry.node.get("uses").map(list).unwrap_or_default();
+        let out: Vec<(&str, Span)> = uses
+            .into_iter()
+            .filter_map(|n| n.as_str().map(str::trim).map(|w| (w, n.span.clone())))
+            .filter(|(w, _)| workflows.contains_key(*w))
+            .collect();
+        edges.insert(name.as_str(), out);
+    }
+    let is_agent = |name: &str| agents.is_some_and(|a| a.contains_key(name));
     let mut reported: BTreeSet<Vec<&str>> = BTreeSet::new();
-    for start in edges.keys().copied() {
+    for start in workflows.keys().map(String::as_str) {
         let mut path = vec![start];
         if let Some((circle, at)) = circle_from(&edges, &mut path) {
             let mut key = circle.clone();
@@ -785,25 +801,64 @@ fn calls_go_round(document: &Node, diags: &mut Diagnostics) {
             if !reported.insert(key) {
                 continue;
             }
-            let said = circle
-                .iter()
-                .map(|w| format!("'{w}'"))
-                .collect::<Vec<_>>()
-                .join(" calls ");
-            diags.push(Diagnostic::error(
-                "loader/workflows-that-call-each-other",
-                at,
-                format!(
-                    "{said} calls '{}' again, so one run can start itself without end.",
-                    circle[0]
-                ),
-                "Break the circle; a workflow that must come back is a `repeat`.".to_string(),
-            ));
+            diags.push(circle_said(&circle, at, &is_agent));
         }
     }
 }
 
-fn called_workflows<'a>(workflows: &Map, steps: &'a Map, out: &mut Vec<(&'a str, Span)>) {
+/// The words for one circle: `'a' calls 'b' calls 'a' again` between workflows,
+/// and, through an agent, `'a' calls the agent 'c', which uses 'a' again`.
+fn circle_said(circle: &[&str], at: Span, is_agent: &dyn Fn(&str) -> bool) -> Diagnostic {
+    let mut said = format!("'{}'", circle[0]);
+    let hop = |from: &str, to: &str| {
+        if is_agent(from) {
+            format!(", which uses '{to}'")
+        } else if is_agent(to) {
+            format!(" calls the agent '{to}'")
+        } else {
+            format!(" calls '{to}'")
+        }
+    };
+    for pair in circle.windows(2) {
+        said.push_str(&hop(pair[0], pair[1]));
+    }
+    said.push_str(&hop(circle[circle.len() - 1], circle[0]));
+    let words = format!("{said} again, so one run can start itself without end.");
+    match circle.iter().find(|n| is_agent(n)) {
+        None => Diagnostic::error(
+            "loader/workflows-that-call-each-other",
+            at,
+            words,
+            "Break the circle; a workflow that must come back is a `repeat`.".to_string(),
+        ),
+        Some(agent) => {
+            let flow = circle
+                .iter()
+                .cycle()
+                .skip_while(|n| *n != agent)
+                .nth(1)
+                .copied()
+                .unwrap_or(circle[0]);
+            Diagnostic::error(
+                "loader/a-workflow-its-own-agent-starts",
+                at,
+                words,
+                format!(
+                    "Break the circle: take '{flow}' off the `uses:` of '{agent}', or have the stage \
+                     that calls '{agent}' call an agent that does not use '{flow}'; a workflow that \
+                     must come back is a `repeat`."
+                ),
+            )
+        }
+    }
+}
+
+fn called_workflows<'a>(
+    workflows: &Map,
+    agents: Option<&Map>,
+    steps: &'a Map,
+    out: &mut Vec<(&'a str, Span)>,
+) {
     for entry in steps.values() {
         let Some(fields) = entry.node.as_map() else {
             continue;
@@ -814,19 +869,19 @@ fn called_workflows<'a>(workflows: &Map, steps: &'a Map, out: &mut Vec<(&'a str,
         }
         for n in said {
             if let Some(name) = n.as_str().map(str::trim)
-                && workflows.contains_key(name)
+                && (workflows.contains_key(name) || agents.is_some_and(|a| a.contains_key(name)))
             {
                 out.push((name, n.span.clone()));
             }
         }
         if let Some(inner) = fields.get("steps").and_then(|e| e.node.as_map()) {
-            called_workflows(workflows, inner, out);
+            called_workflows(workflows, agents, inner, out);
         }
     }
 }
 
-/// The first circle back to `path[0]`, with the line in the last workflow that
-/// closes it.
+/// The first circle back to `path[0]`, with the line that closes it (a call in
+/// the last workflow, or the last agent's `uses:` entry).
 fn circle_from<'a>(
     edges: &BTreeMap<&'a str, Vec<(&'a str, Span)>>,
     path: &mut Vec<&'a str>,
