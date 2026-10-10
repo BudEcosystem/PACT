@@ -9,11 +9,14 @@
 //! "the same version" means:
 //!
 //! * **`doc-digest`** — what the run itself relies on. The canonical digest of
-//!   the document with three things left out: every workflow this one never
-//!   reaches, with the ports that answer one; and the owners and release
+//!   the document with these left out: every workflow this one never
+//!   reaches, with the ports that answer one; the owners and release
 //!   settings (`owners:`, `release:` and a workflow's own `release:`), which
 //!   02W leaves out of both digests because they are the release service's,
-//!   not the run's. Everything else stays in:
+//!   not the run's; and the checks (`evals:`, the workspace's suite and its
+//!   cases, and the `evals:` line of a workflow or an agent), which grade a
+//!   run and govern none, so a new eval case keeps the version (02W §7.2
+//!   classes it additive). Everything else stays in:
 //!   its own stages, questions and policy, the tools, agents and programs of
 //!   the workspace (a program's body is in the document as its file's digest),
 //!   the workspace's settings. That is wider than 02W's list (its local
@@ -76,14 +79,17 @@ pub fn of(doc: &Node) -> J {
 }
 
 /// The workflows named anywhere outside `workflows:` and `ports:` (and the
-/// owners and release settings, which no digest covers).
+/// owners, release and evals settings, which no doc-digest covers).
 fn names_outside(doc: &Node, flows: &Map) -> BTreeSet<String> {
     let mut found = BTreeSet::new();
     for (key, entry) in doc.as_map().into_iter().flatten() {
         // A setting of the workspace's own (`name:`, `description:`) names
         // nothing; its collections and groups are what can call a workflow.
         let scalar = !matches!(entry.node.value, Value::Map(_) | Value::List(_));
-        if !scalar && !matches!(key.as_str(), "workflows" | "ports" | "owners" | "release") {
+        if !scalar
+            && !matches!(key.as_str(), "workflows" | "ports")
+            && !LEFT_OUT.contains(&key.as_str())
+        {
             named(&entry.node, flows, &mut found);
         }
     }
@@ -126,16 +132,29 @@ fn named(node: &Node, flows: &Map, found: &mut BTreeSet<String>) {
     }
 }
 
+/// What no doc-digest covers: the workspace's settings of these names, and
+/// a workflow's own `release:` and `evals:` (an agent's `evals:` too).
+const LEFT_OUT: [&str; 3] = ["owners", "release", "evals"];
+
 fn doc_digest(doc: &Node, flows: &Map, reached: &BTreeSet<String>) -> String {
     let mut kept = doc.clone();
     if let Some(map) = kept.as_map_mut() {
-        map.shift_remove("owners");
-        map.shift_remove("release");
+        for key in LEFT_OUT {
+            map.shift_remove(key);
+        }
         if let Some(flows) = map.get_mut("workflows").and_then(|e| e.node.as_map_mut()) {
             flows.retain(|name, _| reached.contains(name));
             for entry in flows.values_mut() {
                 if let Some(flow) = entry.node.as_map_mut() {
                     flow.shift_remove("release");
+                    flow.shift_remove("evals");
+                }
+            }
+        }
+        if let Some(agents) = map.get_mut("agents").and_then(|e| e.node.as_map_mut()) {
+            for entry in agents.values_mut() {
+                if let Some(agent) = entry.node.as_map_mut() {
+                    agent.shift_remove("evals");
                 }
             }
         }

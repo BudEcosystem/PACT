@@ -45,8 +45,10 @@ fn digests(name: &str, edits: &[(&str, &str, &str)]) -> Digests {
     let _ = std::fs::remove_dir_all(&dst);
     copy(&repo().join(TREE), &dst);
     for (file, from, to) in edits {
+        // A file that is not there is written, from "".
         let p = dst.join(file);
-        let text = std::fs::read_to_string(&p).unwrap();
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        let text = std::fs::read_to_string(&p).unwrap_or_default();
         assert!(
             text.contains(from),
             "fixture drifted: {from:?} not in {file}"
@@ -201,6 +203,61 @@ fn a_change_outside_every_workflow_moves_every_doc_digest() {
     for flow in ["trial-booking", "parent-contact"] {
         assert_ne!(doc(&plain, flow), doc(&edited, flow), "{flow}");
     }
+}
+
+const SUITE: (&str, &str, &str) = (
+    "evals/suite.yaml",
+    "",
+    "description: The trial is booked.\npopulation: authored-enumeration\nmust-pass: 100%\n",
+);
+const NAMES_IT: (&str, &str, &str) = (BOOKING, "\naccepts:", "\nevals: evals\naccepts:");
+
+fn case(name: &str, when: &str) -> (String, String, String) {
+    (
+        format!("evals/cases/{name}.yaml"),
+        String::new(),
+        format!(
+            "when: {when}\nwith:\n  parent-name: Ana\nexpect:\n  contact-id: c-1\nbecause: It is booked.\n"
+        ),
+    )
+}
+
+fn with_cases(name: &str, cases: &[(String, String, String)]) -> Digests {
+    let mut edits: Vec<(&str, &str, &str)> = vec![SUITE, NAMES_IT];
+    edits.extend(
+        cases
+            .iter()
+            .map(|(f, a, b)| (f.as_str(), a.as_str(), b.as_str())),
+    );
+    digests(name, &edits)
+}
+
+#[test]
+fn an_eval_case_added_or_reworded_moves_no_doc_digest() {
+    let plain = digests("evals-none", &[]);
+    let one = with_cases("evals-one", &[case("booked", "a parent books")]);
+    let two = with_cases(
+        "evals-two",
+        &[
+            case("booked", "a parent books"),
+            case("again", "a parent books twice"),
+        ],
+    );
+    let reworded = with_cases(
+        "evals-reworded",
+        &[case("booked", "a parent books a trial")],
+    );
+    for flow in ["trial-booking", "parent-contact"] {
+        for d in [&one, &two, &reworded] {
+            assert_eq!(
+                doc(&plain, flow),
+                doc(d, flow),
+                "{flow}: an eval grades a run and governs none (02W §7.2: additive)"
+            );
+            assert_eq!(contract(&plain, flow), contract(d, flow), "{flow}");
+        }
+    }
+    assert_ne!(one.1, two.1, "the workspace's own digest still moves");
 }
 
 #[test]

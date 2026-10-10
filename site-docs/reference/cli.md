@@ -71,8 +71,9 @@ pinned to:
 - `doc-digest` moves when anything the workflow's run relies on changes: the
   workflow itself, a workflow it calls, or anything of the workspace outside
   its workflows (tools, agents, programs, policies, settings). An edit to a
-  workflow it never reaches, or to the owners and release settings, leaves it
-  as it was, so a run waiting on this workflow can still be resumed.
+  workflow it never reaches, to the owners and release settings, or to the
+  eval suite and its cases (they grade a run and govern none), leaves it as
+  it was, so a run waiting on this workflow can still be resumed.
 - `contract-digest` moves only with what its callers rely on: `accepts:`,
   `answers-with:`, `published-as:`, and each port that answers it with its
   `same-conversation-when:` and `if-still-running:`.
