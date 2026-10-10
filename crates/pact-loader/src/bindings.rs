@@ -16,6 +16,7 @@
 //! | `loader/until-that-cannot-change` | WF-14 | `until:`'s `value:` lines read nothing the round writes (an `until:` of `tool:` lines only asks its tool each round) |
 //! | `loader/a-call-that-does-not-fit` | WF-39 | a call's `bind:` leaves a required input (or a required part of one filled part by part, `fills.first-name`) of its target empty, names one it does not take or a part its shape does not have, or binds the wrong shape; the same for the stage's `bind:` against its `if-it-fails.backup:`, and for an `answer`'s `bind:` (in the workflow's own `steps:`) against the workflow's `answers-with:`; a `carry-on-with:` value in another shape than the answer field it stands in for |
 //! | `loader/a-binding-to-nothing` *(also)* | WF-4 | `carry-on-with:` names a field the stage does not answer with (its values are bindings, read as any other) |
+//! | `loader/a-binding-to-nothing` *(also)* | WF-4 | `latest-update.<field>` names a field neither the workflow's `accepts:` nor any port answering it brings (a port with no `accepts:` brings the workflow's own) |
 //! | `loader/a-shape-made-of-itself` | new | a shape under `workspace.shapes` is, through its parts, made of itself |
 //! | `loader/a-line-this-stage-never-reads` | WF-3 | `comes-from:`, `combines-by:` or `lasts: one-run` on memory that is not a repeat's, or `kept-per:` on an agent's or a port's |
 //!
@@ -1186,7 +1187,39 @@ impl<'a> Flow<'a> {
                     .to_string(),
                 "Move it into an `until:` line, or read another value here.".to_string(),
             )),
-            "latest-update" | "values" | "used" => {}
+            "latest-update" => {
+                let Some(field) = first else { return };
+                // What a run of this workflow can hear (02W §2.9): its input, and
+                // each event a port answering it brings: the port's `accepts:`,
+                // else the workflow's own (WF-27). A timer's run is given its
+                // row, whose shape lives in a value table: not held here.
+                let Some(arrives) = self.what_arrives() else {
+                    return;
+                };
+                if !arrives.contains(field) {
+                    let names: Vec<&str> = arrives.iter().copied().collect();
+                    diags.push(nothing(
+                        format!(
+                            "neither the workflow '{}' nor any event a port brings it has the \
+                             field '{field}'",
+                            self.name
+                        ),
+                        if names.is_empty() {
+                            format!(
+                                "Add `{field}:` under the `accepts:` of the port whose event \
+                                 brings it."
+                            )
+                        } else {
+                            format!(
+                                "Add `{field}:` under the `accepts:` of the port whose event \
+                                 brings it, or use one of the names offered: {}.",
+                                offered_as("latest-update", field, &names)
+                            )
+                        },
+                    ));
+                }
+            }
+            "values" | "used" => {}
             _ => diags.push(nothing(
                 format!("'{root}' is not where a binding starts"),
                 format!(
@@ -1205,6 +1238,36 @@ impl<'a> Flow<'a> {
                 ),
             )),
         }
+    }
+
+    /// The fields `latest-update.` can read: the workflow's `accepts:` and every
+    /// field the events of the ports answering it bring (a port's `accepts:`,
+    /// else the workflow's). `None` when a timer answers it row by row.
+    fn what_arrives(&self) -> Option<BTreeSet<&'a str>> {
+        let keys = |n: &'a Node| -> Vec<&'a str> {
+            n.get("accepts")
+                .and_then(Node::as_map)
+                .map(|m| m.keys().map(String::as_str).collect())
+                .unwrap_or_default()
+        };
+        let mut out: BTreeSet<&'a str> = keys(self.node).into_iter().collect();
+        for (_, port) in self
+            .document
+            .get("ports")
+            .and_then(Node::as_map)
+            .into_iter()
+            .flatten()
+        {
+            let answers = port.node.get("answers").and_then(Node::as_str);
+            if answers.map(str::trim) != Some(self.name) {
+                continue;
+            }
+            if port.node.get("per-row-of").is_some() {
+                return None;
+            }
+            out.extend(keys(&port.node));
+        }
+        Some(out)
     }
 
     fn outside_each(&self, stage: &str, written: &str, node: &Node) -> Diagnostic {
@@ -2306,13 +2369,85 @@ workflows:
         );
         // An event heard in the round changes `latest-update`; none is heard here.
         assert_eq!(
-            round("{ value: latest-update.status }", "input.id")[0].0,
+            round("{ value: latest-update.id }", "input.id")[0].0,
             "loader/until-that-cannot-change"
         );
         assert_eq!(
             round("{ value: steps.c.total }", "input.id")[0].0,
             "loader/a-binding-to-nothing"
         );
+    }
+
+    const HEARD: &str = "\
+tools:
+  t:
+    actions:
+      read:
+        takes: { id: text }
+        answers-with: { total: number }
+ports:
+  arrived:
+    kind: event
+    answers: w
+    accepts: { id: text, status: text }
+    same-conversation-when: [id]
+    if-still-running: join
+workflows:
+  w:
+    description: d
+    accepts: { id: text }
+    starts-at: wait
+    steps:
+      wait:
+        does: ask-someone
+        asks: q
+        then: { heard: { arrived: a } }
+      a:
+        does: call
+        call: t/read
+        bind: { id: READ }
+questions:
+  q:
+    description: d
+    asked-of: [arrived]
+    answer-within: 1 day
+";
+
+    fn heard(read: &str, port_accepts: &str) -> Vec<(&'static str, String)> {
+        rules(
+            &HEARD
+                .replace("READ", read)
+                .replace("accepts: { id: text, status: text }", port_accepts),
+        )
+    }
+
+    /// The `a-binding-to-nothing` messages of `HEARD` with `read` bound.
+    fn read_nothing(read: &str, port_accepts: &str) -> Vec<String> {
+        heard(read, port_accepts)
+            .into_iter()
+            .filter(|(r, _)| *r == "loader/a-binding-to-nothing")
+            .map(|(_, m)| m)
+            .collect()
+    }
+
+    #[test]
+    fn latest_update_reads_only_what_the_input_or_an_event_brings() {
+        let brings = "accepts: { id: text, status: text }";
+        assert!(read_nothing("latest-update.status", brings).is_empty());
+        // The workflow's own input is there to read before any event.
+        assert!(read_nothing("latest-update.id", brings).is_empty());
+        // A port with no `accepts:` brings the workflow's own fields (WF-27),
+        // so no event can bring `status`: 02W §5.5's inspection result.
+        let none = read_nothing("latest-update.status", "");
+        assert_eq!(none.len(), 1, "{none:?}");
+        assert!(
+            none[0].contains("nor any event a port brings it has the field 'status'"),
+            "{}",
+            none[0]
+        );
+        let misspelt = read_nothing("latest-update.stauts", brings);
+        assert_eq!(misspelt.len(), 1, "{misspelt:?}");
+        assert!(misspelt[0].contains("'stauts'"), "{}", misspelt[0]);
     }
 
     #[test]

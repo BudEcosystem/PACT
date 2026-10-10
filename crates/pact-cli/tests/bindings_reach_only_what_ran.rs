@@ -212,6 +212,37 @@ fn an_input_the_workflow_does_not_accept_is_nothing() {
 }
 
 #[test]
+fn an_update_reads_only_what_an_event_brings() {
+    // 02W §5.5: the inspection's repeat reads `latest-update.inspection-result`,
+    // which only the `inspection-recorded` port's own `accepts:` brings; without
+    // it the port brings the workflow's fields, and the result never arrives.
+    let worked = "workflows-60-interconnection";
+    let (ok, text) = check(&tree(worked));
+    assert!(ok, "{text}");
+    let root = edited(
+        worked,
+        "nothing-brings-it",
+        &[(
+            "ports/inspection-recorded.yaml",
+            "accepts:\n  application-id: text\n  inspection-result: one of pass, fail\n",
+            "",
+        )],
+    );
+    let text = refused(&root, "loader/a-binding-to-nothing");
+    assert!(
+        text.contains(
+            "error: 'inspection' reads 'latest-update.inspection-result', and neither the \
+             workflow 'interconnection' nor any event a port brings it has the field 'inspection-result'."
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains("fix: Add `inspection-result:` under the `accepts:` of the port"),
+        "{text}"
+    );
+}
+
+#[test]
 fn a_binding_that_starts_nowhere_is_nothing() {
     let root = edited(
         CASE,
