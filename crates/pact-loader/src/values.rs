@@ -307,10 +307,80 @@ fn read_by_name(top: &pact_doc::Map) -> Vec<ReadByName> {
             _ => {}
         }
     }
-    if let Some(e) = top.get("workflows") {
-        walk(&e.node, &mut out, 0);
+    let Some(flows) = top.get("workflows").and_then(|e| e.node.as_map()) else {
+        return out;
+    };
+    for (name, flow) in flows {
+        let mut read = Vec::new();
+        walk(&flow.node, &mut read, 0);
+        if !crate::templates::is_a_pattern(&flow.node) {
+            out.extend(read);
+            continue;
+        }
+        // A pattern's `values.<hole>` names the value each workflow made from
+        // it fills the hole with (`with: {panel: reviewers}`), and this pass
+        // runs before `based-on:` is resolved, so it is read through them; a
+        // name with no hole in it is read as written.
+        for r in read {
+            match hole_of(&r.name) {
+                Some(hole) => filled_by(flows, name, hole, &mut out, 0),
+                None => out.push(r),
+            }
+        }
     }
     out
+}
+
+/// The parameter a name is exactly one hole of (`<panel>`), if it is one.
+fn hole_of(name: &str) -> Option<&str> {
+    name.strip_prefix('<')
+        .and_then(|r| r.strip_suffix('>'))
+        .filter(|h| !h.is_empty() && !h.contains(['<', '>']))
+}
+
+/// Every value a workflow made from `pattern` (`based-on:` it) fills `hole`
+/// with, followed through a pattern that forwards the hole as its own.
+fn filled_by(
+    flows: &pact_doc::Map,
+    pattern: &str,
+    hole: &str,
+    out: &mut Vec<ReadByName>,
+    depth: usize,
+) {
+    if depth > 32 {
+        return;
+    }
+    for (name, flow) in flows {
+        if flow
+            .node
+            .get("based-on")
+            .and_then(Node::as_str)
+            .map(str::trim)
+            != Some(pattern)
+        {
+            continue;
+        }
+        let Some(given) = flow
+            .node
+            .get(crate::templates::WITH)
+            .and_then(|w| w.get(hole))
+        else {
+            continue; // an unfilled parameter is the templates pass's to refuse
+        };
+        let Some(text) = given.as_str().map(str::trim) else {
+            continue; // not a name: the templates pass refuses what is not a figure
+        };
+        match hole_of(text) {
+            Some(own) if crate::templates::is_a_pattern(&flow.node) => {
+                filled_by(flows, name, own, out, depth + 1);
+            }
+            _ => out.push(ReadByName {
+                name: text.to_string(),
+                at: given.span.clone(),
+                via: Via::Binding,
+            }),
+        }
+    }
 }
 
 /// WF-4 for `values.<name>`: a binding to a value this workspace does not have.

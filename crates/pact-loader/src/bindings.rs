@@ -561,18 +561,33 @@ impl<'a> Flow<'a> {
     /// answers for that body, not for the workflow.
     fn answer(&self, frames: &[Frame<'a>], stage: &str, fields: &Map, diags: &mut Diagnostics) {
         let bind = fields.get("bind");
-        for value in bind
-            .and_then(|e| e.node.as_map())
-            .into_iter()
-            .flatten()
-            .map(|(_, v)| &v.node)
-        {
-            self.read(frames, stage, value, None, Reading::At, diags);
+        let answers = self.node.get("answers-with").and_then(Node::as_map);
+        // Written in the workflow's own `steps:`, each value fills a field of its
+        // `answers-with:`, so a field marked `, optional` may be read from a stage
+        // that may not have run (WF-5's escape, as for a call's input).
+        let own = answers.filter(|_| frames.len() == 1);
+        for (key, value) in bind.and_then(|e| e.node.as_map()).into_iter().flatten() {
+            let filling = own.map(|answers| {
+                let field = answers.get(key.trim());
+                Filling {
+                    input: key.trim(),
+                    line: field.and_then(|e| self.shapes.line(&e.node)),
+                    written: field.and_then(|e| e.node.as_str()).map(str::to_string),
+                    target: self.name,
+                }
+            });
+            self.read(
+                frames,
+                stage,
+                &value.node,
+                filling.as_ref(),
+                Reading::At,
+                diags,
+            );
         }
         // An `answer` hands back its `bind:` and nothing else: one with no `bind:` hands back
         // nothing, so it is held like one that binds no field (each required field left empty),
         // the caret on its `does:` line.
-        let answers = self.node.get("answers-with").and_then(Node::as_map);
         let (Some(at), Some(answers), 1) = (bind.or(fields.get("does")), answers, frames.len())
         else {
             return;
@@ -2145,6 +2160,41 @@ workflows:
             "on: steps.a.when, note: steps.b.total }",
         );
         assert!(rules(&text).is_empty(), "{:?}", rules(&text));
+    }
+
+    /// The workflow's own answer is held as a call's inputs are: a field it marks
+    /// `, optional` may be read from a stage off one path (the *Ask a panel*
+    /// template's ruling, given only when a person settled a split), and a field
+    /// it needs may not.
+    #[test]
+    fn an_optional_field_of_the_answer_may_be_read_from_a_stage_that_may_not_have_run() {
+        let answering = FLOW
+            .replace(
+                "    accepts: { id: text, on: date }\n",
+                "    accepts: { id: text, on: date }\n    answers-with: { total: money, again: 'money, optional' }\n",
+            )
+            .replace(
+                "        then: { answered: c }\n",
+                "        then: { answered: c }\n      c:\n        does: answer\n        bind: { total: steps.a.total, again: steps.b.total }\n",
+            )
+            .replace(
+                "      c:\n        does: call\n        call: t/post\n        bind: { id: input.id, on: steps.a.when }\n",
+                "",
+            )
+            .replace("by: [{ rules: [{ choose: 'no' }] }]", "by: [{ rules: [{ choose: 'no' }] }]\n");
+        assert!(rules(&answering).is_empty(), "{:?}", rules(&answering));
+        let needed = answering.replace("again: 'money, optional'", "again: money");
+        let found = rules(&needed);
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(
+            found[0].0,
+            "loader/a-binding-to-a-stage-that-may-not-have-run"
+        );
+        assert!(
+            found[0].1.contains("'c' reads 'steps.b.total'"),
+            "{}",
+            found[0].1
+        );
     }
 
     #[test]
