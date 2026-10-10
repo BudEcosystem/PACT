@@ -317,39 +317,38 @@ fn read_by_name(top: &pact_doc::Map) -> Vec<ReadByName> {
             out.extend(read);
             continue;
         }
-        // A pattern's `values.<hole>` names the value each workflow made from
-        // it fills the hole with (`with: {panel: reviewers}`), and this pass
-        // runs before `based-on:` is resolved, so it is read through them; a
-        // name with no hole in it is read as written.
+        // A pattern's `values.<hole>` (or `values.<team>-seats`) names the
+        // value each workflow made from it fills the holes with (`with: {panel:
+        // reviewers}`), and this pass runs before `based-on:` is resolved, so
+        // the name is filled as the templates pass fills it, through each
+        // caller; a name with no hole in it is read as written.
         for r in read {
-            match hole_of(&r.name) {
-                Some(hole) => filled_by(flows, name, hole, &mut out, 0),
-                None => out.push(r),
+            if crate::templates::holes_in(&r.name).is_empty() {
+                out.push(r);
+            } else {
+                filled_by(flows, name, &r.name, &mut out, 0);
             }
         }
     }
     out
 }
 
-/// The parameter a name is exactly one hole of (`<panel>`), if it is one.
-fn hole_of(name: &str) -> Option<&str> {
-    name.strip_prefix('<')
-        .and_then(|r| r.strip_suffix('>'))
-        .filter(|h| !h.is_empty() && !h.contains(['<', '>']))
-}
-
-/// Every value a workflow made from `pattern` (`based-on:` it) fills `hole`
-/// with, followed through a pattern that forwards the hole as its own.
+/// The name `text` (holes in it) reads in every workflow made from `pattern`
+/// (`based-on:` it), filled with that workflow's `with:` by the templates
+/// pass's own `fill`, and followed through a pattern that forwards a hole as
+/// one of its own. The caret goes on the caller's line that fills the first
+/// hole.
 fn filled_by(
     flows: &pact_doc::Map,
     pattern: &str,
-    hole: &str,
+    text: &str,
     out: &mut Vec<ReadByName>,
     depth: usize,
 ) {
     if depth > 32 {
         return;
     }
+    let holes = crate::templates::holes_in(text);
     for (name, flow) in flows {
         if flow
             .node
@@ -360,26 +359,32 @@ fn filled_by(
         {
             continue;
         }
-        let Some(given) = flow
-            .node
-            .get(crate::templates::WITH)
-            .and_then(|w| w.get(hole))
-        else {
-            continue; // an unfilled parameter is the templates pass's to refuse
-        };
-        let Some(text) = given.as_str().map(str::trim) else {
+        let with = flow.node.get(crate::templates::WITH);
+        let args: BTreeMap<String, Node> = with
+            .and_then(Node::as_map)
+            .into_iter()
+            .flatten()
+            .map(|(k, e)| (k.clone(), e.node.clone()))
+            .collect();
+        let at = holes
+            .iter()
+            .find_map(|h| args.get(h))
+            .map_or_else(|| flow.node.span.clone(), |n| n.span.clone());
+        let mut filled = Node::new(Value::Str(text.to_string()), at.clone());
+        crate::templates::fill(&mut filled, &args);
+        let Some(read) = filled.as_str().map(str::trim) else {
             continue; // not a name: the templates pass refuses what is not a figure
         };
-        match hole_of(text) {
-            Some(own) if crate::templates::is_a_pattern(&flow.node) => {
-                filled_by(flows, name, own, out, depth + 1);
-            }
-            _ => out.push(ReadByName {
-                name: text.to_string(),
-                at: given.span.clone(),
+        if crate::templates::holes_in(read).is_empty() {
+            out.push(ReadByName {
+                name: read.to_string(),
+                at,
                 via: Via::Binding,
-            }),
+            });
+        } else if crate::templates::is_a_pattern(&flow.node) {
+            filled_by(flows, name, read, out, depth + 1);
         }
+        // Otherwise a hole is unfilled: the templates pass's to refuse.
     }
 }
 

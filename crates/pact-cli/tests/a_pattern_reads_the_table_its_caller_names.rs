@@ -80,6 +80,25 @@ fn table(seats: &[&str]) -> String {
 
 /// A tree with the pattern, the given workflow files and tables, written fresh.
 fn tree(name: &str, flows: &[(&str, &str)], tables: &[(&str, &[&str])]) -> PathBuf {
+    tree_of(PATTERN, name, flows, tables)
+}
+
+/// The same pattern with its holes and table name written differently: the
+/// `expects:` block and the name `over:` reads (`values.<team>-seats`).
+fn pattern_reading(expects: &str, over: &str) -> String {
+    let declared = "expects:\n  panel:\n    shape: text\n    help: the value table naming who sits on the panel\n";
+    PATTERN
+        .replacen(declared, expects, 1)
+        .replace("of <panel> the question", "the question")
+        .replace("values.<panel>", over)
+}
+
+fn tree_of(
+    pattern: &str,
+    name: &str,
+    flows: &[(&str, &str)],
+    tables: &[(&str, &[&str])],
+) -> PathBuf {
     static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let dst = std::env::temp_dir().join(format!("pact-panel-{name}-{n}-{}", std::process::id()));
@@ -90,7 +109,7 @@ fn tree(name: &str, flows: &[(&str, &str)], tables: &[(&str, &[&str])]) -> PathB
         std::fs::write(p, text).unwrap();
     };
     write("workspace.yaml", WORKSPACE);
-    write("workflows/ask-a-panel.yaml", PATTERN);
+    write("workflows/ask-a-panel.yaml", pattern);
     write("agents/member/agent.yaml", MEMBER);
     for (flow, text) in flows {
         write(&format!("workflows/{flow}.yaml"), text);
@@ -227,6 +246,99 @@ fn a_pattern_built_on_the_pattern_forwards_the_hole_to_its_own_caller() {
     assert!(
         doc["values"]["risk-seats"].is_object(),
         "the table is kept for the run"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_hole_inside_a_longer_table_name_is_filled_as_the_pattern_fills_it() {
+    let pattern = pattern_reading(
+        "expects:\n  team:\n    shape: text\n    help: the team whose seats sit\n",
+        "values.<team>-seats",
+    );
+    let root = tree_of(
+        &pattern,
+        "inside",
+        &[("risk", "based-on: ask-a-panel\nwith:\n  team: risk\n")],
+        &[("risk-seats", &["optimist", "skeptic"])],
+    );
+    let (ok, said) = check(&root, true);
+    assert!(
+        ok,
+        "`values.<team>-seats` with team risk reads risk-seats:\n{said}"
+    );
+    let doc = shown(&root);
+    assert_eq!(
+        doc["workflows"]["risk"]["steps"]["ask"]["over"],
+        "values.risk-seats"
+    );
+    assert_eq!(
+        doc["values"]["risk-seats"]["value"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    // And a name the filled text does not match is refused at the caller.
+    let wrong = tree_of(
+        &pattern,
+        "inside-wrong",
+        &[("risk", "based-on: ask-a-panel\nwith:\n  team: risky\n")],
+        &[("risk-seats", &["optimist"])],
+    );
+    let (ok, said) = check(&wrong, true);
+    assert!(!ok, "{said}");
+    assert!(
+        said.contains("`values.risky-seats` names no value"),
+        "{said}"
+    );
+    assert!(said.contains("workflows/risk.yaml"), "{said}");
+    let _ = std::fs::remove_dir_all(&root);
+    let _ = std::fs::remove_dir_all(&wrong);
+}
+
+#[test]
+fn two_holes_in_a_table_name_are_both_filled() {
+    let pattern = pattern_reading(
+        "expects:\n  team:\n    shape: text\n    help: the team\n  \
+         size:\n    shape: text\n    help: which of its panels\n",
+        "values.<team>-<size>",
+    );
+    let root = tree_of(
+        &pattern,
+        "two-holes",
+        &[
+            (
+                "risk",
+                "based-on: ask-a-panel\nwith:\n  team: risk\n  size: small\n",
+            ),
+            (
+                "style",
+                "based-on: ask-a-panel\nwith:\n  team: style\n  size: large\n",
+            ),
+        ],
+        &[
+            ("risk-small", &["optimist"]),
+            ("style-large", &["editor", "proofreader", "designer"]),
+        ],
+    );
+    let (ok, said) = check(&root, true);
+    assert!(ok, "both holes are filled by each caller:\n{said}");
+    let doc = shown(&root);
+    assert_eq!(
+        doc["workflows"]["risk"]["steps"]["ask"]["over"],
+        "values.risk-small"
+    );
+    assert_eq!(
+        doc["workflows"]["style"]["steps"]["ask"]["over"],
+        "values.style-large"
+    );
+    assert_eq!(
+        doc["values"]["style-large"]["value"]
+            .as_array()
+            .unwrap()
+            .len(),
+        3
     );
     let _ = std::fs::remove_dir_all(&root);
 }

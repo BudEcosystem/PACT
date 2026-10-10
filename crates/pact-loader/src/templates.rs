@@ -87,7 +87,7 @@ fn as_text(node: &Node) -> Option<String> {
 /// Deliberately narrow: a hole is `<` then a kebab-case name then `>`, with no
 /// spaces. Prose that reads `if x < 5` is not a hole and never becomes one, and
 /// neither is a comparison, an arrow, or a piece of XML somebody quoted.
-fn holes_in(text: &str) -> Vec<String> {
+pub(crate) fn holes_in(text: &str) -> Vec<String> {
     let mut out = Vec::new();
     let bytes = text.as_bytes();
     let mut i = 0;
