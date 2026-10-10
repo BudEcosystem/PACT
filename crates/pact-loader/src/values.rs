@@ -268,20 +268,27 @@ fn read_by_name(top: &pact_doc::Map) -> Vec<ReadByName> {
             via: Via::Calendar,
         });
     }
-    for (_, port) in top
-        .get("ports")
-        .and_then(|e| e.node.as_map())
-        .into_iter()
-        .flatten()
-    {
+    let ports = top.get("ports").and_then(|e| e.node.as_map());
+    for (name, port) in ports.into_iter().flatten() {
         if let Some(n) = port.node.get("per-row-of")
-            && let Some(name) = n.as_str()
+            && let Some(text) = n.as_str()
         {
-            out.push(ReadByName {
-                name: name.trim().to_string(),
-                at: n.span.clone(),
-                via: Via::PerRow,
-            });
+            let text = text.trim();
+            // A timer pattern's `per-row-of: <watched>` names the table each
+            // timer made from it fills the hole with, as a workflow pattern's
+            // `values.<hole>` does.
+            if crate::templates::is_a_pattern(&port.node)
+                && !crate::templates::holes_in(text).is_empty()
+                && let Some(ports) = ports
+            {
+                filled_by(ports, name, text, Via::PerRow, &mut out, 0);
+            } else {
+                out.push(ReadByName {
+                    name: text.to_string(),
+                    at: n.span.clone(),
+                    via: Via::PerRow,
+                });
+            }
         }
     }
     fn walk(node: &Node, out: &mut Vec<ReadByName>, depth: usize) {
@@ -326,22 +333,23 @@ fn read_by_name(top: &pact_doc::Map) -> Vec<ReadByName> {
             if crate::templates::holes_in(&r.name).is_empty() {
                 out.push(r);
             } else {
-                filled_by(flows, name, &r.name, &mut out, 0);
+                filled_by(flows, name, &r.name, Via::Binding, &mut out, 0);
             }
         }
     }
     out
 }
 
-/// The name `text` (holes in it) reads in every workflow made from `pattern`
-/// (`based-on:` it), filled with that workflow's `with:` by the templates
-/// pass's own `fill`, and followed through a pattern that forwards a hole as
-/// one of its own. The caret goes on the caller's line that fills the first
-/// hole.
+/// The name `text` (holes in it) reads in every entry of `flows` (the
+/// workflows, or the ports) made from `pattern` (`based-on:` it), filled with
+/// that entry's `with:` by the templates pass's own `fill`, and followed
+/// through a pattern that forwards a hole as one of its own. The caret goes on
+/// the caller's line that fills the first hole.
 fn filled_by(
     flows: &pact_doc::Map,
     pattern: &str,
     text: &str,
+    via: Via,
     out: &mut Vec<ReadByName>,
     depth: usize,
 ) {
@@ -379,10 +387,10 @@ fn filled_by(
             out.push(ReadByName {
                 name: read.to_string(),
                 at,
-                via: Via::Binding,
+                via,
             });
         } else if crate::templates::is_a_pattern(&flow.node) {
-            filled_by(flows, name, read, out, depth + 1);
+            filled_by(flows, name, read, via, out, depth + 1);
         }
         // Otherwise a hole is unfilled: the templates pass's to refuse.
     }

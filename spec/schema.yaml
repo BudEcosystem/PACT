@@ -5597,7 +5597,7 @@ groups:
         needs-also: [comes-from]
         surface: S-CTRL
         tier: core
-        help: how each round's value joins what is already remembered
+        help: how each round's value joins what is already remembered; `top <n>` over a round's best (a list) ranks the items it holds, so the best few are carried round to round
       never-from:
         # CLOSED, and it was open text in an S-EXEC field — the one hole in a
         # governance column that was never held against anything, so

@@ -945,6 +945,9 @@ impl<'a> Flow<'a> {
                 _ => false,
             };
         }
+        // A line held against the clock (`{now-plus: ...}`, `{now-minus: ...}`)
+        // changes too: `now` is read again at every round's end.
+        changes |= against_the_clock(&until.node);
         // An `until:` with no `value:` at all is WF-18's to tell, line by line.
         if !changes && !values.is_empty() {
             diags.push(Diagnostic::error(
@@ -2077,6 +2080,19 @@ fn offer_or_add(field: &str, map: Option<&Map>, prefix: &str, place: &str) -> St
     }
 }
 
+/// Whether any line of a condition compares against the clock
+/// (`{now-plus: ...}` or `{now-minus: ...}`), which reads `now` again every
+/// time the condition is read.
+fn against_the_clock(node: &Node) -> bool {
+    match &node.value {
+        Value::Map(m) => m
+            .iter()
+            .any(|(k, e)| k == "now-plus" || k == "now-minus" || against_the_clock(&e.node)),
+        Value::List(items) => items.iter().any(against_the_clock),
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2239,7 +2255,7 @@ tools:
 workflows:
   w:
     description: d
-    accepts: { id: text, ids: list of text }
+    accepts: { id: text, ids: list of text, due: date and time }
     starts-at: r
     steps:
       r:
@@ -2272,6 +2288,22 @@ workflows:
         let still = round("{ value: input.id }", "input.id");
         assert_eq!(still.len(), 1, "{still:?}");
         assert_eq!(still[0].0, "loader/until-that-cannot-change");
+        // Held against the clock, a value the round does not write still changes
+        // its answer: `now` is read again at every round's end (*Explore options*).
+        assert!(
+            round(
+                "{ value: input.due, less-than: { now-plus: 1 minute } }",
+                "input.id"
+            )
+            .is_empty()
+        );
+        assert!(
+            round(
+                "{ value: input.due, more-than: { now-minus: 2 days } }",
+                "input.id"
+            )
+            .is_empty()
+        );
         // An event heard in the round changes `latest-update`; none is heard here.
         assert_eq!(
             round("{ value: latest-update.status }", "input.id")[0].0,

@@ -16,7 +16,9 @@ same closed list is used, one rule per field:
                       `vote, everyone agreeing` has an answer only when all agree
     top-n             the n best by a field, highest or lowest; top 1 is the item.
                       Ranked as a condition orders (`conditions.ordered_as`): a
-                      date as a date, a time as a time, money as its figure
+                      date as a date, a time as a time, money as its figure. A
+                      list among the items (what an earlier `top <n>` gave, a
+                      round's best carried by a repeat) is ranked item by item
 
 **The tie rule is the earliest item wins**: two answers with as many votes, two
 items with the same figure — the one that came first in input order is chosen.
@@ -148,6 +150,12 @@ class Combine:
             return (Fraction(figure), currency(item), places, whole)
         if self.rule == "vote":
             return ((_key(item), item, 1),)
+        if isinstance(item, list | tuple):
+            # What `top <n>` itself gives for n > 1: its best, which a repeat
+            # carries round to round. The best of the best of each round is
+            # the best of every item, as `join` promises.
+            lifted = [pair for one in item for pair in self.lift(one)]
+            return tuple(self._best_first(lifted, f"`top {self.n}`")[: self.n])
         ranked = self._rank_of(item)
         return () if ranked is None else ((ranked, item),)
 

@@ -161,6 +161,19 @@ def test_top_n_ranks_a_date_as_a_date() -> None:
         Combine.parse("top 1 highest by due").combined([early, {"due": 3}])
 
 
+def test_top_n_over_earlier_top_ns_is_the_top_n_of_every_item() -> None:
+    """A repeat carrying the best few round to round (the *Explore options* template):
+    each round's value is what `top <n>` gave it, a list best first, and the best of
+    those lists is the best of every item they held, as if ranked all at once. Before,
+    a list had nothing to rank it by and every round was skipped."""
+    rounds = [[{"c": "a", "s": 7}, {"c": "b", "s": 4}], [{"c": "c", "s": 9}, {"c": "d", "s": 7}], []]
+    top = Combine.parse("top 2 highest by s")
+    assert top.combined(rounds) == [{"c": "c", "s": 9}, {"c": "a", "s": 7}]  # the earliest 7 wins the tie
+    every = [item for r in rounds for item in r]
+    assert top.combined(rounds) == top.combined(every)
+    assert top.combined([top.combined(rounds[:1]), {"c": "e", "s": 8}]) == [{"c": "e", "s": 8}, {"c": "a", "s": 7}]
+
+
 def test_a_list_ranked_through_keeps_every_item_and_ranks_as_top_n_does() -> None:
     """`Combine.ranked`: best first as `top-n` ranks (the earliest of equals first),
     then every item with nothing to rank it by, in input order: none left out."""

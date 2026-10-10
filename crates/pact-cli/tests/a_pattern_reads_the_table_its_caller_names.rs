@@ -342,3 +342,56 @@ fn two_holes_in_a_table_name_are_both_filled() {
     );
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// A timer pattern reads its table the same way: `per-row-of: <watched>`, the
+/// hole filled by each timer made from it (the *Monitor and report* template's
+/// `monitor-timer`). Before, the pattern's own line was refused as naming no
+/// value, and the table the filled timer reads was dropped as a figure nothing
+/// uses.
+#[test]
+fn each_timer_made_from_a_pattern_reads_the_table_it_names() {
+    let dst = std::env::temp_dir().join(format!("pact-timer-pattern-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dst);
+    let write = |rel: &str, text: &str| {
+        let p = dst.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, text).unwrap();
+    };
+    write(
+        "workspace.yaml",
+        "name: sweeps\ndescription: Clinics swept every hour.\nowner: tests\nallow-egress: []\n\
+         time-zone: America/Chicago\nshapes:\n  clinic:\n    clinic: text\n",
+    );
+    write(
+        "workflows/sweep.yaml",
+        "description: Sweeps one clinic.\naccepts:\n  clinic: text\nanswers-with:\n  clinic: text\n\
+         starts-at: reply\nsteps:\n  reply:\n    does: answer\n    bind:\n      clinic: input.clinic\n",
+    );
+    write(
+        "ports/timer.yaml",
+        "expects:\n  watched:\n    shape: text\n    help: the table of clinics to sweep\n\
+         description: Sweeps every clinic of <watched> every hour.\nevery: every hour\n\
+         answers: sweep\nper-row-of: <watched>\nif-still-running: skip\n",
+    );
+    write(
+        "ports/hourly.yaml",
+        "based-on: timer\nwith:\n  watched: clinics\n",
+    );
+    write(
+        "values/clinics.yaml",
+        "description: The clinics.\nshape: table\nrows-are: clinic\nvalue:\n  - { clinic: Austin }\n  - { clinic: Boise }\n",
+    );
+    let (ok, said) = check(&dst, true);
+    assert!(
+        ok,
+        "a hole in a timer's table is filled by each timer:\n{said}"
+    );
+    let doc = shown(&dst);
+    assert_eq!(doc["ports"]["hourly"]["per-row-of"], "clinics");
+    assert!(doc["ports"].get("timer").is_none(), "the pattern is gone");
+    assert_eq!(
+        doc["values"]["clinics"]["value"].as_array().unwrap().len(),
+        2
+    );
+    let _ = std::fs::remove_dir_all(&dst);
+}
