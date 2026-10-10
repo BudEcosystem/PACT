@@ -860,7 +860,12 @@ RECOGNISES: Mapping[str, str] = {
         r"|\b\d{8}\b"                                     # UK account number
     ),
     "email address": r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b",
-    "phone number": r"\+?\d[\d ()-]{7,}\d",
+    # Ten digits or more (a US number and its area code; international ones are
+    # longer), parted by spaces, dashes or brackets. Eight separated digits
+    # matched an ISO date (`2026-07-15`), so every date in a chart or a log was
+    # hidden as a phone number (Bud Flow's corpus, #51); a candidate that holds
+    # a date is none either (`_hides`), which keeps `2026-10-05 09:00`.
+    "phone number": r"\+?\d(?:[ ()-]*\d){9,}",
     # A US social security number: three, two and four digits, parted the same
     # way throughout (`123-45-6789`, `123 45 6789`) or run together. Nine digits
     # run together over-match an order number of that length, which is the safe
@@ -869,6 +874,10 @@ RECOGNISES: Mapping[str, str] = {
     "social security number": r"\b(?:\d{3}-\d{2}-\d{4}|\d{3} \d{2} \d{4}|\d{9})\b",
 }
 
+
+#: An ISO date (`2026-07-15`): a run of digits that holds one, a date and a
+#: time or two dates side by side, is no phone number.
+_A_DATE = re.compile(r"(?<!\d)\d{4}-\d{2}-\d{2}(?!\d)")
 
 #: Starts the way an IBAN does: a country's two letters and two check digits.
 _LOOKS_LIKE_IBAN = re.compile(r"[A-Za-z]{2}\d{2}")
@@ -889,8 +898,11 @@ def _hides(pattern: str, found: str) -> int:
 
     All of it, except for an IBAN that fails its check: then the longest run of
     its leading groups that passes (an IBAN written in fours with a number after
-    it), or nothing, so a hex digest or an id that merely starts like one stays.
+    it), or nothing, so a hex digest or an id that merely starts like one stays;
+    and nothing of a phone number that holds an ISO date, which is dates.
     """
+    if pattern == RECOGNISES["phone number"]:
+        return 0 if _A_DATE.search(found) else len(found)
     if pattern != RECOGNISES["bank account"] or not _LOOKS_LIKE_IBAN.match(found):
         return len(found)
     groups = found.split(" ")
