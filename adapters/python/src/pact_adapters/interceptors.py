@@ -857,7 +857,11 @@ RECOGNISES: Mapping[str, str] = {
         r"(?i:\b[A-Z]{2}\d{2}(?:[ ][A-Z0-9]{4}){2,7}(?:[ ][A-Z0-9]{1,3})?\b)"
         r"|(?i:\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b)"        # IBAN, run together
         r"|\b\d{2}[- ]\d{2}[- ]\d{2}\b"                   # UK sort code
-        r"|\b\d{8}\b"                                     # UK account number
+        # An account number written as one run of digits: eight for a UK one,
+        # and up to seventeen for a US one (`000123456789`), which went through a
+        # `bank account` rule untouched when only eight was read (Bud Flow's
+        # corpus case #77, an employee typing the account their pay goes to).
+        r"|\b\d{8,17}\b"
     ),
     "email address": r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b",
     # Ten digits or more (a US number and its area code; international ones are
