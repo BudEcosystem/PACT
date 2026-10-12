@@ -1211,6 +1211,16 @@ impl Loader {
 
             let path = dir.join(&name);
 
+            // A folder with no file in it, at any depth, contributes nothing:
+            // not a field, not a note. Git cannot carry an empty folder, so a
+            // `questions/` left empty made `questions: {}` here and nothing in
+            // a checkout of the same commit, and the two digests differed
+            // (FIX-06: three corpus fixtures failed on CI). Asked before
+            // anything else, so what the loader says is what a checkout says.
+            if is_dir && holds_no_file(&path) {
+                continue;
+            }
+
             // `.pactignore` is asked FIRST, and answers on its own. Asking it
             // first is what makes it the way to SILENCE the warning below
             // rather than a second way to earn one alongside it.
@@ -1543,6 +1553,18 @@ fn unloaded(at: &Span) -> Node {
 /// Every entry of `dir`, sorted by name: the one way the loader (and
 /// `pact discover`) reads a folder.
 ///
+/// Whether `dir` holds no file at any depth: only folders, or nothing, which is
+/// what git cannot carry. A link counts as a file (it is never followed here),
+/// so real folders alone are walked, and they cannot contain themselves.
+fn holds_no_file(dir: &Utf8Path) -> bool {
+    std::fs::read_dir(dir).is_ok_and(|read| {
+        read.flatten().all(|e| {
+            e.file_type().is_ok_and(|t| t.is_dir())
+                && Utf8PathBuf::from_path_buf(e.path()).is_ok_and(|p| holds_no_file(&p))
+        })
+    })
+}
+
 /// `read_dir` lists entries in whatever order the filesystem keeps them, and
 /// that order is not the same from one machine to the next (ext4 lists by a
 /// hash seeded per filesystem). Anything decided while walking a folder took

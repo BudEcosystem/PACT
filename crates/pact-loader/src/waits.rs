@@ -276,7 +276,7 @@ fn asked_by_both(
 }
 
 /// Every question in the tree: the workspace's and each workflow's own.
-fn every_question(document: &Node) -> Vec<(&str, &Node)> {
+pub(crate) fn every_question(document: &Node) -> Vec<(&str, &Node)> {
     let mut out: Vec<(&str, &Node)> = Vec::new();
     for (name, q) in document
         .get("questions")

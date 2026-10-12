@@ -242,6 +242,7 @@ question.escalates-to	list of text | S-EXEC | core | optional
 question.if-nobody-answers	one-of | S-EXEC | core | optional
 question.needs-signature	yes-no | S-EXEC | core | optional
 question.not-the-same-as	list of text | S-EXEC | core | optional
+question.only-when	list of group:when-this | S-CTRL | core | optional
 question.ordered-by	text | S-CTRL | core | optional
 question.reminds-at	list of group:reminder | S-EXEC | core | optional
 question.says	text | S-EXEC | core | optional

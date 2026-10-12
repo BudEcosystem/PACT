@@ -18,9 +18,14 @@
 //! | `loader/a-binding-to-nothing` | WF-4 | a port's `bind:` or `only-when:` reads a field that does not arrive |
 //! | `loader/a-call-that-does-not-fit` | WF-39 | a port's `bind:` fills an input its workflow does not take |
 //! | `loader/a-workflow-only-spelling` | new | a port answering an agent writes what only a workflow's port reads (`accepts:`, `bind:`, `undo:`, `then-run:`), or `if-still-running: join` (an agent's conversation is joined by no other port: R23 stays refused there) |
+//! | `loader/a-line-this-stage-never-reads` | WF-3 (extended, N193) | a question's `only-when:` when it is asked of no port, so it hears no event |
+//! | `loader/compared-in-the-wrong-shape` | WF-18 (extended, N193) | a line of a question's `only-when:` looks at something other than the event, `event.<field>` |
+//! | `loader/a-binding-to-nothing` | WF-4 (extended, N193) | a question's `only-when:` reads `event.<field>`, and nothing that arrives at a port it is asked of has that field |
 //!
-//! A port's `only-when:` is held by the one condition reader
-//! (`conditions::line`), as an approval rule, a routing rule and an `until:` are.
+//! A port's `only-when:` and a wait's (a question's, N193: which of a port's
+//! events the wait hears, so the waits of an `each` hear their own item's) are
+//! held by the one condition reader (`conditions::line`), as an approval rule,
+//! a routing rule and an `until:` are.
 
 use crate::bindings::Shapes;
 use crate::conditions::{self, Kind, Position};
@@ -87,6 +92,107 @@ pub fn check(document: &Node, schema: &Schema, diags: &mut Diagnostics) {
         .flatten()
     {
         heard(document, &shapes, &ports, name, &entry.node, diags);
+    }
+    for (name, q) in waits::every_question(document) {
+        hears_only(document, &shapes, &ports, name, q, diags);
+    }
+}
+
+/// Where a wait's `only-when:` reads what an event brought (N193).
+const EVENT: &str = "event.";
+
+/// A question's `only-when:` (N193): it is asked of a port, every line looks
+/// at `event.<field>`, a field of what arrives there, and each line is held
+/// by the one condition reader.
+fn hears_only(
+    document: &Node,
+    shapes: &Shapes,
+    ports: &[Port],
+    name: &str,
+    q: &Node,
+    diags: &mut Diagnostics,
+) {
+    let Some(lines) = q.get("only-when") else {
+        return;
+    };
+    let asked: Vec<&Port> = waits::answerers(document, q)
+        .into_iter()
+        .filter(|(_, a)| *a == Answerer::Port)
+        .filter_map(|(n, _)| {
+            ports
+                .iter()
+                .find(|p| Some(p.name) == n.as_str().map(str::trim))
+        })
+        .collect();
+    if asked.is_empty() {
+        diags.push(Diagnostic::error(
+            "loader/a-line-this-stage-never-reads",
+            key_span(q, "only-when").unwrap_or_else(|| lines.span.clone()),
+            format!(
+                "'{name}' hears only the events its `only-when:` lets through, and it is asked \
+                 of no port, so it hears no event at all."
+            ),
+            "Delete `only-when:`, or add the port the events come from to `asked-of:`.".to_string(),
+        ));
+        return;
+    }
+    let came: Vec<&Map> = asked
+        .iter()
+        .filter_map(|p| {
+            let answers = p.text("answers").unwrap_or("");
+            match workflows::entry_in(document, "workflows", answers) {
+                Some(flow) => arriving(document, p, flow),
+                None => p.node.get("accepts").and_then(Node::as_map),
+            }
+        })
+        .collect();
+    let kind = |n: &Node| -> Option<Kind> {
+        let field = n.as_str()?.trim().strip_prefix(EVENT)?;
+        let line = came.iter().find_map(|m| shapes.line(&m.get(field)?.node))?;
+        conditions::of_shape(&line.shape)
+    };
+    for when in workflows::list(lines) {
+        let Some(value) = when.get("value") else {
+            conditions::line(when, Position::Elsewhere, None, &|_| None, diags);
+            continue;
+        };
+        let written = value.as_str().map(str::trim).unwrap_or("");
+        let Some(field) = written.strip_prefix(EVENT) else {
+            diags.push(Diagnostic::error(
+                "loader/compared-in-the-wrong-shape",
+                value.span.clone(),
+                format!(
+                    "This line of '{name}''s `only-when:` looks at '{written}', and a wait's \
+                     `only-when:` says which events it hears, so each line looks at the event."
+                ),
+                "Write `value: event.<field>`, naming a field of what arrives, and compare it \
+                 with the run's value — `is: {value: item.<field>}`."
+                    .to_string(),
+            ));
+            continue;
+        };
+        if !came.is_empty() && !came.iter().any(|m| a_field_of(document, m, field)) {
+            let fields: BTreeSet<String> = came
+                .iter()
+                .flat_map(|m| m.iter().map(|(k, _)| format!("{EVENT}{k}")))
+                .collect();
+            diags.push(Diagnostic::error(
+                "loader/a-binding-to-nothing",
+                value.span.clone(),
+                format!(
+                    "'{name}' hears only the events where '{written}' holds, and nothing that \
+                     arrives at {} has a field '{field}'.",
+                    asked
+                        .iter()
+                        .map(|p| format!("'{}'", p.name))
+                        .collect::<Vec<_>>()
+                        .join(" or ")
+                ),
+                format!("Use one of the fields listed: {}.", listed(&fields)),
+            ));
+            continue;
+        }
+        conditions::line(when, Position::Elsewhere, kind(value), &kind, diags);
     }
 }
 

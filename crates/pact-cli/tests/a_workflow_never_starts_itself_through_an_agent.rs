@@ -127,8 +127,18 @@ fn a_longer_circle_through_another_workflow_and_an_agent_is_refused_once() {
     assert!(!ok, "{said}");
     assert!(
         said.contains(
-            "'hand-on' calls the agent 'desk', which uses 'order-status' calls 'hand-on' again"
+            "'hand-on' calls the agent 'desk', which uses 'order-status', which calls 'hand-on' \
+             again"
         ),
+        "{said}"
+    );
+    assert!(
+        said.contains("agents/desk.yaml:5:5"),
+        "the caret is on the `uses:` entry the fix names, not the call that closes the \
+         circle:\n{said}"
+    );
+    assert!(
+        said.contains("fix: Break the circle: take 'order-status' off the `uses:` of 'desk'"),
         "{said}"
     );
     assert_eq!(
@@ -140,5 +150,46 @@ fn a_longer_circle_through_another_workflow_and_an_agent_is_refused_once() {
     assert!(
         !said.contains("loader/workflows-that-call-each-other"),
         "a circle through an agent is not WF-8's:\n{said}"
+    );
+}
+
+/// A workflow that calls `to` from its one stage.
+fn calling(to: &str) -> String {
+    format!(
+        "description: Hands an order on.\naccepts:\n  order-number: text\nanswers-with:\n  \
+         status: text\nstarts-at: ask\nsteps:\n  ask:\n    does: call\n    call: {to}\n    \
+         bind:\n      order-number: input.order-number\n    then:\n      answered: reply\n  reply:\n    does: answer\n    bind:\n      status: \
+         steps.ask.status\n"
+    )
+}
+
+#[test]
+fn a_circle_of_four_hops_has_its_caret_on_the_uses_entry_and_says_each_hop() {
+    let (pass_on, hand_on) = (calling("hand-on"), calling("desk"));
+    let root = edited(
+        "four",
+        &[(FLOW, "    call: orders/look-up\n", "    call: pass-on\n")],
+        &[
+            ("workflows/pass-on.yaml", pass_on.as_str()),
+            ("workflows/hand-on.yaml", hand_on.as_str()),
+        ],
+    );
+    let (ok, said) = check(&root);
+    assert!(!ok, "{said}");
+    assert!(
+        said.contains(
+            "'hand-on' calls the agent 'desk', which uses 'order-status', which calls 'pass-on' \
+             calls 'hand-on' again"
+        ),
+        "only the hop after a `uses` reads ', which calls':\n{said}"
+    );
+    assert!(
+        said.contains("agents/desk.yaml:5:5"),
+        "the caret is on the `uses:` entry the fix names:\n{said}"
+    );
+    assert_eq!(
+        said.matches("rule: loader/").count(),
+        1,
+        "one circle, one message:\n{said}"
     );
 }

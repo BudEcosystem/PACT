@@ -801,47 +801,59 @@ fn calls_go_round(document: &Node, diags: &mut Diagnostics) {
             if !reported.insert(key) {
                 continue;
             }
-            diags.push(circle_said(&circle, at, &is_agent));
+            diags.push(circle_said(&circle, at, &edges, &is_agent));
         }
     }
 }
 
 /// The words for one circle: `'a' calls 'b' calls 'a' again` between workflows,
-/// and, through an agent, `'a' calls the agent 'c', which uses 'a' again`.
-fn circle_said(circle: &[&str], at: Span, is_agent: &dyn Fn(&str) -> bool) -> Diagnostic {
+/// and, through an agent, `'a' calls the agent 'c', which uses 'b', which calls
+/// 'a' again`. A circle of workflows alone is WF-8's, its caret on the line
+/// that closes it; one through an agent has its caret on the agent's `uses:`
+/// entry the fix names, whichever line closes the circle.
+fn circle_said(
+    circle: &[&str],
+    at: Span,
+    edges: &BTreeMap<&str, Vec<(&str, Span)>>,
+    is_agent: &dyn Fn(&str) -> bool,
+) -> Diagnostic {
     let mut said = format!("'{}'", circle[0]);
-    let hop = |from: &str, to: &str| {
+    let hop = |from: &str, to: &str, after_uses: bool| {
+        let join = if after_uses {
+            ", which calls"
+        } else {
+            " calls"
+        };
         if is_agent(from) {
             format!(", which uses '{to}'")
         } else if is_agent(to) {
-            format!(" calls the agent '{to}'")
+            format!("{join} the agent '{to}'")
         } else {
-            format!(" calls '{to}'")
+            format!("{join} '{to}'")
         }
     };
-    for pair in circle.windows(2) {
-        said.push_str(&hop(pair[0], pair[1]));
+    let hops = circle.len();
+    for i in 0..hops {
+        let after_uses = i > 0 && is_agent(circle[i - 1]);
+        said.push_str(&hop(circle[i], circle[(i + 1) % hops], after_uses));
     }
-    said.push_str(&hop(circle[circle.len() - 1], circle[0]));
     let words = format!("{said} again, so one run can start itself without end.");
-    match circle.iter().find(|n| is_agent(n)) {
+    match circle.iter().position(|n| is_agent(n)) {
         None => Diagnostic::error(
             "loader/workflows-that-call-each-other",
             at,
             words,
             "Break the circle; a workflow that must come back is a `repeat`.".to_string(),
         ),
-        Some(agent) => {
-            let flow = circle
-                .iter()
-                .cycle()
-                .skip_while(|n| *n != agent)
-                .nth(1)
-                .copied()
-                .unwrap_or(circle[0]);
+        Some(i) => {
+            let (agent, flow) = (circle[i], circle[(i + 1) % hops]);
+            let uses = edges
+                .get(agent)
+                .and_then(|out| out.iter().find(|(to, _)| *to == flow))
+                .map_or(at, |(_, span)| span.clone());
             Diagnostic::error(
                 "loader/a-workflow-its-own-agent-starts",
-                at,
+                uses,
                 words,
                 format!(
                     "Break the circle: take '{flow}' off the `uses:` of '{agent}', or have the stage \

@@ -57,7 +57,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 #: One diagnostic shape for the whole adapter — see `diagnostics`. A rule this
 #: vocabulary cannot decide names the real file and the real line, exactly as a
 #: mistake in a context policy or an interceptor does.
-from .conditions import ABSENT, amount, compares, holds
+from .conditions import ABSENT, Read, all_hold, amount, compares, holds
 from .diagnostics import locate
 from .yes_no import said_yes
 
@@ -66,6 +66,8 @@ if TYPE_CHECKING:  # pragma: no cover - `moments` is read where a question is bu
 
 #: The answerer that is the clock: a time-only wait (02W §2.8, R12 reopened).
 THE_CLOCK = "the-clock"
+#: Where a wait's `only-when:` reads what an event brought: `event.<field>`.
+EVENT = "event"
 
 
 class Rejected(ValueError):
@@ -687,8 +689,36 @@ class Question:
     ordered_by: str = ""
     #: `whenever-they-arrived` (the default) or `this-wait`.
     counts_events_from: str = "whenever-they-arrived"
+    #: What has to hold of an event for this wait to hear it (`when-this`
+    #: lines over `event.<field>`, read by `conditions.all_hold`); empty, any.
+    only_when: "tuple[Mapping[str, Any], ...]" = ()
     #: Times on the wait's clock to nudge, tell, hand over or run a flow.
     reminds_at: "tuple[Reminder, ...]" = ()
+
+    def hears(
+        self,
+        brought: Mapping[str, Any],
+        read: Read,
+        *,
+        now: "Any | None" = None,
+        zone: "str | None" = None,
+    ) -> "bool | None":
+        """Whether this wait hears an event that brought `brought` (`only-when:`, N193): every
+        line holds, `event.<field>` read from what the event brought and every other binding by
+        `read`. `None` when a line cannot be told; a question with no `only-when:` hears any."""
+
+        def value(binding: str) -> Any:
+            root, *path = [p.strip() for p in binding.strip().split(".")]
+            if root != EVENT:
+                return read(binding)
+            found: Any = brought
+            for part in path:
+                if not isinstance(found, Mapping) or part not in found:
+                    return ABSENT
+                found = found[part]
+            return found
+
+        return all_hold(self.only_when, value, now=now, zone=zone)
 
     # -- approval is one of these, not a kind of its own --------------------
 
@@ -1001,6 +1031,7 @@ class Question:
             starts_with={str(k): str(v).strip() for k, v in (q.get("starts-with") or {}).items()},
             ordered_by=str(q.get("ordered-by") or "").strip(),
             counts_events_from=str(q.get("counts-events-from") or "whenever-they-arrived").strip(),
+            only_when=tuple(dict(w) for w in q.get("only-when") or () if isinstance(w, Mapping)),
             reminds_at=reminders(q.get("reminds-at")),
         )
 

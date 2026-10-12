@@ -8,7 +8,29 @@ holds that did not; the commits are listed under it for whoever wants the detail
 Running PACT trees in production on Pydantic AI 2.54, through
 [Bud Agent Flow](https://github.com/BudEcosystem/Bud-Agent-Flow), drove these changes. Every
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
-runs offline: 3922 tests, 1345 Rust and 2577 adapter.
+runs offline: 3997 tests, 1388 Rust and 2609 adapter.
+
+### A tree is the same wherever it is checked out; a wait hears its own events (12 October)
+
+- **An empty folder contributes nothing.** A folder with no file in it, at any depth, is no part
+  of the document: not a field, not a note. Git cannot carry an empty folder, so a `questions/`
+  left empty read as `questions: {}` here and as nothing in a checkout of the same commit, and the
+  two digests differed, so a journal recorded under one would not replay under the other.
+  `crates/pact-cli/tests/an_empty_folder_contributes_nothing.rs`.
+- **A wait hears only its own events** (`question.only-when:`, N193). In a question a workflow
+  asks of a port, `only-when:` lines in the one condition grammar say which events the wait hears:
+  each looks at what the event brought, `value: event.<field>`, and compares it with a figure or a
+  value the wait can read (`is: {value: item.custodian-id}`), so the waits of an `each` that all
+  listen at one port each hear their own item's; an event a wait does not hear is kept for the
+  next. Refused: `only-when:` on a question asked of no port (`loader/a-line-this-stage-never-reads`),
+  a line that looks at anything but the event (`loader/compared-in-the-wrong-shape`), a field
+  that nothing arriving at its ports has (`loader/a-binding-to-nothing`, with the fields that
+  do), and a comparison in another shape than the field's. `Question.only_when` and
+  `Question.hears` read it in Python. `crates/pact-cli/tests/a_wait_hears_only_its_own_events.rs`,
+  `adapters/python/tests/test_a_wait_hears_only_its_own_events.py`.
+- **A circle through an agent has its caret on the agent's `uses:` entry** the fix names, for a
+  circle of any length, and says each hop after a `uses` as `, which calls`
+  (`loader/a-workflow-its-own-agent-starts`).
 
 ### Workflows: failure plans, undo, silence, and the five worked trees (9 October)
 

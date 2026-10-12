@@ -3185,6 +3185,24 @@ groups:
           `this-wait` ignores events that arrived before this wait began. Left
           out, an event no wait was listening for is kept for the next wait
           that listens.
+      only-when:
+        # N193 (FIX-06): one port's events waited for inside an `each` — an
+        # acknowledgement per custodian — went to whichever item's wait listened
+        # first, so an event could not name the item it belonged to. The one
+        # condition grammar, read where the wait reads it: `event.<field>` is
+        # what the event brought, and the other side any value the wait can
+        # read (`{value: item.custodian-id}`). Held by `waits.rs`.
+        type: list of group:when-this
+        surface: S-CTRL
+        tier: core
+        help: >
+          in a question a workflow asks of a port, what has to hold of an event
+          for this wait to hear it — every line, each looking at what the event
+          brought, `value: event.<field>`, and comparing it with a figure or a
+          value the wait can read, `is: {value: item.custodian-id}`. An event it
+          does not hear is kept for the next wait that listens, so the waits of
+          an `each` each hear their own item's. Left out, the wait hears any
+          event from the ports it is asked of.
       reminds-at:
         type: list of group:reminder
         surface: S-EXEC
