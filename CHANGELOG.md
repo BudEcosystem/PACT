@@ -8,7 +8,20 @@ holds that did not; the commits are listed under it for whoever wants the detail
 Running PACT trees in production on Pydantic AI 2.54, through
 [Bud Agent Flow](https://github.com/BudEcosystem/Bud-Agent-Flow), drove these changes. Every
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
-runs offline: 4080 tests, 1422 Rust and 2658 adapter.
+runs offline: 4082 tests, 1424 Rust and 2658 adapter.
+
+### How much of a limit is used, read in a decide's rules (12 October)
+
+- **`used.<ceiling>` in a `decide`'s rules.** 02W §2.0 reads `used.<ceiling>` (how much of a
+  limit is used, as a percent) in `when-this` lines, and a decide's rules are `when-this` lines,
+  yet the loader read it only in a `repeat`'s `until:` and refused it in a rule
+  (`loader/a-binding-to-nothing`, "is read only in a condition"). It is now read in every
+  condition and still refused anywhere else (a `bind:`, an `over:`, a `call:`).
+- **A share of a limit nobody writes is refused.** `used.<ceiling>` reads how much of a pot is
+  spent, so its ceiling is one a pot keeps (`cost-per-request-under`, `tokens-at-most`,
+  `tool-calls-at-most`) written in a `limits:` group around the stage that reads it: its own, a
+  stage it is inside, or the workflow's. Any other was read as nothing, and a rule over it never
+  fired; it is now `loader/a-share-of-no-limit-around-it`, with the line to write.
 
 ### An OpenAPI description imported as reviewed tool files; blanks in an address (12 October)
 

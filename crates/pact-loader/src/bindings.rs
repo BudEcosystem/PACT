@@ -968,6 +968,50 @@ impl<'a> Flow<'a> {
         }
     }
 
+    /// `used.<ceiling>` (02W §2.0): how much of a pot is spent, so `<ceiling>` is
+    /// one a pot keeps, written in a `limits:` group around the stage that reads
+    /// it: its own, a stage it is inside, or the workflow's.
+    fn share(&self, frames: &[Frame<'a>], stage: &str, value: &Node, diags: &mut Diagnostics) {
+        let said = value.as_str().unwrap_or("").trim();
+        let line = said.trim_start_matches("used.").trim();
+        let rule = "loader/a-share-of-no-limit-around-it";
+        if !SHARES.contains(&line) {
+            diags.push(Diagnostic::error(
+                rule,
+                value.span.clone(),
+                format!(
+                    "'{stage}' reads `{said}`, and a share is kept only of what a run spends \
+                     from a pot: {}.",
+                    SHARES.map(|s| format!("`{s}`")).join(", ")
+                ),
+                "Read the share of one of those, or compare the value itself.".to_string(),
+            ));
+            return;
+        }
+        let own = frames
+            .last()
+            .and_then(|f| f.steps.get(stage))
+            .map(|e| &e.node);
+        let holders = frames.iter().rev().filter_map(|f| f.holder.map(|(_, n)| n));
+        let mut around = own.into_iter().chain(holders).chain([self.node]);
+        let writes = |n: &Node| n.get("limits").and_then(|l| l.get(line)).is_some();
+        if !around.any(writes) {
+            diags.push(Diagnostic::error(
+                rule,
+                value.span.clone(),
+                format!(
+                    "'{stage}' reads `{said}`, and no `limits:` around it writes `{line}:` (its \
+                     own, a stage it is inside, or the workflow's), so there is no share of it \
+                     to read."
+                ),
+                format!(
+                    "Write `{line}:` under the `limits:` of the workflow or of a stage '{stage}' \
+                     is inside, or read a limit one of them writes."
+                ),
+            ));
+        }
+    }
+
     /// A `when:` or an `until:`: each line's `value:` and `{value: ...}` is a
     /// binding read where the stage reads it (WF-4 to WF-7), and the line is
     /// held by the one condition reader, its value's shape resolved here.
@@ -979,8 +1023,16 @@ impl<'a> Flow<'a> {
         reading: Reading,
         diags: &mut Diagnostics,
     ) {
+        // `used.<ceiling>` is how much of a limit is used (02W §2.0, `when-this`
+        // only): a share compared in the line, read by no stage, so it is not a
+        // binding to hold here. Anywhere else it is refused (`read`).
+        let used = |n: &&Node| n.as_str().is_some_and(|s| s.trim().starts_with("used."));
         for value in values_in(lines) {
-            self.read(frames, stage, value, None, reading, diags);
+            if used(&value) {
+                self.share(frames, stage, value, diags);
+            } else {
+                self.read(frames, stage, value, None, reading, diags);
+            }
         }
         let kind = |n: &Node| -> Option<Kind> {
             if n.as_str()?.trim().starts_with("used.") {
@@ -1182,7 +1234,7 @@ impl<'a> Flow<'a> {
                     ));
                 }
             }
-            "used" if reading != Reading::RoundEnd => diags.push(nothing(
+            "used" => diags.push(nothing(
                 "`used.` is read only in a condition, where a limit's share is compared"
                     .to_string(),
                 "Move it into an `until:` line, or read another value here.".to_string(),
@@ -1219,7 +1271,7 @@ impl<'a> Flow<'a> {
                     ));
                 }
             }
-            "values" | "used" => {}
+            "values" => {}
             _ => diags.push(nothing(
                 format!("'{root}' is not where a binding starts"),
                 format!(
@@ -2031,6 +2083,13 @@ fn first_stage<'m>(fields: &'m Map, body: &'m Map) -> &'m str {
         .unwrap_or("<stage>")
 }
 
+/// The ceilings a pot keeps, of which `used.` reads a share (02W §2.0, §2.10).
+const SHARES: [&str; 3] = [
+    "cost-per-request-under",
+    "tokens-at-most",
+    "tool-calls-at-most",
+];
+
 /// Every `value:` an `until:` reads, written directly or as `{value: ...}`
 /// beside a comparison.
 fn values_in(node: &Node) -> Vec<&Node> {
@@ -2473,11 +2532,74 @@ questions:
     }
 
     #[test]
+    fn a_used_share_is_read_in_a_decide_rule_as_in_an_until() {
+        // 02W §2.0: `used.<ceiling>` is read in `when-this` lines, and a decide's
+        // rules are `when-this` lines (§2.6 names `used.cost-per-request-under`).
+        let rule = "by: [{ rules: [{ when: [{ value: used.cost-per-request-under, \
+                    more-than: 80% }], choose: 'no' }, { choose: 'yes' }] }]";
+        let flow = FLOW.replace("by: [{ rules: [{ choose: 'no' }] }]", rule);
+        let pot = "limits: { cost-per-request-under: 1 USD, when-it-runs-out: stop-and-say-so }";
+        let with_pot = flow.replace(
+            "    starts-at: a\n",
+            &format!("    {pot}\n    starts-at: a\n"),
+        );
+        assert!(rules(&with_pot).is_empty(), "{:?}", rules(&with_pot));
+        let bound = FLOW.replace(
+            "bind: { id: input.id, on:",
+            "bind: { id: used.tokens-at-most, on:",
+        );
+        assert_eq!(rules(&bound)[0].0, "loader/a-binding-to-nothing");
+    }
+
+    #[test]
+    fn a_share_is_of_a_limit_a_group_around_the_stage_writes() {
+        let rule = "by: [{ rules: [{ when: [{ value: used.tokens-at-most, more-than: 80% }], \
+                    choose: 'no' }, { choose: 'yes' }] }]";
+        let flow = FLOW.replace("by: [{ rules: [{ choose: 'no' }] }]", rule);
+        let found = rules(&flow);
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].0, "loader/a-share-of-no-limit-around-it");
+        assert!(
+            found[0]
+                .1
+                .contains("no `limits:` around it writes `tokens-at-most:`"),
+            "{found:?}"
+        );
+        let tokens = "limits: { tokens-at-most: 900, when-it-runs-out: stop-and-say-so }";
+        for (at, under) in [
+            ("    starts-at: a\n", "    "),
+            ("        does: decide\n", "        "),
+        ] {
+            let written = flow.replacen(at, &format!("{under}{tokens}\n{at}"), 1);
+            assert!(rules(&written).is_empty(), "{at:?}: {:?}", rules(&written));
+        }
+        let unkept = FLOW.replace(
+            "by: [{ rules: [{ choose: 'no' }] }]",
+            &rule.replace("used.tokens-at-most", "used.finishes-within"),
+        );
+        let found = rules(&unkept);
+        assert_eq!(
+            found[0].0, "loader/a-share-of-no-limit-around-it",
+            "{found:?}"
+        );
+        assert!(
+            found[0]
+                .1
+                .contains("a share is kept only of what a run spends"),
+            "{found:?}"
+        );
+    }
+
+    #[test]
     fn a_used_share_is_read_only_in_a_condition() {
         assert!(
             round("{ value: used.cost-per-run-under }", "input.id")
                 .iter()
-                .all(|(r, _)| *r == "loader/until-that-cannot-change")
+                .all(|(r, _)| [
+                    "loader/until-that-cannot-change",
+                    "loader/a-share-of-no-limit-around-it"
+                ]
+                .contains(r))
         );
         assert_eq!(
             round("{ value: steps.b.total }", "used.cost-per-run-under")[0].0,
