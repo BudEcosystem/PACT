@@ -162,6 +162,12 @@ class RegionLimits:
     at_once_at_most: int | None = None
     #: `when-it-runs-out:` as written.
     when_it_runs_out: str = ""
+    #: `counted-per:` — what each ceiling is counted across: `run` (unwritten),
+    #: `connection`, `team`, or a binding (`input.customer-id`).
+    counted_per: str = ""
+    #: `resets-every:` — the period a ceiling counted across runs starts again
+    #: after, in seconds.
+    resets_every: float | None = None
 
     @staticmethod
     def from_limits(written: Any) -> "RegionLimits":
@@ -173,6 +179,8 @@ class RegionLimits:
             milestones=reminders(m.get("milestones")),
             at_once_at_most=whole(m.get("at-once-at-most")),
             when_it_runs_out=_text(m.get("when-it-runs-out", "")),
+            counted_per=_text(m.get("counted-per", "")),
+            resets_every=seconds(m.get("resets-every")),
         )
 
 

@@ -1,0 +1,8 @@
+# The workspace's own row for the classifier 02W §5.2 sorts attachments with:
+# a decision model, served on this machine.
+models:
+  ap-attachment-classifier:
+    description: A trained classifier that says whether an attachment is a supplier invoice.
+    kind: decision
+    served-by:
+      - { runtime: systemone, endpoint: local }

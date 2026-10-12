@@ -587,3 +587,22 @@ fn the_whole_inventory_is_the_same_whatever_directory_it_was_asked_from() {
 
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn an_agent_on_a_decision_model_alone_is_runnable_with_no_instructions() {
+    // 02W §5.2's attachment sorter: a `kind: decision` catalogue row, and no
+    // `instructions:` at all, because a classifier is given no words.
+    let tree = format!(
+        "{}/../../tests/trees/workflows-48-invoices",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let out = pact().args(["discover", &tree]).output().expect("runs");
+    let inv: serde_json::Value = serde_json::from_slice(&out.stdout).expect("json");
+    let sorter = inv[0]["agents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["id"] == "pact:attachment-sorter")
+        .expect("the sorter is listed");
+    assert_eq!(sorter["runnable"], true, "{sorter}");
+}

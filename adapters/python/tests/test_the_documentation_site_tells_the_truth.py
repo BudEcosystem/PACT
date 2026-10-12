@@ -48,6 +48,18 @@ def test_the_kind_count_is_the_number_of_kinds() -> None:
     )
 
 
+def test_each_kind_row_counts_its_fields_and_names_its_first_core_ones() -> None:
+    # `reference/kinds.md` is written by hand from the schema, and a package adding fields went
+    # past it: the rung row said one field when the schema had five.
+    groups = yaml.safe_load((REPO / "spec/schema.yaml").read_text())["groups"]
+    rows = re.findall(r"^\| `([\w-]+)` \| (\d+) \| (.*) \|$", (SITE / "reference/kinds.md").read_text(), re.M)
+    assert {name for name, _, _ in rows} == set(groups)
+    for name, count, core in rows:
+        fields = groups[name].get("fields", {})
+        first = [f"`{k}`" for k, v in fields.items() if isinstance(v, dict) and v.get("tier") == "core"][:5]
+        assert (int(count), core) == (len(fields), ", ".join(first) or "—"), name
+
+
 def test_the_named_field_count_is_the_number_of_fields_that_resolve_a_name() -> None:
     real = len(re.findall(r"^\s*names:", (REPO / "spec/schema.yaml").read_text(), re.M))
     quoted = {int(n) for n in re.findall(r"\*\*(\d+) fields\*\* declare what they name", site_text())}

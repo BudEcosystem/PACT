@@ -34,7 +34,7 @@ write: most workspaces use a dozen.
 | `if-it-fails` | 8 | `after-that`, `gives-up-after`, `backup`, `carry-on-with`, `asks` |
 | `reminder` | 5 | `at`, `nudges`, `tells`, `hands-over-to`, `runs` |
 | `moment` | 5 | `at`, `after`, `before`, `counted-in`, `in-time-zone` |
-| `rung` | 1 | `rules` |
+| `rung` | 5 | `rules`, `agent`, `if-unsure-below`, `if-it-disagrees`, `asks` |
 | `route-rule` | 3 | `when`, `choose`, `because` |
 | `ownership` | 3 | `owned-by`, `locked`, `locked-until` |
 | `release` | 1 | `asks` |
@@ -46,7 +46,7 @@ write: most workspaces use a dozen.
 | `credential-reference` | 1 | `by-reference` |
 | `interceptor` | 6 | `description`, `when`, `applies-to`, `may`, `rules` |
 | `policy` | 2 | `applies-to`, `ask-a-person` |
-| `question` | 19 | `description`, `says`, `answer`, `shows`, `asked-of` |
+| `question` | 20 | `description`, `says`, `answer`, `shows`, `asked-of` |
 | `question-rule` | 4 | `when`, `because`, `question`, `first-times` |
 | `redaction` | 2 | `description`, `hide` |
 
@@ -57,8 +57,8 @@ write: most workspaces use a dozen.
 | `call-order` | 2 | `call`, `first` |
 | `catalog` | 3 | — |
 | `figure` | 2 | — |
-| `limits` | 20 | `feel`, `finishes-within`, `starts-from`, `paused-during`, `milestones` |
-| `model` | 8 | — |
+| `limits` | 22 | `feel`, `finishes-within`, `starts-from`, `paused-during`, `milestones` |
+| `model` | 9 | — |
 | `model-can` | 5 | — |
 | `model-cost` | 2 | — |
 | `needs` | 8 | `reasoning`, `tool-calling`, `images`, `audio`, `computer-use` |

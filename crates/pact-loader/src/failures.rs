@@ -413,7 +413,7 @@ impl<'a> Flow<'a> {
             }
             self.companions(stage, fields, diags);
             match does {
-                "call" => self.cannot_be_undone(stage, fields, diags),
+                "call" => self.cannot_be_undone(stage, &entry.node, diags),
                 "ask-someone" => self.silence(steps, stage, &entry.node, diags),
                 _ => {}
             }
@@ -563,18 +563,8 @@ impl<'a> Flow<'a> {
         ));
     }
 
-    /// Why a call needs a person's yes before it runs, if it does: its own
-    /// `needs-a-person: yes`, or a rule in this workflow's policy naming it.
     fn guard_of(&self, target: &str) -> Option<String> {
-        let (tool, action) = target.split_once('/')?;
-        let node = workflows::entry_in(self.document, "tools", tool)?
-            .get("actions")?
-            .get(action)?;
-        if crate::approvals::asked_for(node) {
-            return Some("says `needs-a-person: yes`".to_string());
-        }
-        (self.guards.contains(target) || self.guards.contains(tool))
-            .then(|| "a rule in this workflow's policy asks a person about".to_string())
+        guard_of(self.document, &self.guards, target)
     }
 
     /// The first call a stage makes (or a stage inside it makes, before any
@@ -586,11 +576,7 @@ impl<'a> Flow<'a> {
             }
         }
         let body = node.get("steps").and_then(Node::as_map)?;
-        let starts: Vec<&str> = match node.get("starts-at").and_then(Node::as_str) {
-            Some(s) if workflows::does(node) != Some("together") => vec![s.trim()],
-            _ => body.keys().map(String::as_str).collect(),
-        };
-        for start in starts {
+        for start in starts_of(node, body) {
             for name in reach(body, start, &|n| self.a_person_answers(n)) {
                 if let Some(found) = body
                     .get(name)
@@ -603,33 +589,24 @@ impl<'a> Flow<'a> {
         None
     }
 
-    /// WF-25: a call to a tool's write with no undo and no *Ask before*.
-    fn cannot_be_undone(&self, stage: &str, fields: &Map, diags: &mut Diagnostics) {
-        let Some(call) = fields.get("call") else {
+    /// WF-25: a call to a tool's write with no undo and no *Ask before*. On a
+    /// path a model picked it is WF-24's instead (`picked.rs`).
+    fn cannot_be_undone(&self, stage: &str, node: &Node, diags: &mut Diagnostics) {
+        let Some(call) = node.get("call") else {
             return;
         };
-        let Some(target) = call.node.as_str().map(str::trim) else {
+        let Some(target) = call.as_str().map(str::trim) else {
             return;
         };
         let Some((tool, action)) = target.split_once('/') else {
             return;
         };
-        if fields.contains_key("undone-by")
-            || !workflows::action_writes(self.document, tool, action)
-            || self.guard_of(target).is_some()
-        {
-            return;
-        }
-        let undoable = workflows::entry_in(self.document, "tools", tool)
-            .and_then(|t| t.get("actions"))
-            .and_then(|a| a.get(action))
-            .is_some_and(|a| a.get("undone-by").is_some());
-        if undoable {
+        if !cannot_be_undone_unasked(self.document, &self.guards, node, target) {
             return;
         }
         diags.push(Diagnostic::note(
             "loader/cannot-be-undone-and-nobody-asked",
-            call.node.span.clone(),
+            call.span.clone(),
             format!(
                 "'{stage}' calls `{target}`, which cannot be undone, and nobody is asked before \
                  it runs."
@@ -743,18 +720,8 @@ impl<'a> Flow<'a> {
         out
     }
 
-    /// Whether a stage is a wait some person, group or contact answers.
     fn a_person_answers(&self, node: &Node) -> bool {
-        workflows::does(node) == Some("ask-someone")
-            && node
-                .get("asks")
-                .and_then(Node::as_str)
-                .and_then(|asks| waits::question_of(self.document, self.workflow, asks.trim()))
-                .is_some_and(|q| {
-                    waits::answerers(self.document, q)
-                        .iter()
-                        .any(|(_, a)| a.reads())
-                })
+        waits::a_person_answers(self.document, self.workflow, node)
     }
 
     /// Every write the stages `on` make ([`Flow::writes_made`]).
@@ -931,8 +898,55 @@ impl<'a> Flow<'a> {
     }
 }
 
+/// Why a call needs a person's yes before it runs, if it does: its own
+/// `needs-a-person: yes`, or a rule in the workflow's policy naming it
+/// (`guards`, every `<tool>` and `<tool>/<action>` that policy names).
+pub(crate) fn guard_of(document: &Node, guards: &BTreeSet<String>, target: &str) -> Option<String> {
+    let (tool, action) = target.split_once('/')?;
+    let node = workflows::entry_in(document, "tools", tool)?
+        .get("actions")?
+        .get(action)?;
+    if crate::approvals::asked_for(node) {
+        return Some("says `needs-a-person: yes`".to_string());
+    }
+    (guards.contains(target) || guards.contains(tool))
+        .then(|| "a rule in this workflow's policy asks a person about".to_string())
+}
+
+/// Whether a stage's call to `target` is a tool's write that nobody can undo
+/// and nobody is asked about first: no `undone-by:` on the stage or on the
+/// action, and no *Ask before* (WF-25, and WF-24 on a path a model picked).
+pub(crate) fn cannot_be_undone_unasked(
+    document: &Node,
+    guards: &BTreeSet<String>,
+    stage: &Node,
+    target: &str,
+) -> bool {
+    let Some((tool, action)) = target.split_once('/') else {
+        return false;
+    };
+    let undoable = workflows::entry_in(document, "tools", tool)
+        .and_then(|t| t.get("actions"))
+        .and_then(|a| a.get(action))
+        .is_some_and(|a| a.get("undone-by").is_some());
+    stage.get("undone-by").is_none()
+        && !undoable
+        && workflows::action_writes(document, tool, action)
+        && guard_of(document, guards, target).is_none()
+}
+
+/// The stages a `steps:` block starts at: every stage of a `together`, else
+/// its `starts-at:`, else every stage (a block of more than one with no
+/// `starts-at:` is `reachability.rs`'s to refuse).
+pub(crate) fn starts_of<'m>(holder: &'m Node, body: &'m Map) -> Vec<&'m str> {
+    match holder.get("starts-at").and_then(Node::as_str) {
+        Some(s) if workflows::does(holder) != Some("together") => vec![s.trim()],
+        _ => body.keys().map(String::as_str).collect(),
+    }
+}
+
 /// The names a stage's `call:` and `may-call:` write.
-fn calls(node: &Node) -> Vec<&str> {
+pub(crate) fn calls(node: &Node) -> Vec<&str> {
     let mut out: Vec<&str> = node
         .get("call")
         .and_then(Node::as_str)
@@ -966,7 +980,7 @@ fn bound(fields: &Map) -> Vec<&str> {
 
 /// The stages of `steps` reached from `from`, in the order a walk finds them;
 /// the walk ends at a stage `stops` says (which is itself left out).
-fn reach<'m>(steps: &'m Map, from: &str, stops: &dyn Fn(&Node) -> bool) -> Vec<&'m str> {
+pub(crate) fn reach<'m>(steps: &'m Map, from: &str, stops: &dyn Fn(&Node) -> bool) -> Vec<&'m str> {
     let Some((start, _)) = steps.get_key_value(from) else {
         return Vec::new();
     };

@@ -1181,6 +1181,9 @@ async def run(
     # `tests/test_a_spend_cap_nothing_can_reach_holds_nothing_and_says_so.py`.
     held_nothing = spec.limits.nothing_can_reach
     result.unmetered = result.unmetered + held_nothing
+    # A ceiling counted across runs (`counted-per: team`): this run's meter holds
+    # only this run, so the line is said, not kept as if it were one run's.
+    result.unmetered = result.unmetered + spec.limits.across_runs
     # The two latency promises nothing on this run measures. `slo.py` carried a
     # `Budget` that would have — `note_first_token`, `check_elapsed`, `add_cost`
     # — and nothing in `src/` ever constructed one, so `first-reply-within` and

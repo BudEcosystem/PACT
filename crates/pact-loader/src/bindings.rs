@@ -2047,12 +2047,16 @@ fn values_in(node: &Node) -> Vec<&Node> {
     out
 }
 
-/// Every moment's `at:` and `in-time-zone:` written as text, below `node`.
+/// Every moment's `at:` and `in-time-zone:` written as text, below `node`,
+/// and every `limits.counted-per:` (a binding there names what a ceiling is
+/// counted across).
 fn moments<'n>(node: &'n Node, found: &mut Vec<&'n Node>) {
     match &node.value {
         Value::Map(m) => {
             for (key, e) in m {
-                if matches!(key.as_str(), "at" | "in-time-zone") && e.node.as_str().is_some() {
+                if matches!(key.as_str(), "at" | "in-time-zone" | "counted-per")
+                    && e.node.as_str().is_some()
+                {
                     found.push(&e.node);
                 } else if key != "steps" {
                     moments(&e.node, found);

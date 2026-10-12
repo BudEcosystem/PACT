@@ -184,6 +184,11 @@ class ModelEntry:
     #: which for one round meant the Anthropic transport reported that its model
     #: held 32,768 tokens because it had bound a Qwen id it cannot serve.
     runtimes: frozenset[str] = frozenset()
+    #: `kind:` — `language` (the default) or `decision`: a trained classifier
+    #: that answers a label and a score (02W §2.12). An agent on decision models
+    #: only needs no instructions, and only a decision model may be unsure below
+    #: a figure (`pact check`, WF-17).
+    kind: str = "language"
 
     def satisfies(self, needs: dict[str, Any]) -> tuple[bool, str]:
         """Cheap pre-filter. Never a substitute for an eval verdict (FR-2.1.2).
@@ -527,6 +532,7 @@ def _load(path: Path) -> Catalogue:
             reasoning=_reasoning(row.get("reasoning")),
             served_locally=_served_locally(row.get("served-by")),
             runtimes=_runtimes(row.get("served-by")),
+            kind="decision" if str(row.get("kind") or "").strip() == "decision" else "language",
         )
         entries.append(entry)
         for key in (name, *entry.aliases):

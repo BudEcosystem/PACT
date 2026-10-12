@@ -62,6 +62,7 @@ from typing import Any, Callable, Iterable, Mapping
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .limits import seconds
+from .providers import share
 from .yes_no import said_yes
 
 __all__ = [
@@ -193,14 +194,38 @@ class RouteRule:
 
 @dataclass(frozen=True)
 class Rung:
-    """One way of deciding, tried in order (`stage.by:`). Written rules only,
-    until the model and person rungs arrive."""
+    """One way of deciding, tried in order (`stage.by:`, 02W §2.5): written
+    rules, an agent (a decision model is an agent whose model has `kind:
+    decision`), or a person. `pact check` holds a rung to exactly one of the
+    three and a person rung to the last place (`deciding.rs`)."""
 
     rules: tuple[RouteRule, ...] = ()
+    #: `agent:` — the agent that picks a label; it may answer `not-sure`.
+    agent: str = ""
+    #: `if-unsure-below:` — a decision model's score under which it passes the
+    #: decision on, as a share of one (`85%` is 0.85); `None` when unwritten.
+    if_unsure_below: float | None = None
+    #: `if-it-disagrees:` — `keep-its-answer` (the default) or `go-on`.
+    if_it_disagrees: str = "keep-its-answer"
+    #: `asks:` — the person rung's question.
+    asks: str = ""
+
+    @property
+    def goes_on_if_it_disagrees(self) -> bool:
+        """`if-it-disagrees: go-on`: a label other than the rung before it chose
+        passes the decision on, rather than being kept."""
+        return self.if_it_disagrees == "go-on"
 
     @staticmethod
     def from_written(raw: Mapping[str, Any]) -> "Rung":
-        return Rung(rules=tuple(RouteRule.from_written(r) for r in raw.get("rules") or () if isinstance(r, Mapping)))
+        unsure = share(raw.get("if-unsure-below"), -1.0)  # `-1`: not written, or no share
+        return Rung(
+            rules=tuple(RouteRule.from_written(r) for r in raw.get("rules") or () if isinstance(r, Mapping)),
+            agent=str(raw.get("agent") or "").strip(),
+            if_unsure_below=unsure if unsure >= 0 else None,
+            if_it_disagrees=str(raw.get("if-it-disagrees") or "keep-its-answer").strip(),
+            asks=str(raw.get("asks") or "").strip(),
+        )
 
 
 @dataclass(frozen=True)

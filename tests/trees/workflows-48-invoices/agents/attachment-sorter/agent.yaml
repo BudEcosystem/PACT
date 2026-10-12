@@ -1,9 +1,5 @@
 description: Says whether an attachment is a supplier invoice.
-# 02W §5.2 runs this on `model: ap-attachment-classifier`, a catalogue entry
-# with `kind: decision`, which needs no instructions. Decision models come with
-# deciding by models and people; until then it is an agent with instructions.
-instructions: Say whether the attachment you are given is a supplier invoice.
-accepts:
-  attachment: text
+# 02W §5.2: a decision model needs no instructions.
+model: ap-attachment-classifier      # catalogue entry with `kind: decision`
 answers-with:
   label: one of invoice, other

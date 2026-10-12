@@ -120,6 +120,8 @@ pub fn inventory(found: &Found) -> J {
     // that was not already absolute. See `absolutise` for the rule.
     let root = absolutise(&found.root).unwrap_or_else(|| found.root.clone());
 
+    // An agent on decision models alone runs with no instructions (02W §2.12).
+    let decision = pact_loader::deciding::decision_models(crate::BUILTIN_CATALOGUE, doc);
     let mut list = Vec::new();
     for (key, entry) in agents.into_iter().flatten() {
         let a = &entry.node;
@@ -191,7 +193,9 @@ pub fn inventory(found: &Found) -> J {
         // delegates. Each is the author's own name, so the runtime can fetch the
         // document by it; a boolean would answer "is it governed" and not "how".
         o.insert("governance".into(), governance(a));
-        o.insert("runnable".into(), J::Bool(a.get("instructions").is_some()));
+        let runnable =
+            a.get("instructions").is_some() || pact_loader::deciding::decides_alone(a, &decision);
+        o.insert("runnable".into(), J::Bool(runnable));
         list.push(J::Object(o));
     }
 

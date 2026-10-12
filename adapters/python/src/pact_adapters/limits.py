@@ -323,6 +323,14 @@ class Limits:
     when_it_runs_out: Action = Action.STOP
     #: The named question to put to a person when the action is `ask-a-person`.
     asks: str = ""
+    #: `counted-per:` — what every ceiling here is counted across (02W §2.10):
+    #: `run` (unwritten), `connection` or `team`. One run of this harness counts
+    #: only itself, so anything wider is reported on `RunResult.unmetered`
+    #: (`across_runs`) rather than held as if it were one run's.
+    counted_per: str = ""
+    #: `resets-every:` — the period a ceiling counted across runs starts again
+    #: after, in seconds.
+    resets_every: float | None = None
     #: The ceilings this object was handed that no reading can ever be at or
     #: above — `cost-per-request-under: NaN USD`, `runs-for-at-most: inf`,
     #: `tokens-at-most: inf`. The FIGURES, moved off the ceiling fields rather
@@ -558,7 +566,16 @@ class Limits:
             nests_at_most=whole(m.get("nests-at-most")),
             when_it_runs_out=action(m.get("when-it-runs-out")),
             asks=str(m.get("asks") or ""),
+            counted_per=str(m.get("counted-per") or "").strip(),
+            resets_every=seconds(m.get("resets-every")),
         )
+
+    @property
+    def across_runs(self) -> tuple[str, ...]:
+        """`("counted-per",)` when the ceilings are counted across more than one
+        run, which one run cannot hold: what other runs spent is not on its
+        meter. Reported, never dropped (T7)."""
+        return ("counted-per",) if self.counted_per not in ("", "run") else ()
 
     def ceilings(self, steps_at_most: int | None = None) -> tuple[Ceiling, ...]:
         """Every ceiling in force, in a FIXED order.

@@ -1853,6 +1853,16 @@ fn validate(
         // WF-26, WF-34): a failure plan's backup and undo, what an undo and a
         // status check are given, and where silence may never lead.
         pact_loader::failures::check(root, &schema, &mut diags);
+        // And deciding by models and people (02W §2.5, §3 WF-15 to WF-17): an
+        // agent rung's labels, a decision model's score, a person rung last —
+        // and an agent on decision models only, which needs no instructions.
+        pact_loader::deciding::check(root, &schema, BUILTIN_CATALOGUE, &mut diags);
+        pact_loader::deciding::told_once(root, BUILTIN_CATALOGUE, &mut diags);
+        // And what a path may reach (WF-23 on a workflow's paths, WF-24): money
+        // and a write nobody can take back, past a person or a written rule.
+        pact_loader::picked::check(root, &mut diags);
+        // And the one pot a run has (WF-31), and what a ceiling is counted across.
+        pact_loader::pots::check(root, &mut diags);
         diags.sort();
     }
     Ok((node, diags, substituted))

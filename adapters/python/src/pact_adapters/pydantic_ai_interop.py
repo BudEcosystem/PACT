@@ -60,7 +60,7 @@ from .ir import AgentSpec as PactAgentSpec
 from .loader import FIX as LOADER_FIX
 from .loader import pact_binary
 from .pydantic_ai_registry import registry
-from .questions import Shape
+from .questions import Shape, object_schema
 from .transports.pydantic_ai_transport import _SETTINGS, _translated
 from .yes_no import said_yes
 
@@ -79,64 +79,15 @@ __all__ = [
 # ───────────────────────────── the answer shapes, as JSON Schema and back
 
 
-#: One PACT answer shape, as the JSON Schema fragment that means the same thing.
-#:
-#: Built on `questions.Shape` rather than beside it, because the vocabulary is
-#: closed and held in ONE place — `spec/schema.yaml` anchors it as
-#: `&the-answer-shapes` and `Shape.parse` is the only reader. A second table
-#: here would be the `same-setting-twice` mistake the validator exists to catch,
-#: and it would go stale the first time a ninth shape is added.
-_SHAPE_SCHEMAS: dict[str, dict[str, Any]] = {
-    "text": {"type": "string"},
-    "yes-or-no": {"type": "boolean"},
-    "number": {"type": "number"},
-    "whole-number": {"type": "integer"},
-    # Money is a string and not a number, and the reason is `limits.py`'s: a
-    # ceiling carries a CURRENCY (`40 USD`), `Ty::Money` refuses a bare `0.05`,
-    # and a JSON Schema that said `number` would invite a model to answer `40`
-    # for a field whose own parser rejects it. The description carries the
-    # currency requirement to the model, which is the only place it can be said.
-    "money": {"type": "string", "description": "an amount of money with its currency, e.g. `40 USD`"},
-    # The three attachment shapes. A model returns a REFERENCE to one of these,
-    # never the bytes, so the schema says so — and `shape_from_json_schema`
-    # deliberately does not invert them, because `array of string` is far too
-    # common a shape to claim back as `images`.
-    "images": {"type": "array", "items": {"type": "string"}, "description": "references to images"},
-    "audio": {"type": "array", "items": {"type": "string"}, "description": "references to audio"},
-    "file": {"type": "array", "items": {"type": "string"}, "description": "references to files"},
-    "agent": {"type": "string", "description": "the name of one of this workspace's agents"},
-    # 02W §2.15. JSON Schema's own formats; `Shape.read` reads each to ISO 8601.
-    "date": {"type": "string", "format": "date"},
-    "time": {"type": "string", "format": "time"},
-    "date-and-time": {"type": "string", "format": "date-time"},
-}
-
-
 def shape_as_json_schema(shape: Shape) -> dict[str, Any]:
     """One `answers-with:` line as the JSON Schema fragment that means it.
 
-    `one of approved, declined` becomes an `enum`, which is the only one of the
-    ten that a model can be CONSTRAINED to rather than merely asked for — and
-    it is also the shape PACT's own worked example uses, so getting it wrong
-    would be visible in the first document anybody exports.
+    Read off `questions.Shape` (`Shape.json_schema`), whose one table holds each
+    shape's spellings, words and fragment: the vocabulary is closed and held in
+    ONE place, so this module keeps no second table that would go stale the
+    first time a shape is added.
     """
-    if shape.kind == "one-of":
-        return {"type": "string", "enum": list(shape.choices)}
-    if shape.kind == "list":
-        return {"type": "array", "items": shape_as_json_schema(shape.of or Shape("text"))}
-    if shape.kind == "named":
-        return _object_schema({k: p for k, p in shape.parts})
-    return dict(_SHAPE_SCHEMAS[shape.kind])
-
-
-def _object_schema(parts: Mapping[str, Shape]) -> dict[str, Any]:
-    """Lines as one object: every line `required` unless it says `, optional`."""
-    return {
-        "type": "object",
-        "properties": {str(k): shape_as_json_schema(p) for k, p in parts.items()},
-        "required": sorted(str(k) for k, p in parts.items() if not p.optional),
-        "additionalProperties": False,
-    }
+    return shape.json_schema()
 
 
 def shape_from_json_schema(schema: Mapping[str, Any]) -> "Shape | None":
@@ -200,7 +151,7 @@ def _answers_with_schema(
     """
     if not answers:
         return None
-    return _object_schema({str(k): Shape.parse(w, shapes) for k, w in answers.items()})
+    return object_schema({str(k): Shape.parse(w, shapes) for k, w in answers.items()})
 
 
 def return_schema_for(
@@ -2179,7 +2130,7 @@ def _takes_as_schema(
             # fail a run — the model is shown a string and the tool's own
             # validation is what refuses a bad value.
             loose[str(arg)] = {"type": "string", "description": str(written)}
-    schema = _object_schema(parts)
+    schema = object_schema(parts)
     schema["properties"].update(loose)
     schema["required"] = sorted([*schema["required"], *loose])
     return schema

@@ -1271,6 +1271,18 @@ groups:
         surface: S-GOV
         tier: expert
         help: what it costs to run
+      kind:
+        # 02W §2.12. Read by `pact check` (`deciding.rs`: WF-17, and an agent
+        # all of whose models are decision models needs no `instructions:`) and
+        # by `resolve.ModelEntry.kind`.
+        type: one-of
+        choices: [language, decision]
+        surface: S-CAP
+        tier: expert
+        help: >
+          `decision` for a trained classifier that answers a label and a score.
+          An agent on one needs no `instructions:`. Leave it out for a language
+          model.
 
   served-by:
     describe: something a way of serving a model can have
@@ -1603,6 +1615,8 @@ groups:
           one step and not one agent: what this agent spends and what its team
           spends come out of the same figure, however many times it asks them
           and however deep the team goes. It is also the pot `teamwork:` divides.
+          On a stage, this is that stage's share of the run's figure, never a
+          second pot: the run, or something wider, must have its own.
       first-reply-within:
         type: duration
         surface: S-GOV
@@ -1718,8 +1732,25 @@ groups:
         tier: core
         help: >
           how many may run at the same time: items on an `each`, or runs of
-          this flow. `1` is one at a time, in order. Leave it out to let the
-          runtime choose.
+          this flow when `counted-per:` says so. `1` is one at a time, in order.
+          Leave it out to let the runtime choose.
+      counted-per:
+        # 02W §2.10. `run`, `connection` or `team`, or (in a workflow) a binding
+        # that resolves (`bindings.rs`, WF-4); anything else is
+        # `loader/counted-across-nothing` (`pots.rs`).
+        type: text
+        surface: S-GOV
+        tier: core
+        help: >
+          what each ceiling here is counted across: `run` (the default), every
+          use of a `connection`, a `team`, or a binding — `input.customer-id`
+          for a ceiling per customer.
+      resets-every:
+        type: duration
+        needs-also: [counted-per]
+        surface: S-GOV
+        tier: core
+        help: for a ceiling counted over a period — `1 day`, `30 days`
       when-it-runs-out:
         # The first three are an agent's; the other five a workflow's (02W
         # §2.10), and `answer-with-what-it-has` is written `carry-on` there
@@ -4477,10 +4508,8 @@ groups:
           `{invoice: read, other: done}`. A label that leads to `done` is shown
           to people as "only if".
       by:
-        # 02W §2.5 (N32: it lands with `rung`). Written rules only for now; the
-        # agent and person rungs (`agent`, `if-unsure-below`, `if-it-disagrees`,
-        # `asks`) arrive with deciding by models and people. WF-16 holds the
-        # last rung to deciding every case (`conditions.rs`).
+        # 02W §2.5 (N32: it lands with `rung`). WF-16 holds the last rung to
+        # deciding every case (`conditions.rs`, `deciding.rs`).
         type: list of group:rung
         surface: S-CTRL
         tier: core
@@ -4605,20 +4634,59 @@ groups:
           backup, carry on with set values, ask a person, wait for a new
           version, or undo what was done. Leave it out to stop and say so.
 
-  # One way a `decide` stage decides (02W §2.5). Written rules are the first
-  # rung, and for now the only one: the rungs that ask an agent or a person
-  # come with deciding by models and people.
+  # One way a `decide` stage decides (02W §2.5): written rules, an agent (a
+  # decision model is an agent whose model has `kind: decision`), or a person.
+  # A rung writes exactly one of `rules:`, `agent:` and `asks:`, and a person
+  # rung is the last (`deciding.rs`: `loader/one-rung-one-way`,
+  # `loader/a-rung-out-of-order`); its labels are
+  # held to `chooses-between:` (WF-15) and the last rung to deciding every case
+  # (WF-16), `if-unsure-below:` to a decision model (WF-17).
   rung:
     describe: something a way of deciding can have
     fields:
       rules:
         type: list of group:route-rule
-        required: yes
         surface: S-EXEC
         tier: core
         help: >
           written rules, tried in order; the first whose conditions all hold
           picks its label. None holding passes the decision to the next rung.
+      agent:
+        type: text
+        names: agents
+        surface: S-ROUTE
+        tier: core
+        help: >
+          an agent that picks a label. Its `answers-with:` has one `one of`
+          line naming these labels, and may add `not-sure`, which passes the
+          decision on. A decision model is an agent whose model has
+          `kind: decision`.
+      if-unsure-below:
+        type: percent
+        needs-also: [agent]
+        surface: S-GOV
+        tier: core
+        help: >
+          for a decision model, the score under which it passes the decision
+          on. A language model has no honest score, so it answers `not-sure`
+          instead and this line is refused on it.
+      if-it-disagrees:
+        type: one-of
+        choices: [keep-its-answer, go-on]
+        needs-also: [agent]
+        surface: S-GOV
+        tier: core
+        help: >
+          `go-on` passes the decision on when this rung picks a different label
+          from the rung before it. Leave it out to keep its answer.
+      asks:
+        type: text
+        names: [^questions, questions]
+        surface: S-EXEC
+        tier: core
+        help: >
+          the person rung: a question whose answer has a `one of` line naming
+          these labels. It is always last.
 
   # One written rule of a rules rung. Its conditions are `when-this` lines, the
   # grammar every condition in PACT is written in.

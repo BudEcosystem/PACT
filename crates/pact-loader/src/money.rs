@@ -871,7 +871,7 @@ fn uses(agent: &Node) -> Vec<&str> {
 /// percentage. `yes`, `y`, `true`, `on` and `enabled` are all a yes to the
 /// validator, so all five have to be a yes to this too — a tick the checker
 /// does not recognise is an ungated spend it reports as fine.
-fn moves_money(action: &Node) -> Option<(Span, String)> {
+pub(crate) fn moves_money(action: &Node) -> Option<(Span, String)> {
     let entry = action.as_map()?.get("spends-money")?;
     match pact_schema::coerce::check(&entry.node, &pact_schema::Ty::YesNo) {
         Some(pact_schema::coerce::Coerced::YesNo(true)) => {

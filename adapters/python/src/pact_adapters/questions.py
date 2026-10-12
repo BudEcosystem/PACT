@@ -113,37 +113,103 @@ _MONEY = re.compile(
 #: process the author never starts" failure the `shapes:` attribute exists to end,
 #: and it blocked D16's stated v1 modalities at the one surface where a person is
 #: asked. `test_typed_questions.py` holds this list against the specification's.
-_SPELLINGS: Mapping[str, frozenset[str]] = {
-    "yes-or-no": frozenset({"yes-or-no", "yes or no", "yes-no", "yes/no", "boolean"}),
-    "text": frozenset({"text", "some text", "a sentence", "a note"}),
-    "money": frozenset({"money", "an amount of money", "an amount"}),
-    "number": frozenset({"number", "a number"}),
-    "whole-number": frozenset({"whole-number", "whole number", "a whole number", "integer"}),
-    "images": frozenset({"images", "a picture", "pictures", "list of images", "an image"}),
-    "audio": frozenset({"audio", "a recording", "a voice message", "list of audio"}),
-    "file": frozenset({"file", "a file", "an attachment", "list of files"}),
-    "agent": frozenset({"agent", "an agent", "which agent", "the name of an agent"}),
+#:
+#: ONE TABLE per shape: its spellings, the words a person reads, the line they
+#: are told to type, and the JSON Schema fragment that means the same thing
+#: (`Shape.json_schema`, which `pydantic_ai_interop` and the MCP bridge read).
+#: The fragments were a second table in `pydantic_ai_interop.py` for a round,
+#: which is the `same-setting-twice` mistake the validator exists to catch.
+@dataclass(frozen=True)
+class _Kind:
+    spellings: frozenset[str]
+    described: str
+    example: str
+    json_schema: Mapping[str, Any]
+
+
+_KINDS: Mapping[str, _Kind] = {
+    "yes-or-no": _Kind(
+        frozenset({"yes-or-no", "yes or no", "yes-no", "yes/no", "boolean"}),
+        "yes or no", "yes", {"type": "boolean"},
+    ),
+    "text": _Kind(
+        frozenset({"text", "some text", "a sentence", "a note"}),
+        "some text", "a sentence", {"type": "string"},
+    ),
+    # Money is a string and not a number, and the reason is `limits.py`'s: a
+    # ceiling carries a CURRENCY (`40 USD`), `Ty::Money` refuses a bare `0.05`,
+    # and a JSON Schema that said `number` would invite a model to answer `40`
+    # for a field whose own parser rejects it. The description carries the
+    # currency requirement to the model, which is the only place it can be said.
+    "money": _Kind(
+        frozenset({"money", "an amount of money", "an amount"}),
+        "an amount of money, like `25.00 USD`", "25.00 USD",
+        {"type": "string", "description": "an amount of money with its currency, e.g. `40 USD`"},
+    ),
+    "number": _Kind(frozenset({"number", "a number"}), "a number", "1.5", {"type": "number"}),
+    "whole-number": _Kind(
+        frozenset({"whole-number", "whole number", "a whole number", "integer"}),
+        "a whole number", "3", {"type": "integer"},
+    ),
+    # The three attachment shapes. A model returns a REFERENCE to one of these,
+    # never the bytes, so the schema says so — and `shape_from_json_schema`
+    # deliberately does not invert them, because `array of string` is far too
+    # common a shape to claim back as `images`.
+    "images": _Kind(
+        frozenset({"images", "a picture", "pictures", "list of images", "an image"}),
+        "one or more pictures", "a picture",
+        {"type": "array", "items": {"type": "string"}, "description": "references to images"},
+    ),
+    "audio": _Kind(
+        frozenset({"audio", "a recording", "a voice message", "list of audio"}),
+        "a recording", "a recording",
+        {"type": "array", "items": {"type": "string"}, "description": "references to audio"},
+    ),
+    "file": _Kind(
+        frozenset({"file", "a file", "an attachment", "list of files"}),
+        "a file", "a file",
+        {"type": "array", "items": {"type": "string"}, "description": "references to files"},
+    ),
+    # The example is a KIND, not a name, and it is the only row that has to be.
+    #
+    # `25.00 USD`, `3` and `yes` are literals anybody can type in any workspace;
+    # `a sentence`, `a picture` and `a recording` read as descriptions of a kind.
+    # This row said `refund-desk` — the flagship example's own agent — and
+    # `Shape.example()` is the line a person is told to type, word for word. So a
+    # hospital workspace holding `triage` and `x-ray` told a clinician with a
+    # patient waiting to `Add \`who: refund-desk\``, which resolves to nothing.
+    #
+    # That is R56 one layer worse: there the AUTHOR was told their file said
+    # something it does not; here the reader is not the author and cannot go and
+    # look. An answer shape whose values are names from THIS tree cannot have a
+    # correct literal here, so it does not pretend to.
+    "agent": _Kind(
+        frozenset({"agent", "an agent", "which agent", "the name of an agent"}),
+        "the name of one of this workspace's agents", "the name of an agent in this workspace",
+        {"type": "string", "description": "the name of one of this workspace's agents"},
+    ),
     # 02W §2.15. A date and time carries its zone; one written without a zone
-    # is read in the workspace's `time-zone:` (`Shape.zone`).
-    "date": frozenset({"date", "a date"}),
-    "time": frozenset({"time", "a time of day"}),
-    "date-and-time": frozenset({"date-and-time", "date and time", "a date and time"}),
+    # is read in the workspace's `time-zone:` (`Shape.zone`). JSON Schema's own
+    # formats; `Shape.read` reads each to ISO 8601.
+    "date": _Kind(
+        frozenset({"date", "a date"}), "a date, like `2026-10-09`", "2026-10-09",
+        {"type": "string", "format": "date"},
+    ),
+    "time": _Kind(
+        frozenset({"time", "a time of day"}), "a time of day, like `14:30`", "14:30",
+        {"type": "string", "format": "time"},
+    ),
+    "date-and-time": _Kind(
+        frozenset({"date-and-time", "date and time", "a date and time"}),
+        "a date and time, like `2026-10-09T14:30:00-05:00`", "2026-10-09T14:30:00+00:00",
+        {"type": "string", "format": "date-time"},
+    ),
 }
 
-_DESCRIBED: Mapping[str, str] = {
-    "yes-or-no": "yes or no",
-    "text": "some text",
-    "money": "an amount of money, like `25.00 USD`",
-    "number": "a number",
-    "whole-number": "a whole number",
-    "images": "one or more pictures",
-    "audio": "a recording",
-    "file": "a file",
-    "agent": "the name of one of this workspace's agents",
-    "date": "a date, like `2026-10-09`",
-    "time": "a time of day, like `14:30`",
-    "date-and-time": "a date and time, like `2026-10-09T14:30:00-05:00`",
-}
+#: Views of the one table, by what each reader asks of it.
+_SPELLINGS: Mapping[str, frozenset[str]] = {k: v.spellings for k, v in _KINDS.items()}
+_DESCRIBED: Mapping[str, str] = {k: v.described for k, v in _KINDS.items()}
+_EXAMPLE: Mapping[str, str] = {k: v.example for k, v in _KINDS.items()}
 
 #: The three shapes whose value is a path to a file in this workspace.
 #:
@@ -180,33 +246,16 @@ def _a_path_inside_the_workspace(value: Any, described: str) -> str:
     return "/".join(p for p in parts if p not in ("", "."))
 
 
-_EXAMPLE: Mapping[str, str] = {
-    "yes-or-no": "yes",
-    "text": "a sentence",
-    "money": "25.00 USD",
-    "number": "1.5",
-    "whole-number": "3",
-    "images": "a picture",
-    "audio": "a recording",
-    "file": "a file",
-    # A KIND, not a name, and it is the only row here that has to be.
-    #
-    # `25.00 USD`, `3` and `yes` are literals anybody can type in any workspace;
-    # `a sentence`, `a picture` and `a recording` read as descriptions of a kind.
-    # This row said `refund-desk` — the flagship example's own agent — and
-    # `Shape.example()` is the line a person is told to type, word for word. So a
-    # hospital workspace holding `triage` and `x-ray` told a clinician with a
-    # patient waiting to `Add \`who: refund-desk\``, which resolves to nothing.
-    #
-    # That is R56 one layer worse: there the AUTHOR was told their file said
-    # something it does not; here the reader is not the author and cannot go and
-    # look. An answer shape whose values are names from THIS tree cannot have a
-    # correct literal here, so it does not pretend to.
-    "agent": "the name of an agent in this workspace",
-    "date": "2026-10-09",
-    "time": "14:30",
-    "date-and-time": "2026-10-09T14:30:00+00:00",
-}
+def object_schema(parts: Mapping[str, "Shape"]) -> dict[str, Any]:
+    """Lines as one JSON Schema object: every line `required` unless it says
+    `, optional`."""
+    return {
+        "type": "object",
+        "properties": {str(k): p.json_schema() for k, p in parts.items()},
+        "required": sorted(str(k) for k, p in parts.items() if not p.optional),
+        "additionalProperties": False,
+    }
+
 
 #: `<shape>, optional` at the end of a line (02W §2.15).
 _OPTIONAL = re.compile(r",\s*optional\s*$")
@@ -373,6 +422,22 @@ class Shape:
         if self.kind in ("list", "named"):
             return json.dumps(self._example_value())
         return _EXAMPLE[self.kind]
+
+    def json_schema(self) -> dict[str, Any]:
+        """This line as the JSON Schema fragment that means it.
+
+        `one of approved, declined` becomes an `enum`, which is the only shape a
+        model can be CONSTRAINED to rather than merely asked for; a list its
+        items; a shape with parts an object ([`object_schema`]); every other
+        shape its row of the one table.
+        """
+        if self.kind == "one-of":
+            return {"type": "string", "enum": list(self.choices)}
+        if self.kind == "list":
+            return {"type": "array", "items": (self.of or Shape("text")).json_schema()}
+        if self.kind == "named":
+            return object_schema(dict(self.parts))
+        return dict(_KINDS[self.kind].json_schema)
 
     def _example_value(self) -> Any:
         if self.kind == "list":

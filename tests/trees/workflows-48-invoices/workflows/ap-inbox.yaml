@@ -18,23 +18,13 @@ steps:
       if-someone-fails: carry-on           # one unreadable scan does not stop the rest
     starts-at: sort
     steps:
-      # 02W §5.2 decides here by an agent rung (`agent: attachment-sorter`,
-      # `if-unsure-below: 85%`), then a person rung (`asks:
-      # what-is-this-attachment`). Those rungs come with deciding by models and
-      # people; until then the sorter is called and its label decided by rules.
       sort:
-        does: call
-        call: attachment-sorter
-        bind: { attachment: item.name }
-        then: { answered: is-it }
-      is-it:
         does: decide
         chooses-between: { invoice: read, other: done }
         by:
-          - rules:
-              - when: [{ value: steps.sort.label, is: invoice }]
-                choose: invoice
-              - choose: other
+          - agent: attachment-sorter
+            if-unsure-below: 85%
+          - asks: what-is-this-attachment
       read:
         does: call
         call: invoice-reader
@@ -71,7 +61,14 @@ steps:
           fills.vendor: steps.read.invoice.vendor-name
 
 questions:
-  # `what-is-this-attachment`, the person rung's question, returns with that rung.
+  what-is-this-attachment:
+    description: An AP clerk sorts an attachment the classifier was unsure of.
+    says: Is this attachment a supplier invoice?
+    shows: [item.name]
+    answer:
+      label: one of invoice, other
+    asked-of: [ap-clerks]
+    answer-within: 1 day
   too-many-attachments:
     description: More than 20 attachments arrived in one email.
     says: This email has more than 20 attachments. Process the first 20?

@@ -8,7 +8,46 @@ holds that did not; the commits are listed under it for whoever wants the detail
 Running PACT trees in production on Pydantic AI 2.54, through
 [Bud Agent Flow](https://github.com/BudEcosystem/Bud-Agent-Flow), drove these changes. Every
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
-runs offline: 3997 tests, 1388 Rust and 2609 adapter.
+runs offline: 4046 tests, 1416 Rust and 2630 adapter.
+
+### Deciding by models and people; money on a workflow's paths; one pot per run (12 October)
+
+- **A decide may ask an agent, then a person** (02W §2.5). A rung of `by:` writes exactly one of
+  `rules:`, `agent:` (an agent whose `answers-with:` has one `one of` line naming the stage's
+  labels, and may add `not-sure`, which passes the decision on) and `asks:` (the person rung, a
+  question whose answer has a `one of` line naming the labels; always last). `if-unsure-below:`
+  is a decision model's score under which it passes the decision on; `if-it-disagrees: go-on`
+  passes it on when this rung picks another label than the rung before. Refused: a rung with
+  none or two ways (`loader/one-rung-one-way`), a person rung that is not last or a first rung
+  that disagrees with nobody (`loader/a-rung-out-of-order`), an agent or question whose labels
+  differ (`loader/a-label-with-nowhere-to-go`, WF-15), a last agent rung that may pass the
+  decision on, by `not-sure`, `if-unsure-below:` or `if-it-disagrees: go-on`
+  (`loader/a-decide-that-can-run-out-of-rungs`, WF-16), and `if-unsure-below:` on an
+  agent with no decision model (`loader/sure-only-a-decision-model-can-be`, WF-17). Read in
+  Python by `conditions.Rung`. `crates/pact-cli/tests/a_decide_cannot_run_out_of_rungs.rs`.
+- **A decision model is a catalogue row with `kind: decision`** (02W §2.12): a trained
+  classifier that answers a label and a score. An agent on decision models only needs no
+  `instructions:`, and `pact discover` lists it as runnable. `resolve.ModelEntry.kind`.
+  `tests/trees/workflows-48-invoices` now sorts its attachments as 02W §5.2 prints it.
+- **Money moves only past a person or a written rule, on a workflow's paths too** (WF-23
+  extended, WF-24, F1). A stage calling a `spends-money` action nobody guards is told about
+  (`loader/money-moves-with-nobody-asked`) when a path reaches it with no wait a person answers
+  and no decide by written rules or a person on the way: a warning on a path from the start, as
+  on an agent, and refused on a path from a decide an agent may choose for. A write that cannot be
+  undone on a path an agent may pick is refused (`loader/a-model-chose-what-cannot-be-undone`, in
+  place of the note `loader/cannot-be-undone-and-nobody-asked` on that call). A call to a workflow is judged by that
+  workflow's own checks. `crates/pact-cli/tests/money_moves_only_past_a_person_or_a_written_rule.rs`.
+- **A run has one money pot** (WF-31, R32). `cost-per-request-under:` on a stage is its share of
+  the run's figure; a share with no pot, or shares adding up to more than their pot, is
+  `loader/a-share-of-no-pot`. `limits.counted-per:` (`run`, `connection`, `team`, or in a
+  workflow a binding) and `limits.resets-every:` say what a ceiling is counted across and when it
+  starts again (`loader/counted-across-nothing`); the Python harness counts one run and says a
+  wider count on `RunResult.unmetered` (`Limits.across_runs`).
+  `crates/pact-cli/tests/a_run_has_one_money_pot.rs`.
+- **One table of answer shapes.** Each shape's spellings, words, example and JSON Schema
+  fragment are one row of `questions._KINDS`, read through `Shape.json_schema`;
+  `pydantic_ai_interop._SHAPE_SCHEMAS`, the second copy, is gone.
+  `adapters/python/tests/test_one_shape_table_and_the_rungs_are_read.py`.
 
 ### A tree is the same wherever it is checked out; a wait hears its own events (12 October)
 

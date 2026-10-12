@@ -117,6 +117,17 @@ pub(crate) fn question_of<'d>(
         .or_else(|| document.get("questions").and_then(|q| q.get(name)))
 }
 
+/// Whether a stage of `workflow` is a wait some person, group or contact
+/// answers (a wait only the clock and events answer is no gate).
+pub(crate) fn a_person_answers(document: &Node, workflow: &Node, node: &Node) -> bool {
+    workflows::does(node) == Some("ask-someone")
+        && node
+            .get("asks")
+            .and_then(Node::as_str)
+            .and_then(|asks| question_of(document, workflow, asks.trim()))
+            .is_some_and(|q| answerers(document, q).iter().any(|(_, a)| a.reads()))
+}
+
 /// Every check on waits and time, over the loaded document.
 pub fn check(document: &Node, diags: &mut Diagnostics) {
     let asked = asked_by_workflows(document);
