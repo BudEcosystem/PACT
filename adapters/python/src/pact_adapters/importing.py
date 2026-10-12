@@ -333,11 +333,19 @@ pact-import — turn a framework's own artifact into a PACT agent
 
 USAGE:
     pact-import FILE [--as a2a-card|anthropic-request|pydantic-ai-spec]
+    pact-import FILE --as openapi [--out DIR]
 
 Prints the agent as YAML, then the ImportReport: in plain words first, then
 key by key. Nothing is written: what comes back is a STUB, because these
 formats carry less than a PACT agent does, and the report says exactly what
 you still have to write.
+
+`openapi` reads an OpenAPI 3 description into one tool file per operation
+(`pact_adapters.openapi`). With `--out DIR`, a PACT tree, it writes them into
+`DIR/tools/` and their named shapes into `DIR/workspace.yaml`; without it, it
+prints each file. An operation whose description does not declare its effect
+(`x-pact-reads-only: true` or `false`) is marked *Needs a look*, and is a write
+that cannot be undone until a person decides.
 
 `pydantic-ai-spec` reads a Pydantic AI agent spec — the YAML or JSON that
 `Agent.from_file()` loads. It is the one source here that is a real agent
@@ -365,12 +373,41 @@ def _from_pydantic_ai_spec(
     return from_pydantic_ai_spec(artifact)
 
 
+def _openapi(document: Mapping[str, Any], out: "str | None") -> int:
+    """`--as openapi`: the tool files written into `out`, or printed; then the report."""
+    import sys
+
+    from .openapi import NotImported, from_openapi, write_into
+
+    try:
+        imported = from_openapi(document)
+        if out:
+            written = write_into(Path(out), imported)
+            sys.stdout.write(f"Wrote {len(written)} file(s) into {out}: {', '.join(written) or 'none new'}.\n")
+        else:
+            for name, text in imported.files.items():
+                sys.stdout.write(f"--- # {name}\n{text}")
+            if imported.shapes:
+                import yaml
+
+                shapes = yaml.safe_dump({"shapes": imported.shapes}, sort_keys=False, allow_unicode=True)
+                sys.stdout.write(f"--- # beside them in workspace.yaml\n{shapes}")
+    except NotImported as trouble:
+        sys.stderr.write(f"error: {trouble}\n")
+        return 1
+    report = imported.report
+    sys.stdout.write("\n" + report.in_plain_words() + "\n\n" + report.in_words() + "\n")
+    return 1 if report.silent_drops else 0
+
+
 #: What each `--as` reads, so the refusal can name them.
 READERS = {
     "a2a-card": from_a2a_card,
     "anthropic-request": from_anthropic_request,
     "pydantic-ai-spec": _from_pydantic_ai_spec,
 }
+#: Everything `--as` reads: the agents above, and an OpenAPI description's tool files.
+KINDS = (*READERS, "openapi")
 
 
 def main(argv: "list[str] | None" = None) -> int:
@@ -386,12 +423,20 @@ def main(argv: "list[str] | None" = None) -> int:
         at = args.index("--as")
         kind = args[at + 1] if at + 1 < len(args) else ""
         del args[at : at + 2]
-    if kind not in READERS:
+    if kind not in KINDS:
         sys.stderr.write(
             f"error: `{kind}` is not something this can read.\n"
-            f"  fix: use one of: {', '.join(sorted(READERS))}\n"
+            f"  fix: use one of: {', '.join(sorted(KINDS))}\n"
         )
         return 1
+    out = None
+    if "--out" in args:
+        at = args.index("--out")
+        out = args[at + 1] if at + 1 < len(args) else ""
+        del args[at : at + 2]
+        if kind != "openapi" or not out:
+            sys.stderr.write("error: `--out DIR` goes with `--as openapi`\n  fix: name the tree to write into\n")
+            return 1
     if not args:
         sys.stderr.write("error: no file was given\n  fix: name one\n")
         return 1
@@ -417,6 +462,8 @@ def main(argv: "list[str] | None" = None) -> int:
         )
         return 1
 
+    if kind == "openapi":
+        return _openapi(artifact, out)
     agent, report = READERS[kind](artifact)
 
     sys.stdout.write(yaml.safe_dump(agent, sort_keys=False, allow_unicode=True))

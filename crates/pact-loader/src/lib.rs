@@ -134,6 +134,7 @@ pub mod approvals;
 pub mod arrivals;
 pub mod available;
 pub mod bindings;
+pub mod blanks;
 pub mod bundles;
 pub mod callable;
 pub mod clauses;

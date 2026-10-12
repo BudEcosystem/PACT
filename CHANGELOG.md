@@ -8,7 +8,33 @@ holds that did not; the commits are listed under it for whoever wants the detail
 Running PACT trees in production on Pydantic AI 2.54, through
 [Bud Agent Flow](https://github.com/BudEcosystem/Bud-Agent-Flow), drove these changes. Every
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
-runs offline: 4046 tests, 1416 Rust and 2630 adapter.
+runs offline: 4080 tests, 1422 Rust and 2658 adapter.
+
+### An OpenAPI description imported as reviewed tool files; blanks in an address (12 October)
+
+- **`pact-import --as openapi FILE [--out DIR]`** (decision P10). Each operation of an OpenAPI 3
+  description becomes `tools/<operation-id>.yaml`: a `url:` tool whose address is the API's name
+  (bound by the host to the API's address and its credentials) and the path, one action named for
+  its `method:`, `takes:` from the path and query parameters or the JSON body's parts in PACT's
+  shape words, and `answers-with:` from the success answer when PACT can say all of it. An object
+  is a named shape, added to `workspace.yaml`'s `shapes:`. Nothing is guessed about an effect: an
+  operation that does not declare it (`x-pact-reads-only: true` or `false`) gets no `reads-only:`
+  and a *Needs a look* line, so it stays a write that cannot be undone until a person decides. The
+  security schemes are named in a comment, never written as a value. The `ImportReport` accounts
+  for every key read, down to each schema keyword: what PACT cannot say (a `oneOf` of several
+  shapes, a free-form object, a shape that contains itself) is named and left out, never
+  flattened. Held on ten public descriptions under `tests/trees/openapi/`, each with its licence
+  recorded: every written file passes `pact check`. A list in the address is written as the
+  server reads it: `list of ...` when OpenAPI's default spelling holds (one pair per item in the
+  query), `text` with what joins the items when the server reads one value (`explode: false`),
+  and any other spelling (`deepObject`, `matrix`, ...) reported and listed to write by hand.
+  `adapters/python/tests/test_an_openapi_description_imports_as_reviewed_tool_files.py`.
+- **A blank in an address is an argument.** `url: host/pets/{pet-id}?tag={tag}` fills each
+  `{name}` from the call's argument of that name, in the path or in a query (where it is left out
+  when the call has none); a blank that no `takes:` or `bind:` line of the tool's actions fills is
+  refused (`loader/a-blank-in-the-address-nothing-fills`). `method:`'s help now says where the
+  other arguments go: the query for `get` and `delete`, one JSON body for `post`, `put` and
+  `patch`. `crates/pact-cli/tests/an_address_leaves_blanks_only_for_arguments.rs`.
 
 ### Deciding by models and people; money on a workflow's paths; one pot per run (12 October)
 

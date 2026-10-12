@@ -634,6 +634,8 @@ the spec. Every one is checked by `pact check` and held by the harness. The deta
 | **One grammar for schedules** | `every:` on a port's timer | read one way by every runtime; an hour is never guessed |
 | **Program bodies, specified** | `programs:` with `engine: python` or `wasm` | a Python body gets `inputs` and answers with its last line; a WASM body reads and writes one JSON object |
 | **Learning, scored by the host** | `learning.yaml` | a cycle is scored by the host's own runner from a kept baseline, and "held for a person" is its own outcome |
+| **REST services, imported** | `pact-import --as openapi api.yaml --out .` | one reviewed tool file per operation of an OpenAPI description; an operation that does not declare what it does is marked *Needs a look* and treated as a write that cannot be undone; the report names everything PACT cannot say |
+| **Blanks in an address** | `url: host/pets/{pet-id}?tag={tag}` | each blank is filled from the call's argument of that name; a blank no argument fills is refused |
 | **A social security number, hidden** | `anything that looks like a social security number` in `redaction.yaml` | a US one is hidden however it is parted; a bank account in lower case is a bank account too |
 
 It also tightened what already existed: nobody is asked to approve a call that at-most-once
@@ -654,11 +656,11 @@ framework is an extra.
 |---|---|
 | **Design** | Thesis, 28 binding decisions, FRD (120 requirements), 60-row refusal ledger — complete |
 | **Research** | 14 source-grounded studies, ~15,750 lines, over 140 repos (~15 GB) + 57 papers |
-| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **4046 tests (1416 Rust + 2630 adapter), clippy clean, TypeScript type-checked** |
+| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **4080 tests (1422 Rust + 2658 adapter), clippy clean, TypeScript type-checked** |
 | **Adapters** | **All 7 named targets**, proven against one shared conformance suite |
 
 ```bash
-./scripts/test-all.sh          # 4046 tests, Rust + 7 adapters, fully offline
+./scripts/test-all.sh          # 4080 tests, Rust + 7 adapters, fully offline
 ```
 
 **What is still owed** is not hidden — it lives in

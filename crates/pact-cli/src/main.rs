@@ -1782,6 +1782,9 @@ fn validate(
         // same, with nothing written down anywhere deciding which one a runtime
         // would use.
         pact_loader::reach::check(root, &mut diags);
+        // A `url:` may leave `{name}` blanks for each call to fill; one that no
+        // argument of the tool's actions fills would send the braces themselves.
+        pact_loader::blanks::check(root, &mut diags);
         // And the tenth, which is about the NAME rather than about anything
         // written under it, so no field attribute can see it: `names:` and
         // `key-names:` ask whether a name resolves inside this tree, and every

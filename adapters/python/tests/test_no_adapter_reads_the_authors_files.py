@@ -65,6 +65,8 @@ COMMANDS: dict[str, str] = {
     # `to_bud_agent_record` — still touch nothing; it is the door that reads a
     # file, because a door is a thing a person points at something.
     "importing": "reads the artifact named on the command line",
+    "openapi": "writes the tool files an OpenAPI description became into the tree "
+               "`pact-import --as openapi --out` names; `from_openapi` itself reads nothing",
     "learning": "keeps the spend and refusal ledgers in `.pact/`, which is the "
                 "DERIVED area (D2) and never the author's files",
     "watches": "writes a `watch:` record to `.pact/`, same area, same reason",

@@ -2464,9 +2464,13 @@ groups:
         tier: core
         help: >
           the address this tool calls — a name your platform team publishes, the
-          same way an `endpoint:` is. Say beside it, in `method:`, which kind of
-          call to make. A tool reaches ONE place, so write this, or `connect:`,
-          or `says:` — never two of them.
+          same way an `endpoint:` is, with the path under it when it has one
+          (`host/payments/refunds`). Write `{order-number}` in it for a part
+          each call fills from its argument of that name, in the path or in a
+          query (`?status={status}`, left out when the call has none). Say
+          beside it, in `method:`, which kind of call to make. A tool reaches
+          ONE place, so write this, or `connect:`, or `says:` — never two of
+          them.
       method:
         # The advice this used to end with — *"Write `post` if you are unsure"*
         # — contradicted the fix the checker offers the moment `url:` started
@@ -2481,7 +2485,9 @@ groups:
         help: >
           which kind of call to make at the address in `url:` — `get` to look
           something up, `post` to send something in. Whoever published the
-          address will say which one it expects.
+          address will say which one it expects. A `get` or `delete` sends the
+          arguments the address does not name in its query; a `post`, `put` or
+          `patch` sends them as one JSON body.
       says:
         type: text
         surface: S-GEN
