@@ -8,7 +8,17 @@ holds that did not; the commits are listed under it for whoever wants the detail
 Running PACT trees in production on Pydantic AI 2.54, through
 [Bud Agent Flow](https://github.com/BudEcosystem/Bud-Agent-Flow), drove these changes. Every
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
-runs offline: 4097 tests, 1432 Rust and 2665 adapter.
+runs offline: 4099 tests, 1434 Rust and 2665 adapter.
+
+### A stage named `done` (13 October)
+
+- **`loader/a-stage-named-done`.** `done` is where a route ends: a `then:` line or a label that
+  says `done` ends the run, the item, the round or the branch there. A stage of that name was
+  accepted and could never be reached (a run compiled from it ended where the stage was meant to
+  run); `pact check` now refuses it where its name is written, and says to give it another.
+  Found by Bud Agent Flow's corpus kit, whose test tree named its answer stage `done`.
+- Tests: 2 Rust (`crates/pact-cli/tests/a_stage_named_done_is_refused.rs`), failing without the
+  rule.
 
 ### An agent somewhere else, reached over A2A (13 October)
 

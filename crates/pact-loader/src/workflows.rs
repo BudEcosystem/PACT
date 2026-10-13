@@ -29,7 +29,7 @@
 
 use crate::bindings::is_binding;
 use pact_diag::{Diagnostic, Diagnostics, Span};
-use pact_doc::{Map, Node, Value};
+use pact_doc::{Entry, Map, Node, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The `does:` values only an agent's own loop has: they think.
@@ -158,6 +158,22 @@ impl Scope<'_> {
     }
 }
 
+/// A stage named `done`: `done` is where a route ends (a `then:` line or a label that says it
+/// ends that run, item, round or branch there), so a stage of that name is never reached.
+fn finish_line_named(entry: &Entry, diags: &mut Diagnostics) {
+    diags.push(Diagnostic::error(
+        "loader/a-stage-named-done",
+        entry.key_span.clone(),
+        "This stage is named `done`, and `done` is where a route ends: every line that says \
+         `done` ends the run (or the item, round or branch) there, so no line can send anything \
+         to this stage and it never runs."
+            .to_string(),
+        "Give the stage another name (`finish`, `keep`, `close`), and send the lines that should \
+         reach it to that name."
+            .to_string(),
+    ));
+}
+
 /// WF-1.
 fn a_mind_of_its_own(name: &str, w: &Node, diags: &mut Diagnostics) {
     let Some(map) = w.as_map() else { return };
@@ -192,6 +208,9 @@ fn a_mind_of_its_own(name: &str, w: &Node, diags: &mut Diagnostics) {
 /// over every stage of one `steps:` and of every `steps:` inside it.
 fn stages(document: &Node, scope: &Scope, steps: &Map, diags: &mut Diagnostics) {
     for (stage, entry) in steps {
+        if stage.trim() == "done" {
+            finish_line_named(entry, diags);
+        }
         let Some(fields) = entry.node.as_map() else {
             continue;
         };
