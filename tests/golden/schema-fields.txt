@@ -280,6 +280,7 @@ rung.if-it-disagrees	one-of | S-GOV | core | optional
 rung.if-unsure-below	percent | S-GOV | core | optional
 rung.rules	list of group:route-rule | S-EXEC | core | optional
 served-by.endpoint	text | S-CAP | expert | optional
+served-by.region	text | S-CAP | expert | optional
 served-by.runtime	text | S-CAP | expert | required
 settings.frequency-penalty	number | S-CTRL | expert | optional
 settings.max-tokens	integer | S-CTRL | core | optional

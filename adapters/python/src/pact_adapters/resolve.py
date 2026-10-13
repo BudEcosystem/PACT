@@ -189,6 +189,14 @@ class ModelEntry:
     #: only needs no instructions, and only a decision model may be unsure below
     #: a figure (`pact check`, WF-17).
     kind: str = "language"
+    #: `served-by.region` — `(endpoint, region)` for each runtime that names the
+    #: region it serves these weights in (`("local", "us-baa-region")`). A
+    #: workflow's `data-stays-in:` names a region, and the call is held to the
+    #: entry whose endpoint is where the binding sends it: a union of regions
+    #: would let a row served in the region by one runtime pass while the host
+    #: binds another. A row that says nothing about regions is served in none,
+    #: never in every one.
+    regions: frozenset[tuple[str, str]] = frozenset()
 
     def satisfies(self, needs: dict[str, Any]) -> tuple[bool, str]:
         """Cheap pre-filter. Never a substitute for an eval verdict (FR-2.1.2).
@@ -532,6 +540,7 @@ def _load(path: Path) -> Catalogue:
             reasoning=_reasoning(row.get("reasoning")),
             served_locally=_served_locally(row.get("served-by")),
             runtimes=_runtimes(row.get("served-by")),
+            regions=_regions(row.get("served-by")),
             kind="decision" if str(row.get("kind") or "").strip() == "decision" else "language",
         )
         entries.append(entry)
@@ -896,6 +905,17 @@ def _runtimes(written: Any) -> frozenset[str]:
         str(entry.get("runtime") or "").strip()
         for entry in written
         if isinstance(entry, dict) and str(entry.get("runtime") or "").strip()
+    )
+
+
+def _regions(written: Any) -> frozenset[tuple[str, str]]:
+    """`(endpoint, region)` for each of a row's `served-by:` entries that names a region."""
+    if not isinstance(written, list):
+        return frozenset()
+    return frozenset(
+        (str(entry.get("endpoint") or "").strip(), str(entry.get("region") or "").strip())
+        for entry in written
+        if isinstance(entry, dict) and str(entry.get("region") or "").strip()
     )
 
 

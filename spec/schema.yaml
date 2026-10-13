@@ -1304,6 +1304,14 @@ groups:
           write `local` when the model runs on this machine. Anything else means
           the call leaves the box — which a workspace with nothing in
           `allow-egress:` will refuse to do.
+      region:
+        type: text
+        surface: S-CAP
+        tier: expert
+        help: >
+          the region this runtime serves the model in, as your runtime names it
+          (`us-baa-region`). A workflow whose `data-stays-in:` names a region
+          runs only on models served there.
 
   model-can:
     describe: something a model's abilities can include

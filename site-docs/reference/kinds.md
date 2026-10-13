@@ -63,7 +63,7 @@ write: most workspaces use a dozen.
 | `model-cost` | 2 | — |
 | `needs` | 8 | `reasoning`, `tool-calling`, `images`, `audio`, `computer-use` |
 | `provenance` | 6 | — |
-| `served-by` | 2 | — |
+| `served-by` | 3 | — |
 
 ## Memory and context
 

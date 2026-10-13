@@ -8,7 +8,16 @@ holds that did not; the commits are listed under it for whoever wants the detail
 Running PACT trees in production on Pydantic AI 2.54, through
 [Bud Agent Flow](https://github.com/BudEcosystem/Bud-Agent-Flow), drove these changes. Every
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
-runs offline: 4082 tests, 1424 Rust and 2658 adapter.
+runs offline: 4083 tests, 1424 Rust and 2659 adapter.
+
+### Where a model is served: `served-by.region` (12 October)
+
+- **`served-by.region`** on a catalogue row's `served-by:` entry names the region that runtime
+  serves the model in, as the runtime names it (`us-baa-region`). A workflow's `data-stays-in:`
+  names a region and a model not served there is refused, and until now no line could say where
+  a model is served. The resolver reads it as `ModelEntry.regions`, each region with the endpoint of
+  the entry that names it, so a call is held to the runtime the host binds; a row that names no
+  region is served in none, never in every one.
 
 ### How much of a limit is used, read in a decide's rules (12 October)
 
