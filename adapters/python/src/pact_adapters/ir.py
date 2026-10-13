@@ -115,10 +115,10 @@ class ResourceSpec:
 
     #: The key in `resources:` — what the tool's `connect:` line named.
     name: str
-    #: `resource-kind:`. One choice today (`mcp-server`), carried rather than
-    #: assumed: a bridge that built an MCP client for whatever it was handed
-    #: would be reading a field that does not say what it thinks it says the
-    #: first time a second kind returns.
+    #: `resource-kind:`: `mcp-server`, `sandbox` or `a2a-agent` (`a2a_bridge`),
+    #: carried rather than assumed: a bridge that built an MCP client for
+    #: whatever it was handed would be reading a field that does not say what it
+    #: thinks it says.
     kind: str = ""
     #: `endpoint:` — a name the platform team publishes, not an address this
     #: process resolves.

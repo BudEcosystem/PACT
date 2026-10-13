@@ -8,7 +8,27 @@ holds that did not; the commits are listed under it for whoever wants the detail
 Running PACT trees in production on Pydantic AI 2.54, through
 [Bud Agent Flow](https://github.com/BudEcosystem/Bud-Agent-Flow), drove these changes. Every
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
-runs offline: 4083 tests, 1424 Rust and 2659 adapter.
+runs offline: 4097 tests, 1432 Rust and 2665 adapter.
+
+### An agent somewhere else, reached over A2A (13 October)
+
+- **`resource-kind: a2a-agent`** (N1). A remote agent that speaks A2A is a resource like an MCP
+  server, with no field of its own: `endpoint:` where it is (held to `allow-egress: [tools]` when
+  it is off this machine), `auth:` where its credential is kept, `asks-to-connect:` the question
+  answered before it is first asked anything, and `tool-snapshot-digest:` (with its date and
+  maximum age) what its card said when somebody read it. A tool reaches it with `connect:`, and
+  that tool's `actions:` are the skills of the card the model may ask, each by the skill's id.
+- **Two shapes of such a tool are refused.** One that asks it for no skill
+  (`loader/a-remote-agent-asked-for-no-skill`), and an action that says `answers-with:`
+  (`loader/a-remote-agent-answers-in-words`): what comes back is words a remote agent wrote,
+  fenced off as text nobody here reviewed, never values a run acts on.
+- **`pact_adapters.a2a_bridge`**: `card_digest` (canonical JSON of the card as served, its
+  signatures aside: what `tool-snapshot-digest:` pins), `check_card` (a skill the tree asks for
+  that the card does not list, a card that is not the one pinned, a review past its maximum age),
+  and `reply` (the reply fenced as `mcp_bridge.quarantined` fences a server's prose).
+  `mcp_bridge.check_pin` is the one reader of the three `tool-snapshot-*` lines for both, and
+  `quarantined(what=)` says whose words they are. `mcp_toolset_for` defers such a resource's tools
+  with a reason naming the A2A client's two calls, rather than as a kind it does not know.
 
 ### Where a model is served: `served-by.region` (12 October)
 

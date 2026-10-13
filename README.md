@@ -587,7 +587,11 @@ somebody must be able to prove behaviour did not drift.
 
 PACT is not a competitor to A2A or MCP — it **speaks** both. `pact card`
 publishes an A2A Agent Card; a tool's `connect:` names an MCP server, with the
-consent gate and the published-tool digest that the protocol leaves to you.
+consent gate and the published-tool digest that the protocol leaves to you. The
+same `connect:` names an agent somewhere else (`resource-kind: a2a-agent`): its
+`actions:` are the skills of its card the model may ask, the card is pinned like
+a tool list (`tool-snapshot-digest:`), and its replies reach a model only fenced,
+as text nobody here reviewed (`a2a_bridge`).
 
 ---
 
@@ -656,11 +660,11 @@ framework is an extra.
 |---|---|
 | **Design** | Thesis, 28 binding decisions, FRD (120 requirements), 60-row refusal ledger — complete |
 | **Research** | 14 source-grounded studies, ~15,750 lines, over 140 repos (~15 GB) + 57 papers |
-| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **4083 tests (1424 Rust + 2659 adapter), clippy clean, TypeScript type-checked** |
+| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **4097 tests (1432 Rust + 2665 adapter), clippy clean, TypeScript type-checked** |
 | **Adapters** | **All 7 named targets**, proven against one shared conformance suite |
 
 ```bash
-./scripts/test-all.sh          # 4083 tests, Rust + 7 adapters, fully offline
+./scripts/test-all.sh          # 4097 tests, Rust + 7 adapters, fully offline
 ```
 
 **What is still owed** is not hidden — it lives in

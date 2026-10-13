@@ -1948,11 +1948,23 @@ groups:
         # needs". It comes back with two that are its alone: `engines:`, which
         # says what it can host, and `asks-to-run:`, which is the consent in
         # front of running a carried body at all.
-        choices: [mcp-server, sandbox]
+        # `a2a-agent` (N1, WP-29) is the third, and it needs no field of its own:
+        # an agent somewhere else, reached over A2A, is found at an `endpoint:`,
+        # reached with a credential kept by reference (`auth:`), consented to
+        # before the first call (`asks-to-connect:`), and what it publishes about
+        # itself (its card) is pinned exactly as an MCP server's tool list is
+        # (`tool-snapshot-digest:` and the two lines beside it). A tool's
+        # `connect:` names it, and that tool's `actions:` are the skills of the
+        # card it may ask, each by the skill's id. What comes back is words a
+        # remote agent wrote, so no action of such a tool says `answers-with:`
+        # (`crates/pact-loader/src/remote.rs`).
+        choices: [mcp-server, sandbox, a2a-agent]
         required: yes
         surface: S-CAP
         tier: core
-        help: what kind of thing this is
+        help: >
+          what kind of thing this is: an MCP server, a locked room that runs
+          carried programs, or an agent somewhere else reached over A2A.
       endpoint:
         # Carries an address that can point outside the workspace. See
         # `tool.url` for why this is data rather than a list in Rust.
@@ -2063,9 +2075,10 @@ groups:
         tier: expert
         help: >
           one digest over everything this server published when somebody
-          reviewed it — every tool, every argument, and every sentence. If what
-          the server publishes now does not match, the run says so instead of
-          quietly using the new words. Leave it out and the server's prose is
+          reviewed it — every tool, every argument, and every sentence; for an
+          agent reached over A2A, its whole card. If what the server publishes
+          now does not match, the run says so instead of quietly using the new
+          words. Leave it out and the server's prose is
           still fenced off and still cannot instruct this agent; what you lose is
           being told that it changed.
       tool-snapshot-taken-at:
@@ -2440,10 +2453,10 @@ groups:
         surface: S-CAP
         tier: core
         help: >
-          which server this reaches, by name — one of the entries in
-          `resources`. A name that is not there is refused, and the message
-          names the ones that are. A tool reaches ONE place, so write this, or
-          `url:`, or `says:` — never two of them.
+          which server, locked room or remote agent this reaches, by name —
+          one of the entries in `resources`. A name that is not there is
+          refused, and the message names the ones that are. A tool reaches
+          ONE place, so write this, or `url:`, or `says:` — never two of them.
       # `runs-as:` used to stand in front of the three lines below as a word
       # naming which one applied — and it was read by NOTHING. Not the loader,
       # not an adapter, not the worked example, which has never written it. Two
@@ -2511,7 +2524,8 @@ groups:
         tier: core
         help: >
           the only actions this agent may call. Anything else the server
-          offers is refused.
+          offers is refused. For an agent reached over A2A, each action is one
+          skill on its card, named by the skill's id.
 
   action:
     fields:

@@ -213,12 +213,12 @@ HOST_API: dict[str, str] = {
         "why AD-71 puts the pin in the tree and the comparison in the host's "
         "hands rather than in the loader"
     ),
-    "mcp_bridge.quarantined": (
-        "fences one server's prose into the only shape it may reach a model in "
-        "— labelled non-authoritative, every line quoted, a policy always wins. "
-        "A host that has connected calls it and puts the result on "
-        "`AgentSpec.external_prose`; a run that has connected to nothing carries "
-        "`()`, which is the state every run in this repository is in"
+    "a2a_bridge.check_card": (
+        "holds a remote agent's card against the tree: the skills its tools ask "
+        "for and the `tool-snapshot-*` pin. The card arrives over a live "
+        "connection to an agent somewhere else, on the host's machine, after "
+        "`pact check` has finished, and PACT's own run parks on the consent "
+        "rather than connecting, so nothing in `src/` has a card to check"
     ),
     "mcp_bridge.assemble_instructions": (
         "puts authored instructions first and external regions after, so the "

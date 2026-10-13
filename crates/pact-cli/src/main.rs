@@ -1782,6 +1782,9 @@ fn validate(
         // same, with nothing written down anywhere deciding which one a runtime
         // would use.
         pact_loader::reach::check(root, &mut diags);
+        // A tool reaching an agent somewhere else over A2A asks it for at
+        // least one skill, and never promises values from a stranger's words.
+        pact_loader::remote::check(root, &mut diags);
         // A `url:` may leave `{name}` blanks for each call to fill; one that no
         // argument of the tool's actions fills would send the braces themselves.
         pact_loader::blanks::check(root, &mut diags);

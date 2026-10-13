@@ -185,9 +185,9 @@ fields:
     outcome: carried
     rows: [T1]
   tool.connect:
-    construct: "MCPToolset over the named mcp-server resource, with mcp_bridge consent and drift checks"
+    construct: "MCPToolset over the named mcp-server resource, with mcp_bridge consent and drift checks; over an a2a-agent resource, a function tool per declared skill, its card held by a2a_bridge and its replies fenced"
     outcome: carried
-    rows: [P1]
+    rows: [P1, P7]
   tool.url:
     construct: "a function tool whose body is the host's HTTP call"
     outcome: mapped

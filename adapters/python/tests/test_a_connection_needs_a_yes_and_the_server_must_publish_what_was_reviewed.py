@@ -547,6 +547,21 @@ def test_a_kind_this_bridge_does_not_speak_is_refused_rather_than_assumed(
     assert "content-store" in conn.why_not
 
 
+def test_an_agent_reached_over_a2a_is_left_to_the_hosts_a2a_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`resource-kind: a2a-agent` is a kind this bridge knows and does not speak: its tools are
+    deferred, nothing is opened, and the reason names the two calls the host's A2A client owes."""
+    built = stub_client(monkeypatch)
+    (conn,) = mcp_toolset_for(
+        a_spec(a_workspace(kind="a2a-agent")),
+        resolve_endpoint=Asked({"host/payments-mcp": "https://pay/mcp"}),
+        resolve_credential=Asked({"host/payments-credential": "sk"}),
+    )
+    assert conn.connected is False and built == []
+    assert "reached over A2A" in conn.why_not and "a2a_bridge.check_card" in conn.why_not
+
+
 def test_one_toolset_per_server_and_not_one_per_tool(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
