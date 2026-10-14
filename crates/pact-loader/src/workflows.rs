@@ -15,6 +15,7 @@
 //! | `loader/for-each-with-no-ceiling` | WF-10 | an `each` with no `limits.items-at-most` |
 //! | `loader/items-told-apart-by-position` | WF-11 | an `each` whose body writes and has no `identified-by:` |
 //! | `loader/repeat-with-no-bottom` | WF-12 | a `repeat` with no `at-most:` |
+//! | `loader/a-route-back-to-an-earlier-stage` | new | a line of a workflow's stage leads back to a stage on the way to it (a circle of stages outside a `repeat`) |
 //! | `loader/a-version-of-something-that-has-none` | WF-35 | `version:` on a call that is not to a workflow |
 //! | `loader/forget-after-is-now-kept-for` | WF-37 | `forget-after:` on remembered state (a warning, for one release) |
 //! | `loader/a-path-that-answers-nothing` | WF-38 | `answers-with:` is declared and a path ends with no `answer` stage |
@@ -125,6 +126,7 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
         no_items_here(&format!("The workflow '{name}'"), w, diags);
         if let Some(steps) = w.get("steps").and_then(Node::as_map) {
             stages(document, &Scope::Workflow, steps, diags);
+            routes_back(steps, diags);
             answers_on_every_path(document, name, w, steps, diags);
         }
     }
@@ -276,6 +278,70 @@ fn stages(document: &Node, scope: &Scope, steps: &Map, diags: &mut Diagnostics) 
             stages(document, scope, inner, diags);
         }
     }
+}
+
+/// A line of a workflow's stage that leads back to a stage on the way to it, in
+/// one `steps:` or in any `steps:` inside it. A stage of a workflow runs once a
+/// run: what it did is kept under its name, so a second visit is answered with
+/// the first visit's answer and the run goes round the same stages for ever. A
+/// workflow that must come back is a `repeat` (as WF-8 says of a circle of
+/// workflows), whose rounds are kept apart.
+fn routes_back(steps: &Map, diags: &mut Diagnostics) {
+    let next: BTreeMap<&str, Vec<(&str, Span)>> = steps
+        .iter()
+        .map(|(name, e)| {
+            let lines = lines_to(&e.node, true).into_iter();
+            let to = lines.filter_map(|(_, n)| n.as_str().map(|s| (s.trim(), n.span.clone())));
+            (name.as_str(), to.collect())
+        })
+        .collect();
+    let mut done: BTreeSet<&str> = BTreeSet::new();
+    for start in steps.keys() {
+        let mut path: Vec<&str> = Vec::new();
+        go_round(start.as_str(), &next, &mut path, &mut done, diags);
+    }
+    for entry in steps.values() {
+        if let Some(inner) = entry.node.get("steps").and_then(Node::as_map) {
+            routes_back(inner, diags);
+        }
+    }
+}
+
+/// Depth first from `at`; a line to a stage on `path` closes a circle.
+fn go_round<'a>(
+    at: &'a str,
+    next: &BTreeMap<&'a str, Vec<(&'a str, Span)>>,
+    path: &mut Vec<&'a str>,
+    done: &mut BTreeSet<&'a str>,
+    diags: &mut Diagnostics,
+) {
+    if done.contains(at) {
+        return;
+    }
+    path.push(at);
+    for (to, span) in next.get(at).into_iter().flatten() {
+        if let Some(i) = path.iter().position(|p| p == to) {
+            let way = path[i..].join("' to '");
+            diags.push(Diagnostic::error(
+                "loader/a-route-back-to-an-earlier-stage",
+                span.clone(),
+                format!(
+                    "'{at}' goes back to '{to}', which this run has already been through on the \
+                     way here ('{way}' and back to '{to}'). A workflow's stage runs once a run \
+                     and keeps what it did under its name, so going back would answer '{to}' \
+                     again with its first answer and the run would go round for ever."
+                ),
+                "Put the stages that run again inside a `repeat` (`does: repeat`, its \
+                 `steps:`, an `until:` that says when to stop and `at-most:` rounds), and send \
+                 this line on to a stage after it."
+                    .to_string(),
+            ));
+        } else if next.contains_key(to) {
+            go_round(to, next, path, done, diags);
+        }
+    }
+    path.pop();
+    done.insert(at);
 }
 
 /// WF-3: a line written beside a `does:` it does not belong to, and an outcome
@@ -759,6 +825,15 @@ pub(crate) fn successors(stage: &Node, in_workflow: bool) -> Vec<&str> {
 /// [`successors`], each with the word that leads there: the outcome
 /// (`answered`), the port a `heard:` names, or the `decide`'s label.
 pub(crate) fn next_stages(stage: &Node, in_workflow: bool) -> Vec<(&str, &str)> {
+    lines_to(stage, in_workflow)
+        .into_iter()
+        .filter_map(|(word, node)| node.as_str().map(|s| (word, s.trim())))
+        .collect()
+}
+
+/// [`next_stages`], each with the line that names where it goes (its span is
+/// where a line that should not be there is pointed at).
+fn lines_to(stage: &Node, in_workflow: bool) -> Vec<(&str, &Node)> {
     let mut to: Vec<(&str, &Node)> = routes(stage, in_workflow);
     if does(stage).is_none_or(|d| d == "decide") {
         to.extend(
@@ -772,11 +847,8 @@ pub(crate) fn next_stages(stage: &Node, in_workflow: bool) -> Vec<(&str, &str)> 
     let mut out = Vec::new();
     for (word, node) in to {
         match &node.value {
-            Value::Str(s) => out.push((word, s.trim())),
-            Value::Map(m) => out.extend(
-                m.iter()
-                    .filter_map(|(k, e)| e.node.as_str().map(|s| (k.as_str(), s.trim()))),
-            ),
+            Value::Str(_) => out.push((word, node)),
+            Value::Map(m) => out.extend(m.iter().map(|(k, e)| (k.as_str(), &e.node))),
             _ => {}
         }
     }

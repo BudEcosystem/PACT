@@ -24,6 +24,7 @@ grade takes the same three-way care one level down — see `CaseOutcome.unenforc
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Mapping
@@ -543,12 +544,25 @@ EQUIVALENT: dict[str, tuple[str, ...]] = {
 #: Words that turn the phrase after them into its opposite. Kept to the ones
 #: English actually uses immediately before a verb or a noun phrase, because a
 #: wider list would start refusing sentences that only mention a negation.
-_NEGATORS = ("not ", "n't", "cannot", "can not", "never", "no ", "unable to", "refus")
+#: Each begins at a word's start (`n't` ends one): `"no "` alone was found inside *Merino tee*,
+#: and a reply that ended a sentence on that word negated the expected value written after it.
+#: A word ends at any space, a line break too: *not* with *approved* wrapped onto the next line
+#: graded as stating it.
+_NEGATORS = re.compile(r"\bnot\s|n't|\bcannot|\bcan\snot|\bnever|\bno\s|\bunable\sto|\brefus")
 
 #: How far back to look for one. Long enough for *"I cannot approve a refund"*
 #: and *"this order is not eligible for a refund"*; short enough that a negation
 #: in the previous clause does not reach across.
 _NEGATION_WINDOW = 24
+
+#: Where a value's own words begin: a string closed by `,` `:` `}` or `]`, or a
+#: line that starts `<key>:`, ends the field before it, so a negator there is
+#: that field's, never this one's. A reply field ending *"... we can't"* negated
+#: the `path: simple` written on the next line, and `"... can't", "path":
+#: "simple"` in one line of JSON (Bud Agent Flow's *Route to a specialist*
+#: example, recorded live). A lone quote or line break is no boundary: *not
+#: "approved"* and *not* with *approved* on the next line still negate it.
+_A_FIELD_ENDS = re.compile(r'"\s*[,:}\]]|\n\s*"?[\w-]+"?\s*:')
 
 
 def _stated_at(text: str, phrase: str) -> bool:
@@ -569,7 +583,8 @@ def _stated_at(text: str, phrase: str) -> bool:
     at = text.find(phrase)
     while at != -1:
         before = text[max(0, at - _NEGATION_WINDOW):at]
-        if not any(n in before for n in _NEGATORS):
+        before = _A_FIELD_ENDS.split(before)[-1]  # only this field's own words
+        if not _NEGATORS.search(before):
             return True
         at = text.find(phrase, at + 1)
     return False

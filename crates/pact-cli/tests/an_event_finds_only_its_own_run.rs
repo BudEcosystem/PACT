@@ -21,7 +21,8 @@ const TREE: &str = "tests/trees/workflows-16-trial-booking";
 const FLOW: &str = "workflows/trial-booking.yaml";
 const MOVED: &str = "ports/lesson-moved.yaml";
 
-/// A port the wait hears: the lesson moved, so the reminder waits again.
+/// A port the wait hears: the lesson moved, so the consent is asked at once (a line back to the
+/// wait itself is a route back, `loader/a-route-back-to-an-earlier-stage`).
 const PORT: &str = "description: The tutor moves the lesson to another time.
 kind: event
 through: calendly
@@ -42,7 +43,7 @@ const HEARS: [(&str, &str, &str); 2] = [
     (
         FLOW,
         "then: { nobody-answered: consent }",
-        "then: { nobody-answered: consent, heard: { lesson-moved: day-before } }",
+        "then: { nobody-answered: consent, heard: { lesson-moved: consent } }",
     ),
 ];
 

@@ -148,6 +148,7 @@ pub mod handover;
 pub mod holes;
 pub mod kindfiles;
 pub mod money;
+pub mod phrases;
 pub mod picked;
 pub mod policy;
 pub mod ports;

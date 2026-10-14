@@ -8,7 +8,61 @@ holds that did not; the commits are listed under it for whoever wants the detail
 Running PACT trees in production on Pydantic AI 2.54, through
 [Bud Agent Flow](https://github.com/BudEcosystem/Bud-Agent-Flow), drove these changes. Every
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
-runs offline: 4099 tests, 1434 Rust and 2665 adapter.
+runs offline: 4114 tests, 1445 Rust and 2669 adapter.
+
+### An empty phrase, a decide's own question, and a negation in the field before (14 October)
+
+- **`loader/an-empty-phrase`.** Every answer contains the empty phrase, so a rule with one
+  (`must-not-contain: [""]`, or a hole filled with `""`) loaded clean and failed every answer:
+  each checked answer was asked for again and every request went to the backup; under
+  `must-contain:` or `must-say-one-of:` it held for every answer. `pact check` now refuses an
+  empty or blank phrase wherever a rule is written, and says that `[]` checks nothing. Found by
+  Bud Agent Flow's *Route to a specialist* template, whose `never-say` hole fills
+  `must-not-contain:`.
+- **A question a `decide`'s person rung asks is the workflow's.** Only a stage's, a limit's and
+  a failure plan's `asks:` counted, so a workspace question only a rung asked was read as an
+  agent's: it had to say `if-nobody-answers:`, and an `escalate` written there loaded and was
+  never read, since a decide's silence stops the run. It is now a workflow's question, so the
+  line is refused (`loader/an-agent-only-spelling`, which now says what a rung's silence does and
+  that a reminder's `hands-over-to:` passes the question on first). A question nothing names
+  (a tree begun from a template, before the `decide` that asks it is written) is held to neither
+  reader's lines, since the one an agent would need is the one a workflow refuses:
+  `loader/nothing-points-at-it`, which reads the same names, alone says it takes no effect. Any
+  other question some line names keeps `if-nobody-answers:`: a gate reads it when a workflow's
+  call is gated as when an agent's is, whether the gate is a policy's `ask-a-person` rule or a
+  resource's `asks-to-connect:` or `asks-to-run:` reached through a tool only a workflow calls.
+  Found by Bud Agent Flow's *Sort and route an inbox* template.
+- **A negator in the field before is that field's** (`evals._stated_at`). The window looked back
+  across a line break or a quote, so a reply field ending *"... we can't"* negated the
+  `path: simple` written after it, and a correct answer graded FAIL (*Route to a specialist*,
+  recorded live). The window now stops where the value's own field begins: a string closed by
+  `,` `:` `}` or `]`, or a line that starts `<key>:`. A lone quote or line break is no boundary,
+  so *not "approved"* is still a refusal, and a negator ends at any space, a line break too.
+- Tests: 7 Rust (`a_question_a_decide_asks_is_the_workflows.rs` (5),
+  `an_empty_phrase_is_refused.rs` (2)), 2 adapter (the field-before cases in
+  `test_a_negation_is_a_word_not_part_of_one.py`), each failing without its change.
+
+### A route back, a field a stage word hides, and a negation inside a word (14 October)
+
+- **`loader/a-route-back-to-an-earlier-stage`.** A workflow's stage runs once a run and keeps
+  what it did under its name, so a line that led back to a stage the run had already been
+  through (a declined diff sent back to its dry run) loaded, and the second visit was answered
+  with the first visit's answer: the run went round the same stages for ever. `pact check` now
+  refuses such a line where it is written, in one `steps:` or any inside it, and says to put the
+  stages that run again inside a `repeat`. Found by Bud Agent Flow's corpus case #94.
+- **`loader/an-answer-field-a-stage-word-hides`.** `steps.<stage>.outcome` (and `.label`,
+  `.decided-by`, `.answered-by`, `.ended`, `.rounds`, `.run`) reads what every stage has besides
+  its answer, so a callee whose answer has a field of one of those names could never have it
+  read: the binding loaded and read the stage's own word. It is refused where it is read, with
+  the fix to rename the field. Found by Bud Agent Flow's corpus case #102 (a sub-workflow
+  answering `decided-by`), and it caught pattern AP15's workflow reading its agent's `outcome`.
+- **A negation is a word, not part of one** (`evals._stated_at`). The negators were matched as
+  plain substrings, so the `no ` at the end of *Merino* negated the expected value written after
+  it and a correct answer graded FAIL (Bud Agent Flow's corpus case #76). Each now begins at a
+  word's start (`n't` still ends one).
+- Tests: 4 Rust (`a_route_back_to_an_earlier_stage_is_refused.rs`,
+  `an_answer_field_a_stage_word_hides_is_refused.rs`), 2 adapter
+  (`test_a_negation_is_a_word_not_part_of_one.py`), each failing without its change.
 
 ### A stage named `done` (13 October)
 

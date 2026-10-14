@@ -55,7 +55,9 @@ const ROOTS: &[&str] = &[
     "used",
 ];
 
-/// What every stage has besides its answer (02W §2.0's `steps.` row).
+/// What every stage has besides its answer (02W §2.0's `steps.` row). A stage
+/// whose answer has a field of one of these names hides it from every binding
+/// (`loader/an-answer-field-a-stage-word-hides`).
 const STAGE_FIELDS: &[&str] = &[
     "outcome",
     "label",
@@ -1419,6 +1421,25 @@ impl<'a> Flow<'a> {
             };
             return diags.push(d);
         };
+        if let Some(field) = rest.first().copied()
+            && STAGE_FIELDS.contains(&field)
+            && let Some(answers) = self.answer_of(target_node)
+            && answers.iter().any(|(k, _)| k == field)
+        {
+            diags.push(Diagnostic::error(
+                "loader/an-answer-field-a-stage-word-hides",
+                node.span.clone(),
+                format!(
+                    "{who} reads '{written}', which is the stage's own `{field}` (what every \
+                     stage has besides its answer), and '{target}' also answers with a field \
+                     called '{field}': no binding can ever read that field."
+                ),
+                format!(
+                    "Rename '{field}' in what '{target}' answers with (`rated-by` for \
+                     `decided-by`, say) and read `steps.{target}.<the new name>`."
+                ),
+            ));
+        }
         if let Some(field) = rest.first().copied()
             && !STAGE_FIELDS.contains(&field)
             && let Some(answers) = self.answer_of(target_node)

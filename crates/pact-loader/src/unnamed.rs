@@ -169,8 +169,7 @@ pub fn nothing_points_at_it(document: &Node, schema: &Schema, diags: &mut Diagno
     // forbids. A false NEGATIVE here (a name mentioned in a comment-like text
     // field) costs nothing; a false positive would tell an author to attach
     // something already attached.
-    let mut mentioned: BTreeSet<&str> = BTreeSet::new();
-    collect(document, &mut mentioned);
+    let mentioned = mentioned(document);
     // And the names that are inside a sentence rather than being one.
     //
     // A rewriting interceptor rule is one prose string — `replace the answer
@@ -252,6 +251,15 @@ fn a_room_nothing_can_point_at(section: &str, node: &Node, wanted: bool) -> bool
 /// could opt out by deleting a line is the agent that leaks.
 fn attaches_itself(node: &Node) -> bool {
     node.get("applies-to").and_then(Node::as_str).map(str::trim) == Some("every-agent")
+}
+
+/// Every name some line of the tree writes: the set this check holds each
+/// document's name against, for a pass that must agree with it on whether a
+/// document is named at all (`waits.rs`, on which reader a question has).
+pub(crate) fn mentioned(document: &Node) -> BTreeSet<&str> {
+    let mut out = BTreeSet::new();
+    collect(document, &mut out);
+    out
 }
 
 /// Every string value in the document, borrowed.

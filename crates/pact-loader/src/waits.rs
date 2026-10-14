@@ -13,10 +13,10 @@
 //! | `loader/a-pause-for-something-that-does-not-wait` | WF-32 | `paused-during:` names a stage that does not `ask-someone` |
 //! | `loader/asked-in-for-someone-who-chooses` | WF-36 | `asked-in:` on a question asked of a person, a role, a team, the clock or a port |
 //! | `loader/an-agent-only-spelling` | WF-40 | in a workflow, `if-nobody-answers:` on a question it asks, or `when-it-runs-out: answer-with-what-it-has` |
-//! | `loader/a-workflow-only-spelling` | new | what only a workflow reads, written where an agent reads it: a question no workflow asks that is asked of the clock or a port, or whose `answer-within:` is a moment; an agent's `finishes-within:` written as a moment, or a `when-it-runs-out:` choice only a workflow has |
+//! | `loader/a-workflow-only-spelling` | new | what only a workflow reads, written where an agent reads it: a question an agent or a policy asks and no workflow does, asked of the clock or a port or with an `answer-within:` that is a moment; an agent's `finishes-within:` written as a moment, or a `when-it-runs-out:` choice only a workflow has |
 //! | `loader/a-line-this-stage-never-reads` | WF-3 | an `ask-someone` stage's `then.answered`/`declined` when only the clock or events answer it, or `then.heard` when no port does; an agent's `limits:` line only a workflow reads |
 //! | `loader/an-agent-only-spelling`, `loader/a-workflow-only-spelling` | N58 | a workspace question both an agent and a workflow ask, whichever way it is written: once, at `if-nobody-answers:` when written, else at the question |
-//! | `schema/missing-field` | shipped | `if-nobody-answers:` missing on a question no workflow asks (the schema's `required: yes`, moved here) |
+//! | `schema/missing-field` | shipped | `if-nobody-answers:` missing on a question some line names and no workflow's `asks:` does — an agent's, a policy's `ask-a-person` rule, a resource's `asks-to-connect:`/`asks-to-run:` (the schema's `required: yes`, moved here); a question nothing names is held to neither reader's lines |
 //!
 //! **Who answers** is told by spelling alone, since people are the host's to
 //! bind (`asked-of:` has no `names:`): `the-clock`; a port of this workspace;
@@ -25,10 +25,12 @@
 //! a role or a team, reached the way they chose.
 //!
 //! **Which questions a workflow asks**: its own `questions:`, and every
-//! workspace question an `asks:` inside it names (a stage's, a limit's, or a
-//! failure plan's).
-//! Every other workspace question is an agent's, and keeps the lines an
-//! agent's runtime reads.
+//! workspace question an `asks:` inside it names (a stage's, a limit's, a
+//! failure plan's, or a `decide`'s person rung's).
+//! Every other workspace question some line names (an agent's, or a gate's:
+//! a policy's `ask-a-person` rule, a resource's `asks-to-connect:` or
+//! `asks-to-run:`, which ask it whoever's call they gate) keeps the lines an
+//! agent's runtime reads; one nothing names is held to neither.
 
 use crate::bindings::is_binding;
 use crate::workflows;
@@ -132,6 +134,7 @@ pub(crate) fn a_person_answers(document: &Node, workflow: &Node, node: &Node) ->
 pub fn check(document: &Node, diags: &mut Diagnostics) {
     let asked = asked_by_workflows(document);
     let agents_ask = asked_by_agents(document);
+    let named = crate::unnamed::mentioned(document);
     let workflows_map = document.get("workflows").and_then(Node::as_map);
     for (flow, entry) in workflows_map.into_iter().flatten() {
         for (name, q) in entry
@@ -158,7 +161,18 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
                 a_workflows_question(document, name, &q.node, flow, false, diags);
             }
             (Some(flow), None) => a_workflows_question(document, name, &q.node, flow, true, diags),
-            (None, _) => an_agents_question(document, name, &q.node, diags),
+            // Named by a line no workflow's `asks:` is: an agent's, or a gate's that reads
+            // `if-nobody-answers:` whoever's call it gates — a policy's `ask-a-person`, a
+            // resource's `asks-to-connect:` or `asks-to-run:` reached by a workflow's call,
+            // `teamwork:`, a context policy. Every naming line counts, not a list of them.
+            (None, _) if named.contains(name.as_str()) => {
+                an_agents_question(document, name, &q.node, diags);
+            }
+            // Named by nothing (a tree begun from a template, before the `decide` that asks
+            // it is written): no runtime reads it, so neither reader's lines are held to it —
+            // `loader/nothing-points-at-it`, reading the same names, says it takes no effect,
+            // and the line an agent would need is the one a workflow would refuse.
+            (None, _) => {}
         }
     }
     for (_, q) in every_question(document) {
@@ -204,6 +218,15 @@ fn asked_by_workflows(document: &Node) -> BTreeMap<String, String> {
             names.push(asks);
         }
         for (_, stage) in every_stage(&entry.node) {
+            // A `decide`'s person rung (`by: [- asks: <question>]`) is the
+            // workflow asking it too: silence there goes nowhere the question
+            // says, so `if-nobody-answers:` on it was quietly never read.
+            let rungs = stage
+                .get("by")
+                .and_then(Node::as_list)
+                .into_iter()
+                .flatten()
+                .filter_map(|rung| rung.get("asks"));
             for n in [
                 stage.get("asks"),
                 stage.get("limits").and_then(|l| l.get("asks")),
@@ -211,6 +234,7 @@ fn asked_by_workflows(document: &Node) -> BTreeMap<String, String> {
             ]
             .into_iter()
             .flatten()
+            .chain(rungs)
             {
                 if let Some(s) = n.as_str() {
                     names.push(s);
@@ -386,10 +410,13 @@ fn a_workflows_question(
             format!(
                 "'{name}' is asked by the workflow '{flow}' and says what to do when nobody \
                  answers with `if-nobody-answers:`, which only an agent reads: in a workflow, \
-                 silence goes where the asking stage's `nobody-answered:` exit says."
+                 silence goes where the asking stage's `nobody-answered:` exit says, and a \
+                 `decide`'s person rung, which has no exit, stops the run."
             ),
             "Delete `if-nobody-answers:` and write the stage's exit — `then: {nobody-answered: \
-             <a stage>}`. A question an agent asks as well needs a question of its own."
+             <a stage>}`; for a `decide`'s person rung, a reminder's `hands-over-to:` passes the \
+             question on before its deadline. A question an agent asks as well needs a question \
+             of its own."
                 .to_string(),
         ));
     }
