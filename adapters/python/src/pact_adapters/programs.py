@@ -101,6 +101,17 @@ class ProgramFuel:
         values = (self.instructions_at_most, self.runs_for_at_most, self.memory_at_most)
         return {name: v for name, v in zip(CEILINGS, values, strict=True) if v is not None}
 
+    def to_document(self) -> dict[str, Any]:
+        """Back into `fuel:` lines `from_document` reads as this (a loop's `based-on:`
+        hands its stages on in document shape): sizes as whole numbers, the time in
+        seconds."""
+        out: dict[str, Any] = dict(self.written())
+        if self.runs_for_at_most is not None:
+            out["runs-for-at-most"] = f"{self.runs_for_at_most:g}s"
+        if self.when_it_runs_out:
+            out["when-it-runs-out"] = self.when_it_runs_out
+        return out
+
 
 def body_entry(files: "tuple[str, ...]", engine: str) -> str:
     """Which file of a body a host starts, by the contract above, or `""`.

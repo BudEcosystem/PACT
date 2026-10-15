@@ -23,6 +23,12 @@ standing as a tool call the model asked for — and it:
 The line R16 draws is `meta-depth = 1` (AD-83): no run-created thing holds
 topology-authoring authority. A snippet that computes a number holds none.
 
+R16 has since been narrowed (02P §8.1, 02W §2.16): a host may offer the code,
+as functions, what its stage's `may-use:` names — reads, writes no Rule asks
+about, and agents and workflows that can never wait (WF-33) — and the stage
+must say how long and how much its code may run (`fuel:`, A3). This reference
+harness offers the room nothing, which is the narrowest reading of that line.
+
 It is expert tier and excluded from the `no-code` badge, and it requires a
 sandbox at check time — a `does: run-code` stage in a workspace with no locked
 room is refused before anything runs, rather than discovered on the first step.
@@ -93,6 +99,31 @@ def test_run_code_is_a_stage_kind() -> None:
     assert Does.RUN_CODE.value == "run-code"
     loop = Loop.from_mapping("works-it-out", CODEACT["loops"]["works-it-out"])
     assert loop.steps["work"].does is Does.RUN_CODE
+
+
+def test_a_code_stage_reads_its_fuel_and_hands_it_on_to_a_loop_based_on_it() -> None:
+    """A3: `fuel:` on `run-code` is the `program-fuel` group, read as a program's is,
+    and a loop `based-on:` this one inherits the same ceilings."""
+    from pact_adapters.loops import _phase_to_mapping
+    from pact_adapters.programs import ProgramFuel
+
+    raw = {
+        "starts-at": "work",
+        "steps": {
+            "work": {
+                "does": "run-code",
+                "fuel": {"runs-for-at-most": "1m30s", "memory-at-most": "256m",
+                         "when-it-runs-out": "stop-and-say-so"},
+                "then": {"answered": "done"},
+            }
+        },
+    }
+    work = Loop.from_mapping("fuelled", raw).steps["work"]
+    assert work.fuel == ProgramFuel(runs_for_at_most=90.0, memory_at_most=256_000_000,
+                                    when_it_runs_out="stop-and-say-so")
+    again = Loop.from_mapping("again", {"starts-at": "work", "steps": {"work": _phase_to_mapping(work)}})
+    assert again.steps["work"].fuel == work.fuel
+    assert Loop.from_mapping("works-it-out", CODEACT["loops"]["works-it-out"]).steps["work"].fuel is None
 
 
 def test_what_the_model_wrote_is_run_and_the_answer_comes_back() -> None:

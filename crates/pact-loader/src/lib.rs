@@ -138,6 +138,7 @@ pub mod blanks;
 pub mod bundles;
 pub mod callable;
 pub mod clauses;
+pub mod code;
 pub mod conditions;
 pub mod currency;
 pub mod deciding;

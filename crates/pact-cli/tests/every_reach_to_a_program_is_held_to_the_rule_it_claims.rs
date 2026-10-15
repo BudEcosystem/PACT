@@ -308,7 +308,7 @@ fn a_code_stage_and_a_directly_used_program_can_live_in_one_tree() {
     std::fs::create_dir_all(dst.join("loops")).unwrap();
     std::fs::write(
         dst.join("loops/works-it-out.yaml"),
-        "description: Write the working, run it, then answer.\nstarts-at: work\nsteps:\n  work:\n    does: run-code\n    then:\n      answered: reply\n  reply:\n    does: answer\n    then:\n      answered: done\n",
+        "description: Write the working, run it, then answer.\nstarts-at: work\nsteps:\n  work:\n    does: run-code\n    fuel:\n      runs-for-at-most: 30s\n      when-it-runs-out: stop-and-say-so\n    then:\n      answered: reply\n  reply:\n    does: answer\n    then:\n      answered: done\n",
     )
     .unwrap();
     // The fix the run-code refusal itself prints, obeyed verbatim.
@@ -388,7 +388,7 @@ fn a_stage_that_writes_code_needs_a_room_declared_to_run_it() {
         &[(
             "loops/works-it-out.yaml",
             "  think-again:\n    does: check-its-work",
-            "  think-again:\n    does: run-code",
+            "  think-again:\n    does: run-code\n    fuel:\n      runs-for-at-most: 30s\n      when-it-runs-out: stop-and-say-so",
         )],
     );
     // The room this tree does declare, taken away — the stage stays.
@@ -421,7 +421,7 @@ fn a_stage_that_writes_code_loads_where_a_room_is_declared() {
         &[(
             "loops/works-it-out.yaml",
             "  think-again:\n    does: check-its-work",
-            "  think-again:\n    does: run-code",
+            "  think-again:\n    does: run-code\n    fuel:\n      runs-for-at-most: 30s\n      when-it-runs-out: stop-and-say-so",
         )],
     );
     let (code, said) = run(&["check", &dst]);

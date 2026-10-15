@@ -1669,6 +1669,10 @@ fn validate(
         // Reproduced before this line: `shares:` reading 60% and 90% — 150% of
         // one pot — printed `OK — … loaded cleanly (468 settings).` and exited 0.
         pact_loader::teamwork::check(root, &mut diags);
+        // And WF-33's second half beside its first: code the model writes cannot
+        // stop and wait, so a `run-code` stage may call no agent or workflow that
+        // can, and a `fuel:` beside a stage that runs no code is never read.
+        pact_loader::code::check(root, &mut diags);
         // And the fourth: the tool an approval rule guards. `names:` resolves a
         // value against the keys of a map, and the name here is `<tool>/<action>`
         // — two names in one string, the second a level down — so nothing the

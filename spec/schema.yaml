@@ -4353,16 +4353,22 @@ groups:
         # `run-code` is CodeAct (FR-6.1.5, AC-5.2), required for a round and
         # never shippable because there was nowhere to run anything.
         #
-        # It is not R16. That row refuses orchestration code the model writes —
-        # code that decides which agents exist and who is asked — because it
-        # cannot be reviewed before it runs and structural change must pass a
-        # person (D22/D23). A snippet here has no structural authority at all: it
-        # runs in the locked room under the sandbox's deny-by-default egress and
-        # the stage's fuel, it is offered no tools and no teammates, and it lands
-        # in the transcript verbatim — so it is reviewable after the fact exactly
-        # as the model's own prose already is, which is the standard that prose
-        # is held to and not a lower one. AD-83's `meta-depth = 1` is the line,
-        # and a snippet that computes a number is nowhere near it.
+        # R16 as 02P §8.1 narrows it: *a model may compose structure at run
+        # time only over catalogued or narrowed helpers and tools, within
+        # declared limits, fully journaled; such structure never becomes
+        # specification without a person's review.* A snippet runs in the
+        # locked room under the sandbox's deny-by-default egress and the
+        # stage's `fuel:` (required: A3, `needed-when:` below), and it may call,
+        # as functions, the tools, teammates and workflows its stage's
+        # `may-use:` names: reads, writes no Rule asks about, and agents and
+        # workflows that can never wait (WF-33, `code.rs`). A write behind
+        # *Ask before* is never one of them: it stays a direct tool call the
+        # model makes, and the ones it makes in one reply go to one approval
+        # as a batch (P9: there is no "proposed" write). Every call the code
+        # makes is journaled like a direct one, and the snippet lands in the
+        # transcript verbatim, so it is reviewable after the fact exactly as
+        # the model's own prose is. Nothing it composes is written into the
+        # tree.
         #
         # The last five are a workflow's (02W §2.3). `workflows.rs` refuses the
         # four that think (`think`, `use-tools`, `check-its-work`, `run-code`)
@@ -4375,6 +4381,7 @@ groups:
           call: call
           chooses-between: decide
           over: each
+          fuel: run-code
         surface: S-CTRL
         # Was `expert`. A workflow's stage is drawn by a no-code author in the
         # Outline (02W §2.3), so what it does is a core line.
@@ -4463,7 +4470,14 @@ groups:
           which is what makes a `think` stage think instead of reaching for the
           first tool it recognises. Narrowing per stage is the cheapest accuracy
           win on a smaller model: the stage that re-reads a refund decision can
-          name the written refund policy and not the payment tool.
+          name the written refund policy and not the payment tool. On
+          `run-code`, the code may call everything listed as a function, writes
+          included: a read, and a write no Rule asks about, run at once, each
+          call recorded with its own idempotency key. A write behind *Ask
+          before* is never called from code: the model makes it as a direct
+          tool call, and the ones it makes together go to one approval as a
+          batch. A teammate or workflow listed here must be one that can never
+          wait for a person, since code cannot stop and wait.
       at-most:
         type: integer
         at-least: 1
@@ -4475,6 +4489,21 @@ groups:
           — and if you write no `too-many-times:` line it goes wherever
           `answered:` goes. On a `call`, how many attempts in all; the outline's
           "Try 3 times" is `3`. On a `repeat`, how many rounds; required there.
+      fuel:
+        # 02P A3 (decision P3): the `program-fuel` group unchanged, and required
+        # on `does: run-code` (`needed-when:` on `does:`), for the reason it is
+        # required on a program: code with no ceiling is the one thing that
+        # could run forever with nobody having written down that it may. Read
+        # beside `run-code` only; anywhere else `code.rs` says it is never read.
+        type: group:program-fuel
+        surface: S-GOV
+        tier: expert
+        summary: how long and how much its code may run
+        help: >
+          on `run-code`, what one run of the code the model writes may spend
+          before it is stopped: `runs-for-at-most: 30s`, `memory-at-most: 256m`,
+          and `when-it-runs-out:` to say what happens then. Required on
+          `run-code`, and read nowhere else.
       # ── The workflow lines (02W §2.3). Which `does:` each belongs with is held
       # by `workflows.rs` (WF-3): a line written beside another `does:` is never
       # read, and saying so is the only honest thing to do with it.

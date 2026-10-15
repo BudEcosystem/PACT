@@ -315,6 +315,7 @@ stage.checks-at-most	integer | S-GOV | core | optional
 stage.chooses-between	map of text | S-CTRL | core | optional
 stage.combines-by	map of combine-rule | S-CTRL | core | optional
 stage.does	one-of | S-CTRL | core | required
+stage.fuel	group:program-fuel | S-GOV | expert | optional
 stage.identified-by	list of text | S-EXEC | core | optional
 stage.if-it-fails	group:if-it-fails | S-EXEC | core | optional
 stage.limits	group:limits | S-GOV | core | optional

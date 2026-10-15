@@ -33,6 +33,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Mapping
 
+from .programs import ProgramFuel
+
 
 class LoopError(ValueError):
     """An authoring mistake in a loop document.
@@ -118,6 +120,11 @@ class Phase:
     #: is a hang. Every other place in PACT that can stop and ask has this line;
     #: this one did not have it for a round, and it was the only one.
     asks: str = ""
+    #: For a `does: run-code` stage, what one run of its code may spend (A3:
+    #: the `program-fuel` group, required there by `pact check`). `None` when
+    #: the stage writes none — which the check refuses on `run-code` and
+    #: reports as never read anywhere else.
+    fuel: "ProgramFuel | None" = None
 
     def instruction(self) -> str:
         """The extra wording for this stage, authored or built in."""
@@ -514,6 +521,7 @@ def _read_phase(loop_name: str, key: str, raw: Any) -> Phase:
             str(x).strip() for x in (raw.get("then") or {}).get("may-go-to") or ()
         ),
         asks=str(raw.get("asks") or "").strip(),
+        fuel=ProgramFuel.from_document(raw["fuel"]) if raw.get("fuel") is not None else None,
     )
 
 
@@ -528,6 +536,8 @@ def _phase_to_mapping(p: Phase) -> dict[str, Any]:
         out["at-most"] = p.at_most
     if p.asks:
         out["asks"] = p.asks
+    if p.fuel is not None:
+        out["fuel"] = p.fuel.to_document()
     return out
 
 
