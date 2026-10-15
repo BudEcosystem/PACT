@@ -18,7 +18,7 @@ write: most workspaces use a dozen.
 | `loop` | 4 | `description`, `based-on` |
 | `knowledge` | 9 | `description`, `documents`, `passages-at-most`, `must-cite`, `use-when` |
 | `skill` | 11 | `name`, `description`, `use-when`, `do-not-use-when`, `if-unsure` |
-| `stage` | 28 | `does`, `says`, `asks`, `call`, `may-call` |
+| `stage` | 29 | `does`, `says`, `asks`, `call`, `may-call` |
 | `tool` | 7 | `description`, `connect`, `url`, `method`, `says` |
 | `program` | 7 | `description` |
 | `program-fuel` | 4 | — |

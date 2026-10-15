@@ -62,7 +62,7 @@ use pact_doc::Node;
 use pact_schema::{Schema, Ty};
 
 /// The engines a resource says it can host.
-fn hosted_by(resource: &Node) -> Vec<String> {
+pub(crate) fn hosted_by(resource: &Node) -> Vec<String> {
     match resource.get("engines").map(|n| &n.value) {
         Some(pact_doc::Value::List(items)) => items
             .iter()

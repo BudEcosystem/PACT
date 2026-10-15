@@ -126,6 +126,29 @@ def test_a_code_stage_reads_its_fuel_and_hands_it_on_to_a_loop_based_on_it() -> 
     assert Loop.from_mapping("works-it-out", CODEACT["loops"]["works-it-out"]).steps["work"].fuel is None
 
 
+def test_a_code_stage_reads_the_room_it_runs_in_and_hands_it_on_to_a_loop_based_on_it() -> None:
+    """WP-34: `runs-in:` names the locked room a `run-code` stage's code needs, and a
+    loop `based-on:` this one runs its code in the same room."""
+    from pact_adapters.loops import _phase_to_mapping
+
+    raw = {
+        "starts-at": "work",
+        "steps": {
+            "work": {
+                "does": "run-code",
+                "runs-in": " algebra-room ",
+                "fuel": {"runs-for-at-most": "30s", "when-it-runs-out": "stop-and-say-so"},
+                "then": {"answered": "done"},
+            }
+        },
+    }
+    work = Loop.from_mapping("roomed", raw).steps["work"]
+    assert work.runs_in == "algebra-room"
+    again = Loop.from_mapping("again", {"starts-at": "work", "steps": {"work": _phase_to_mapping(work)}})
+    assert again.steps["work"].runs_in == "algebra-room"
+    assert Loop.from_mapping("works-it-out", CODEACT["loops"]["works-it-out"]).steps["work"].runs_in == ""
+
+
 def test_what_the_model_wrote_is_run_and_the_answer_comes_back() -> None:
     """The snippet goes to the locked room and its output is the step's result."""
     seen: list[str] = []

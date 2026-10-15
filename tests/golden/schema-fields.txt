@@ -324,6 +324,7 @@ stage.may-use	list of text | S-ROUTE | expert | optional
 stage.ordered-by	text | S-CTRL | core | optional
 stage.over	text | S-CTRL | core | optional
 stage.remembers	map of group:state | S-GOV | core | optional
+stage.runs-in	text | S-EXEC | expert | optional
 stage.says	text | S-GEN | core | optional
 stage.starts-at	text | S-CTRL | core | optional
 stage.steps	map of group:stage | S-CTRL | core | optional

@@ -165,6 +165,17 @@ class ResourceSpec:
     #: model at all (G12). `""` is `always`. Decided by `available`.
     available_when: str = ""
 
+    @staticmethod
+    def from_document(doc: Mapping[str, Any], name: str) -> "ResourceSpec":
+        """One entry of `resources:`, read as a tool's `connect:` reads it, for
+        a line that names a resource without a tool (a `run-code` stage's
+        `runs-in:`, WP-34). `KeyError` for a name the workspace does not carry."""
+        declared = doc.get("resources") or {}
+        entry = declared.get(name) if isinstance(declared, Mapping) else None
+        if not isinstance(entry, Mapping):
+            raise KeyError(f"no resource named {name!r}; this workspace has: {sorted(declared)}")
+        return _resource(name, entry)
+
 
 @dataclass(frozen=True)
 class Reach:

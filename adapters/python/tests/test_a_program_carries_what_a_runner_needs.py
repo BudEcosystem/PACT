@@ -26,7 +26,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from pact_adapters.interceptors import Chain  # noqa: E402
-from pact_adapters.ir import AgentSpec, ProgramSpec  # noqa: E402
+from pact_adapters.ir import AgentSpec, ProgramSpec, ResourceSpec  # noqa: E402
 from pact_adapters.loader import pact_binary  # noqa: E402
 from pact_adapters.programs import ProgramFuel, body_entry, size  # noqa: E402
 from pact_adapters.questions import NEEDS_PERMISSION, Shape, questions_for  # noqa: E402
@@ -79,6 +79,17 @@ def test_the_agents_own_programs_are_read_by_the_same_reader(document: dict[str,
 def test_a_name_the_workspace_does_not_carry_is_refused(document: dict[str, Any]) -> None:
     with pytest.raises(KeyError, match="no program named 'nope'"):
         ProgramSpec.from_document(document, "nope")
+
+
+def test_a_room_named_without_a_tool_is_read_as_a_tools_connect_reads_it(document: dict[str, Any]) -> None:
+    """WP-34: a `run-code` stage's `runs-in:` names a room no tool reaches; it is read by the
+    same reader, so a host sees the same kind, engines and consent question."""
+    (tool,) = AgentSpec.from_document(document, "desk", TREE).tools
+    assert tool.reaches is not None
+    room = ResourceSpec.from_document(document, tool.reaches.value)
+    assert room == tool.reaches.resource and room.kind == "sandbox"
+    with pytest.raises(KeyError, match="no resource named 'nope'"):
+        ResourceSpec.from_document(document, "nope")
 
 
 def test_a_size_is_read_the_way_the_schema_spells_it() -> None:

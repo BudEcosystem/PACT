@@ -8,11 +8,20 @@
 //! | Rule | ID | Fires when |
 //! |---|---|---|
 //! | `loader/code-calls-what-can-wait` | WF-33, second case | a `run-code` stage's `may-use:` names an agent, a workflow or a program that can stop and wait |
-//! | `loader/a-line-this-stage-never-reads` | WF-3 | `fuel:` beside a stage that runs no code (a loop's other stages, any workflow stage) |
+//! | `loader/a-line-this-stage-never-reads` | WF-3 | `fuel:` or `runs-in:` beside a stage that runs no code (a loop's other stages, any workflow stage) |
+//! | `loader/nothing-here-can-run-that-program` | WP-34 | a `run-code` stage's `runs-in:` names a resource that is not a locked room, or a room that cannot run `python` |
+//! | `loader/code-in-a-room-calls-nothing` | WP-34, F7 | a `run-code` stage writes `runs-in:` and names something in `may-use:` |
 //!
 //! `fuel:` itself is required on `run-code` by the schema (`needed-when:` on
 //! `stage.does`, A3), and WF-33's first case (`may-start:` without its two
 //! ceilings) is `teamwork.rs`'s.
+//!
+//! **Where the code runs** (`runs-in:`, WP-34, decision B2). Code that needs
+//! packages and calls nothing runs in the locked room the stage names, which a
+//! host binds to a sandbox; that room has no way back to the tools (F7), so a
+//! stage that names one names nothing to call. The room must be a `sandbox`
+//! that hosts `python`, the language the model writes, under the same rule id
+//! `programs.rs` gives a carried program and its room.
 //!
 //! **What "can wait" means** is read off the document and nothing else, and it
 //! errs towards waiting: a call refused here that would never have waited is a
@@ -65,12 +74,21 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
         for (stage, entry) in steps {
             let did = does(&entry.node).unwrap_or("");
             if did != RUN_CODE {
-                fuel_never_read(
+                code_lines_never_read(
                     &format!("'{loop_name}/{stage}' does `{did}`"),
                     &entry.node,
                     diags,
                 );
                 continue;
+            }
+            if let Some(room) = entry.node.get("runs-in") {
+                runs_in(
+                    document,
+                    &format!("{loop_name}/{stage}"),
+                    room,
+                    &entry.node,
+                    diags,
+                );
             }
             for named in entry.node.get("may-use").map(names).unwrap_or_default() {
                 let Some(name) = named.as_str().map(str::trim) else {
@@ -104,7 +122,7 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
         for (stage, node) in crate::waits::every_stage(&entry.node) {
             if does(node) != Some(RUN_CODE) {
                 // A workflow's `run-code` is WF-2's to refuse; one mistake, one message.
-                fuel_never_read(
+                code_lines_never_read(
                     &format!("'{flow}/{stage}', a workflow's stage,"),
                     node,
                     diags,
@@ -167,20 +185,106 @@ fn code_calls_what_can_wait(
     )
 }
 
-fn fuel_never_read(what: &str, stage: &Node, diags: &mut Diagnostics) {
-    let Some(entry) = stage.as_map().and_then(|m: &Map| m.get("fuel")) else {
+fn code_lines_never_read(what: &str, stage: &Node, diags: &mut Diagnostics) {
+    const LINES: [(&str, &str); 2] = [
+        (
+            "fuel",
+            "how long and how much the code a `run-code` stage writes may run",
+        ),
+        (
+            "runs-in",
+            "which locked room the code a `run-code` stage writes runs in",
+        ),
+    ];
+    for (line, says) in LINES {
+        let Some(entry) = stage.as_map().and_then(|m: &Map| m.get(line)) else {
+            continue;
+        };
+        diags.push(Diagnostic::error(
+            "loader/a-line-this-stage-never-reads",
+            entry.key_span.clone(),
+            format!(
+                "{what} and writes `{line}:`, which only a stage that does `run-code` reads, \
+                 so nothing ever reads this line."
+            ),
+            format!("Delete it. `{line}:` says {says}, and this stage runs no code."),
+        ));
+    }
+}
+
+/// `runs-in:` on the `run-code` stage `at`: a locked room that runs `python`,
+/// and a stage that calls nothing from it.
+fn runs_in(document: &Node, at: &str, room: &Node, stage: &Node, diags: &mut Diagnostics) {
+    let Some(name) = room.as_str().map(str::trim) else {
         return;
     };
+    // A name that is not a resource is the schema's to refuse (`names: resources`).
+    let Some(resource) = entry(document, "resources", name) else {
+        return;
+    };
+    let kind = resource.get("resource-kind").and_then(Node::as_str);
+    if kind != Some("sandbox") {
+        diags.push(Diagnostic::error(
+            "loader/nothing-here-can-run-that-program",
+            room.span.clone(),
+            format!(
+                "'{at}' runs its code in '{name}', which is {}.",
+                kind.map_or_else(|| "not a locked room".to_string(), |k| format!("a {k}"))
+            ),
+            "Point `runs-in:` at a resource whose `resource-kind:` is `sandbox`. Code runs \
+             in a locked room and nowhere else."
+                .to_string(),
+        ));
+        return;
+    }
+    let hosts = crate::programs::hosted_by(resource);
+    if !hosts.iter().any(|h| h == "python") {
+        diags.push(Diagnostic::error(
+            "loader/nothing-here-can-run-that-program",
+            room.span.clone(),
+            format!(
+                "'{at}' runs the code the model writes, which is `python`, in '{name}', which \
+                 hosts {}.",
+                if hosts.is_empty() {
+                    "nothing (it lists no `engines:`)".to_string()
+                } else {
+                    format!("only {}", hosts.join(", "))
+                }
+            ),
+            format!(
+                "Add `python` to `engines:` on `resources/{name}.yaml`, or point `runs-in:` at \
+                 a room that runs it."
+            ),
+        ));
+    }
+    let Some(listed) = stage.as_map().and_then(|m: &Map| m.get("may-use")) else {
+        return;
+    };
+    let called: Vec<&str> = names(&listed.node)
+        .into_iter()
+        .filter_map(|n| n.as_str().map(str::trim))
+        .collect();
+    if called.is_empty() {
+        return;
+    }
     diags.push(Diagnostic::error(
-        "loader/a-line-this-stage-never-reads",
-        entry.key_span.clone(),
+        "loader/code-in-a-room-calls-nothing",
+        listed.key_span.clone(),
         format!(
-            "{what} and writes `fuel:`, which only a stage that does `run-code` reads, so \
-             nothing ever reads this line."
+            "'{at}' runs its code in the locked room '{name}' and may use {}, and code in \
+             that room has no way back to anything outside it, so every call it made would \
+             fail.",
+            called
+                .iter()
+                .map(|c| format!("'{c}'"))
+                .collect::<Vec<_>>()
+                .join(", ")
         ),
-        "Delete it. `fuel:` says how long and how much the code a `run-code` stage writes \
-         may run, and this stage runs no code."
-            .to_string(),
+        format!(
+            "Take `may-use:` off this stage and make those calls in a stage of their own \
+             (`does: use-tools`) before or after it; or take `runs-in:` off, so the code runs \
+             where it can call them, without what only '{name}' has."
+        ),
     ));
 }
 

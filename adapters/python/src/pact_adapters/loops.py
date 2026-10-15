@@ -125,6 +125,11 @@ class Phase:
     #: the stage writes none — which the check refuses on `run-code` and
     #: reports as never read anywhere else.
     fuel: "ProgramFuel | None" = None
+    #: For a `does: run-code` stage, the locked room its code runs in, by
+    #: resource name (WP-34): a sandbox with what the code needs and no way
+    #: back to the tools, so such a stage names nothing in `may-use:`. "" when
+    #: the code runs where it can call what `may-use:` names.
+    runs_in: str = ""
 
     def instruction(self) -> str:
         """The extra wording for this stage, authored or built in."""
@@ -522,6 +527,7 @@ def _read_phase(loop_name: str, key: str, raw: Any) -> Phase:
         ),
         asks=str(raw.get("asks") or "").strip(),
         fuel=ProgramFuel.from_document(raw["fuel"]) if raw.get("fuel") is not None else None,
+        runs_in=str(raw.get("runs-in") or "").strip(),
     )
 
 
@@ -538,6 +544,8 @@ def _phase_to_mapping(p: Phase) -> dict[str, Any]:
         out["asks"] = p.asks
     if p.fuel is not None:
         out["fuel"] = p.fuel.to_document()
+    if p.runs_in:
+        out["runs-in"] = p.runs_in
     return out
 
 

@@ -4504,6 +4504,26 @@ groups:
           before it is stopped: `runs-for-at-most: 30s`, `memory-at-most: 256m`,
           and `when-it-runs-out:` to say what happens then. Required on
           `run-code`, and read nowhere else.
+      runs-in:
+        # WP-34 (decision B2): code that needs packages (statistics, SymPy,
+        # OR-Tools) and calls nothing runs in a sandbox the host binds, while
+        # code that calls tools runs where it can call them back. A carried
+        # program already says which room it runs in (its tool's `connect:`);
+        # a `run-code` stage names no program, so nothing could say which of a
+        # workspace's rooms its code needs. Read beside `run-code` only, and a
+        # stage that says it calls nothing (`code.rs`): such a room has no way
+        # back to the tools (F7).
+        type: text
+        names: resources
+        surface: S-EXEC
+        tier: expert
+        help: >
+          on `run-code`, which locked room the code runs in, by name — one of
+          the entries in `resources` whose `resource-kind:` is `sandbox` and
+          that can run `python`. Write it when the code needs what only that
+          room has, such as packages for statistics or algebra. Code in that
+          room calls nothing, so the stage names nothing in `may-use:`. Leave
+          it out and the code runs where it can call what `may-use:` names.
       # ── The workflow lines (02W §2.3). Which `does:` each belongs with is held
       # by `workflows.rs` (WF-3): a line written beside another `does:` is never
       # read, and saying so is the only honest thing to do with it.
