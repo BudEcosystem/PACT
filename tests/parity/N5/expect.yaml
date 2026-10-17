@@ -1,0 +1,11 @@
+# 02P N5: an MCP server the provider connects to is named: write a resource Bud connects to.
+row: N5
+says: 'an MCP server the provider connects to is named: write a resource Bud connects to'
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.NativeTool

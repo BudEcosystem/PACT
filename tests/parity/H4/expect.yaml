@@ -1,0 +1,5 @@
+# 02P H4: a deferred call's result is what a run is handed: nothing on an agent to import.
+row: H4
+says: 'a deferred call''s result is what a run is handed: nothing on an agent to import'
+import: none
+why: 'a deferred call''s result is what a run is handed: nothing on an agent to import'

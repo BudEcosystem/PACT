@@ -1,0 +1,10 @@
+# 02P A16: `end_strategy` is named: PACT's loop decides what happens to calls beside an answer.
+row: A16
+says: '`end_strategy` is named: PACT''s loop decides what happens to calls beside an answer'
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - end_strategy

@@ -1,0 +1,7 @@
+# 02P M8: an MCP server's sampling model is set on a live connection, never in an agent PACT can import.
+row: M8
+says: an MCP server's sampling model is set on a live connection, never in an agent PACT can
+  import
+import: none
+why: an MCP server's sampling model is set on a live connection, never in an agent PACT can
+  import

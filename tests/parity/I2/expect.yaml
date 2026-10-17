@@ -1,0 +1,5 @@
+# 02P I2: Logfire's MCP server and span evals are the host's: nothing on an agent to import.
+row: I2
+says: 'Logfire''s MCP server and span evals are the host''s: nothing on an agent to import'
+import: none
+why: 'Logfire''s MCP server and span evals are the host''s: nothing on an agent to import'

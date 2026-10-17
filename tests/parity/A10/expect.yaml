@@ -1,0 +1,15 @@
+# 02P A10: transport settings (timeout, headers, body, logit bias) are named.
+row: A10
+says: transport settings (timeout, headers, body, logit bias) are named
+import:
+  mapped:
+  - description
+  - instructions
+  - model_settings
+  - model_settings.temperature
+  - name
+  not-portable:
+  - model_settings.extra_body
+  - model_settings.extra_headers
+  - model_settings.logit_bias
+  - model_settings.timeout

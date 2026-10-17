@@ -1,0 +1,13 @@
+# 02P A13: `parallel_tool_calls` is `settings.parallel-tool-calls:`.
+row: A13
+says: '`parallel_tool_calls` is `settings.parallel-tool-calls:`'
+import:
+  mapped:
+  - description
+  - instructions
+  - model_settings
+  - model_settings.parallel_tool_calls
+  - name
+  not-portable: []
+export:
+  not-carried: []

@@ -1,0 +1,7 @@
+# 02P F1: Pydantic AI declares no input shape on an agent (files are handed to a run), so there is nothing to import into `accepts:`.
+row: F1
+says: Pydantic AI declares no input shape on an agent (files are handed to a run), so there
+  is nothing to import into `accepts:`
+import: none
+why: Pydantic AI declares no input shape on an agent (files are handed to a run), so there is
+  nothing to import into `accepts:`

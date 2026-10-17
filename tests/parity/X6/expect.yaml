@@ -1,0 +1,12 @@
+# 02P X6: the harness's memory is named, with the PACT line to write.
+row: X6
+says: the harness's memory is named, with the PACT line to write
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.Memory
+  - instructions.added-by-capabilities-or-toolsets

@@ -1,0 +1,6 @@
+# 02P A11: `minimal` and `xhigh` thinking are rounded to `low` and `high`, and the rounding is named.
+name: desk
+description: Answers order questions.
+instructions: Answer briefly.
+capabilities:
+- Thinking: xhigh

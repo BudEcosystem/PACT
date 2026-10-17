@@ -1,0 +1,7 @@
+# 02P P3: an MCP server's resources, prompts and elicitation are the server's, read over a live connection: nothing on an agent to import.
+row: P3
+says: 'an MCP server''s resources, prompts and elicitation are the server''s, read over a live
+  connection: nothing on an agent to import'
+import: none
+why: 'an MCP server''s resources, prompts and elicitation are the server''s, read over a live
+  connection: nothing on an agent to import'

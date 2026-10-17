@@ -1,0 +1,11 @@
+# 02P T8: a tool's `prepare=` function is named with the tool it is on.
+row: T8
+says: a tool's `prepare=` function is named with the tool it is on
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  - toolsets
+  not-portable:
+  - prepare

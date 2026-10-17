@@ -1,0 +1,5 @@
+# 02P X3: a capability loaded on demand is loaded by a run: nothing on an agent to import.
+row: X3
+says: 'a capability loaded on demand is loaded by a run: nothing on an agent to import'
+import: none
+why: 'a capability loaded on demand is loaded by a run: nothing on an agent to import'

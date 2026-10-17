@@ -561,6 +561,33 @@ def test_the_conversation_the_run_had_is_readable_off_the_result(
     assert result.new_messages(), "nothing on this result is new, on a run with no history"
 
 
+def test_the_sdks_result_type_is_built_once_and_not_on_every_run(
+    pact_agent: Any, spec: AgentSpec, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The result is validated from its public shape (no `_state` is written), and the
+    validator that takes is about a tenth of a second of schema building: built on
+    every run, every run would pay it."""
+    from pact_adapters import pact_agent as module
+
+    built: list[Any] = []
+    real = module.TypeAdapter
+
+    def counted(*args: Any, **kwargs: Any) -> Any:
+        built.append(args)
+        return real(*args, **kwargs)
+
+    module._run_result.cache_clear()
+    monkeypatch.setattr(module, "TypeAdapter", counted)
+    for _ in range(2):
+        agent = pact_agent.for_spec(
+            replace(spec, loop=Loop.from_library(STANDARD)),
+            transport=PydanticAITransport(Script([Turn(ANSWERED)])),
+            tool_impls={},
+        )
+        assert agent.run_sync(ASKED).output
+    assert len(built) == 1, f"the result's validator was built {len(built)} times for two runs"
+
+
 # ─────────────────────────────── a park is not a halt, and leaves another way
 
 

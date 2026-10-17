@@ -1,0 +1,5 @@
+# 02P M9: HTTP retries are the transport's: nothing on an agent to import.
+row: M9
+says: 'HTTP retries are the transport''s: nothing on an agent to import'
+import: none
+why: 'HTTP retries are the transport''s: nothing on an agent to import'

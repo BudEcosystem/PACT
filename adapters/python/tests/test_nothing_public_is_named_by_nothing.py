@@ -147,7 +147,7 @@ HOST_API: dict[str, str] = {
     # does not have: a live SDK object, or somewhere to put a file. Each is
     # exercised by `test_both_directions_of_the_one_framework_that_writes_agents
     # _down.py`, so "no internal caller" here is not "no caller".
-    "pydantic_ai_interop.from_pydantic_ai_agent": (
+    "pydantic_ai_live.from_pydantic_ai_agent": (
         "takes a live `pydantic_ai.Agent`. Nothing in `src/` can call it because "
         "nothing in `src/` HAS one — the caller built it by importing their own "
         "module in their own process, which is the whole reason this door exists "
@@ -169,14 +169,15 @@ HOST_API: dict[str, str] = {
         "`build_agent` is what calls `run`. PACT's own runs enforce these "
         "ceilings in `limits.py`, which is why this is not a second enforcer"
     ),
-    "pydantic_ai_interop.tool_files_for": (
+    "pydantic_ai_live.tool_files_for": (
         "returns the BODY of one `tools/<name>.yaml` per tool a live agent "
-        "holds. It is not called here because writing an author's files is not "
+        "holds (`pydantic_ai_trees.imported_agent` reads them once with the agent, "
+        "through `pydantic_ai_live.imported`). It is not called here because writing an author's files is not "
         "something an adapter may do — P-1 says an adapter is handed a document, "
         "and `exploding` is the one module whose job is to create author files. "
         "The host writes what this returns, or a person reads it"
     ),
-    "pydantic_ai_interop.resource_file_for": (
+    "pydantic_ai_live.resource_file_for": (
         "returns the BODY of the one `resources/<name>.yaml` those tool files "
         "connect to, and its endpoint is a name only the HOST knows — the "
         "platform team publishes it and nothing in a Pydantic AI agent carries "

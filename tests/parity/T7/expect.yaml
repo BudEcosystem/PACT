@@ -1,0 +1,11 @@
+# 02P T7: metadata set on a tool's definition is named.
+row: T7
+says: metadata set on a tool's definition is named
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  - toolsets
+  not-portable:
+  - toolsets[1].metadata

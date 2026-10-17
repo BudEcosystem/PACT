@@ -23,3 +23,7 @@ import:
   - instructions
   - name
   not-portable: []
+# S2 and S3: what its export cannot carry, and whether a spec file brings the agent back whole.
+export:
+  not-carried: []
+  round-trip: the same digest

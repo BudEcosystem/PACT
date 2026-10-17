@@ -1,0 +1,6 @@
+# 02P A23: an `AgentSpec` file's own `$schema` and `instrument` are named.
+$schema: ./agent_schema.json
+name: desk
+description: Answers order questions.
+instructions: Answer briefly.
+instrument: true

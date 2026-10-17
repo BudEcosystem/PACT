@@ -1,0 +1,5 @@
+# 02P C7: a `CachePoint` is a part of one request: nothing on an agent to import.
+row: C7
+says: 'a `CachePoint` is a part of one request: nothing on an agent to import'
+import: none
+why: 'a `CachePoint` is a part of one request: nothing on an agent to import'

@@ -1,0 +1,10 @@
+# 02P A9: settings made by a function each step are named, not carried.
+row: A9
+says: settings made by a function each step are named, not carried
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - model_settings

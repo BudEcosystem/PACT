@@ -17,3 +17,10 @@ import:
   - name
   - toolsets
   not-portable: []
+# S2 and S3: what its export cannot carry, and whether a spec file brings the agent back whole.
+export:
+  not-carried:
+  - limits
+  - 'resources (resource-kind: mcp-server)'
+  - uses
+  round-trip: a spec file holds no ceilings and no tools

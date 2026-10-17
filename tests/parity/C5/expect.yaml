@@ -1,0 +1,11 @@
+# 02P C5: the harness's compaction is named, with the PACT line to write.
+row: C5
+says: the harness's compaction is named, with the PACT line to write
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.SlidingWindowCompaction

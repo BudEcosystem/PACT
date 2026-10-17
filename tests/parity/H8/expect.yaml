@@ -1,0 +1,11 @@
+# 02P H8: the harness's tool-call judge is named, with the PACT line to write.
+row: H8
+says: the harness's tool-call judge is named, with the PACT line to write
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.ToolCallJudge

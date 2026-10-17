@@ -1,0 +1,5 @@
+# 02P A24: `to_cli`, `to_web` and `clai` serve an agent, they are not part of it: nothing to import.
+row: A24
+says: '`to_cli`, `to_web` and `clai` serve an agent, they are not part of it: nothing to import'
+import: none
+why: '`to_cli`, `to_web` and `clai` serve an agent, they are not part of it: nothing to import'

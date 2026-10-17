@@ -1,0 +1,11 @@
+# 02P N6: the harness's advisor is named, with the PACT line to write.
+row: N6
+says: the harness's advisor is named, with the PACT line to write
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.Advisor

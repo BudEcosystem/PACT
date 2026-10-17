@@ -1,0 +1,5 @@
+# 02P P2: `mcp.json` is read by the `mcp.json` importer.
+row: P2
+says: '`mcp.json` is read by the `mcp.json` importer'
+import: none
+later: WP-39

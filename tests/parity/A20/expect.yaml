@@ -1,0 +1,5 @@
+# 02P A20: `iter` steps through Pydantic AI's own loop, which PACT does not run: nothing to import.
+row: A20
+says: '`iter` steps through Pydantic AI''s own loop, which PACT does not run: nothing to import'
+import: none
+why: '`iter` steps through Pydantic AI''s own loop, which PACT does not run: nothing to import'

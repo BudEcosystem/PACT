@@ -14,3 +14,10 @@ import:
   - instructions
   - name
   not-portable: []
+# S2 and S3: what its export cannot carry, and whether a spec file brings the agent back whole.
+export:
+  not-carried:
+  - instructions.holes
+  - remembers
+  round-trip: a spec file has nothing to fill a remembered fact from, so `remembers:` does not
+    come back

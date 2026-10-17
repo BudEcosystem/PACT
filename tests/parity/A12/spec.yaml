@@ -1,0 +1,6 @@
+# 02P A12: a `tool_choice` naming several tools is named, not cut to its first.
+name: desk
+description: Answers order questions.
+instructions: Answer briefly.
+model_settings:
+  tool_choice: [lookup, refund]

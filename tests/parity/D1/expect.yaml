@@ -1,0 +1,9 @@
+# 02P D1: each durable engine needs its own package (`temporalio`, `dbos`, `prefect`), none of which this suite installs; the registry's `TemporalDurability`, `DBOSDurability` and `PrefectDurability` rows are the named loss, held by S4.
+row: D1
+says: each durable engine needs its own package (`temporalio`, `dbos`, `prefect`), none of which
+  this suite installs; the registry's `TemporalDurability`, `DBOSDurability` and `PrefectDurability`
+  rows are the named loss, held by S4
+import: none
+why: each durable engine needs its own package (`temporalio`, `dbos`, `prefect`), none of which
+  this suite installs; the registry's `TemporalDurability`, `DBOSDurability` and `PrefectDurability`
+  rows are the named loss, held by S4

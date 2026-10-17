@@ -1,0 +1,5 @@
+# 02P K3: harness agent folders are read by the agent-folder importer.
+row: K3
+says: harness agent folders are read by the agent-folder importer
+import: none
+later: WP-39

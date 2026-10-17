@@ -1,0 +1,5 @@
+# 02P E10: `generate_dataset` writes cases: nothing on an agent to import.
+row: E10
+says: '`generate_dataset` writes cases: nothing on an agent to import'
+import: none
+why: '`generate_dataset` writes cases: nothing on an agent to import'

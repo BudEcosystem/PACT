@@ -1,0 +1,10 @@
+# 02P M4: a fallback model's own test for falling back has no public read, and the import says so.
+row: M4
+says: a fallback model's own test for falling back has no public read, and the import says so
+import:
+  mapped:
+  - description
+  - instructions
+  - model
+  - name
+  not-portable: []

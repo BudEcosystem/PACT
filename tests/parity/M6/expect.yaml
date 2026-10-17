@@ -1,0 +1,13 @@
+# 02P M6: a decision model is a model: its id is carried.
+row: M6
+says: 'a decision model is a model: its id is carried'
+import:
+  mapped:
+  - description
+  - instructions
+  - model
+  - name
+  not-portable: []
+export:
+  not-carried:
+  - model

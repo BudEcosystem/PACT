@@ -1,0 +1,12 @@
+# 02P K5: the harness's planning is named, with the PACT loop to write.
+row: K5
+says: the harness's planning is named, with the PACT loop to write
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.Planning
+  - instructions.added-by-capabilities-or-toolsets

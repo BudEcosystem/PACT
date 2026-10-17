@@ -18,7 +18,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from pact_adapters import pydantic_ai_interop  # noqa: E402
+from pact_adapters import pydantic_ai_interop, pydantic_ai_live  # noqa: E402
 from pact_adapters.pydantic_ai_registry import (  # noqa: E402
     KINDS,
     PATH,
@@ -81,8 +81,8 @@ def test_the_importers_and_the_exporter_read_their_words_from_the_registry() -> 
     assert {k: r.pact for k, r in spec.items() if r.pact} == m._SPEC_MAPS
     assert {k: r.why for k, r in spec.items() if r.why} == m._SPEC_NOT_PORTABLE
     assert {k: r.left for k, r in spec.items() if r.left} == m._SPEC_SUPPLIES
-    assert {k: r.pact for k, r in agent.items() if r.pact} == m._AGENT_MAPS
-    assert {k: r.why for k, r in agent.items() if r.why} == m._AGENT_NOT_PORTABLE
+    assert {k: r.pact for k, r in agent.items() if r.pact} == pydantic_ai_live._AGENT_MAPS
+    assert {k: r.why for k, r in agent.items() if r.why} == pydantic_ai_live._AGENT_NOT_PORTABLE
     assert {k: r.why for k, r in reg.through("settings").items()} == m._SETTINGS_NOT_PORTABLE
     assert {
         k.split(".", 1)[1]: r.spec_file for k, r in reg.fields.items() if r.spec_file
@@ -120,7 +120,7 @@ def test_a_capability_with_no_pact_spelling_is_a_named_loss_through_both_doors()
     from pydantic_ai.capabilities import ReinjectSystemPrompt
 
     live = agent_mod.Agent("test", capabilities=[ReinjectSystemPrompt()])
-    _, by_object = pydantic_ai_interop.from_pydantic_ai_agent(live)
+    _, by_object = pydantic_ai_live.from_pydantic_ai_agent(live)
     assert by_object.not_portable["capabilities.ReinjectSystemPrompt"] == said
 
 

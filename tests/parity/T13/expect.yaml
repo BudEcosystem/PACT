@@ -1,0 +1,11 @@
+# 02P T13: a toolset a function builds per run is named, and none of its tools is invented.
+row: T13
+says: a toolset a function builds per run is named, and none of its tools is invented
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - toolsets
+  - toolsets[1]

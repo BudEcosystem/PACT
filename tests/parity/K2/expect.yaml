@@ -1,0 +1,5 @@
+# 02P K2: a hand-off sequenced in application code is not on any agent: nothing to import.
+row: K2
+says: 'a hand-off sequenced in application code is not on any agent: nothing to import'
+import: none
+why: 'a hand-off sequenced in application code is not on any agent: nothing to import'

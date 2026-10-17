@@ -1,0 +1,5 @@
+# 02P S2: stream events come from one run: nothing on an agent to import.
+row: S2
+says: 'stream events come from one run: nothing on an agent to import'
+import: none
+why: 'stream events come from one run: nothing on an agent to import'

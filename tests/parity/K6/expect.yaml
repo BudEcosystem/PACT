@@ -1,0 +1,12 @@
+# 02P K6: the harness's coder stack is named: PACT ships templates.
+row: K6
+says: 'the harness''s coder stack is named: PACT ships templates'
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.RepoContext
+  - instructions.added-by-capabilities-or-toolsets

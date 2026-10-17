@@ -18,3 +18,10 @@ import:
   - name
   - toolsets
   not-portable: []
+# S2 and S3: what its export cannot carry, and whether a spec file brings the agent back whole.
+export:
+  not-carried:
+  - 'resources (resource-kind: mcp-server)'
+  - uses
+  round-trip: 'a spec file holds no tools, so `uses:` and the server they reach do not come
+    back (the live door holds them: `tests/test_both_directions_of_the_one_framework_that_writes_agents_down.py`)'

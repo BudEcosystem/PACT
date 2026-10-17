@@ -51,7 +51,6 @@ from pact_adapters.loops import STANDARD, Loop  # noqa: E402
 from pact_adapters.pydantic_ai_interop import (  # noqa: E402
     _output_type_for,
     _takes_as_schema,
-    _toolsets_to_pact,
     build_agent,
     pydantic_ai_model_id,
 )
@@ -360,8 +359,8 @@ def test_the_toolsets_name_the_authors_tools_and_can_be_read_without_a_run(
 ) -> None:
     """Read back by the importer this repository already has, because that is who reads it.
 
-    `_toolsets_to_pact` is what `from_pydantic_ai_agent` uses to see what a live
-    agent holds, and it is deliberately STATIC: a toolset whose tools are
+    `pydantic_ai_reading.read_agent` is what `from_pydantic_ai_agent` uses to see
+    what a live agent holds, and it reads each toolset's own `get_tools`: a toolset whose tools are
     resolved per run against a `RunContext` has no list to read, and it reports
     that rather than carrying four of nine tools. So a `PactAgent` whose tools
     are only knowable inside a run imports back as a PACT document with no
@@ -372,13 +371,15 @@ def test_the_toolsets_name_the_authors_tools_and_can_be_read_without_a_run(
     the mode table is checked against `_output_type_for`: it is the schema the
     model is shown, and two builders of it is two things the model is shown.
     """
-    agent = held(spec)
-    uses, tools, notes = _toolsets_to_pact(agent)
-    assert uses == sorted(t.name for t in spec.tools) == ["payments", "zendesk"]
-    assert notes == {}, "a tool nobody can see without a run is a tool that imports back as nothing"
+    from pact_adapters.pydantic_ai_reading import read_agent
+
+    read = read_agent(held(spec))
+    (leaf,) = [leaf for leaf in read.leaves if leaf.tools]
+    assert sorted(leaf.tools) == sorted(t.name for t in spec.tools) == ["payments", "zendesk"]
+    assert (read.losses, read.unknown) == ({}, {}), "a tool nobody can see without a run imports back as nothing"
     for tool in spec.tools:
-        assert tools[tool.name]["description"] == tool.description
-        assert tools[tool.name]["parameters"] == _takes_as_schema(tool.parameters)
+        assert leaf.tools[tool.name].description == tool.description
+        assert leaf.tools[tool.name].parameters_json_schema == _takes_as_schema(tool.parameters)
 
 
 def test_an_event_stream_handler_is_the_callers_own_and_none_when_nobody_passed_one(
@@ -410,13 +411,13 @@ def test_the_toolset_is_named_and_a_document_with_no_tools_offers_none(
 ) -> None:
     """A toolset with no id, or one invented per run, imports back as nothing.
 
-    `_toolsets_to_pact` reads a live agent's toolsets by walking them and
+    `pydantic_ai_reading` reads a live agent's toolsets by walking them and
     reporting the ones it cannot; the id is how a reader of a mixed agent tells
     the tools that came out of a PACT document from the ones a host bound
     itself. And an agent whose author wrote no `uses:` at all must offer NO
     toolset rather than an empty one: an empty `ExternalToolset` is a claim that
     this agent has tools and none of them are visible, which is the exact report
-    `_toolsets_to_pact` reserves for a toolset it could not read.
+    the reader reserves for a toolset it could not read.
     """
     agent = held(spec)
     assert [getattr(t, "id", None) for t in agent.toolsets] == ["pact"]

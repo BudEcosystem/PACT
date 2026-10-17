@@ -29,7 +29,7 @@ author did not write.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -72,32 +72,72 @@ class Unfilled(KeyError):
         return str(self.args[0])
 
 
-def _spans(text: str) -> list[tuple[int, int, Hole | None]]:
-    """`(start, end, hole)` for every hole, and `(start, end, None)` for every
-    escaped `\\{{` (from its backslash to the end of its braces), in order.
+def _scan(text: str) -> Iterator[tuple[int, int, "str | None"]]:
+    """The loader's scan, step for step (`holes.rs::scan`), and the one scan here.
 
-    The loader's scan, step for step (`holes.rs::scan`).
+    Yields `(start, end, name)` for every `{{name}}` (a name of the characters a hole's
+    name may hold, in either namespace or none), `(start, end, None)` for every escaped
+    `\\{{` (from its backslash to the end of its braces), and `(start, end, "")` for a
+    `{{...}}` whose inside is no name (a Handlebars helper, a JSON example), past whose
+    `{{` only the scan goes on, as the loader's does.
     """
-    out: list[tuple[int, int, Hole | None]] = []
     at = 0
     while (open_ := text.find("{{", at)) != -1:
         if open_ > 0 and text[open_ - 1] == "\\":
-            out.append((open_ - 1, open_ + 2, None))
+            yield open_ - 1, open_ + 2, None
             at = open_ + 2
             continue
         close = text.find("}}", open_ + 2)
         if close == -1:
-            break
+            return
         inner = text[open_ + 2 : close].strip()
         if inner and all(c in _NAME_CHARS for c in inner):
-            namespace, _, name = inner.partition(".")
-            # A name in neither namespace is the author's own braces: text.
-            if namespace in (RUN_INPUTS, REMEMBERS):
-                out.append((open_, close + 2, Hole(namespace, name)))
+            yield open_, close + 2, inner
             at = close + 2
         else:
+            yield open_, close + 2, ""
             at = open_ + 2
+
+
+def _hole(name: str) -> "Hole | None":
+    namespace, _, rest = name.partition(".")
+    # A name in neither namespace is the author's own braces: text.
+    return Hole(namespace, rest) if namespace in (RUN_INPUTS, REMEMBERS) else None
+
+
+def _spans(text: str) -> list[tuple[int, int, Hole | None]]:
+    """`(start, end, hole)` for every hole, and `(start, end, None)` for every
+    escaped `\\{{`, in order (`_scan`)."""
+    out: list[tuple[int, int, Hole | None]] = []
+    for start, end, name in _scan(text):
+        if name is None:
+            out.append((start, end, None))
+        elif name and (hole := _hole(name)) is not None:
+            out.append((start, end, hole))
     return out
+
+
+def rewritten(text: str, swap: "Callable[[str], str | None]") -> str:
+    """`text` with each `{{<name>}}` (a name of the characters a hole's name may hold, in
+    either namespace or none) replaced by `swap(name)`, or left as written when it gives
+    `None`; an escaped `\\{{` is left as written. The scan is the loader's (`_scan`), so a
+    template whose braces cross the two dialects (`{{brand}}` in a Pydantic AI spec,
+    `{{run-inputs.brand}}` in PACT) is rewritten exactly where a hole would be read."""
+    parts: list[str] = []
+    at = 0
+    for start, end, name in _scan(text):
+        if name and (said := swap(name)) is not None:
+            parts.append(text[at:start] + said)
+            at = end
+    parts.append(text[at:])
+    return "".join(parts)
+
+
+def templates_in(text: str) -> tuple[str, ...]:
+    """Every `{{...}}` in `text` that is neither a hole nor escaped, as written, in order, each
+    once: braces a template language would fill, which reach a PACT model as text."""
+    found = (text[start:end] for start, end, name in _scan(text) if name == "" or (name and not _hole(name)))
+    return tuple(dict.fromkeys(found))
 
 
 def holes_in(text: str) -> tuple[Hole, ...]:

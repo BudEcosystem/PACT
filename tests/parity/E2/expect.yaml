@@ -1,0 +1,5 @@
+# 02P E2: an evaluator in a dataset is read by the pydantic-evals importer.
+row: E2
+says: an evaluator in a dataset is read by the pydantic-evals importer
+import: none
+later: WP-39

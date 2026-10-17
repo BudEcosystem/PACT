@@ -77,3 +77,25 @@ jobs:
         run: |
           uv tool install --with mkdocs-material mkdocs
           mkdocs build --strict
+
+  newest-pydantic-ai:
+    # The importer and exporter held on the newest Pydantic AI 2.x as well as on the locked
+    # one `everything` runs: a release that adds a capability, a setting or a message part
+    # fails S4 with the registry row to write, and one that moves a public read fails the
+    # live reader's tests. One script, as above.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: The newest Pydantic AI 2.x
+        run: ./scripts/test-newest-pydantic-ai.sh

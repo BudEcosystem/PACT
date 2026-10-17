@@ -1,0 +1,11 @@
+# 02P A15: a tool timeout is named with the tool it is on.
+row: A15
+says: a tool timeout is named with the tool it is on
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  - toolsets
+  not-portable:
+  - tool_timeout

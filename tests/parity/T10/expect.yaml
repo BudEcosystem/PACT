@@ -1,0 +1,7 @@
+# 02P T10: each common tool needs its own client package (`markdownify`, `ddgs`, `tavily`, `exa`), none of which this suite installs; a common tool is a function tool and imports as T1's do.
+row: T10
+says: each common tool needs its own client package (`markdownify`, `ddgs`, `tavily`, `exa`),
+  none of which this suite installs; a common tool is a function tool and imports as T1's do
+import: none
+why: each common tool needs its own client package (`markdownify`, `ddgs`, `tavily`, `exa`),
+  none of which this suite installs; a common tool is a function tool and imports as T1's do

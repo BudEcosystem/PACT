@@ -1,0 +1,11 @@
+# 02P N7: a provider's own tool is named.
+row: N7
+says: a provider's own tool is named
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.NativeTool

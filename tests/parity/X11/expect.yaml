@@ -1,0 +1,11 @@
+# 02P X11: a runtime capability is named.
+row: X11
+says: a runtime capability is named
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.RaiseContentFilterError

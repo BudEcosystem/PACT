@@ -279,16 +279,20 @@ def test_the_harness_refuses_a_run_missing_a_value_a_hole_needs() -> None:
 
 
 def test_an_exported_spec_file_says_its_holes_will_reach_the_model_unfilled() -> None:
-    """A spec file is read with no run. The words went out with their braces and
-    the report, which exists to name every loss, said `instructions` was carried."""
+    """A spec file is read with no run of PACT's. A run-input hole becomes Pydantic AI's
+    own `{{name}}` template, filled from the run's deps (02P A4, WP-38); a remembered fact
+    has no deps to come from, so it goes out as literal braces (escaped, so Handlebars
+    reads it as text) and the report says it will reach the model unfilled."""
     import yaml
 
     from pact_adapters.pydantic_ai_interop import to_pydantic_ai_spec
 
     written, report = to_pydantic_ai_spec({"agents": {"writer": yaml.safe_load(AGENT)}}, "writer")
-    assert "{{ run-inputs.brand }}" in written["instructions"]
-    assert "`{{run-inputs.brand}}`" in report.not_carried["instructions.holes"]
+    assert "Write in this voice: {{brand}}" in written["instructions"]
+    assert "\\{{remembers.tone}}" in written["instructions"]
+    assert "`{{run-inputs.brand}}`" not in report.not_carried["instructions.holes"]
     assert "`{{remembers.tone}}`" in report.not_carried["instructions.holes"]
-    assert "build_agent(spec, run_inputs=" in report.not_carried["description.holes"]
+    assert written["description"] == "Writes listings for {{brand}}"
+    assert "description.holes" not in report.not_carried
     plain, quiet = to_pydantic_ai_spec({"agents": {"a": {"instructions": "Help."}}}, "a")
     assert not [k for k in quiet.not_carried if k.endswith(".holes")]

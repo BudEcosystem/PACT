@@ -333,6 +333,7 @@ pact-import — turn a framework's own artifact into a PACT agent
 
 USAGE:
     pact-import FILE [--as a2a-card|anthropic-request|pydantic-ai-spec]
+    pact-import FILE --as pydantic-ai-spec --out DIR
     pact-import FILE --as openapi [--out DIR]
 
 Prints the agent as YAML, then the ImportReport: in plain words first, then
@@ -350,10 +351,13 @@ that cannot be undone until a person decides.
 `pydantic-ai-spec` reads a Pydantic AI agent spec — the YAML or JSON that
 `Agent.from_file()` loads. It is the one source here that is a real agent
 SPECIFICATION rather than a facade or a single request, so what comes back is a
-working agent short of its ceilings, policy and tools. A Pydantic AI agent
-defined in Python instead has no file to read: hand the live object to
-`pact_adapters.pydantic_ai_interop.from_pydantic_ai_agent()` from your own
-process, which reads the object and still executes nothing of yours.
+working agent short of its ceilings, policy and tools. With `--out DIR`, a
+PACT tree, it writes the agent into `DIR/agents/<name>.yaml` instead
+(`pact_adapters.pydantic_ai_trees`); a file already there with other words is
+refused and nothing is written. A Pydantic AI agent defined in Python instead
+has no file to read: hand the live object to
+`pact_adapters.pydantic_ai_trees.imported_agent()` from your own process, which
+reads the object through Pydantic AI's public API and runs no tool of yours.
 """
 
 
@@ -400,6 +404,25 @@ def _openapi(document: Mapping[str, Any], out: "str | None") -> int:
     return 1 if report.silent_drops else 0
 
 
+def _into(spec: Mapping[str, Any], out: str) -> int:
+    """`--as pydantic-ai-spec --out DIR`: the agent written into the tree, then the report."""
+    import sys
+
+    from .openapi import NotImported, write_into
+    from .pydantic_ai_trees import imported_agent
+
+    imported = imported_agent(spec)
+    try:
+        written = write_into(Path(out), imported)
+    except NotImported as trouble:
+        sys.stderr.write(f"error: {trouble}\n")
+        return 1
+    sys.stdout.write(f"Wrote {len(written)} file(s) into {out}: {', '.join(written) or 'none new'}.\n")
+    report = imported.report
+    sys.stdout.write("\n" + report.in_plain_words() + "\n\n" + report.in_words() + "\n")
+    return 1 if report.silent_drops else 0
+
+
 #: What each `--as` reads, so the refusal can name them.
 READERS = {
     "a2a-card": from_a2a_card,
@@ -434,8 +457,11 @@ def main(argv: "list[str] | None" = None) -> int:
         at = args.index("--out")
         out = args[at + 1] if at + 1 < len(args) else ""
         del args[at : at + 2]
-        if kind != "openapi" or not out:
-            sys.stderr.write("error: `--out DIR` goes with `--as openapi`\n  fix: name the tree to write into\n")
+        if kind not in ("openapi", "pydantic-ai-spec") or not out:
+            sys.stderr.write(
+                "error: `--out DIR` goes with `--as openapi` or `--as pydantic-ai-spec`\n"
+                "  fix: name the tree to write into\n"
+            )
             return 1
     if not args:
         sys.stderr.write("error: no file was given\n  fix: name one\n")
@@ -464,6 +490,8 @@ def main(argv: "list[str] | None" = None) -> int:
 
     if kind == "openapi":
         return _openapi(artifact, out)
+    if out:
+        return _into(artifact, out)
     agent, report = READERS[kind](artifact)
 
     sys.stdout.write(yaml.safe_dump(agent, sort_keys=False, allow_unicode=True))

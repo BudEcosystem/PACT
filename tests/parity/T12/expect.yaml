@@ -1,0 +1,13 @@
+# 02P T12: tools behind wrappers are read: prefixes, renames, filters and approval, each named where it changes something.
+row: T12
+says: 'tools behind wrappers are read: prefixes, renames, filters and approval, each named where
+  it changes something'
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  - requires_approval
+  - toolsets
+  not-portable:
+  - toolsets[1][1].filter

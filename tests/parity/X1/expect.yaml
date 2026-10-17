@@ -1,0 +1,12 @@
+# 02P X1: a capability combined from others is read through, each one named.
+row: X1
+says: a capability combined from others is read through, each one named
+import:
+  mapped:
+  - capabilities
+  - capabilities.Thinking
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities.ToolSearch

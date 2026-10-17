@@ -1,0 +1,5 @@
+# 02P S4: the AG-UI adapter serves a run: nothing on an agent to import.
+row: S4
+says: 'the AG-UI adapter serves a run: nothing on an agent to import'
+import: none
+why: 'the AG-UI adapter serves a run: nothing on an agent to import'

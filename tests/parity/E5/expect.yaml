@@ -1,0 +1,5 @@
+# 02P E5: `HasMatchingSpan` in a dataset is read by the pydantic-evals importer.
+row: E5
+says: '`HasMatchingSpan` in a dataset is read by the pydantic-evals importer'
+import: none
+later: WP-39

@@ -416,6 +416,343 @@ capabilities:
     outcome: loss
     rows: [C4]
     why: *provider-compaction
+  # Pydantic AI 2.57 (the latest 2.x when WP-38 ran the suite on it): one capability and
+  # its `ModelSettings` key, below under `settings.cache`. Named so the suite holds on both.
+  Caching:
+    outcome: loss
+    rows: [C7]
+    why: &prompt-caching >-
+      the provider keeping the stable start of a prompt to read again more cheaply (a
+      fact about one provider's pricing and the request, not about the agent). PACT
+      writes no cache points; the host's model binding decides whether a provider caches
+
+  # ── pydantic-ai-harness 0.54 (02P §4.1): read only to recognise a live agent's
+  # capabilities. None is translated yet; each is a named loss naming the PACT
+  # construct to write instead.
+  CodeMode:
+    outcome: loss
+    rows: [X4]
+    why: >-
+      the harness's `CodeMode`: model-written code run in a sandbox. Write a `run-code` stage (`does: run-code`, with `fuel:` and `may-use:`)
+  DynamicWorkflow:
+    outcome: loss
+    rows: [K4]
+    why: >-
+      the harness's `DynamicWorkflow`: helpers the model brings in while it runs. Write `teamwork.may-start:` with `limits.starts-at-most:`
+  Skills:
+    outcome: loss
+    rows: [X5]
+    why: >-
+      the harness's `Skills`: Agent Skills folders. Write each as `skills/<name>/SKILL.md` and name it on `skills:`
+  SubAgents:
+    outcome: loss
+    rows: [K3]
+    why: >-
+      the harness's `SubAgents`: subagents it hands tasks to. Write each as an agent and name them on `team:`
+  DelegationReports:
+    outcome: loss
+    rows: [K3]
+    why: >-
+      the harness's `DelegationReports`: subagents it hands tasks to. Write each as an agent and name them on `team:`
+  Planning:
+    outcome: loss
+    rows: [K5]
+    why: >-
+      the harness's `Planning`: a plan made before the work. Write `loop: pact:loop/plan-then-do`
+  Memory:
+    outcome: loss
+    rows: [X6]
+    why: >-
+      the harness's `Memory`: what the agent keeps between runs. Write a named memory (`remembers:`)
+  ConversationSearch:
+    outcome: loss
+    rows: [X6]
+    why: >-
+      the harness's `ConversationSearch`: a search over the harness's own records or docs, which PACT has no home for. Give the agent `knowledge:` it may read instead
+  RepoContext:
+    outcome: loss
+    rows: [X6]
+    why: >-
+      the harness's `RepoContext`: a search over the harness's own records or docs, which PACT has no home for. Give the agent `knowledge:` it may read instead
+  PydanticAIDocs:
+    outcome: loss
+    rows: [X6]
+    why: >-
+      the harness's `PydanticAIDocs`: a search over the harness's own records or docs, which PACT has no home for. Give the agent `knowledge:` it may read instead
+  PyaiDocs:
+    outcome: loss
+    rows: [X6]
+    why: >-
+      the harness's `PyaiDocs`: a search over the harness's own records or docs, which PACT has no home for. Give the agent `knowledge:` it may read instead
+  InputGuardrail:
+    outcome: loss
+    rows: [X7]
+    why: >-
+      the harness's `InputGuardrail`: a guard around what goes in and out. Write it as an interceptor sentence, or what to hide in `redaction.yaml`
+  OutputGuardrail:
+    outcome: loss
+    rows: [X7]
+    why: >-
+      the harness's `OutputGuardrail`: a guard around what goes in and out. Write it as an interceptor sentence, or what to hide in `redaction.yaml`
+  ToolGuardrail:
+    outcome: loss
+    rows: [X7]
+    why: >-
+      the harness's `ToolGuardrail`: a guard around what goes in and out. Write it as an interceptor sentence, or what to hide in `redaction.yaml`
+  PromptInjectionDefender:
+    outcome: loss
+    rows: [X7]
+    why: >-
+      the harness's `PromptInjectionDefender`: a guard around what goes in and out. Write it as an interceptor sentence, or what to hide in `redaction.yaml`
+  RepairToolArguments:
+    outcome: loss
+    rows: [X7]
+    why: >-
+      the harness's `RepairToolArguments`: a guard around what goes in and out. Write it as an interceptor sentence, or what to hide in `redaction.yaml`
+  AskUser:
+    outcome: loss
+    rows: [H7]
+    why: >-
+      the harness's `AskUser`: the model asking the person a question. Write a `question` with `answer: one of ...`
+  ToolCallJudge:
+    outcome: loss
+    rows: [H8]
+    why: >-
+      the harness's `ToolCallJudge`: a model judging each tool call. Write a policy whose question is asked of an agent
+  TrajectoryJudge:
+    outcome: loss
+    rows: [H9]
+    why: >-
+      the harness's `TrajectoryJudge`: a model judging the whole run. Write a `check-its-work` stage with `model-for-checking:`
+  ClampOversizedMessages:
+    outcome: loss
+    rows: [C5]
+    why: >-
+      the harness's `ClampOversizedMessages`: a way of shortening or watching the conversation. Write `context-policy:` with its `then:` steps
+  ClearToolResults:
+    outcome: loss
+    rows: [C5]
+    why: >-
+      the harness's `ClearToolResults`: a way of shortening or watching the conversation. Write `context-policy:` with its `then:` steps
+  DeduplicateFileReads:
+    outcome: loss
+    rows: [C5]
+    why: >-
+      the harness's `DeduplicateFileReads`: a way of shortening or watching the conversation. Write `context-policy:` with its `then:` steps
+  FallbackCompaction:
+    outcome: loss
+    rows: [C5]
+    why: >-
+      the harness's `FallbackCompaction`: a way of shortening or watching the conversation. Write `context-policy:` with its `then:` steps
+  SlidingWindowCompaction:
+    outcome: loss
+    rows: [C5]
+    why: >-
+      the harness's `SlidingWindowCompaction`: a way of shortening or watching the conversation. Write `context-policy:` with its `then:` steps
+  SummarizingCompaction:
+    outcome: loss
+    rows: [C5]
+    why: >-
+      the harness's `SummarizingCompaction`: a way of shortening or watching the conversation. Write `context-policy:` with its `then:` steps
+  TieredCompaction:
+    outcome: loss
+    rows: [C5]
+    why: >-
+      the harness's `TieredCompaction`: a way of shortening or watching the conversation. Write `context-policy:` with its `then:` steps
+  ReportContextUsage:
+    outcome: loss
+    rows: [C5]
+    why: >-
+      the harness's `ReportContextUsage`: a way of shortening or watching the conversation. Write `context-policy:` with its `then:` steps
+  WarnNearLimits:
+    outcome: loss
+    rows: [C5]
+    why: >-
+      the harness's `WarnNearLimits`: a way of shortening or watching the conversation. Write `context-policy:` with its `then:` steps
+  ToolOutputLimits:
+    outcome: loss
+    rows: [C5]
+    why: >-
+      the harness's `ToolOutputLimits`: a way of shortening or watching the conversation. Write `context-policy:` with its `then:` steps
+  SystemReminders:
+    outcome: loss
+    rows: [C5]
+    why: >-
+      the harness's `SystemReminders`: a way of shortening or watching the conversation. Write `context-policy:` with its `then:` steps
+  WarnOnCacheBusts:
+    outcome: loss
+    rows: [C5]
+    why: >-
+      the harness's `WarnOnCacheBusts`: a way of shortening or watching the conversation. Write `context-policy:` with its `then:` steps
+  SpendLimits:
+    outcome: loss
+    rows: [C11]
+    why: >-
+      the harness's `SpendLimits`: a spending limit across runs. Write a Rule: *No more than $n per period*
+  StepPersistence:
+    outcome: loss
+    rows: [D3]
+    why: >-
+      the harness's `StepPersistence`: saving each step to come back to. A PACT run's journal does this whatever the agent says
+  FileSystem:
+    outcome: loss
+    rows: [X8]
+    why: >-
+      the harness's `FileSystem`: a place for files or commands. Write a `resource-kind: sandbox` resource and reach it with `connect:`
+  Shell:
+    outcome: loss
+    rows: [X8]
+    why: >-
+      the harness's `Shell`: a place for files or commands. Write a `resource-kind: sandbox` resource and reach it with `connect:`
+  SSHWorkspace:
+    outcome: loss
+    rows: [X8]
+    why: >-
+      the harness's `SSHWorkspace`: a place for files or commands. Write a `resource-kind: sandbox` resource and reach it with `connect:`
+  E2BSandbox:
+    outcome: loss
+    rows: [X8]
+    why: >-
+      the harness's `E2BSandbox`: a place for files or commands. Write a `resource-kind: sandbox` resource and reach it with `connect:`
+  ModalSandbox:
+    outcome: loss
+    rows: [X8]
+    why: >-
+      the harness's `ModalSandbox`: a place for files or commands. Write a `resource-kind: sandbox` resource and reach it with `connect:`
+  SpritesSandbox:
+    outcome: loss
+    rows: [X8]
+    why: >-
+      the harness's `SpritesSandbox`: a place for files or commands. Write a `resource-kind: sandbox` resource and reach it with `connect:`
+  LocalStack:
+    outcome: loss
+    rows: [X8]
+    why: >-
+      the harness's `LocalStack`: a place for files or commands. Write a `resource-kind: sandbox` resource and reach it with `connect:`
+  BrowserUse:
+    outcome: loss
+    rows: [X8]
+    why: >-
+      the harness's `BrowserUse`: a place for files or commands. Write a `resource-kind: sandbox` resource and reach it with `connect:`
+  PlaywrightBrowser:
+    outcome: loss
+    rows: [X8]
+    why: >-
+      the harness's `PlaywrightBrowser`: a place for files or commands. Write a `resource-kind: sandbox` resource and reach it with `connect:`
+  BackgroundTools:
+    outcome: loss
+    rows: [H2]
+    why: >-
+      the harness's `BackgroundTools`: tools that answer later. Write the call with `waits-for-result: no`, or a wait for the event
+  ManagedPrompt:
+    outcome: loss
+    rows: [X9]
+    why: >-
+      the harness's `ManagedPrompt`: instructions kept outside the agent. The PACT tree is the versioned source: write them in `instructions:`
+  CapabilityCreation:
+    outcome: loss
+    rows: [X10]
+    why: >-
+      the harness's `CapabilityCreation`: the agent writing new capabilities for itself. Write `learning:`, which only proposes
+  ExaAgent:
+    outcome: loss
+    rows: [T10]
+    why: >-
+      the harness's `ExaAgent`: a ready-made set of tools for another service. Write a tool file for each tool it relies on (`connect:` an MCP server, or `url:`)
+  ExaSearch:
+    outcome: loss
+    rows: [T10]
+    why: >-
+      the harness's `ExaSearch`: a ready-made set of tools for another service. Write a tool file for each tool it relies on (`connect:` an MCP server, or `url:`)
+  YouResearch:
+    outcome: loss
+    rows: [T10]
+    why: >-
+      the harness's `YouResearch`: a ready-made set of tools for another service. Write a tool file for each tool it relies on (`connect:` an MCP server, or `url:`)
+  YouSearch:
+    outcome: loss
+    rows: [T10]
+    why: >-
+      the harness's `YouSearch`: a ready-made set of tools for another service. Write a tool file for each tool it relies on (`connect:` an MCP server, or `url:`)
+  GitHub:
+    outcome: loss
+    rows: [T10]
+    why: >-
+      the harness's `GitHub`: a ready-made set of tools for another service. Write a tool file for each tool it relies on (`connect:` an MCP server, or `url:`)
+  GoogleWorkspace:
+    outcome: loss
+    rows: [T10]
+    why: >-
+      the harness's `GoogleWorkspace`: a ready-made set of tools for another service. Write a tool file for each tool it relies on (`connect:` an MCP server, or `url:`)
+  Linear:
+    outcome: loss
+    rows: [T10]
+    why: >-
+      the harness's `Linear`: a ready-made set of tools for another service. Write a tool file for each tool it relies on (`connect:` an MCP server, or `url:`)
+  Notion:
+    outcome: loss
+    rows: [T10]
+    why: >-
+      the harness's `Notion`: a ready-made set of tools for another service. Write a tool file for each tool it relies on (`connect:` an MCP server, or `url:`)
+  Slack:
+    outcome: loss
+    rows: [T10]
+    why: >-
+      the harness's `Slack`: a ready-made set of tools for another service. Write a tool file for each tool it relies on (`connect:` an MCP server, or `url:`)
+  StackOne:
+    outcome: loss
+    rows: [T10]
+    why: >-
+      the harness's `StackOne`: a ready-made set of tools for another service. Write a tool file for each tool it relies on (`connect:` an MCP server, or `url:`)
+  PostHog:
+    outcome: loss
+    rows: [T10]
+    why: >-
+      the harness's `PostHog`: a ready-made set of tools for another service. Write a tool file for each tool it relies on (`connect:` an MCP server, or `url:`)
+  Pylon:
+    outcome: loss
+    rows: [T10]
+    why: >-
+      the harness's `Pylon`: a ready-made set of tools for another service. Write a tool file for each tool it relies on (`connect:` an MCP server, or `url:`)
+  DayAI:
+    outcome: loss
+    rows: [T10]
+    why: >-
+      the harness's `DayAI`: a ready-made set of tools for another service. Write a tool file for each tool it relies on (`connect:` an MCP server, or `url:`)
+  Grain:
+    outcome: loss
+    rows: [T10]
+    why: >-
+      the harness's `Grain`: a ready-made set of tools for another service. Write a tool file for each tool it relies on (`connect:` an MCP server, or `url:`)
+  Ordinal:
+    outcome: loss
+    rows: [T10]
+    why: >-
+      the harness's `Ordinal`: a ready-made set of tools for another service. Write a tool file for each tool it relies on (`connect:` an MCP server, or `url:`)
+  Macroscope:
+    outcome: loss
+    rows: [T10]
+    why: >-
+      the harness's `Macroscope`: a ready-made set of tools for another service. Write a tool file for each tool it relies on (`connect:` an MCP server, or `url:`)
+  LogfireMCP:
+    outcome: loss
+    rows: [T10]
+    why: >-
+      the harness's `LogfireMCP`: a ready-made set of tools for another service. Write a tool file for each tool it relies on (`connect:` an MCP server, or `url:`)
+  # pydantic-ai-harness after 0.54 (with Pydantic AI 2.57, the latest 2.x when WP-38 ran the
+  # suite on it): named so the suite holds on both.
+  ApprovalReviewer:
+    outcome: loss
+    rows: [H8]
+    why: >-
+      the harness's `ApprovalReviewer`: a model deciding which calls need a person. Write a
+      policy whose question is asked of an agent
+  SmolSandbox:
+    outcome: loss
+    rows: [X8]
+    why: >-
+      the harness's `SmolSandbox`: a place for files or commands. Write a `resource-kind:
+      sandbox` resource and reach it with `connect:`
 
 # Pydantic AI's own names that are not capabilities, and what PACT says of
 # each, read by the two importers and the exporter. `spec.<key>` is a key of an
@@ -538,8 +875,10 @@ names:
     pact: "`answers-with:`"
   agent.toolsets:
     outcome: mapped
-    rows: [T1, T11]
-    pact: "`uses:`, and one `tools/<name>.yaml` per tool"
+    rows: [T1, T11, T12]
+    pact: >-
+      `uses:`, and a `tools/<name>.yaml` per tool (an MCP server's tools as the actions of
+      one file named for its prefix), each offered under the name Pydantic AI offered it
   agent.end_strategy:
     outcome: loss
     rows: [A16]
@@ -574,6 +913,39 @@ names:
       `@agent.output_validator` functions — Python that inspects an output and may raise
       `ModelRetry`. PACT's equivalent is an eval or a judged rule, which is an authored
       sentence rather than a callable
+  agent.not_shown:
+    outcome: loss
+    rows: [A14, A17, A18, M4, O7]
+    why: >-
+      Pydantic AI does not show this through its public API: an agent's output
+      validators, its retry budgets for tools and for answers, its metadata, how many of
+      its runs may go at once (`max_concurrency`), a fallback model's own test for when
+      to fall back (`fallback_on`), and any instruction function that writes nothing for
+      the deps the importer built. So this import cannot tell whether the agent has any.
+      If it does, write `checked-by:` with `checks-at-most:` for a validator,
+      `if-it-fails:` with `at-most:` for a retry budget, a Rule for how many at once, and
+      the instruction as text with a `{{run-inputs.<name>}}` blank
+  agent.event_stream_handler:
+    outcome: loss
+    rows: [S3]
+    why: >-
+      a function that reads every event of a run as it happens. Code does not cross;
+      write a `watch:` for what it observes
+  agent.validation_context:
+    outcome: loss
+    rows: [A7]
+    why: >-
+      a value handed to the Pydantic validators of tool arguments and answers. PACT
+      checks arguments against `takes:` and answers against `answers-with:` itself, with
+      no context of the host's
+  agent.prepare:
+    outcome: loss
+    rows: [T8]
+    why: >-
+      a `prepare=` function that rewrites a tool's definition for each step. Code does
+      not cross: the definition it made with the deps the importer built is carried.
+      Narrow a stage with `may-use:`, or offer a tool only sometimes with
+      `available-when:`
   agent.capabilities:
     outcome: loss
     rows: [A11, N1]
@@ -601,6 +973,10 @@ names:
     outcome: loss
     rows: [A10]
     why: "raw request-body fields for one provider. Not a fact about the agent"
+  settings.cache:
+    outcome: loss
+    rows: [C7]
+    why: *prompt-caching
 
   # ── message parts (02P C1): what crosses into a PACT history and what does not.
   # The crossing is `pact_agent.to_pact_history` / `from_history`, whose own report

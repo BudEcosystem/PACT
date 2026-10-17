@@ -22,10 +22,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from pact_adapters.ir import AgentSpec  # noqa: E402
-from pact_adapters.pydantic_ai_interop import (  # noqa: E402
-    from_pydantic_ai_agent,
-    to_pydantic_ai_spec,
-)
+from pact_adapters.pydantic_ai_interop import to_pydantic_ai_spec  # noqa: E402
+from pact_adapters.pydantic_ai_live import from_pydantic_ai_agent  # noqa: E402
 from pact_adapters.scoring import _bind  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[3]

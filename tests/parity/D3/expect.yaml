@@ -1,0 +1,11 @@
+# 02P D3: the harness's step persistence is named: a PACT run journals every step.
+row: D3
+says: 'the harness''s step persistence is named: a PACT run journals every step'
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.StepPersistence

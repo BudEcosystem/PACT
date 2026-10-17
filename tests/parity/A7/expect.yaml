@@ -1,0 +1,10 @@
+# 02P A7: a validation context is named, since PACT checks arguments and answers itself.
+row: A7
+says: a validation context is named, since PACT checks arguments and answers itself
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - validation_context

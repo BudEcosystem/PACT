@@ -1,0 +1,9 @@
+# 02P C1: message parts are a conversation's, not an agent's: the crossing is held by the transcript tests.
+row: C1
+says: 'message parts are a conversation''s, not an agent''s: the crossing is held by the transcript
+  tests'
+import: none
+why: 'message parts are a conversation''s, not an agent''s: the crossing is held by the transcript
+  tests'
+held-elsewhere:
+  message parts are a conversation's, not an agent's: adapters/python/tests/test_a_conversation_crosses_between_the_two_message_dialects.py::test_the_worked_examples_history_comes_back_the_same_history

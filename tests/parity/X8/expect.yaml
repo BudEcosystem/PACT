@@ -1,0 +1,12 @@
+# 02P X8: the harness's file system is named: write a sandbox resource.
+row: X8
+says: 'the harness''s file system is named: write a sandbox resource'
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.FileSystem
+  - instructions.added-by-capabilities-or-toolsets

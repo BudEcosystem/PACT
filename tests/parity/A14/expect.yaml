@@ -17,6 +17,11 @@ import:
   - description
   - instructions
   - name
-  not-portable:
-  - output_validators
-  - retries
+  # validators and retry budgets have no public read: the import's `not_shown` names them.
+  not-portable: []
+# S2 and S3: what its export cannot carry, and whether a spec file brings the agent back whole.
+export:
+  not-carried:
+  - checked-by
+  - checks-at-most
+  round-trip: a spec file has no field for a check and its count, so they do not come back

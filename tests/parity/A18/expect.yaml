@@ -1,0 +1,9 @@
+# 02P A18: a limit on runs at once has no public read, and the import says so.
+row: A18
+says: a limit on runs at once has no public read, and the import says so
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable: []

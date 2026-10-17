@@ -1,0 +1,5 @@
+# 02P A16: `end_strategy` is named: PACT's loop decides what happens to calls beside an answer.
+name: desk
+description: Answers order questions.
+instructions: Answer briefly.
+end_strategy: exhaustive

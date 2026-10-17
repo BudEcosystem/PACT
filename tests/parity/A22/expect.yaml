@@ -1,0 +1,7 @@
+# 02P A22: a run id and a conversation id belong to one run: nothing to import.
+row: A22
+says: 'a run id and a conversation id belong to one run: nothing to import'
+import: none
+why: 'a run id and a conversation id belong to one run: nothing to import'
+held-elsewhere:
+  a run id and a conversation id belong to one run: adapters/python/tests/test_a_halted_run_does_not_pretend_to_be_an_answer.py::test_a_run_id_and_a_conversation_id_the_caller_gave_reach_the_result

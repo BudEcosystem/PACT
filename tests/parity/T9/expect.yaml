@@ -1,0 +1,11 @@
+# 02P T9: a configured tool search is named; the default one every agent has is not.
+row: T9
+says: a configured tool search is named; the default one every agent has is not
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.ToolSearch

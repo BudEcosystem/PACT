@@ -1,0 +1,10 @@
+# 02P I1: instrumentation is named: the host decides where spans go.
+row: I1
+says: 'instrumentation is named: the host decides where spans go'
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - instrument

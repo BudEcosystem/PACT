@@ -1,0 +1,12 @@
+# 02P F4: an answer that is a file is named: `answers-with:` holds named fields.
+row: F4
+says: 'an answer that is a file is named: `answers-with:` holds named fields'
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - output_type
+export:
+  not-carried: []

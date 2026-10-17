@@ -1,0 +1,10 @@
+# 02P O5: a `TextOutput` function is named: code.
+row: O5
+says: 'a `TextOutput` function is named: code'
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - output_type

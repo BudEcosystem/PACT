@@ -1,0 +1,14 @@
+# 02P A23: an `AgentSpec` file's own `$schema` and `instrument` are named.
+row: A23
+says: an `AgentSpec` file's own `$schema` and `instrument` are named
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - $schema
+  - instrument
+  - json_schema_path
+export:
+  not-carried: []

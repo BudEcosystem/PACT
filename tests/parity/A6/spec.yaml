@@ -1,0 +1,10 @@
+# 02P A6: `deps_schema` is `run-inputs:`.
+name: desk
+description: Answers order questions.
+instructions: Answer briefly.
+deps_schema:
+  type: object
+  properties:
+    brand: {type: string}
+    order-limit: {type: integer}
+  required: [brand]

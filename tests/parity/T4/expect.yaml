@@ -1,0 +1,15 @@
+# 02P T4: an approval a function decides asks a person for every call, and the function is named.
+row: T4
+says: an approval a function decides asks a person for every call, and the function is named
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  - requires_approval
+  - toolsets
+  not-portable:
+  - toolsets[1].approval
+export:
+  not-carried:
+  - uses

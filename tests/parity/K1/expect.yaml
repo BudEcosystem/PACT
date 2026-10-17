@@ -1,0 +1,11 @@
+# 02P K1: an agent called inside a tool is a tool: the delegation is invisible in code, so only the tool is carried.
+row: K1
+says: 'an agent called inside a tool is a tool: the delegation is invisible in code, so only
+  the tool is carried'
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  - toolsets
+  not-portable: []

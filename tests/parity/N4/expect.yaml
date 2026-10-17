@@ -1,0 +1,11 @@
+# 02P N4: a provider's file search is named: write `knowledge:`.
+row: N4
+says: 'a provider''s file search is named: write `knowledge:`'
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.NativeTool

@@ -45,16 +45,14 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from pact_adapters.ir import AgentSpec  # noqa: E402
+from pact_adapters.pydantic_ai_live import from_pydantic_ai_agent, resource_file_for, tool_files_for  # noqa: E402
 from pact_adapters.pydantic_ai_interop import (  # noqa: E402
     build_agent,
-    from_pydantic_ai_agent,
     from_pydantic_ai_spec,
     pydantic_ai_model_id,
-    resource_file_for,
     shape_as_json_schema,
     shape_from_json_schema,
     to_pydantic_ai_spec,
-    tool_files_for,
     usage_limits_for,
 )
 from pact_adapters.questions import Shape  # noqa: E402
@@ -199,8 +197,10 @@ def test_what_a_spec_file_actually_carries() -> None:
     assert agent["instructions"] == "You are a research assistant.\n\nCite your sources."
     assert agent["settings"]["max-tokens"] == 8192
     assert agent["settings"]["thinking"] == "high"
-    assert agent["answers-with"] == {"answer": "text", "confidence": "number"}
-    assert agent["run-inputs"] == {"user_name": "text"}
+    # The fixture's `output_schema` lists no `required:`, and in JSON Schema a property not
+    # listed there may be left out: PACT's `, optional` (02P O2).
+    assert agent["answers-with"] == {"answer": "text, optional", "confidence": "number, optional"}
+    assert agent["run-inputs"] == {"user_name": "text, optional"}
     assert agent["uses"] == ["web-search"]
 
 
@@ -288,7 +288,7 @@ def _live_agent():
     )
 
     @agent.instructions
-    def whoami(ctx: RunContext) -> str:  # pragma: no cover - never called here
+    def whoami(ctx: RunContext) -> str:
         return "you are helping a customer"
 
     @agent.tool_plain(requires_approval=True)
@@ -332,14 +332,16 @@ def test_instructions_that_only_exist_during_a_run_are_reported_not_invented() -
     """What an OBJECT knows is less than what the CODE says.
 
     `@agent.instructions` registers a callable whose text is produced from a
-    `RunContext`; there is no sentence on the object to carry. Reporting it is
-    the difference between a PACT tree missing the instructions that actually
-    govern the agent and one that says which are missing.
+    `RunContext`. The probe request shows its text marked `dynamic`, so it is
+    counted and never carried: what it said with the deps the importer built is
+    not what it says in a run. Reporting it is the difference between a PACT
+    tree missing the instructions that actually govern the agent and one that
+    says which are missing.
     """
     agent, report = from_pydantic_ai_agent(_live_agent())
     assert agent["instructions"] == "Be concise and kind."
-    assert "instructions" in report.unmapped
-    assert "RunContext" in report.unmapped["instructions"]
+    assert "you are helping" not in agent["instructions"], "a function's text was carried as the author's"
+    assert "1 part(s)" in report.not_portable["instructions.made-at-run-time"]
 
 
 def test_a_tool_that_requires_approval_becomes_a_gate_on_that_tools_action() -> None:
@@ -363,10 +365,10 @@ def test_a_tool_that_requires_approval_becomes_a_gate_on_that_tools_action() -> 
     assert "requires_approval" in report.mapped
 
     files = tool_files_for(_live_agent())
-    assert files["refund"]["actions"]["call"]["needs-a-person"] == "yes"
+    assert files["refund"]["actions"]["refund"]["needs-a-person"] == "yes"
     # And only the tool the author actually guarded.
     plain = tool_files_for(_live_agent_without_approval())
-    assert "needs-a-person" not in plain["refund"]["actions"]["call"]
+    assert "needs-a-person" not in plain["refund"]["actions"]["refund"]
 
     # An author whose approval already crossed is not told to write a policy.
     assert not any(s.startswith("`policy:`") for s in report.still_to_write)
@@ -452,8 +454,8 @@ def test_a_toolset_with_nothing_readable_without_a_run_is_reported() -> None:
         return FunctionToolset([])
 
     _, report = from_pydantic_ai_agent(Agent(TestModel(), toolsets=[build]))
-    assert any(k.startswith("toolsets[") for k in report.unmapped)
-    assert report.silent_drops == ()
+    assert any(k.startswith("toolsets[") for k in report.not_portable), report.not_portable
+    assert report.unmapped == {} and report.silent_drops == ()
 
 
 # ──────────────────────────────────────── a PACT agent out
@@ -1130,7 +1132,7 @@ def test_the_line_a_tool_reaches_by_is_written_for_every_tool_or_for_none() -> N
     # The rest of the file is the same either way — `connect:` adds a line, it
     # does not change what the tool can do or who has to approve it.
     assert served["refund"]["actions"] == bare["refund"]["actions"]
-    assert served["refund"]["actions"]["call"]["needs-a-person"] == "yes"
+    assert served["refund"]["actions"]["refund"]["needs-a-person"] == "yes"
 
 
 def test_a_host_that_answered_where_the_tools_reach_is_not_asked_again() -> None:

@@ -1,0 +1,11 @@
+# 02P C3: a history processor is named: its body is code.
+row: C3
+says: 'a history processor is named: its body is code'
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.ProcessHistory

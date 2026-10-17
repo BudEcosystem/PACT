@@ -1,0 +1,10 @@
+# 02P A6: `deps_schema` is `run-inputs:`.
+row: A6
+says: '`deps_schema` is `run-inputs:`'
+import:
+  mapped:
+  - deps_schema
+  - description
+  - instructions
+  - name
+  not-portable: []

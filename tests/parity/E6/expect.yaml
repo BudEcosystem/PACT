@@ -1,0 +1,5 @@
+# 02P E6: an LLM judge is part of an eval suite, not an agent: nothing on an agent to import.
+row: E6
+says: 'an LLM judge is part of an eval suite, not an agent: nothing on an agent to import'
+import: none
+why: 'an LLM judge is part of an eval suite, not an agent: nothing on an agent to import'

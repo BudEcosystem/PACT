@@ -1,0 +1,10 @@
+# 02P O6: an output function is named: code.
+row: O6
+says: 'an output function is named: code'
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - output_type

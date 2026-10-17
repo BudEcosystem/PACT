@@ -1,0 +1,12 @@
+# 02P A11: `minimal` and `xhigh` thinking are rounded to `low` and `high`, and the rounding is named.
+row: A11
+says: '`minimal` and `xhigh` thinking are rounded to `low` and `high`, and the rounding is named'
+import:
+  mapped:
+  - capabilities
+  - capabilities.Thinking
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities.Thinking.rounded

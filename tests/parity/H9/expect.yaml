@@ -1,0 +1,11 @@
+# 02P H9: the harness's trajectory judge is named, with the PACT line to write.
+row: H9
+says: the harness's trajectory judge is named, with the PACT line to write
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.TrajectoryJudge

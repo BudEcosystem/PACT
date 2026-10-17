@@ -1,0 +1,12 @@
+# 02P O3: a choice between answer shapes is named, not cut to one.
+row: O3
+says: a choice between answer shapes is named, not cut to one
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - output_type
+export:
+  not-carried: []

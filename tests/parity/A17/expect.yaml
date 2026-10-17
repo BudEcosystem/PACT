@@ -1,0 +1,10 @@
+# 02P A17: `metadata` is named: a tracing tag of one deployment.
+row: A17
+says: '`metadata` is named: a tracing tag of one deployment'
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - metadata

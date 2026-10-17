@@ -1,0 +1,7 @@
+# 02P E3: `IsInstance` is always on: an answer is held to `answers-with:`; nothing on an agent to import.
+row: E3
+says: '`IsInstance` is always on: an answer is held to `answers-with:`; nothing on an agent
+  to import'
+import: none
+why: '`IsInstance` is always on: an answer is held to `answers-with:`; nothing on an agent to
+  import'

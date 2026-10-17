@@ -1,0 +1,7 @@
+# 02P A19: `run`, `run_sync`, `run_stream` are how an agent is started, not part of it: nothing to import.
+row: A19
+says: '`run`, `run_sync`, `run_stream` are how an agent is started, not part of it: nothing
+  to import'
+import: none
+why: '`run`, `run_sync`, `run_stream` are how an agent is started, not part of it: nothing to
+  import'

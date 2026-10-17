@@ -1,0 +1,5 @@
+# 02P F3: `BinaryContent` is handed to one run: nothing on an agent to import.
+row: F3
+says: '`BinaryContent` is handed to one run: nothing on an agent to import'
+import: none
+why: '`BinaryContent` is handed to one run: nothing on an agent to import'

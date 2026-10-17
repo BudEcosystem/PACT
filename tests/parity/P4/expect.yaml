@@ -1,0 +1,5 @@
+# 02P P4: MCP sampling is a live connection's: nothing on an agent to import.
+row: P4
+says: 'MCP sampling is a live connection''s: nothing on an agent to import'
+import: none
+why: 'MCP sampling is a live connection''s: nothing on an agent to import'

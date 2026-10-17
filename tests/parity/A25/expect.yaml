@@ -1,0 +1,7 @@
+# 02P A25: `TestModel`, `FunctionModel` and `override` are test seams: nothing to import (this suite uses them).
+row: A25
+says: '`TestModel`, `FunctionModel` and `override` are test seams: nothing to import (this suite
+  uses them)'
+import: none
+why: '`TestModel`, `FunctionModel` and `override` are test seams: nothing to import (this suite
+  uses them)'

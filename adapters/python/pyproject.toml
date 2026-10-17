@@ -26,6 +26,10 @@ dependencies = [
     # imports it directly, and a dependency the source uses but the manifest
     # does not name is one that disappears on the next re-lock.
     "pyyaml>=6.0",
+    # `pact_agent.py` builds an `AgentRunResult` from its public serialized shape with
+    # `pydantic.TypeAdapter` (WP-38: never by writing its private `_state`). Pydantic AI
+    # brings it; named because the source imports it directly.
+    "pydantic>=2.10",
     # The `pact` loader binary every command here shells out to, as a wheel
     # (`pyproject.toml` at the repository root, built from `crates/pact-cli`).
     # Exactly this package's own version: the loader writes the document these
@@ -52,7 +56,12 @@ openai-agents = ["openai-agents>=0.18.3", "openai>=2.16.0"]
 # The eval metrics `providers.py` reaches for, imported lazily when asked.
 deepeval = ["deepeval>=4.1.3"]
 all = ["pact-adapters[anthropic,autogen,langgraph,langchain,openai-agents,deepeval]"]
-test = ["pytest>=9.1.1"]
+# `pydantic-handlebars` is what `Agent.from_spec` compiles a `{{name}}` template with (the
+# `spec` extra of `pydantic-ai-slim`): the parity suite loads exported specs whose holes are
+# templates and checks the model reads the filled words (02P A4).
+# `pydantic-ai-harness` only so the parity suite can build agents that carry its capabilities
+# and check each import names them (02P §4: recognising live objects on import only).
+test = ["pytest>=9.1.1", "pydantic-handlebars>=0.1.0", "pydantic-ai-harness==0.54.0", "pydantic-monty>=1,<2"]
 
 
 # Without this the project is not a package: `uv` refuses to install the entry

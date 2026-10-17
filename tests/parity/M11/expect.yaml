@@ -1,0 +1,5 @@
+# 02P M11: a realtime session is a connection, not an agent: nothing to import.
+row: M11
+says: 'a realtime session is a connection, not an agent: nothing to import'
+import: none
+why: 'a realtime session is a connection, not an agent: nothing to import'

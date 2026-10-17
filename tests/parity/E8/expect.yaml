@@ -1,0 +1,5 @@
+# 02P E8: repeats and concurrency are an eval runner's settings: nothing on an agent to import.
+row: E8
+says: 'repeats and concurrency are an eval runner''s settings: nothing on an agent to import'
+import: none
+why: 'repeats and concurrency are an eval runner''s settings: nothing on an agent to import'

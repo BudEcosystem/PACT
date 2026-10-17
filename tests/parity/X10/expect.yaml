@@ -1,0 +1,12 @@
+# 02P X10: the harness's capability creation is named: PACT's `learning:` only proposes.
+row: X10
+says: 'the harness''s capability creation is named: PACT''s `learning:` only proposes'
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.CapabilityCreation
+  - instructions.added-by-capabilities-or-toolsets

@@ -335,7 +335,7 @@ def test_both_import_doors_say_the_one_sentence_about_the_protocol() -> None:
     from pydantic_ai.models.test import TestModel
     from pydantic_ai.toolsets import FunctionToolset
 
-    from pact_adapters.pydantic_ai_interop import from_pydantic_ai_agent
+    from pact_adapters.pydantic_ai_live import from_pydantic_ai_agent
 
     _, filed = from_pydantic_ai_spec({"model": "test", "capabilities": ["MCP"]})
     _, live = from_pydantic_ai_agent(

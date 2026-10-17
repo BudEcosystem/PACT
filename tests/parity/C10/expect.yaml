@@ -20,3 +20,8 @@ import:
   - instructions
   - name
   not-portable: []
+# S2 and S3: what its export cannot carry, and whether a spec file brings the agent back whole.
+export:
+  not-carried:
+  - limits
+  round-trip: a spec file holds no ceilings, so `limits:` does not come back

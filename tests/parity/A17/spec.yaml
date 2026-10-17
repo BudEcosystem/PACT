@@ -1,0 +1,5 @@
+# 02P A17: `metadata` is named: a tracing tag of one deployment.
+name: desk
+description: Answers order questions.
+instructions: Answer briefly.
+metadata: {team: cx}

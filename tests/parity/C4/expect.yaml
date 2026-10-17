@@ -1,0 +1,11 @@
+# 02P C4: a provider's own compaction is named.
+row: C4
+says: a provider's own compaction is named
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.OpenAICompaction

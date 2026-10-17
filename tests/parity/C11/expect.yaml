@@ -1,0 +1,11 @@
+# 02P C11: the harness's spend limits are named, with the PACT Rule to write.
+row: C11
+says: the harness's spend limits are named, with the PACT Rule to write
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.SpendLimits

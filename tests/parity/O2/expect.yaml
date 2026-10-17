@@ -21,3 +21,8 @@ import:
   - name
   - output_type
   not-portable: []
+# S2 and S3: what its export cannot carry, and whether a spec file brings the agent back whole.
+export:
+  not-carried: []
+  round-trip: 'money is one-way: it reaches the model as text with its currency in the description
+    and comes back as `text` (named in the export''s carried note)'

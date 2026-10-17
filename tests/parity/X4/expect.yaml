@@ -1,0 +1,11 @@
+# 02P X4: the harness's code mode is named, with the PACT stage to write.
+row: X4
+says: the harness's code mode is named, with the PACT stage to write
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.CodeMode

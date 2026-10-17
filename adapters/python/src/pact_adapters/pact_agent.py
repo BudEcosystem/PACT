@@ -53,11 +53,13 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import dataclasses
+import functools
 import inspect
 import json
 from dataclasses import dataclass
 from typing import Any, Awaitable, Mapping, Sequence, TypeVar
 
+from pydantic import TypeAdapter
 from pydantic_ai import DeferredToolRequests
 from pydantic_ai.agent.abstract import AbstractAgent
 from pydantic_ai.exceptions import UserError
@@ -1035,9 +1037,9 @@ class PactAgent(AbstractAgent[dict, Any]):
 
         "Statically" is the load-bearing word, and it is why this is an
         `ExternalToolset` of `ToolDefinition`s rather than anything resolved per
-        run: `_toolsets_to_pact` — which is what `from_pydantic_ai_agent` uses to
-        read a live agent back into a PACT document — reports a toolset it cannot
-        read rather than carrying four of nine tools. A `PactAgent` whose tools
+        run: `pydantic_ai_reading.read_agent` — which is what `from_pydantic_ai_agent`
+        uses to read a live agent back into a PACT document — reports a toolset it
+        cannot read rather than carrying four of nine tools. A `PactAgent` whose tools
         were only knowable inside a run would import back as a document with no
         `uses:` at all: the author's tools, gone, through the one class whose
         entire claim is that the document survives being held.
@@ -1432,8 +1434,21 @@ class PactAgent(AbstractAgent[dict, Any]):
         back called `self`.
         """
         if how.pop("infer_name", True) and self.name is None:
-            self._infer_name(inspect.currentframe())
+            self._name_from(inspect.currentframe())
         return super().run_stream_events(*args, infer_name=False, **how)
+
+    def _name_from(self, frame: Any) -> None:
+        """Name an unnamed agent after the caller's variable that holds it, as the SDK's
+        own (private) `AbstractAgent._infer_name` does, from the frame that called `frame`:
+        its locals, then its globals."""
+        caller = frame.f_back if frame is not None else None
+        if caller is None:
+            return
+        for scope in (caller.f_locals, caller.f_globals):
+            for name, item in scope.items():
+                if item is self:
+                    self.name = name
+                    return
 
     def _as_result(
         self,
@@ -1457,10 +1472,9 @@ class PactAgent(AbstractAgent[dict, Any]):
         rules nobody could decide. A facade that returned only what the SDK
         defines would have thrown away every honesty channel the harness has.
         """
-        result: "AgentRunResult[Any]" = AgentRunResult(output=self._answer_of(ran))
-        state = result._state
-        state.message_history.extend(to_model_messages(_history_of(ran)))
-        state.usage = RunUsage(
+        # Built from the result's public serialized shape (`messages`, `usage`, `run_id`,
+        # `conversation_id`: `PA/run.py:787-831`), never by writing its private `_state`.
+        usage = RunUsage(
             requests=len(ran.steps),
             tool_calls=int(ran.used.tool_calls) if ran.used else 0,
             # PACT's meter carries ONE token figure, because that is what every
@@ -1471,10 +1485,16 @@ class PactAgent(AbstractAgent[dict, Any]):
             # reads it off the transport that made the calls.
             input_tokens=int(ran.used.tokens) if ran.used else 0,
         )
+        shown: dict[str, Any] = {
+            "output": self._answer_of(ran),
+            "messages": to_model_messages(_history_of(ran)),
+            "usage": usage,
+        }
         if run_id:
-            state.run_id = run_id
+            shown["run_id"] = run_id
         if conversation_id:
-            state.conversation_id = conversation_id
+            shown["conversation_id"] = conversation_id
+        result: "AgentRunResult[Any]" = _run_result().validate_python(shown)
         result.pact = ran
         return result
 
@@ -1667,6 +1687,13 @@ _NOT_OURS_TO_TAKE: dict[str, str] = {
         "yours to key by."
     ),
 }
+
+
+@functools.cache
+def _run_result() -> "TypeAdapter[AgentRunResult[Any]]":
+    """The validator `_as_result` builds a result with, built once: building it costs about
+    a tenth of a second of schema work, and validating with it next to nothing."""
+    return TypeAdapter(AgentRunResult[Any])
 
 
 def _toolsets_of(spec: AgentSpec) -> tuple[Any, ...]:

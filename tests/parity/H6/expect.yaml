@@ -1,0 +1,11 @@
+# 02P H6: a handler for deferred calls is named: its body is code.
+row: H6
+says: 'a handler for deferred calls is named: its body is code'
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.HandleDeferredToolCalls

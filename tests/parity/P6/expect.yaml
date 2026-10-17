@@ -1,0 +1,7 @@
+# 02P P6: an A2A server serves a run; its card has its own importer (`pact-import --as a2a-card`).
+row: P6
+says: an A2A server serves a run; its card has its own importer (`pact-import --as a2a-card`)
+import: none
+why: an A2A server serves a run; its card has its own importer (`pact-import --as a2a-card`)
+held-elsewhere:
+  an A2A server serves a run; its card has its own importer (`pact-import --as a2a-card`): adapters/python/tests/test_importing_reports_every_drop.py::test_importing_the_card_pact_exports_drops_nothing_silently

@@ -16,13 +16,17 @@ So there are three doors, and they are different sizes on purpose.
 
 * `from_pydantic_ai_spec()` — a spec FILE becomes a PACT agent. Nothing runs.
   This is the door `pact-import --as pydantic-ai-spec` opens.
-* `from_pydantic_ai_agent()` — a LIVE `Agent` object becomes a PACT agent. The
-  caller has already imported their own module in their own process; PACT
-  executes nothing of theirs and never reads their source. This is what covers
-  the agents that are defined in code, which is most of them. What it can see
-  is what the OBJECT holds, which is strictly less than what the CODE says —
-  a `@agent.instructions` function is a callable, not a sentence, and the report
-  says so rather than calling the agent instruction-less.
+* `pydantic_ai_live.from_pydantic_ai_agent()` — a LIVE `Agent` object becomes a
+  PACT agent. The caller has already imported their own module in their own
+  process; PACT never reads their source, and reads the object through Pydantic
+  AI's public API only (`pydantic_ai_reading`: one probe request to a
+  `FunctionModel`, which runs no tool, and each toolset's `get_tools`). This is
+  what covers the agents that are defined in code, which is most of them. What
+  it can see is what the OBJECT shows, which is less than what the CODE says —
+  a `@agent.instructions` function's text is made per run, not a sentence the
+  author wrote, and the report says so rather than inventing one.
+  `pydantic_ai_trees.imported_agent()` writes either door's result as a tree's
+  files.
 * `to_pydantic_ai_spec()` — a PACT agent becomes a spec file plus a loss report.
 
 ## The one thing this module must not be read as claiming
@@ -48,13 +52,14 @@ Both doors are honest. Neither is the other.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from dataclasses import replace
 from functools import lru_cache
 from typing import Any, Mapping
 
 from .exporting import ExportReport
-from .holes import holes_in
+from .holes import RUN_INPUTS, holes_in, rewritten, templates_in
 from .importing import ImportReport
 from .ir import AgentSpec as PactAgentSpec
 from .loader import FIX as LOADER_FIX
@@ -69,7 +74,6 @@ __all__ = [
     "shape_from_json_schema",
     "return_schema_for",
     "from_pydantic_ai_spec",
-    "from_pydantic_ai_agent",
     "to_pydantic_ai_spec",
     "usage_limits_for",
     "build_agent",
@@ -90,7 +94,12 @@ def shape_as_json_schema(shape: Shape) -> dict[str, Any]:
     return shape.json_schema()
 
 
-def shape_from_json_schema(schema: Mapping[str, Any]) -> "Shape | None":
+def shape_from_json_schema(
+    schema: Mapping[str, Any],
+    defs: "Mapping[str, Any] | None" = None,
+    named: "dict[str, Any] | None" = None,
+    hint: str = "",
+) -> "Shape | None":
     """One JSON Schema property as a PACT answer shape, or nothing.
 
     `None` is a real answer and is the important one. PACT's answer shapes are a
@@ -102,6 +111,31 @@ def shape_from_json_schema(schema: Mapping[str, Any]) -> "Shape | None":
     """
     if not isinstance(schema, Mapping):
         return None
+    # 02P O2: what a Pydantic model's schema says of a field. A `$ref` into the
+    # document's own `$defs` is read where it points (an `Enum` class is one); a
+    # field that may be `null` (`X | None`, `anyOf: [X, null]`, `type: [x, null]`)
+    # is `, optional`; a list of one shape is `list of` it; a string's `format`
+    # says a date or a time. Anything else stays `None`, and is reported.
+    ref = schema.get("$ref")
+    if isinstance(ref, str) and ref.startswith("#/$defs/"):
+        key = ref[len("#/$defs/"):]
+        return shape_from_json_schema((defs or {}).get(key) or {}, defs, named, key)
+    either = schema.get("anyOf") or schema.get("oneOf")
+    if isinstance(either, list):
+        kept = [x for x in either if not (isinstance(x, Mapping) and x.get("type") == "null")]
+        one = shape_from_json_schema(kept[0], defs, named, hint) if len(kept) == 1 < len(either) else None
+        return replace(one, optional=True) if one else None
+    if isinstance(schema.get("type"), list):
+        kinds = [t for t in schema["type"] if t != "null"]
+        one = shape_from_json_schema({**schema, "type": kinds[0]}, defs, named, hint) if len(kinds) == 1 else None
+        return replace(one, optional=True) if one and len(kinds) < len(schema["type"]) else one
+    if schema.get("type") == "array" and isinstance(schema.get("items"), Mapping):
+        each = shape_from_json_schema(schema["items"], defs, named, hint)
+        return Shape("list", of=each) if each is not None and not each.optional else None
+    if named is not None and schema.get("type") == "object" and isinstance(schema.get("properties"), Mapping):
+        return _named_shape(schema, defs, named, hint)
+    if schema.get("type") == "string" and schema.get("format") in _FORMATS:
+        return Shape(_FORMATS[schema["format"]])
     # `enum` first: a property can carry both `type: string` and an `enum`, and
     # the enum is the stronger statement of the two. Dropping to the `type` when
     # an enum is present would lose the constraint INSIDE a property the report
@@ -136,6 +170,10 @@ def shape_from_json_schema(schema: Mapping[str, Any]) -> "Shape | None":
     if said == "string":
         return Shape("text")
     return None
+
+
+#: The string `format`s PACT has a shape for (`questions._KINDS`).
+_FORMATS = {"date": "date", "time": "time", "date-time": "date-and-time"}
 
 
 def _answers_with_schema(
@@ -218,6 +256,29 @@ _THINKING_BACK: dict[Any, str] = {
 }
 
 
+#: 02P A11: the two Pydantic AI thinking levels PACT has no word for, as the nearest it has.
+_ROUNDED: dict[str, str] = {"minimal": "low", "xhigh": "high"}
+
+
+def _thinking(effort: Any, where: str, report: ImportReport) -> "str | None":
+    """One Pydantic AI thinking level as PACT's `thinking:` word; `minimal` and `xhigh` are
+    rounded to the nearest and the rounding is named, anything else unknown is unmapped."""
+    key = effort if isinstance(effort, bool) else str(effort)
+    if key in _ROUNDED:
+        report.not_portable[f"{where}.rounded"] = (
+            f"`{key}` is a thinking level PACT has no word for, so it is `{_ROUNDED[key]}`, the nearest "
+            "of PACT's `none`, `low`, `medium`, `high`"
+        )
+        return _ROUNDED[key]
+    said = _THINKING_BACK.get(key)
+    if said is None:
+        report.unmapped[where] = (
+            f"`{effort}` is a Pydantic AI thinking level PACT has no word for — its `thinking:` is "
+            "`none`, `low`, `medium`, `high`"
+        )
+    return said
+
+
 def _settings_to_pact(
     settings: Mapping[str, Any], report: ImportReport, where: str
 ) -> dict[str, Any]:
@@ -243,12 +304,8 @@ def _settings_to_pact(
                 )
             continue
         if authored == "thinking":
-            said = _THINKING_BACK.get(value if isinstance(value, bool) else str(value))
+            said = _thinking(value, f"{where}.thinking", report)
             if said is None:
-                report.unmapped[f"{where}.thinking"] = (
-                    f"`{value}` is a Pydantic AI thinking level PACT has no word "
-                    "for — its `thinking:` is `none`, `low`, `medium`, `high`"
-                )
                 continue
             out["thinking"] = said
         elif authored == "tool-choice":
@@ -342,12 +399,8 @@ def _read_capabilities(
                 effort = argument.get("effort", True)
             elif argument is not None:
                 effort = argument
-            said = _THINKING_BACK.get(effort if isinstance(effort, bool) else str(effort))
+            said = _thinking(effort, where, report)
             if said is None:
-                report.unmapped[where] = (
-                    f"`Thinking(effort={effort!r})` — PACT's `thinking:` is "
-                    "`none`, `low`, `medium`, `high`"
-                )
                 continue
             settings["thinking"] = said
             report.mapped[where] = _REGISTRY.capability("Thinking").pact
@@ -461,7 +514,9 @@ _MCP_SHAPE: str = (
 )
 
 
-def from_pydantic_ai_spec(spec: Mapping[str, Any]) -> tuple[dict[str, Any], ImportReport]:
+def from_pydantic_ai_spec(
+    spec: Mapping[str, Any], shapes: "dict[str, Any] | None" = None
+) -> tuple[dict[str, Any], ImportReport]:
     """One Pydantic AI `AgentSpec` as a PACT agent, and everything it could not say.
 
     The first importer here whose source is a real agent SPECIFICATION rather
@@ -473,23 +528,31 @@ def from_pydantic_ai_spec(spec: Mapping[str, Any]) -> tuple[dict[str, Any], Impo
 
     Nothing is executed. A spec is YAML; `Agent.from_file` is what runs it, and
     this is not that.
+
+    A nested object of the output or deps schema is a shape with parts (02P O2),
+    collected into `shapes` (`{name: {part: line}}`, for `workspace.yaml`'s
+    `shapes:`) when the caller gives it, as an import into a tree does; otherwise
+    `still_to_write` says which shapes to write.
     """
     report = ImportReport(kind="a Pydantic AI agent spec", seen=tuple(sorted(spec)))
+    owed_shapes = shapes is None
+    shapes = {} if shapes is None else shapes
     agent: dict[str, Any] = {}
     settings: dict[str, Any] = {}
 
     if model := str(spec.get("model") or "").strip():
-        agent["model"] = model
+        agent["model"] = catalogue_row_for(model)
         report.mapped["model"] = _SPEC_MAPS["model"]
     if name := str(spec.get("name") or "").strip():
         agent["name"] = name
         report.mapped["name"] = _SPEC_MAPS["name"]
-    if described := str(spec.get("description") or "").strip():
-        agent["description"] = described
-        report.mapped["description"] = _SPEC_MAPS["description"]
-    if told := _instructions_text(spec.get("instructions")):
-        agent["instructions"] = told
-        report.mapped["instructions"] = _SPEC_MAPS["instructions"]
+    deps = spec.get("deps_schema") if isinstance(spec.get("deps_schema"), Mapping) else {}
+    declared = set((deps.get("properties") or {}) if isinstance(deps.get("properties"), Mapping) else ())
+    for key, said in (("description", str(spec.get("description") or "").strip()),
+                      ("instructions", _instructions_text(spec.get("instructions")))):
+        if said:
+            agent[key] = _as_holes(said, declared, key, report)
+            report.mapped[key] = _SPEC_MAPS[key]
 
     if isinstance(spec.get("model_settings"), Mapping):
         settings.update(_settings_to_pact(spec["model_settings"], report, "model_settings"))
@@ -500,7 +563,7 @@ def from_pydantic_ai_spec(spec: Mapping[str, Any]) -> tuple[dict[str, Any], Impo
             report.mapped["model_settings"] = _SPEC_MAPS["model_settings"]
 
     if isinstance(spec.get("output_schema"), Mapping):
-        answers, refused = _schema_to_answers(spec["output_schema"])
+        answers, refused = _schema_to_answers(spec["output_schema"], shapes)
         if answers:
             agent["answers-with"] = answers
             # The MODE is deliberately not set. `AgentSpec.output_schema` builds a
@@ -515,7 +578,7 @@ def from_pydantic_ai_spec(spec: Mapping[str, Any]) -> tuple[dict[str, Any], Impo
             report.unmapped["output_schema"] = "an object schema with no properties"
 
     if isinstance(spec.get("deps_schema"), Mapping):
-        inputs, refused = _schema_to_answers(spec["deps_schema"])
+        inputs, refused = _schema_to_answers(spec["deps_schema"], shapes)
         if inputs:
             agent["run-inputs"] = inputs
             report.mapped["deps_schema"] = _SPEC_MAPS["deps_schema"]
@@ -545,11 +608,70 @@ def from_pydantic_ai_spec(spec: Mapping[str, Any]) -> tuple[dict[str, Any], Impo
             )
 
     report.still_to_write = _still_to_write(agent, tools_named=bool(agent.get("uses")))
+    if owed_shapes and shapes:
+        report.still_to_write += (shapes_owed(shapes),)
     return agent, report
+
+
+def _as_template(text: str, inputs: set[str]) -> str:
+    """PACT words as a Pydantic AI template: each `{{run-inputs.<name>}}` hole of a declared
+    input is `{{<name>}}`, filled from deps; every other pair of braces is escaped (`\\{{`), so
+    Handlebars reads it as the text it is in PACT (a `{{remembers.x}}` hole, `{{#each}}`, a
+    JSON example) and `Agent.from_spec` compiles the words without a template error."""
+    mark = "\x00"
+    said = rewritten(
+        text,
+        lambda n: f"{mark}{n.split('.', 1)[1]}{mark}"
+        if n.startswith(f"{RUN_INPUTS}.") and n.split(".", 1)[1] in inputs else None,
+    )
+    said = said.replace("\\{{", "\x01").replace("{{", "\\{{").replace("\x01", "\\{{")
+    return re.sub(f"{mark}(.*?){mark}", r"{{\1}}", said)
+
+
+def _as_holes(text: str, declared: set[str], where: str, report: ImportReport) -> str:
+    """02P A4: a spec's `{{name}}` template, filled by Pydantic AI from deps, as PACT's
+    `{{run-inputs.name}}` hole when `deps_schema` declares `name` (so `run-inputs:` does);
+    any other template part (a name nothing declares, a path, a Handlebars helper) is named,
+    since PACT has no blank for it and it would reach the model as literal braces."""
+    said = rewritten(text, lambda n: f"{{{{{RUN_INPUTS}.{n}}}}}" if n in declared else None)
+    if left := templates_in(said):
+        report.not_portable[f"{where}.templates"] = (
+            ", ".join(f"`{t}`" for t in left) + " Pydantic AI fills from the run's deps, and PACT has no "
+            "blank for it, so it is carried as written and the model reads the braces. Declare the value "
+            "under `run-inputs:` and write `{{run-inputs.<name>}}`, or write the words out"
+        )
+    return said
+
+
+def _named_shape(
+    schema: Mapping[str, Any], defs: "Mapping[str, Any] | None", named: dict[str, Any], hint: str
+) -> "Shape | None":
+    """A nested object as a shape with parts, named for its `title` (else its `$defs` key) in
+    kebab case and added to `named` (the workspace's `shapes:` an import writes); `None` when a
+    part has no spelling or the object contains itself (a shape is a fixed set of parts)."""
+    from .openapi_shapes import kebab
+
+    called = kebab(str(schema.get("title") or hint or "part")) or "part"
+    if named.get(called, {}) is None:  # being read further up: it contains itself
+        return None
+    named.setdefault(called, None)
+    parts, refused = _schema_to_answers(schema, named, defs)
+    if named.get(called) is None:
+        del named[called]
+    if refused or not parts:
+        return None
+    name, n = called, 1
+    while named.get(name) not in (None, parts):
+        n += 1
+        name = f"{called}-{n}"
+    named[name] = parts
+    return Shape("named", name=name)
 
 
 def _schema_to_answers(
     schema: Mapping[str, Any],
+    named: "dict[str, Any] | None" = None,
+    defs: "Mapping[str, Any] | None" = None,
 ) -> tuple[dict[str, str], dict[str, str]]:
     """A JSON Schema object as PACT answer-shape lines, and what would not go.
 
@@ -563,23 +685,41 @@ def _schema_to_answers(
     properties = schema.get("properties")
     if not isinstance(properties, Mapping):
         return lines, refused
+    required = set(schema.get("required") or ())
+    defs = schema.get("$defs") if isinstance(schema.get("$defs"), Mapping) else (defs or {})
     for name, prop in properties.items():
-        shape = shape_from_json_schema(prop if isinstance(prop, Mapping) else {})
+        shape = shape_from_json_schema(prop if isinstance(prop, Mapping) else {}, defs, named, str(name))
+        if shape is not None and name not in required:
+            shape = replace(shape, optional=True)
         if shape is None:
             said = prop.get("type") if isinstance(prop, Mapping) else None
             refused[str(name)] = (
                 f"a `{said or 'schema-less'}` property. PACT's answer shapes are "
-                "text, yes-or-no, money, number, whole-number, images, audio, "
-                "file, or `one of a, b, c` — a nested object or a list of them "
-                "has no spelling, so this field is not carried"
+                "text, yes-or-no, money, number, whole-number, a date or a time, "
+                "`one of a, b, c`, `list of` one of those, or a shape with parts "
+                "named under `shapes:` (which an import into a tree writes); this "
+                "one has none of those spellings, so this field is not carried"
             )
             continue
         lines[str(name)] = shape.written()
     return lines, refused
 
 
+def shapes_owed(shapes: Mapping[str, Mapping[str, str]]) -> str:
+    """The `still_to_write` line for the shapes with parts an imported answer names, for a door
+    that writes no `workspace.yaml` of its own."""
+    return "`shapes:` in `workspace.yaml`, the shapes with parts its answer names: " + "; ".join(
+        f"`{n}` ({', '.join(f'{k}: {v}' for k, v in parts.items())})" for n, parts in shapes.items()
+    )
+
+
 def _still_to_write(
-    agent: Mapping[str, Any], *, tools_named: bool, has_policy: bool = False, connect: str = ""
+    agent: Mapping[str, Any],
+    *,
+    tools_named: bool,
+    has_policy: bool = False,
+    connect: str = "",
+    servers: tuple[str, ...] = (),
 ) -> tuple[str, ...]:
     """What PACT needs that this Pydantic AI source did not supply.
 
@@ -607,8 +747,11 @@ def _still_to_write(
         owed.append("`instructions:` — the source carried none")
     if not agent.get("description"):
         owed.append("`description:` — PACT requires one and the source had no field for it")
+    functions = tools_named and set(agent.get("uses") or ()) - set(servers)
     if not tools_named:
         owed.append("`uses:` — no tools were named")
+    elif not functions:
+        pass  # every tool reaches an MCP server the agent named; `servers` below
     elif not connect:
         # Measured, not guessed: `pact check` on a tree built from a real import
         # refused every tool with `loader/tool-reaches-nowhere`. A Pydantic AI
@@ -630,11 +773,18 @@ def _still_to_write(
         # asks for the two names rather than for a connection.
         owed.append(
             f"`endpoint:` in `resources/{connect}.yaml` — the tools now say they "
-            f"reach `{connect}`, and an endpoint is a name your platform team "
-            "publishes rather than anything a Pydantic AI agent carries (add "
-            "`auth: {by-reference: ...}` beside it if that server needs a "
-            "credential). `resource_file_for()` writes the file once you have "
-            "the name"
+            f"reach `{connect}`, the server your host serves these functions from, "
+            "and an endpoint is a name your platform team publishes rather than "
+            "anything a Pydantic AI agent carries (add `auth: {by-reference: ...}` "
+            "beside it if that server needs a credential), or the host binds "
+            f"`{connect}` itself"
+        )
+    for server in servers:
+        # An MCP server the agent held: its tools are written and say `connect:`
+        # it, so what is owed is the host's binding of that name to the server.
+        owed.append(
+            f"the address of `{server}`: bind the name to its MCP server on the host that runs the "
+            f"tree (`endpoint:` in `resources/{server}.yaml`, or the host's own binding of `{server}`)"
         )
     owed.append(
         "`limits:` with `steps-at-most:` AND `when-it-runs-out:` — Pydantic AI "
@@ -664,628 +814,9 @@ def _still_to_write(
 
 
 # ─────────────────────────── Pydantic AI (a live object)  →  PACT
-
-
-#: What each attribute of a live `Agent` becomes. Keyed by the name this importer
-#: REPORTS, which is the public attribute where there is one — a reader of the
-#: report should be able to find the thing named on the object they passed in.
-_AGENT_MAPS: dict[str, str] = {k: r.pact for k, r in _REGISTRY.through("agent").items() if r.pact}
-
-def from_pydantic_ai_agent(
-    agent: Any, *, connect: str = ""
-) -> tuple[dict[str, Any], ImportReport]:
-    """One live Pydantic AI `Agent` as a PACT agent, and everything it could not say.
-
-    **PACT executes nothing here.** The caller has already built the object, in
-    their own process, by importing their own module — which is a thing they were
-    always going to do and is not a thing this repository does to them. D17 and
-    D23 forbid PACT running an author's code to find out what their agent is;
-    they do not forbid PACT reading an object it was handed. That distinction is
-    the whole reason this function takes an `Agent` and not a path.
-
-    **What an object knows is less than what the code says, and the report says
-    which.** `@agent.instructions`-decorated functions are callables: their text
-    exists only once a `RunContext` exists, so they are reported as unmapped
-    rather than invented. The same is true of a `prepare` on a tool, a dynamic
-    `model_settings` callable, and a toolset built by a `ToolsetFunc`. An
-    importer that quietly dropped those would produce a PACT tree missing the
-    instructions that actually govern the agent.
-
-    **`connect=` is the host answering the one question this source cannot.** A
-    Pydantic AI tool is a Python function, so an imported tree used to arrive
-    with every tool refused by `loader/tool-reaches-nowhere` — the largest entry
-    on `still_to_write` and the one an author is least able to act on. A host
-    that has wrapped those same functions as one MCP server already knows the
-    answer, and naming the server here says it once: pass the SAME name to
-    `tool_files_for(connect=...)`, which writes the line into every tool file,
-    and to `resource_file_for()`, which writes the server's own file. It is
-    taken here as well as there because this is what produces the REPORT, and a
-    checklist that still demands a line the host has already written is a
-    checklist people stop reading.
-    """
-    report = ImportReport(kind="a live Pydantic AI Agent", seen=_what_it_carries(agent))
-    out: dict[str, Any] = {}
-    settings: dict[str, Any] = {}
-
-    model = getattr(agent, "model", None)
-    if model is not None:
-        # A `Model` object, not a string, once `defer_model_check` is off — and
-        # its `model_name`/`system` are what a catalogue row is keyed on. A
-        # `str()` of the object would carry a repr into `model:`.
-        from pydantic_ai.models.fallback import FallbackModel
-
-        # 02P A2: a `FallbackModel` is PACT's `model: [a, b]`, in its order
-        # (`FallbackModel.models` is public, pydantic_ai/models/fallback.py:96).
-        chain = (
-            [_model_id(m) for m in model.models]
-            if isinstance(model, FallbackModel)
-            else [_model_id(model)]
-        )
-        named = chain[0] if len(chain) == 1 else (chain if all(chain) else "")
-        if named:
-            out["model"] = named
-            report.mapped["model"] = _AGENT_MAPS["model"]
-        else:
-            report.unmapped["model"] = (
-                f"a {type(model).__name__} whose provider and model name could "
-                "not be read; write `model:` by hand"
-            )
-    if name := str(getattr(agent, "name", None) or "").strip():
-        out["name"] = name
-        report.mapped["name"] = _AGENT_MAPS["name"]
-    if described := str(getattr(agent, "description", None) or "").strip():
-        out["description"] = described
-        report.mapped["description"] = _AGENT_MAPS["description"]
-
-    told, dynamic = _static_instructions(agent)
-    if told:
-        out["instructions"] = told
-        report.mapped["instructions"] = _AGENT_MAPS["instructions"]
-    if dynamic:
-        report.unmapped["instructions"] = (
-            f"{dynamic} instruction/system-prompt function(s). Their text is "
-            "produced from a `RunContext` at run time and does not exist on the "
-            "object, so it is not carried — read them and write the sentences "
-            "into `instructions:` yourself"
-        )
-    if getattr(agent, "_system_prompts", ()):
-        report.mapped["system_prompts"] = _AGENT_MAPS["system_prompts"]
-
-    said = getattr(agent, "model_settings", None)
-    if callable(said):
-        report.not_portable["model_settings"] = (
-            "a callable — Pydantic AI re-evaluates it before every model request "
-            "so settings can vary per step. PACT's `settings:` is one block for "
-            "the run, so there is no value here to carry"
-        )
-    elif isinstance(said, Mapping):
-        settings.update(_settings_to_pact(said, report, "model_settings"))
-        if "model_settings" not in report.mapped:
-            report.mapped["model_settings"] = _AGENT_MAPS["model_settings"]
-
-    answers, refused = _output_type_to_answers(agent)
-    if answers:
-        out["answers-with"] = answers
-        report.mapped["output_type"] = _AGENT_MAPS["output_type"]
-    for where, why in refused.items():
-        report.unmapped[where] = why
-
-    uses, tools, tool_notes = _toolsets_to_pact(agent)
-    if uses:
-        out["uses"] = uses
-        report.mapped["toolsets"] = _AGENT_MAPS["toolsets"]
-    elif tool_notes:
-        # Every toolset was unreadable, so nothing was carried and the OUTER key
-        # is what `seen` holds. Naming only the `toolsets[0]` entries left
-        # `toolsets` itself in no bucket at all — a silent drop, on the one agent
-        # shape where the drop is the whole story: an agent all of whose tools
-        # are built per run imported as an agent with no tools, and said so
-        # nowhere a `silent_drops` check would find.
-        report.unmapped["toolsets"] = (
-            f"{len(tool_notes)} toolset(s), none of which can be read without "
-            "starting a run — so no tool names were carried"
-        )
-    for where, why in tool_notes.items():
-        report.unmapped[where] = why
-
-    # Approval is the one place the two systems say the same thing, so it is
-    # carried rather than reported: a tool whose `ToolDefinition.kind` is
-    # `unapproved` is `requires_approval=True`, which is PACT's
-    # `needs-a-person: yes` about that action and nothing else.
-    #
-    # It lands on the TOOL FILE and not on the agent, and that took a `pact
-    # check` to learn. `agent.policy:` is a NAME — `names: policies` in the
-    # schema — so the prose this wrote for a round (`policy: Ask a person before
-    # refund.`) was refused with `schema/no-such-name`, and the fix is not to
-    # write a policy file: `action.needs-a-person` is the shorthand the schema
-    # added for exactly this case, and its own comment says gating one action
-    # otherwise costs three files and thirteen lines. It desugars to `when:
-    # [{tool: <tool>/<action>}]` against `pact:question/is-this-ok` — which is
-    # precisely the rule `_tools_needing_approval` reads back on the way out, so
-    # the two directions are symmetric by construction.
-    #
-    # Reported under `requires_approval` and NOT under `capabilities`, which is
-    # where it was for a round. The two are different things and conflating them
-    # cost the report its point twice over: `capabilities` was marked mapped, so
-    # the middleware this importer genuinely cannot translate stopped being
-    # named as not-portable — an agent with a guardrail capability imported
-    # clean and silent.
-    needs_person = [t for t, meta in tools.items() if meta.get("approval")]
-    if needs_person:
-        report.mapped["requires_approval"] = (
-            "`needs-a-person: yes` on the action, in each tool's own file — see "
-            "`tool_files_for()`, which is what writes them"
-        )
-
-    if capabilities := _authored_capabilities(agent):
-        for name in _live_capabilities(capabilities, settings, uses, report):
-            uses.append(name)
-        uses[:] = sorted(set(uses))
-        if uses:
-            out["uses"] = uses
-
-    if settings:
-        out["settings"] = settings
-
-    for key, why in _AGENT_NOT_PORTABLE.items():
-        if key in report.seen and key not in report.mapped and key not in report.unmapped:
-            report.not_portable[key] = why
-
-    report.still_to_write = _still_to_write(
-        out,
-        tools_named=bool(uses),
-        has_policy=bool(needs_person),
-        connect=str(connect or "").strip(),
-    )
-    return out, report
-
-
-def _what_it_carries(agent: Any) -> tuple[str, ...]:
-    """Every part of this `Agent` that actually holds something.
-
-    `seen` is what `silent_drops` is computed against, so what goes in it decides
-    what a bug in this importer looks like. The two card readers set it to
-    `tuple(sorted(card))` — the keys the source ACTUALLY HAS — and a live object
-    has no such list: every attribute exists, most of them holding a default
-    nobody chose.
-
-    Listing them all unconditionally is what shipped first, and it was wrong in
-    the direction that matters. An agent with no `system_prompt=` reported
-    `system_prompts` as a silent drop — a BUG IN THIS IMPORTER banner, on a
-    correct import, for a field the author never wrote. A reader who sees that
-    banner on a clean run learns to ignore it, which costs the mechanism the one
-    thing it is for.
-
-    So an attribute is `seen` when it holds something: a non-empty value, or a
-    number the author had to type. `end_strategy` is in the list only when it is
-    not `graceful`, and `retries` only when it is not 1, because those are the
-    constructor defaults — carried into the report they would be this importer
-    reporting Pydantic AI's own defaults as the author's losses.
-    """
-    said: list[str] = []
-
-    def carries(key: str, value: Any, default: Any = None) -> None:
-        # Falsy IS absent for every attribute below — an empty list, an empty
-        # tuple, an empty dict, `None`, `''`. Written as `not value` and not as a
-        # chain of `!= () and != {}`, which is what it was and which let `[]`
-        # through: `[] != ()` is True in Python, so a bare agent's empty
-        # `_instructions` counted as carried and then reported itself a silent
-        # drop. None of these fields has a meaningful falsy value.
-        if not value or value == default:
-            return
-        said.append(key)
-
-    carries("model", getattr(agent, "model", None))
-    carries("name", getattr(agent, "name", None))
-    carries("description", getattr(agent, "description", None))
-    carries("instructions", _authored_instructions(agent))
-    carries("system_prompts", tuple(getattr(agent, "_system_prompts", ()) or ()))
-    carries("model_settings", getattr(agent, "model_settings", None))
-    # `str` is `Agent`'s default output type and means the author declared no
-    # shape — see `_output_type_to_answers` for why that carries nothing.
-    carries("output_type", getattr(agent, "output_type", str), default=str)
-    carries("end_strategy", getattr(agent, "end_strategy", "graceful"), default="graceful")
-    carries("tool_timeout", getattr(agent, "_tool_timeout", None))
-    carries("metadata", getattr(agent, "_metadata", None))
-    carries("deps_type", getattr(agent, "deps_type", None), default=object)
-    carries("output_validators", list(getattr(agent, "_output_validators", ()) or ()))
-    if getattr(agent, "_max_tool_retries", 1) != 1 or getattr(agent, "_max_output_retries", 1) != 1:
-        said.append("retries")
-
-    # Toolsets by what is IN them, not by how many there are. Every agent has an
-    # `_AgentFunctionToolset` whether or not anybody registered a tool, so
-    # counting the list made a bare agent carry `toolsets` and then drop it.
-    uses, tools, notes = _toolsets_to_pact(agent)
-    if uses or notes:
-        said.append("toolsets")
-    if any(meta.get("approval") for meta in tools.values()):
-        said.append("requires_approval")
-
-    if _authored_capabilities(agent):
-        said.append("capabilities")
-    return tuple(sorted(said))
-
-
-def _live_capabilities(
-    capabilities: list[Any], settings: dict[str, Any], uses: list[str], report: ImportReport
-) -> list[str]:
-    """The author's capability OBJECTS, as whatever PACT can say of them.
-
-    The live twin of `_read_capabilities`, and it exists because the two sources
-    are genuinely different shapes: a spec entry is `{'Thinking': {'effort':
-    'high'}}` and a live one is a `Thinking` instance with an `effort`
-    attribute. Sharing one reader would mean guessing which it had.
-
-    What they must NOT differ on is the answer. `Thinking(effort='high')` has to
-    become `settings.thinking: high` whichever door it came through — otherwise
-    the same agent imports two ways depending on whether its author wrote YAML
-    or Python, which is the portability being merely technically true.
-
-    Keyed on `get_serialization_name()`, the SDK's own name for a capability in
-    a spec file, so the two readers agree by construction rather than by two
-    tables being kept in step.
-    """
-    named: list[str] = []
-    for capability in capabilities:
-        kind = type(capability)
-        try:
-            name = kind.get_serialization_name() or kind.__name__
-        except Exception:  # pragma: no cover - a custom capability may not have one
-            name = kind.__name__
-        where = f"capabilities.{name}"
-        if name == "Thinking":
-            effort = getattr(capability, "effort", True)
-            said = _THINKING_BACK.get(effort if isinstance(effort, bool) else str(effort))
-            if said is None:
-                report.unmapped[where] = (
-                    f"`Thinking(effort={effort!r})` — PACT's `thinking:` is "
-                    "`none`, `low`, `medium`, `high`"
-                )
-                continue
-            settings["thinking"] = said
-            report.mapped[where] = _REGISTRY.capability("Thinking").pact
-        elif _REGISTRY.crosses(name):
-            row = _REGISTRY.capability(name)
-            named.append(row.tool)
-            report.mapped[where] = row.pact
-            if name == "MCP":
-                # The live twin of the same sentence, from the same constant, so
-                # the two doors cannot tell an author two different things about
-                # the one protocol.
-                report.not_portable[f"{where}.wire-shape"] = _MCP_SHAPE
-        else:
-            report.not_portable[where] = _REGISTRY.why_not_portable(name)
-    # The outer key only counts as accounted-for when at least one capability
-    # was: otherwise `capabilities` falls through to `_AGENT_NOT_PORTABLE` and is
-    # named there, which is the honest answer for an agent whose only
-    # capabilities are middleware.
-    if any(k.startswith("capabilities.") for k in report.mapped):
-        report.mapped["capabilities"] = _SPEC_MAPS["capabilities"]
-    return named
-
-
-def _authored_capabilities(agent: Any) -> list[Any]:
-    """The capabilities somebody actually passed, without the infrastructure.
-
-    `Agent.__init__` calls `_inject_auto_capabilities`, which appends every type
-    in `_AUTO_INJECT_CAPABILITY_TYPES` that is not already there — `ToolSearch`
-    and `PendingMessageDrainCapability` on 2.21. They are on EVERY agent,
-    including one constructed as `Agent('openai:gpt-5.2')` and nothing else.
-
-    Counting them made every bare agent report a capability its author never
-    wrote, under a heading that says PACT cannot translate it. A report that
-    cries loss on an agent with no losses is the same failure as one that stays
-    quiet on an agent with them.
-
-    The list is read from the SDK rather than written here, so an upgrade that
-    injects a third does not silently start reporting it — and read from what
-    the SDK DOES, not from a private name of it: the kinds an agent nobody
-    configured already carries (`_what_every_agent_carries`).
-
-    **By value and not by type**, which is the difference between filtering the
-    injected one and filtering the author's. `_inject_auto_capabilities` appends
-    `cap_type()` — a DEFAULT-constructed instance — and only when the type is not
-    already there. So an author who writes `ToolSearch(max_results=20)` gets
-    theirs and no injected one, and a filter keyed on the TYPE would drop the
-    only capability they configured, silently, under a mechanism whose whole
-    purpose is that nothing is dropped silently.
-
-    Capabilities are `@dataclass`es (the spec registry refuses one that is not),
-    so `==` is a field comparison and a configured instance differs from a
-    default one. An author who passes a bare `ToolSearch()` is filtered — and
-    should be: it is byte-identical to the injected one, so there is nothing
-    about it to report.
-    """
-    root = getattr(agent, "root_capability", None)
-    if root is None:
-        return []
-    automatic = _what_every_agent_carries()
-
-    def injected(capability: Any) -> bool:
-        for kind in automatic:
-            if type(capability) is not kind:
-                continue
-            try:
-                return bool(capability == kind())
-            except Exception:  # pragma: no cover - a capability that will not compare
-                return True
-        return False
-
-    return [c for c in (getattr(root, "capabilities", ()) or ()) if not injected(c)]
-
-
-@lru_cache(maxsize=1)
-def _what_every_agent_carries() -> tuple[type, ...]:
-    """The kinds of capability an agent has before its author gives it any.
-
-    Asked of the SDK through its public surface: build an agent with nothing on
-    it and read `root_capability`. It was `pydantic_ai.agent`'s private
-    `_AUTO_INJECT_CAPABILITY_TYPES`, which a release may rename without notice.
-    """
-    from pydantic_ai import Agent
-
-    bare = Agent(defer_model_check=True)
-    return tuple(type(c) for c in (getattr(bare.root_capability, "capabilities", ()) or ()))
-
-
-#: What a live `Agent` carries that PACT does not: the spec-file reasons word for
-#: word (one YAML anchor each in the registry), plus what an object has and a
-#: file cannot.
-_AGENT_NOT_PORTABLE: dict[str, str] = {
-    k: r.why for k, r in _REGISTRY.through("agent").items() if r.why
-}
-
-def _model_id(model: Any) -> str:
-    """The catalogue-shaped id of a bound model — `provider:name`.
-
-    A string was passed straight through by `Agent.__init__` only when
-    `defer_model_check=True`; otherwise `models.infer_model` has already turned it
-    into a `Model`, whose `system` and `model_name` are the two halves the
-    catalogue keys on. Reading `str(model)` instead would put a repr in `model:`.
-    """
-    if isinstance(model, str):
-        return model.strip()
-    system = str(getattr(model, "system", "") or "").strip()
-    named = str(getattr(model, "model_name", "") or "").strip()
-    if system and named:
-        return f"{system}:{named}"
-    return named
-
-
-def _authored_instructions(agent: Any) -> list[Any]:
-    """`Agent(instructions=...)` entries as the author passed them.
-
-    There is no public read of an agent's own instructions, so this reads
-    `Agent._instructions`, the one private attribute it has to (2.54:
-    agent/__init__.py:757). Since 2.54 each entry is a `SourcedInstruction`
-    holding the author's value under `.instruction` (_instructions.py:46); 2.21
-    held the values bare. Both shapes read the same, and a static
-    `InstructionPart` reads as its text, so the same agent imports the same way
-    on either pin.
-    """
-    out: list[Any] = []
-    for entry in getattr(agent, "_instructions", ()) or ():
-        value = getattr(entry, "instruction", entry)
-        text = getattr(value, "content", None)
-        if not isinstance(value, str) and isinstance(text, str) and not getattr(value, "dynamic", True):
-            value = text
-        out.append(value)
-    return out
-
-
-def _static_instructions(agent: Any) -> tuple[str, int]:
-    """The instruction text that exists WITHOUT a run, and how much does not.
-
-    `Agent._instructions` holds a mixed list — strings the author wrote and
-    functions they decorated — and `_system_prompts` holds the static half of the
-    older `system_prompt=` surface. Both reach the model as one system message,
-    which is exactly `instructions:`, so both are joined here in that order.
-    """
-    said: list[str] = []
-    dynamic = 0
-    for entry in _authored_instructions(agent):
-        if isinstance(entry, str):
-            said.append(entry.strip())
-        else:
-            dynamic += 1
-    said += [str(s).strip() for s in getattr(agent, "_system_prompts", ()) or ()]
-    dynamic += len(getattr(agent, "_system_prompt_functions", ()) or ())
-    dynamic += len(getattr(agent, "_system_prompt_dynamic_functions", {}) or {})
-    return "\n\n".join(s for s in said if s), dynamic
-
-
-def _output_type_to_answers(agent: Any) -> tuple[dict[str, str], dict[str, str]]:
-    """A live agent's output type as `answers-with:` lines.
-
-    Read through `agent.output_json_schema()`, which is public and is the same
-    schema the SDK itself sends — rather than by unwrapping `ToolOutput`,
-    `NativeOutput`, `PromptedOutput` and the bare-type case one at a time, which
-    would be four chances to disagree with what the model is actually told.
-
-    A plain `str` output type produces `{"type": "string"}` and NOT an object,
-    and that is not an answer shape map: PACT's `answers-with:` is a set of named
-    fields. `str` is the default and means the author declared no shape, so it
-    carries nothing and reports nothing — an `answers-with: {answer: text}`
-    nobody wrote would be this importer inventing a contract.
-    """
-    refused: dict[str, str] = {}
-    try:
-        schema = agent.output_json_schema()
-    except Exception as trouble:  # pragma: no cover - depends on the user's type
-        return {}, {"output_type": f"its JSON schema could not be built: {trouble}"}
-    if not isinstance(schema, Mapping) or schema.get("type") != "object":
-        return {}, refused
-    return _schema_to_answers(schema)
-
-
-def _toolsets_to_pact(agent: Any) -> tuple[list[str], dict[str, dict[str, Any]], dict[str, str]]:
-    """Every tool the agent holds statically, by name.
-
-    "Statically" is the load-bearing word and it is why this returns notes. A
-    `FunctionToolset` holds its tools in a public dict and an `ExternalToolset`
-    holds `ToolDefinition`s, so both can be read with no run. A toolset built by
-    a `ToolsetFunc`, an MCP server that has not been connected, and anything
-    behind a `prepare` are all resolved per RUN against a `RunContext` — there is
-    no list to read, and reporting that is the difference between an agent
-    imported with four of its nine tools and an agent that says so.
-    """
-    uses: list[str] = []
-    tools: dict[str, dict[str, Any]] = {}
-    notes: dict[str, str] = {}
-    for i, toolset in enumerate(getattr(agent, "toolsets", ()) or ()):
-        kind = type(toolset).__name__
-        holder = getattr(toolset, "tools", None)
-        defs = getattr(toolset, "tool_defs", None)
-        if isinstance(holder, Mapping):
-            for name, tool in holder.items():
-                td = getattr(tool, "tool_def", None)
-                tools[str(name)] = {
-                    "description": str(getattr(td, "description", "") or ""),
-                    "parameters": dict(getattr(td, "parameters_json_schema", {}) or {}),
-                    "approval": getattr(td, "kind", "") == "unapproved",
-                }
-                uses.append(str(name))
-        elif isinstance(defs, list):
-            for td in defs:
-                name = str(getattr(td, "name", "") or "")
-                if not name:
-                    continue
-                tools[name] = {
-                    "description": str(getattr(td, "description", "") or ""),
-                    "parameters": dict(getattr(td, "parameters_json_schema", {}) or {}),
-                    "approval": getattr(td, "kind", "") == "unapproved",
-                }
-                uses.append(name)
-        else:
-            notes[f"toolsets[{i}]"] = (
-                f"a {kind} whose tools are resolved per run against a "
-                "`RunContext` — there is no list to read without starting one, "
-                "so its tools are not carried"
-            )
-    return sorted(set(uses)), tools, notes
-
-
-def tool_files_for(agent: Any, *, connect: str = "") -> dict[str, dict[str, Any]]:
-    """One `tools/<name>.yaml` body per tool the agent holds.
-
-    Separate from `from_pydantic_ai_agent` because it writes a different FILE.
-    The agent block names tools on `uses:`; each tool is its own document, and a
-    `takes:` block is the one part of it this can fill in — from the tool's own
-    `parameters_json_schema`, which is the same schema the model is shown.
-
-    `spends-money:` is deliberately absent from what this produces. Nothing in a
-    Pydantic AI tool says whether it moves money, and `crates/pact-loader/src/
-    money.rs` refuses a spending action no approval rule names — so a guess
-    either way would be a guess about governance.
-
-    **The line that says where the tool reaches is the one this cannot guess**,
-    and it stops the file loading rather than merely weakening it. `pact check`
-    refuses a tool with no `connect:`, `url:` or `says:`
-    (`loader/tool-reaches-nowhere`), and its own message gives the reason: the
-    model is still offered the tool and every call comes back `error: no tool
-    named ...`. A Pydantic AI tool is a Python function in the author's process,
-    and *call this Python function* is not something a portable document can say
-    to a second runtime — which is the rule working, not a gap in it.
-
-    `connect=` is where the answer comes from, and it comes from the HOST rather
-    than from the agent. The commonest way to make these functions reachable by a
-    second runtime is to serve them — one MCP server carrying all of them — and a
-    host that has done that knows the server's name and PACT does not. Given it,
-    every tool file here says `connect: <that server>`, `resource_file_for()`
-    writes the server's own file, and the tree that comes out is COMPLETE: `pact
-    check` exits 0 with nothing left to add by hand. Without it the files are the
-    same minus that line, and `from_pydantic_ai_agent`'s `still_to_write` names
-    the line and where to put it.
-
-    One name for all of them, and deliberately not a name per tool. The claim
-    being made is *these functions are now behind that server*, which is either
-    true of the set or not true at all; a per-tool map would let a caller wire
-    half a toolset to a server that does not serve it, and the loader cannot
-    catch that — `names: resources` only checks the server EXISTS.
-    """
-    named = str(connect or "").strip()
-    _, tools, _ = _toolsets_to_pact(agent)
-    files: dict[str, dict[str, Any]] = {}
-    for name, meta in sorted(tools.items()):
-        takes: dict[str, str] = {}
-        properties = (meta.get("parameters") or {}).get("properties")
-        if isinstance(properties, Mapping):
-            for arg, prop in properties.items():
-                shape = shape_from_json_schema(prop if isinstance(prop, Mapping) else {})
-                takes[str(arg)] = shape.written() if shape else "text"
-        action: dict[str, Any] = {}
-        if takes:
-            action["takes"] = takes
-        if meta.get("approval"):
-            # `requires_approval=True`, in PACT's one-line spelling. The schema
-            # added this shorthand because gating one action otherwise costs a
-            # question, a policy file and a rule inside it — and it desugars to
-            # exactly that rule, so nothing about the guarantee is weaker.
-            action["needs-a-person"] = "yes"
-        body: dict[str, Any] = {
-            "description": meta.get("description") or f"the {name} tool",
-        }
-        if named:
-            # Written between `description:` and `actions:`, which is where the
-            # worked example puts it — a tool file is read top to bottom by a
-            # person, and *what this is* then *where it goes* then *what it can
-            # do* is the order the questions occur to them.
-            body["connect"] = named
-        body["actions"] = {"call": action}
-        files[name] = body
-    return files
-
-
-def resource_file_for(
-    name: str, endpoint: str, *, asks_to_connect: str = ""
-) -> dict[str, Any]:
-    """The body of one `resources/<name>.yaml` — the server those tools reach.
-
-    The other half of `tool_files_for(connect=...)`, and the reason the pair
-    exists: `connect:` names a server, `names: resources` holds it to naming one
-    that is really there, and until this function there was no way to emit that
-    file at all — so an imported tree could satisfy `reach.rs` only by having a
-    person hand-write a document PACT knew the shape of perfectly well.
-
-    **Four lines, and none of them is a value.** `endpoint:` and `auth:` are
-    both REFERENCES the host resolves — never an address with a secret in it,
-    never a command, never arguments — because honouring a command here would
-    make reviewing an untrusted workspace an act of running its code (§11.5).
-    That is why `endpoint` is an argument rather than something guessed from the
-    agent: it is a name the platform team publishes, and there is nothing in a
-    Pydantic AI `Agent` that could supply it.
-
-    **`auth:` is deliberately not written.** A credential reference is that same
-    platform team's name for a secret, and a guess at one would produce a file
-    that loads clean and cannot connect — `pact check` does not require the
-    field, so nothing downstream would catch it. `still_to_write` says to add it
-    beside the endpoint when the server needs one.
-
-    `asks_to_connect` names the question a person is asked the first time a run
-    reaches this server, and it is a NAME: `names: questions` means the
-    workspace must carry `questions/<that>.yaml`, so passing one owes a question
-    file. Left out, the connection is taken as already allowed — which is the
-    honest default for a server the host has just stood up itself.
-    """
-    called = str(name or "").strip()
-    reaches = str(endpoint or "").strip()
-    if not reaches:
-        # A blank endpoint is the one mistake this function could make that
-        # nothing downstream would catch: `endpoint:` is not `required:` in the
-        # schema, so `endpoint: ''` loads clean and the tools that name this
-        # server reach a server that goes nowhere — the exact
-        # "loads and does nothing" failure `reach.rs` was written against, one
-        # hop further along.
-        raise ValueError(
-            f"`{called or 'this server'}` needs an endpoint: a name your "
-            "platform team publishes for this MCP server. It is their list, not "
-            "a file in here, and not a URL with a credential in it"
-        )
-    body: dict[str, Any] = {"resource-kind": "mcp-server", "endpoint": reaches}
-    if asked := str(asks_to_connect or "").strip():
-        body["asks-to-connect"] = asked
-    body["description"] = f"{called}, as the host publishes it."
-    return body
+#
+# `from_pydantic_ai_agent`, `tool_files_for` and `resource_file_for` are in
+# `pydantic_ai_live`, over `pydantic_ai_reading`'s public-only reads.
 
 
 # ─────────────────────────────────────── PACT  →  Pydantic AI
@@ -1409,17 +940,30 @@ def to_pydantic_ai_spec(
     if told := _field_text(block.get("instructions")):
         spec["instructions"] = told
         report.carried["instructions"] = "`instructions`"
-    # 02P A1. The words are carried as written, holes and all, and a spec file is
-    # read with no run: nobody fills `{{run-inputs.brand}}`, so the model reads
-    # the braces. Carried and lossy, so it is said (`exporting`: every loss).
+    # 02P A1, A4. A `{{run-inputs.brand}}` hole is Pydantic AI's `{{brand}}` template,
+    # filled from the run's deps, which `deps_schema` (the agent's `run-inputs:`,
+    # below) declares: `Agent.from_spec` makes it a `TemplateStr` and the model reads
+    # the filled words. A `{{remembers.x}}` hole has no deps to come from, so it is
+    # carried as written and the model reads the braces: said (`exporting`: every loss).
+    inputs = set(block.get("run-inputs") or {}) if isinstance(block.get("run-inputs"), Mapping) else set()
     for words in ("description", "instructions"):
-        if unfilled := holes_in(str(spec.get(words) or "")):
+        if not spec.get(words):
+            continue
+        written = spec[words]
+        spec[words] = _as_template(written, inputs)
+        if holes_in(written) and any(h.namespace == RUN_INPUTS for h in holes_in(written)):
+            report.carried[words] = (
+                f"`{words}`, each `{{{{run-inputs.<name>}}}}` blank as Pydantic AI's `{{{{<name>}}}}` "
+                "template, filled from the run's deps (`deps_schema`); `Agent.from_file` reads a "
+                "template with `pydantic-ai-slim[spec]` installed"
+            )
+        if unfilled := [h for h in holes_in(written) if h.namespace != RUN_INPUTS or h.name not in inputs]:
             report.not_carried[f"{words}.holes"] = (
                 f"`{words}:` has "
                 + ", ".join(f"`{{{{{h.address}}}}}`" for h in unfilled)
-                + ", which PACT fills when a run starts, and a spec file is read "
-                "with no run, so the braces are carried as written and reach the "
-                "model unfilled. fix: build the agent with "
+                + ", which PACT fills when a run starts from what the agent remembers, and "
+                "a spec file has nothing to fill it from, so the braces are carried as "
+                "written and reach the model unfilled. fix: build the agent with "
                 "`build_agent(spec, run_inputs=..., remembered=...)`, which fills them"
             )
 
@@ -1630,6 +1174,30 @@ _RUNTIME_PROVIDERS: dict[str, str] = {
     "xai-api": "xai",
     "ollama": "ollama",
 }
+
+
+def catalogue_row_for(model_id: str) -> str:
+    """The distribution catalogue's row a Pydantic AI model id names, or the id as it is.
+
+    The inverse of `pydantic_ai_model_id`, so an agent exported with
+    `ollama:qwen2.5:14b-instruct` imports back as the row `qwen2.5-14b-instruct`
+    it was exported from (02P S3: the same `pact show` digest). An id two rows
+    share, or none, is kept as written: `still_to_write` then asks for a row.
+    """
+    rows = _rows_by_id().get(str(model_id or "").strip(), ())
+    return rows[0] if len(rows) == 1 else str(model_id or "").strip()
+
+
+@lru_cache(maxsize=1)
+def _rows_by_id() -> dict[str, tuple[str, ...]]:
+    from .resolve import load_catalogue
+
+    by: dict[str, list[str]] = {}
+    for entry in load_catalogue().entries:
+        said, _ = pydantic_ai_model_id(entry.name)
+        if said:
+            by.setdefault(said, []).append(entry.name)
+    return {k: tuple(v) for k, v in by.items()}
 
 
 def pydantic_ai_model_id(model: str, workspace: str = "") -> tuple[str, str]:
@@ -2213,3 +1781,4 @@ def main(argv: "list[str] | None" = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
+

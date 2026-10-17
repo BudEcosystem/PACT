@@ -1,0 +1,11 @@
+# 02P M7: a wrapper around a model is named, and the model inside is carried.
+row: M7
+says: a wrapper around a model is named, and the model inside is carried
+import:
+  mapped:
+  - description
+  - instructions
+  - model
+  - name
+  not-portable:
+  - model.wrapper

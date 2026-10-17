@@ -1,0 +1,11 @@
+# 02P N2: a provider's code execution is named: `run-code` runs on Bud's own room.
+row: N2
+says: 'a provider''s code execution is named: `run-code` runs on Bud''s own room'
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.NativeTool

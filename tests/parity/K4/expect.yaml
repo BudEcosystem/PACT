@@ -1,0 +1,11 @@
+# 02P K4: the harness's dynamic workflow is named, with the PACT line to write.
+row: K4
+says: the harness's dynamic workflow is named, with the PACT line to write
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.DynamicWorkflow

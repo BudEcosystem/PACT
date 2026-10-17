@@ -1,0 +1,10 @@
+# 02P A5: a dynamic instruction is counted and named, never carried as the author's words.
+row: A5
+says: a dynamic instruction is counted and named, never carried as the author's words
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - instructions.made-at-run-time

@@ -1,0 +1,5 @@
+# 02P M10: `direct.model_request` is a call, not an agent: nothing to import.
+row: M10
+says: '`direct.model_request` is a call, not an agent: nothing to import'
+import: none
+why: '`direct.model_request` is a call, not an agent: nothing to import'

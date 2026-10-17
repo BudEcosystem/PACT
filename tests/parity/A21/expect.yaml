@@ -1,0 +1,5 @@
+# 02P A21: enqueueing a message is something a run does, not part of an agent: nothing to import.
+row: A21
+says: 'enqueueing a message is something a run does, not part of an agent: nothing to import'
+import: none
+why: 'enqueueing a message is something a run does, not part of an agent: nothing to import'

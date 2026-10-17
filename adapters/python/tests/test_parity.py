@@ -20,13 +20,18 @@ Three standard checks (02P §6), and the behaviour of each row:
   turns `expect.yaml` gives under `model:`, and what the row's 02P test column
   asks for holds (`expect:`).
 
-**Which rows.** `PHASE_1` is the set Phase 1 compiles: the 02P rows whose Change
-is `—`, A1, A2 or A4, or a field 02P §3.1 builds in Phase 1 (`answers-with:`,
-`checked-by:` with `checks-at-most:`, edited answers, memory), on PACT's own
-Pydantic AI path. Rows that path does not compile wait for the phase that
-builds them: F1 (the files a run takes in are the host's prompt), O3 (answer
-alternatives, Phase 3), T10 and E3/E6 (a tool file to write, and the eval
-runner, not the agent), and every row whose Change is runtime work (R2 to R10).
+**Which rows.** `AGENT_LEVEL`: every agent-level row of the matrix (WP-38). A
+row's fixture is a PACT tree (`tree/`, built by `build_agent` and imported back
+through the live door), an `AgentSpec` file (`spec.yaml`, the spec door), or a
+module that builds an `Agent` (`agent.py`, the live door); the live door reads
+the object through Pydantic AI's public API only (`pydantic_ai_reading`). A row
+with nothing on an agent to import (a run's, a host's or an export's) says so
+(`import: none`, `why:`), and a row another importer reads says which package
+brings it (`later:`). **S2** runs on each row that says what its export
+cannot carry (`export:`); **S3**, PACT → Pydantic AI → PACT, on each tree row
+whose agent a spec file holds whole (`export: round-trip: the same digest`), and
+Pydantic AI → PACT → Pydantic AI on each `spec.yaml` and `agent.py` row with
+`export:`.
 """
 
 from __future__ import annotations
@@ -48,9 +53,9 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from pact_adapters.ir import AgentSpec  # noqa: E402
+from pact_adapters.pydantic_ai_live import from_pydantic_ai_agent  # noqa: E402
 from pact_adapters.pydantic_ai_interop import (  # noqa: E402
     build_agent,
-    from_pydantic_ai_agent,
     from_pydantic_ai_spec,
     pydantic_ai_model_id,
     return_schema_for,
@@ -76,13 +81,21 @@ from pydantic_ai.usage import UsageLimits  # noqa: E402
 REPO = Path(__file__).resolve().parents[3]
 PARITY = REPO / "tests" / "parity"
 
-#: The rows Phase 1 compiles (see the module docstring for the rule).
-PHASE_1 = (
-    "A1", "A2", "A3", "A4", "A8", "A14", "C6", "C8", "C10", "C12", "H1", "H3",
-    "M1", "M3", "N1", "N3", "O1", "O2", "O7", "P1", "T1", "T2", "T11",
+#: Every agent-level row of the 02P matrix (§2.1 to §2.12, §2.14 to §2.16; the
+#: graph rows, §2.13, are workflows'): each has a folder.
+AGENT_LEVEL = tuple(
+    f"{letter}{n}"
+    for letter, last in (
+        ("A", 26), ("T", 14), ("H", 9), ("O", 8), ("S", 5), ("C", 12), ("M", 11), ("F", 5),
+        ("N", 7), ("P", 8), ("D", 4), ("E", 10), ("K", 6), ("X", 11), ("I", 2),
+    )
+    for n in range(1, last + 1)
 )
 
 ROWS = sorted(p.name for p in PARITY.iterdir() if p.is_dir()) if PARITY.is_dir() else []
+
+#: What a fixture can be: a PACT tree, an `AgentSpec` file, or a module that builds an `Agent`.
+FIXTURES = ("tree", "spec.yaml", "agent.py")
 
 
 def _expect(row: str) -> dict[str, Any]:
@@ -98,29 +111,66 @@ def _document(row: str) -> dict[str, Any]:
     return shown(PARITY / row / "tree")
 
 
+def _fixture(row: str) -> str:
+    return next((f for f in FIXTURES if (PARITY / row / f).exists()), "")
+
+
+IMPORTED = [r for r in ROWS if _fixture(r)]
+
+
 # ───────────────────────────────────────────────────────────── the row set
 
 
-def test_every_phase_1_row_has_a_folder_and_nothing_else_does() -> None:
+def test_every_agent_level_row_has_a_folder_and_nothing_else_does() -> None:
+    """Each row either has a fixture its import is checked on, or says why it has none:
+    `import: none` (nothing on an agent to import: the row is a run's, a host's or an
+    export's) with `why:`, or `later:` naming the package whose importer reads it."""
     assert ROWS, f"{PARITY} has no rows"
-    assert set(ROWS) == set(PHASE_1), (
-        f"missing: {sorted(set(PHASE_1) - set(ROWS))}; not a Phase 1 row: {sorted(set(ROWS) - set(PHASE_1))}"
+    assert set(ROWS) == set(AGENT_LEVEL), (
+        f"missing: {sorted(set(AGENT_LEVEL) - set(ROWS))}; not a row: {sorted(set(ROWS) - set(AGENT_LEVEL))}"
     )
     for row in ROWS:
         said = _expect(row)
         assert said.get("row") == row, f"{row}/expect.yaml says it is row {said.get('row')!r}"
-        has = {p.name for p in (PARITY / row).iterdir()}
-        assert has & {"tree", "spec.yaml"}, f"{row} has no fixture (`tree/` or `spec.yaml`)"
+        assert said.get("says"), f"{row}/expect.yaml says nothing about what the row asks"
+        if _fixture(row):
+            assert "import" in said and said["import"] != "none", f"{row} has a fixture and no buckets"
+        else:
+            assert said.get("import") == "none" and (said.get("why") or said.get("later")), (
+                f"{row} has no fixture (`tree/`, `spec.yaml` or `agent.py`) and does not say why"
+            )
 
 
 # ──────────────────────────────────────────────────────────────── S1, S5
 
 
+def _built(row: str) -> Any:
+    """`agent.py`'s `agent`: the module run as its own, as an author's process would."""
+    import importlib.util
+
+    named = f"parity_{row.lower()}"
+    found = importlib.util.spec_from_file_location(named, PARITY / row / "agent.py")
+    module = importlib.util.module_from_spec(found)
+    sys.modules[named] = module
+    found.loader.exec_module(module)
+    return module.agent
+
+
 def _imported(row: str, said: dict[str, Any]) -> Any:
     """The fixture as Pydantic AI has it, imported back: the `ImportReport`."""
-    if (PARITY / row / "spec.yaml").is_file():
-        spec_file = yaml.safe_load((PARITY / row / "spec.yaml").read_text(encoding="utf-8"))
-        return from_pydantic_ai_spec(spec_file)[1]
+    return _imported_agent(row, said)[1]
+
+
+def _spec_file(row: str) -> dict[str, Any]:
+    return yaml.safe_load((PARITY / row / "spec.yaml").read_text(encoding="utf-8"))
+
+
+def _imported_agent(row: str, said: dict[str, Any]) -> tuple[dict[str, Any], Any]:
+    """The fixture as Pydantic AI has it, imported back: the PACT agent block and the report."""
+    if _fixture(row) == "spec.yaml":
+        return from_pydantic_ai_spec(_spec_file(row))
+    if _fixture(row) == "agent.py":
+        return from_pydantic_ai_agent(_built(row))
     spec = _spec(row, said)
     agent = build_agent(
         spec,
@@ -128,18 +178,29 @@ def _imported(row: str, said: dict[str, Any]) -> Any:
         run_inputs=said.get("inputs"),
         remembered=said.get("remembered"),
     )
-    return from_pydantic_ai_agent(agent)[1]
+    return from_pydantic_ai_agent(agent)
 
 
-@pytest.mark.parametrize("row", ROWS)
+def _not_portable(row: str, said: dict[str, Any]) -> list[str]:
+    """The named losses a row's import must report. Every import of a live agent also says
+    `not_shown`, what Pydantic AI's public API does not show (`pydantic_ai_reading`)."""
+    wanted = list((said.get("import") or {}).get("not-portable") or [])
+    return sorted(wanted + (["not_shown"] if _fixture(row) != "spec.yaml" else []))
+
+
+@pytest.mark.parametrize("row", IMPORTED)
 def test_s1_the_import_accounts_for_every_key(row: str) -> None:
+    """The report's buckets, and `import: block:`: what the agent becomes, each line given
+    exactly (the row's own claim, such as O4's `answers-with-mode:`)."""
     said = _expect(row)
-    report = _imported(row, said)
+    block, report = _imported_agent(row, said)
     assert report.silent_drops == (), f"{row}: dropped in silence: {report.silent_drops}"
     assert report.unmapped == {}, f"{row}: not understood: {report.unmapped}"
     wanted = said.get("import") or {}
     assert sorted(report.mapped) == sorted(wanted.get("mapped") or []), report.in_words()
-    assert sorted(report.not_portable) == sorted(wanted.get("not-portable") or []), report.in_words()
+    assert sorted(report.not_portable) == _not_portable(row, said), report.in_words()
+    for key, value in (wanted.get("block") or {}).items():
+        assert block.get(key) == value, f"{row}: the agent's `{key}:` is {block.get(key)!r}, not {value!r}"
 
 
 #: 04 §14.2: never in a screen, a card or a reply unless technical details are on.
@@ -161,7 +222,7 @@ def _banned_in(text: str) -> list[str]:
     return [w for w in BANNED if re.search(rf"(?<![\w.-]){re.escape(w)}(?![\w-])", text, re.IGNORECASE)]
 
 
-@pytest.mark.parametrize("row", ROWS)
+@pytest.mark.parametrize("row", IMPORTED)
 def test_s5_the_import_report_a_person_reads_uses_plain_words(row: str) -> None:
     said = _imported(row, _expect(row)).in_plain_words()
     assert not _banned_in(said), f"{row}: {_banned_in(said)} in {said!r}"
@@ -174,6 +235,74 @@ def test_s5_the_banned_word_check_finds_a_banned_word() -> None:
 
 
 # ──────────────────────────────────────────────────────────────────── S4
+
+
+# ──────────────────────────────────────────────────────────────── S2, S3
+
+#: The tree rows whose agent is exported: `export:` in `expect.yaml` names what the export
+#: report must say it could not carry (02P §6: every carried row).
+EXPORTED = [r for r in ROWS if _fixture(r) == "tree" and "export" in _expect(r)]
+
+
+@pytest.mark.parametrize("row", EXPORTED)
+def test_s2_the_export_names_everything_it_could_not_carry(row: str) -> None:
+    said = _expect(row)
+    _, report = to_pydantic_ai_spec(_document(row), said.get("agent", "desk"), str(PARITY / row / "tree"))
+    assert report.silent_losses == (), f"{row}: lost in silence: {report.silent_losses}"
+    assert sorted(report.not_carried) == sorted(said["export"].get("not-carried") or []), report.in_words()
+
+
+#: The rows whose agent a spec file holds whole: exported, then imported, it is the same agent.
+ROUND_TRIPS = [r for r in EXPORTED if _expect(r)["export"].get("round-trip") == "the same digest"]
+
+
+@pytest.mark.parametrize("row", ROUND_TRIPS)
+def test_s3_a_carried_agent_comes_back_with_the_same_pact_show_digest(row: str, tmp_path: Path) -> None:
+    """PACT → Pydantic AI → PACT: the tree's agent exported as a spec file, the file imported
+    back and written over the agent's own file, and `pact show` of the two trees gives the
+    agent the same digest. A row whose agent a spec file cannot hold whole (its tools, its
+    ceilings, a second model) says why under `export: round-trip:`."""
+    import hashlib
+    import shutil
+
+    agent = _expect(row).get("agent", "desk")
+    root = tmp_path / "tree"
+    shutil.copytree(PARITY / row / "tree", root)
+    exported, _ = to_pydantic_ai_spec(_document(row), agent, str(root))
+    back, report = from_pydantic_ai_spec(exported)
+    assert report.silent_drops == () and report.unmapped == {}, report.in_words()
+    (found,) = [p for p in (root / "agents").rglob("*.yaml") if p.stem in (agent, "agent")]
+    found.write_text(yaml.safe_dump(back, sort_keys=False, allow_unicode=True), encoding="utf-8")
+
+    def digest(document: dict[str, Any]) -> str:
+        block = (document.get("agents") or {})[agent]
+        return hashlib.sha256(json.dumps(block, sort_keys=True).encode()).hexdigest()
+
+    assert digest(shown(root)) == digest(_document(row)), (shown(root)["agents"][agent], _document(row)["agents"][agent])
+
+
+#: The spec-file and module rows whose agent is exported: `export:` names what the export
+#: cannot carry (S2), and the agent comes back from the spec file it is exported as (S3's
+#: Pydantic AI → PACT → Pydantic AI half).
+EXPORTED_BACK = [r for r in ROWS if _fixture(r) in ("spec.yaml", "agent.py") and "export" in _expect(r)]
+
+
+@pytest.mark.parametrize("row", EXPORTED_BACK)
+def test_s2_s3_an_imported_agent_goes_back_out_with_each_loss_named(row: str) -> None:
+    """Imported, then exported as a spec file: no loss in silence and `not_carried` exactly as
+    `export:` says (S2); and the spec file is the agent again, after normalising (S3): a spec
+    row's file comes back as written less what its import named as a loss, and a module row's
+    agent, imported from the exported file, is the agent less what its export named."""
+    said = _expect(row)
+    block, imported = _imported_agent(row, said)
+    exported, report = to_pydantic_ai_spec({"agents": {"desk": block}}, "desk")
+    assert report.silent_losses == (), f"{row}: lost in silence: {report.silent_losses}"
+    assert sorted(report.not_carried) == sorted(said["export"].get("not-carried") or []), report.in_words()
+    if _fixture(row) == "spec.yaml":
+        assert exported == {k: v for k, v in _spec_file(row).items() if k not in imported.not_portable}
+    back, again = from_pydantic_ai_spec(exported)
+    assert again.silent_drops == () and again.unmapped == {}, again.in_words()
+    assert back == {k: v for k, v in block.items() if k not in report.not_carried}, (back, block)
 
 
 def _members(alias: Any) -> list[type]:
@@ -234,6 +363,18 @@ def capability_classes(root: Path) -> set[str]:
     return {n for n in found & public if not n.startswith("_")}
 
 
+def _harness_capabilities(pydantic_ai_source: "Path | None") -> set[str]:
+    """`pydantic-ai-harness`'s capability classes, read from its source as Pydantic AI's are
+    (02P §4 rule 3), when it is installed; none when a test points the walk at another tree."""
+    if pydantic_ai_source is not None:
+        return set()
+    try:
+        import pydantic_ai_harness
+    except ImportError:  # pragma: no cover - the test extra installs it
+        return set()
+    return capability_classes(Path(pydantic_ai_harness.__file__).parent) - {"AbstractCapability"}
+
+
 def installed_names(pydantic_ai_source: "Path | None" = None) -> dict[str, set[str]]:
     """Every name the installed packages have, by the registry door it goes through.
 
@@ -251,6 +392,7 @@ def installed_names(pydantic_ai_source: "Path | None" = None) -> dict[str, set[s
 
     shipped = (
         capability_classes(pydantic_ai_source or Path(pydantic_ai.__file__).parent)
+        | _harness_capabilities(pydantic_ai_source)
         | {
             name
             for name, value in vars(capabilities).items()

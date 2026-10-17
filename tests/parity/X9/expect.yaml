@@ -1,0 +1,5 @@
+# 02P X9: a managed prompt is fetched by a run from outside the agent: nothing on it to import.
+row: X9
+says: 'a managed prompt is fetched by a run from outside the agent: nothing on it to import'
+import: none
+why: 'a managed prompt is fetched by a run from outside the agent: nothing on it to import'

@@ -1,0 +1,7 @@
+# 02P C2: a message history is handed to one run: nothing on an agent to import.
+row: C2
+says: 'a message history is handed to one run: nothing on an agent to import'
+import: none
+why: 'a message history is handed to one run: nothing on an agent to import'
+held-elsewhere:
+  a message history is handed to one run: adapters/python/tests/test_a_conversation_crosses_between_the_two_message_dialects.py::test_the_things_a_pact_history_has_no_room_for_are_named

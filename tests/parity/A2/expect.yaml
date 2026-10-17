@@ -8,13 +8,10 @@ model:
 - say: ok
 expect:
   description: Answers order questions for Lumen Lamps.
-  # Exported with no run, the braces are carried as written, and the report says
-  # they reach the model unfilled.
+  # Exported, the hole is Pydantic AI's `{{brand}}` template over `deps_schema`, which
+  # `Agent.from_spec` fills from the run's deps (02P A4).
   export-carries:
-    description: Answers order questions for {{run-inputs.brand}}.
-  export-not-carried:
-    description.holes:
-    - '`{{run-inputs.brand}}`'
+    description: Answers order questions for {{brand}}.
 held-elsewhere:
   braces survive the import: adapters/python/tests/test_parity.py::test_a2_braces_in_a_pydantic_ai_description_import_as_written
 import:
@@ -23,3 +20,7 @@ import:
   - instructions
   - name
   not-portable: []
+# S2 and S3: what its export cannot carry, and whether a spec file brings the agent back whole.
+export:
+  not-carried: []
+  round-trip: the same digest

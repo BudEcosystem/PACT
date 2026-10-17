@@ -1,0 +1,5 @@
+# 02P T3: `ToolReturn` is what one call hands back in a run: nothing on an agent to import.
+row: T3
+says: '`ToolReturn` is what one call hands back in a run: nothing on an agent to import'
+import: none
+why: '`ToolReturn` is what one call hands back in a run: nothing on an agent to import'

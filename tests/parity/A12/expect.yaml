@@ -1,0 +1,11 @@
+# 02P A12: a `tool_choice` naming several tools is named, not cut to its first.
+row: A12
+says: a `tool_choice` naming several tools is named, not cut to its first
+import:
+  mapped:
+  - description
+  - instructions
+  - model_settings
+  - name
+  not-portable:
+  - model_settings.tool_choice

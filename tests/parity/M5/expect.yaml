@@ -1,0 +1,11 @@
+# 02P M5: a model picked by code each run is named.
+row: M5
+says: a model picked by code each run is named
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.SelectModel

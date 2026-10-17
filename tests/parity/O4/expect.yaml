@@ -1,0 +1,15 @@
+# 02P O4: `NativeOutput` is `answers-with-mode: native-json-schema`.
+row: O4
+says: '`NativeOutput` is `answers-with-mode: native-json-schema`'
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  - output_type
+  not-portable: []
+  block:
+    answers-with-mode: native-json-schema
+export:
+  not-carried:
+  - answers-with-mode

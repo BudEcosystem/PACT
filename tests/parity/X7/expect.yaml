@@ -1,0 +1,11 @@
+# 02P X7: the harness's guardrails are named, with the PACT line to write.
+row: X7
+says: the harness's guardrails are named, with the PACT line to write
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.InputGuardrail

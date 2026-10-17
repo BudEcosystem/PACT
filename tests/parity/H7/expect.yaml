@@ -1,0 +1,12 @@
+# 02P H7: the harness's ask-the-user is named, with the PACT line to write.
+row: H7
+says: the harness's ask-the-user is named, with the PACT line to write
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.AskUser
+  - instructions.added-by-capabilities-or-toolsets

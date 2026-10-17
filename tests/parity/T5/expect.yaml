@@ -1,0 +1,5 @@
+# 02P T5: a `ModelRetry` is raised by a tool's code in a run: nothing on an agent to import.
+row: T5
+says: 'a `ModelRetry` is raised by a tool''s code in a run: nothing on an agent to import'
+import: none
+why: 'a `ModelRetry` is raised by a tool''s code in a run: nothing on an agent to import'

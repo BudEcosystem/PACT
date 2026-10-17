@@ -1,0 +1,5 @@
+# 02P E4: `MaxDuration` in a dataset is read by the pydantic-evals importer.
+row: E4
+says: '`MaxDuration` in a dataset is read by the pydantic-evals importer'
+import: none
+later: WP-39

@@ -1,0 +1,11 @@
+# 02P S3: an event stream handler is named: code that watches a run.
+row: S3
+says: 'an event stream handler is named: code that watches a run'
+import:
+  mapped:
+  - description
+  - instructions
+  - name
+  not-portable:
+  - capabilities
+  - capabilities.ProcessEventStream

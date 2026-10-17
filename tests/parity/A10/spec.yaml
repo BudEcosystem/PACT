@@ -1,0 +1,10 @@
+# 02P A10: transport settings (timeout, headers, body, logit bias) are named.
+name: desk
+description: Answers order questions.
+instructions: Answer briefly.
+model_settings:
+  temperature: 0.2
+  timeout: 30
+  extra_headers: {X-Team: cx}
+  extra_body: {seed: 1}
+  logit_bias: {'1': 2}

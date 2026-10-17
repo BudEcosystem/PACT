@@ -1,0 +1,5 @@
+# 02P X5: Skills directories are exported and imported by the Skills door.
+row: X5
+says: Skills directories are exported and imported by the Skills door
+import: none
+later: WP-39
