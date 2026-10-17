@@ -267,12 +267,71 @@ impl LoadReport {
             }
         }
 
+        // A workflow's own `policy:` gates the calls its stages make, and its
+        // `ask-a-person` rules put their questions about one action each, so a
+        // `shows:` name that action is not given is dropped in silence exactly as
+        // it is at an agent's (`Question.about_call` keeps `k in args`). Only the
+        // agents were walked: a question a workflow's policy alone put showed
+        // `item.blast-radius` to nobody and loaded clean (budflow's corpus #103).
+        // Held here to `check_shows` alone; the other checks are about the parks
+        // an agent can reach, and a question an agent puts too has them already.
+        let mut by_flows: std::collections::BTreeMap<String, Asked> =
+            std::collections::BTreeMap::new();
+        for (_, flow) in document
+            .get("workflows")
+            .and_then(Node::as_map)
+            .into_iter()
+            .flatten()
+        {
+            let named_policy = flow
+                .node
+                .get("policy")
+                .and_then(Node::as_str)
+                .unwrap_or("")
+                .trim();
+            let Some(rules) = document
+                .get("policies")
+                .and_then(|p| p.get(named_policy))
+                .and_then(|p| p.get("ask-a-person"))
+                .and_then(Node::as_list)
+            else {
+                continue;
+            };
+            for rule in rules {
+                let Some((question, declared_at)) = named(rule, "question") else {
+                    continue;
+                };
+                let seen = match asked.get_mut(&question) {
+                    Some(seen) => seen,
+                    None => by_flows.entry(question).or_default(),
+                };
+                let shows = what_the_rule_is_about(document, rule);
+                let open = matches!(shows, Shown::Anything);
+                let names = match shows {
+                    Shown::Anything => Vec::new(),
+                    Shown::These(names) => names,
+                };
+                if open {
+                    seen.open = true;
+                } else {
+                    seen.names.extend(names.iter().cloned());
+                }
+                seen.bindings.push(Binding { open, names });
+                seen.first.get_or_insert(declared_at);
+            }
+        }
+
         for (question, seen) in &asked {
             if let Some(entry) = questions.and_then(|q| q.get(question)) {
                 check_deadline(question, entry, seen, diags);
                 check_shows(question, entry, seen, diags);
                 check_somebody_can_answer(question, entry, seen, diags);
                 check_nobody_approves_their_own_work(question, entry, document, diags);
+            }
+        }
+        for (question, seen) in &by_flows {
+            if let Some(entry) = questions.and_then(|q| q.get(question)) {
+                check_shows(question, entry, seen, diags);
             }
         }
 

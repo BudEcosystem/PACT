@@ -10,6 +10,17 @@ Running PACT trees in production on Pydantic AI 2.54, through
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
 runs offline: 4114 tests, 1445 Rust and 2669 adapter.
 
+### A workflow's policy question held to its call (16 October)
+
+- **`loader/shows-nothing-can-supply` reads a workflow's `policy:`.** A question a workflow's
+  policy puts about a gated call shows that call's own arguments (`Question.about_call` keeps
+  the names the call is given), and the check that says a `shows:` name is dropped in silence
+  walked only agents' parks. So a question only a workflow's policy put could show
+  `item.blast-radius`, a name no call carries, and load clean while the person approving was
+  shown one value fewer than written. It is now held the same way, with the action's own names
+  in the fix. Found by Bud Agent Flow's corpus case #103, whose incident commander was to read
+  each containment's blast radius and rollback.
+
 ### An empty phrase, a decide's own question, and a negation in the field before (14 October)
 
 - **`loader/an-empty-phrase`.** Every answer contains the empty phrase, so a rule with one
