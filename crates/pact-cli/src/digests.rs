@@ -30,7 +30,7 @@
 //!   effect badge 02W also lists is not derived anywhere yet; it joins this
 //!   digest when it is.
 //!
-//! **Which workflows one reaches.** Its own, and every workflow named by a
+//! **Which workflows one reaches** (printed as its `reaches:`). Its own, and every workflow named by a
 //! value anywhere it reaches: in its own entry, in a reached workflow's, and in
 //! every collection of the workspace outside `workflows:` and `ports:` (an
 //! action's `undone-by:` may name a workflow, and the action is in the
@@ -71,6 +71,27 @@ pub fn of(doc: &Node) -> J {
             o.insert(
                 "contract-digest".into(),
                 J::String(contract_digest(doc, name)),
+            );
+            // The workflows its doc-digest keeps (itself among them), in name
+            // order: what a runtime comparing two versions of the document a
+            // run relies on must compare, and nothing else (02W §7.2's drift
+            // classes), without working out a second time what one reaches.
+            o.insert(
+                "reaches".into(),
+                J::Array(reached.iter().cloned().map(J::String).collect()),
+            );
+            // What its doc-digest leaves out, each as the keys down to it
+            // (`["owners"]`, `["workflows", "<unreached>"]`), so a runtime
+            // projects a document as the digest does instead of keeping a
+            // second copy of `LEFT_OUT` and the rules below.
+            o.insert(
+                "left-out".into(),
+                J::Array(
+                    left_out(doc, flows, &reached)
+                        .into_iter()
+                        .map(|path| J::Array(path.into_iter().map(J::String).collect()))
+                        .collect(),
+                ),
             );
             J::Object(o)
         })
@@ -136,35 +157,73 @@ fn named(node: &Node, flows: &Map, found: &mut BTreeSet<String>) {
 /// a workflow's own `release:` and `evals:` (an agent's `evals:` too).
 const LEFT_OUT: [&str; 3] = ["owners", "release", "evals"];
 
+/// What `doc-digest` leaves out of `doc` for a workflow that reaches `reached`,
+/// each as the keys down to it: the `LEFT_OUT` settings, every workflow it
+/// never reaches, a reached one's own `release:` and `evals:`, an agent's
+/// `evals:`, and the ports that answer a workflow it never reaches. The one
+/// list both the digest and `pact discover`'s `left-out` are made from.
+fn left_out(doc: &Node, flows: &Map, reached: &BTreeSet<String>) -> Vec<Vec<String>> {
+    let path = |keys: &[&str]| keys.iter().map(|k| k.to_string()).collect::<Vec<_>>();
+    let mut out: Vec<Vec<String>> = LEFT_OUT
+        .iter()
+        .copied()
+        .filter(|key| doc.get(key).is_some())
+        .map(|key| path(&[key]))
+        .collect();
+    for (name, entry) in flows {
+        if !reached.contains(name) {
+            out.push(path(&["workflows", name.as_str()]));
+            continue;
+        }
+        for field in ["release", "evals"] {
+            if entry.node.get(field).is_some() {
+                out.push(path(&["workflows", name.as_str(), field]));
+            }
+        }
+    }
+    for (name, entry) in doc
+        .get("agents")
+        .and_then(Node::as_map)
+        .into_iter()
+        .flatten()
+    {
+        if entry.node.get("evals").is_some() {
+            out.push(path(&["agents", name.as_str(), "evals"]));
+        }
+    }
+    let gone = |port: &Node| {
+        port.get("answers")
+            .and_then(Node::as_str)
+            .is_some_and(|a| flows.contains_key(a.trim()) && !reached.contains(a.trim()))
+    };
+    for (name, entry) in doc
+        .get("ports")
+        .and_then(Node::as_map)
+        .into_iter()
+        .flatten()
+    {
+        if gone(&entry.node) {
+            out.push(path(&["ports", name.as_str()]));
+        }
+    }
+    out
+}
+
 fn doc_digest(doc: &Node, flows: &Map, reached: &BTreeSet<String>) -> String {
     let mut kept = doc.clone();
-    if let Some(map) = kept.as_map_mut() {
-        for key in LEFT_OUT {
-            map.shift_remove(key);
-        }
-        if let Some(flows) = map.get_mut("workflows").and_then(|e| e.node.as_map_mut()) {
-            flows.retain(|name, _| reached.contains(name));
-            for entry in flows.values_mut() {
-                if let Some(flow) = entry.node.as_map_mut() {
-                    flow.shift_remove("release");
-                    flow.shift_remove("evals");
-                }
-            }
-        }
-        if let Some(agents) = map.get_mut("agents").and_then(|e| e.node.as_map_mut()) {
-            for entry in agents.values_mut() {
-                if let Some(agent) = entry.node.as_map_mut() {
-                    agent.shift_remove("evals");
-                }
-            }
-        }
-        let gone = |port: &Node| {
-            port.get("answers")
-                .and_then(Node::as_str)
-                .is_some_and(|a| flows.contains_key(a.trim()) && !reached.contains(a.trim()))
+    for keys in left_out(doc, flows, reached) {
+        let Some((last, above)) = keys.split_last() else {
+            continue;
         };
-        if let Some(ports) = map.get_mut("ports").and_then(|e| e.node.as_map_mut()) {
-            ports.retain(|_, entry| !gone(&entry.node));
+        let mut here = Some(&mut kept);
+        for key in above {
+            here = here
+                .and_then(Node::as_map_mut)
+                .and_then(|map| map.get_mut(key.as_str()))
+                .map(|entry| &mut entry.node);
+        }
+        if let Some(map) = here.and_then(Node::as_map_mut) {
+            map.shift_remove(last.as_str());
         }
     }
     pact_doc::digest(&kept)

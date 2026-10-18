@@ -362,7 +362,7 @@ fn filled_by(
             .node
             .get("based-on")
             .and_then(Node::as_str)
-            .map(str::trim)
+            .map(|b| crate::derive::pattern_and_version(b).0)
             != Some(pattern)
         {
             continue;
@@ -1012,6 +1012,7 @@ fn substitute(
                     // it — the definition is one lookup away and the same for
                     // every use.
                     at: node.span.file.to_string(),
+                    version: None,
                 });
                 used.insert(name);
                 // The USE SITE's span is kept, not the definition's. Whatever

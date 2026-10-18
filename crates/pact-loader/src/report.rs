@@ -170,6 +170,9 @@ pub struct Substitution {
     pub name: String,
     /// Where it landed, as the author would open it.
     pub at: String,
+    /// For a pattern, the template version a copy says it was made from
+    /// (`based-on: <template>@<version>`); `None` when it names none.
+    pub version: Option<String>,
 }
 
 impl LoadReport {
@@ -361,11 +364,19 @@ impl LoadReport {
             // An empty list rather than an absent key: "nothing was substituted"
             // and "this build does not record substitutions" are different
             // answers, and a consumer must be able to tell them apart.
-            "substitutions": self.substitutions.iter().map(|s| serde_json::json!({
-                "kind": s.kind,
-                "name": s.name,
-                "at": s.at,
-            })).collect::<Vec<_>>(),
+            "substitutions": self.substitutions.iter().map(|s| {
+                let mut said = serde_json::json!({
+                    "kind": s.kind,
+                    "name": s.name,
+                    "at": s.at,
+                });
+                // Only where a copy named one, so a substitution with no
+                // version reads exactly as it did before versions existed.
+                if let Some(v) = &s.version {
+                    said["version"] = serde_json::Value::String(v.clone());
+                }
+                said
+            }).collect::<Vec<_>>(),
             "waits": self.waits.iter().map(|w| {
                 let mut said = serde_json::json!({
                 "reason": w.reason,

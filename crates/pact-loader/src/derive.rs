@@ -184,6 +184,16 @@ fn resolve_collection(
     }
 }
 
+/// `<name>@<version>` as its two halves; a name with no `@` has no version.
+/// Split at the last `@`, so an empty version (`desk@`) is `Some("")`, which
+/// the caller refuses.
+pub(crate) fn pattern_and_version(written: &str) -> (&str, Option<&str>) {
+    match written.trim().rsplit_once('@') {
+        Some((name, version)) => (name.trim(), Some(version.trim())),
+        None => (written.trim(), None),
+    }
+}
+
 fn derive_one(
     kind: &str,
     entries: &mut Map,
@@ -214,6 +224,28 @@ fn derive_one(
     }
 
     let span = base_node.span.clone();
+
+    // `based-on: <template>@<version>`: a copy made from a template saying
+    // which version of it it was made from (02W §7.2, "Templates"), so a new
+    // version of the template can find every copy made from an older one.
+    // The version is the template bundle's own `version:` as the copy was
+    // made, recorded on the report and nowhere in the document: a copy and
+    // the same tree written out longhand stay one document (one digest).
+    let (base_name, version) = match pattern_and_version(&base_name) {
+        (pattern, Some("")) => {
+            return Err(Box::new(Diagnostic::error(
+                "loader/based-on-names-no-version",
+                span,
+                format!(
+                    "'{name}' is based on '{base_name}', which ends in `@` and names no version after it."
+                ),
+                format!(
+                    "Write the template's version after the `@` (`based-on: {pattern}@<version>`, the `version:` of the bundle it came from), or remove the `@`."
+                ),
+            )));
+        }
+        (pattern, v) => (pattern.to_owned(), v.map(str::to_owned)),
+    };
 
     // A ring is the one shape that cannot terminate, so it is refused by name
     // rather than by a recursion limit — a depth message tells an author a
@@ -294,6 +326,7 @@ fn derive_one(
             kind: "pattern",
             name: base_name.clone(),
             at: span.file.to_string(),
+            version: version.clone(),
         });
     }
 
