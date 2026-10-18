@@ -7,7 +7,7 @@
 //! | `loader/cannot-be-undone-and-nobody-asked` *(note)* | WF-25 | a workflow stage calls a tool's write that has no `undone-by:` and no *Ask before* |
 //! | `loader/an-undo-that-does-not-fit` | WF-26 | an `undone-by:` (an action's, a stage's, a workflow's) names a read, or an undo whose inputs the write's inputs and answer cannot fill |
 //! | `loader/a-status-check-that-does-not-fit` | new | an action's `status-check:` names a write, or a read whose inputs the call's own cannot fill |
-//! | `loader/a-check-nothing-can-run` | WF-34 | a workflow has a `judged:` check and its evals name no `graded-by:` model |
+//! | `loader/a-check-nothing-can-run` | WF-34 | a workflow has a `judged:` check and its evals name no `graded-by:` model (a `program:` check is `suites.rs`'s) |
 //! | `loader/a-line-this-stage-never-reads` | WF-3 | `undo-where:` when `undo:` names a stage that is not an `each` |
 //! | `schema/missing-companion` | §2.10 | a workflow's `when-it-runs-out:` says `use-a-backup`, `wait-for-a-new-version` or `undo` with no companion under the stage's `if-it-fails:` |
 //! | `loader/no-such-name` | shipped | an `undone-by:`, `status-check:` or `backup:` names nothing here |

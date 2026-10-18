@@ -30,7 +30,7 @@
 //! midnight.
 
 use pact_diag::{Diagnostic, Diagnostics};
-use pact_doc::{Node, Value};
+use pact_doc::{Entry, Node, Value};
 
 /// The forms that work, quoted in every refusal (`schedules.FORMS`).
 const FORMS: &str = "plain words like `Friday at 4pm`, `weekday mornings at 9`, \
@@ -402,35 +402,54 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
         let Some(every) = entry.node.as_map().and_then(|m| m.get("every")) else {
             continue;
         };
-        let written = match &every.node.value {
-            Value::Str(s) => s.trim().to_string(),
-            Value::Int(n) => n.to_string(),
-            // Anything else is not text, and the schema says so by itself.
-            _ => continue,
-        };
-        let said = match read(&written) {
-            Ok(_) => continue,
-            Err(Unreadable::NotATime) if written.is_empty() => {
-                format!("`every:` in the port '{name}' is empty, so nothing says when to run.")
-            }
-            Err(Unreadable::NotATime) => {
-                format!("`every: {written}` in the port '{name}' is not a time PACT can read.")
-            }
-            Err(Unreadable::Because(why)) => {
-                format!("`every: {written}` in the port '{name}' — {why}")
-            }
-            Err(Unreadable::NeverComes) => format!(
-                "`every: {written}` in the port '{name}' never comes round: no month has \
-                 such a day."
-            ),
-        };
-        diags.push(Diagnostic::error(
-            "loader/every-is-not-a-time",
-            every.key_span.clone().merge(&every.node.span),
-            format!("{said} A runtime would refuse to start this timer."),
-            format!("Write {FORMS}."),
-        ));
+        refuse_unless_a_time(
+            every,
+            "every",
+            &format!(" in the port '{name}'"),
+            "to run",
+            "A runtime would refuse to start this timer.",
+            diags,
+        );
     }
+}
+
+/// Refuse the line `entry` holds when no clock can keep it: a port's `every:`
+/// and a suite's `runs-every:` (`suites.rs`) alike. `line` is its key, `place`
+/// where it is written (`" in the port 'weekly'"`, or nothing), `to_run` what
+/// nothing then says when to do, and `consequence` who would refuse it.
+pub(crate) fn refuse_unless_a_time(
+    entry: &Entry,
+    line: &str,
+    place: &str,
+    to_run: &str,
+    consequence: &str,
+    diags: &mut Diagnostics,
+) {
+    let written = match &entry.node.value {
+        Value::Str(s) => s.trim().to_string(),
+        Value::Int(n) => n.to_string(),
+        // Anything else is not text, and the schema says so by itself.
+        _ => return,
+    };
+    let said = match read(&written) {
+        Ok(_) => return,
+        Err(Unreadable::NotATime) if written.is_empty() => {
+            format!("`{line}:`{place} is empty, so nothing says when {to_run}.")
+        }
+        Err(Unreadable::NotATime) => {
+            format!("`{line}: {written}`{place} is not a time PACT can read.")
+        }
+        Err(Unreadable::Because(why)) => format!("`{line}: {written}`{place} — {why}"),
+        Err(Unreadable::NeverComes) => {
+            format!("`{line}: {written}`{place} never comes round: no month has such a day.")
+        }
+    };
+    diags.push(Diagnostic::error(
+        "loader/every-is-not-a-time",
+        entry.key_span.clone().merge(&entry.node.span),
+        format!("{said} {consequence}"),
+        format!("Write {FORMS}."),
+    ));
 }
 
 #[cfg(test)]
@@ -493,6 +512,27 @@ mod tests {
         let mut d = Diagnostics::new();
         check(&node, &mut d);
         d
+    }
+
+    #[test]
+    fn a_suites_runs_every_is_refused_as_a_ports_every_is() {
+        for every in ["every fortnight", "'0 0 30 2 *'", "nights at 14", "''", "5"] {
+            let text = format!("evals:\n  runs-every: {every}\n");
+            let node = parse_yaml(&text, camino::Utf8Path::new("s.yaml")).expect("parses");
+            let evals = node.as_map().unwrap().get("evals").unwrap();
+            let line = evals.node.as_map().unwrap().get("runs-every").unwrap();
+            let mut suite = Diagnostics::new();
+            refuse_unless_a_time(line, "runs-every", "", "to run", "So.", &mut suite);
+            let ported = checked(every);
+            let (port, suite) = (&ported.items()[0], &suite.items()[0]);
+            assert_eq!((port.rule, &port.fix), (suite.rule, &suite.fix), "{every}");
+            let as_the_suite = port
+                .message
+                .replacen("`every", "`runs-every", 1)
+                .replacen(" in the port 'weekly'", "", 1)
+                .replacen("A runtime would refuse to start this timer.", "So.", 1);
+            assert_eq!(as_the_suite, suite.message, "{every}");
+        }
     }
 
     #[test]

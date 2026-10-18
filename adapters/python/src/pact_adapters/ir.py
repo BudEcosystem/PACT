@@ -1127,6 +1127,13 @@ def _programs_reached_by(doc: dict[str, Any], agent: dict[str, Any]) -> tuple[Pr
             checker = q.get("checked-by")
             if isinstance(checker, str) and checker in declared:
                 reached.setdefault(checker, []).append(f"{asked} (checked-by)")
+    # AND THE ANSWER IT GIVES. A `program:` rule under the agent's own
+    # `checked-by:` grades every answer before it is the answer (02W §2.13), so
+    # the host that must run it is told so before the first call.
+    for rule in agent.get("checked-by") or ():
+        named = rule.get("program") if isinstance(rule, Mapping) else None
+        if isinstance(named, str) and named.strip() in declared:
+            reached.setdefault(named.strip(), []).append("checked-by")
     for used in sorted(_as_list(agent.get("uses"))):
         tool = tools.get(used) if isinstance(tools, Mapping) else None
         if not isinstance(tool, Mapping):

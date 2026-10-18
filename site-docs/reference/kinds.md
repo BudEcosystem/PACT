@@ -91,8 +91,8 @@ write: most workspaces use a dozen.
 | `case` | 7 | `when`, `with`, `expect`, `because`, `must-also` |
 | `cycle-limits` | 3 | `per-cycle`, `per-month`, `evals` |
 | `drift` | 1 | `at-most` |
-| `eval-rule` | 6 | `must-say-one-of`, `must-contain`, `must-not-contain`, `must-call-before`, `judged` |
-| `evals` | 7 | `description`, `population`, `must-pass`, `rules`, `graded-by` |
+| `eval-rule` | 8 | `must-say-one-of`, `must-contain`, `must-not-contain`, `must-call-before`, `judged` |
+| `evals` | 12 | `description`, `population`, `from-the-last`, `sample`, `reviewed-by` |
 | `learning` | 8 | `enabled`, `may-improve-on-its-own`, `needs-a-person-to-approve`, `keep-only-if`, `review` |
 | `learning-model` | 2 | — |
 | `metric` | 3 | — |

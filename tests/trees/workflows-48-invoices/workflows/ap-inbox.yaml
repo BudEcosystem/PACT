@@ -29,9 +29,9 @@ steps:
         does: call
         call: invoice-reader
         bind: { file: item.file }
-        # 02W §5.2 checks this answer with the ready-made
-        # `library: numbers-come-from-the-source` (`checks-at-most: 2`), which
-        # comes with the ready-made checks of tests over recorded runs.
+        checked-by:
+          - library: numbers-come-from-the-source
+        checks-at-most: 2
         then: { answered: start }
       start:
         does: call

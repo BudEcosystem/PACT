@@ -86,6 +86,7 @@ from .judge import LOCAL_RUNTIME, graded_by, judge_of, local_ask, served_here
 # could type.
 from .learning import CAN_BE_APPLIED, Learner, Outcome, Proposal
 from .resolve import ModelEntry, load_catalogue, needs_of, price_of, resolve
+from .populations import Population, slices
 from .slo import against_the_catalogue
 from .yes_no import said_yes
 
@@ -126,6 +127,10 @@ POPULATION_SAYS: dict[str, str] = {
     "sampled-frame": (
         "a sample drawn from a stated frame, so this score carries whatever "
         "error that sample has"
+    ),
+    "past-runs": (
+        "real runs replayed with every write stubbed, so this score describes "
+        "the traffic those runs carried and nothing they did not"
     ),
 }
 
@@ -235,6 +240,9 @@ class Scored:
     #: The money-moving subset, graded at 100% because it is a correctness
     #: invariant and not a rate (AD-58a).
     money: Verdict = field(default_factory=lambda: Verdict("PASS", 1.0, 1.0, []))
+    #: The score broken down by `sliced-by:` (02W §2.13): each field's groups,
+    #: by what each case was given (`with:`), each with its own verdict.
+    slices: dict[str, dict[str, Verdict]] = field(default_factory=dict)
     #: Rules the author wrote that nothing here could carry out, in their words.
     unenforced: tuple[str, ...] = ()
     #: Everything else this run could not do — approvals suppressed, tools with
@@ -287,6 +295,12 @@ def render(scored: Scored) -> str:
 
     out.append("")
     out.append(_verdict_line(scored))
+    for name, groups in scored.slices.items():
+        for group, said in groups.items():
+            out.append(
+                f"    sliced by {name}: {group} — {said.outcome} "
+                f"({sum(r.passed for r in said.results)} of {len(said.results)})"
+            )
     # Every failure, with the reason `CaseOutcome.why` already carries. Not the
     # first five: a report that truncates the failures is a report that hides the
     # one the author needed.
@@ -425,9 +439,7 @@ def score(
     named = str(((document.get("agents") or {}).get(key) or {}).get("evals") or "")
     scored.suite = named.lstrip("/") or scored.suite
     scored.bar = bar_of(document)
-    scored.population = POPULATION_SAYS.get(
-        str((document.get("evals") or {}).get("population") or "").strip(), ""
-    )
+    scored.population = POPULATION_SAYS.get(Population.of(document).kind, "")
     # Every rule the FILES already say nothing can carry out — a `judged:` line
     # with no `graded-by:`, a grader in no catalogue, a rule shape this runtime
     # does not know. Collected before anything runs, so a suite that never gets
@@ -553,6 +565,9 @@ def score(
         )
         return scored
     scored.verdict = verdict(results, scored.bar)
+    scored.slices = slices(
+        results, {c.key: c.with_ for c in cases}, Population.of(document).sliced_by, scored.bar
+    )
     scored.money = consequential_verdict(results, money_movers)
     # The rules the RUN could not decide, on top of the ones the files already
     # said nothing could. Two different questions with one answer for the reader:

@@ -10,6 +10,27 @@ Running PACT trees in production on Pydantic AI 2.54, through
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
 runs offline: 4114 tests, 1445 Rust and 2669 adapter.
 
+### Tests over recorded runs (18 October)
+
+- **A suite says which runs it is a score of.** `population: past-runs` with `from-the-last:`
+  replays real runs with every write stubbed; `sampled-frame` with `sample:` and `reviewed-by:`
+  puts a share of finished live runs in front of reviewers; `sliced-by:` breaks the score down by
+  what each run was given; `runs-every:` re-runs the checks on a timer port's clock (02W §2.13).
+  `pact check` refuses each line that would load and do nothing: a sample with no share or no
+  reviewer (`schema/missing-companion`), a line only another population reads
+  (`loader/a-line-this-suite-never-reads`), a slice no workflow held to the suite accepts
+  (`loader/slices-by-what-no-run-is-given`), a schedule no clock can keep
+  (`loader/every-is-not-a-time`). `populations.py` reads them, and says which runs a sample
+  takes (by each run's own id, so every runtime samples the same runs) and each slice's verdict.
+- **Two more rule shapes, wherever a rule is written.** `program:` names a carried `pure` program
+  that passes or fails the answer with its reason (a program that is not pure is
+  `loader/only-a-pure-program-grades`; one the workspace lacks is `schema/no-such-name`, WF-34's
+  program half), and `library:` one of four ready-made checks (`library_checks.py`):
+  `numbers-come-from-the-source`, `quotes-are-word-for-word`, `cites-its-sources` and
+  `only-goes-up`, which hold an answer to what the run was given (`RunResult.given`, new) and what
+  its calls returned. Both are decided before any judge. `tests/trees/workflows-48-invoices`
+  checks its reader with `library: numbers-come-from-the-source`, as 02W §5.2 prints it.
+
 ### The rest of what Pydantic AI keeps in files, and built graphs, imported (18 October)
 
 - **`pact-import --as mcp-json | pydantic-evals | agent-folder | skills`.** An `mcp.json` becomes

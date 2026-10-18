@@ -40,18 +40,19 @@ fn check(tree: &Path) -> (bool, String) {
     (out.status.success(), said)
 }
 
-/// A workflow of the tree with `checked-by: [rule]` on the first stage that calls something,
-/// written at that stage's own indent.
+/// A workflow of the tree with `rule` first in the `checked-by:` of the stage that reads each
+/// invoice (02W §5.2's `read`, checked by `library: numbers-come-from-the-source`), written at
+/// that list's own indent.
 fn with_a_check(name: &str, rule: &str) -> PathBuf {
     let tree = copied(name);
     let file = tree.join("workflows/ap-inbox.yaml");
     let text = std::fs::read_to_string(&file).unwrap();
     let line = text
         .lines()
-        .find(|l| l.trim_start() == "does: call")
-        .expect("a stage that calls something");
+        .find(|l| l.trim_start() == "checked-by:")
+        .expect("a stage that is checked");
     let indent = &line[..line.len() - line.trim_start().len()];
-    let checked = format!("{indent}checked-by:\n{indent}  - {rule}\n{line}");
+    let checked = format!("{line}\n{indent}  - {rule}");
     std::fs::write(&file, text.replacen(line, &checked, 1)).unwrap();
     tree
 }

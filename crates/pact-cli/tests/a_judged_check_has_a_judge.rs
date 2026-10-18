@@ -5,7 +5,7 @@
 //! model on the checks the workflow names; with none, nothing can run the
 //! check, and it is refused before anything runs. Over #79's tree
 //! (`tests/trees/workflows-79-supervisor/`). (The other half of WF-34, a
-//! `program:` check, arrives with the checks that run programs.)
+//! `program:` check, is `a_suite_says_which_runs_it_scores.rs`'s.)
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

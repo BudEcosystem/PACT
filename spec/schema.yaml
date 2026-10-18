@@ -3364,15 +3364,66 @@ groups:
         tier: core
         help: one line on what these checks cover
       population:
+        # 02W §2.13. `past-runs` and the four lines below it are what a suite
+        # needs once real runs exist: the score is then a score OF those runs,
+        # not of the situations somebody thought of. A sample with no share or
+        # nobody to review it is refused by the two `needed-when:` lines; a
+        # line only another population reads is refused by
+        # `crates/pact-loader/src/suites.rs`, so it never loads and does nothing.
         type: one-of
-        choices: [authored-enumeration, promoted-traces, sampled-frame]
+        choices: [authored-enumeration, promoted-traces, sampled-frame, past-runs]
         required: yes
+        needed-when:
+          sample: sampled-frame
+          reviewed-by: sampled-frame
         surface: S-GOV
         tier: core
         help: >
           where these cases came from. `authored-enumeration` means you wrote
           down the situations you thought of — which is a fine place to start,
           and it is what the score describes. Reports say so out loud.
+          `sampled-frame` puts a share of finished live runs in front of a
+          reviewer, and `past-runs` replays real runs from `from-the-last:`
+          with every write stubbed by its declared effect: nothing is sent.
+      from-the-last:
+        type: duration
+        surface: S-GOV
+        tier: core
+        help: >
+          with `past-runs`, how far back — `30 days`. Leave it out to replay
+          every finished run there is.
+      sample:
+        type: percent
+        summary: the share of finished live runs a reviewer sees
+        surface: S-GOV
+        tier: core
+        help: >
+          with `sampled-frame`, the share of finished live runs put in front of
+          a reviewer — `5%`. Which runs is decided by each run's own id, so the
+          same run is always in the sample or always out of it.
+      reviewed-by:
+        type: list of text
+        summary: who reviews the sample
+        surface: S-GOV
+        tier: core
+        help: >
+          with `sampled-frame`, who reviews the sample. Each verdict is also an
+          event a port can start a flow on.
+      sliced-by:
+        type: list of text
+        surface: S-GOV
+        tier: core
+        help: >
+          input fields the scores are broken down by — `school-type`, `region`
+          — so a suite that passes on average and fails one group says so.
+      runs-every:
+        type: text
+        surface: S-GOV
+        tier: core
+        help: >
+          re-run these checks on a schedule, written like a port's `every:` —
+          `nights at 2`, `weekday mornings at 9`. Whatever serves the workspace
+          keeps the clock.
       must-pass:
         type: percent
         surface: S-GOV
@@ -3393,10 +3444,11 @@ groups:
         surface: S-GOV
         tier: core
         help: >
-          things that must be true of every answer. Five shapes exist and they
+          things that must be true of every answer. Seven shapes exist and they
           are the only ones: `must-say-one-of:`, `must-contain:`,
-          `must-not-contain:`, `must-call-before:` and `judged:`. Anything else
-          is refused by name rather than accepted and quietly ignored.
+          `must-not-contain:`, `must-call-before:`, `judged:`, `program:` and
+          `library:`. Anything else is refused by name rather than accepted and
+          quietly ignored.
       metrics:
         # D19's fifth on-ramp — "expert upload: metrics and rubrics with the
         # full capability surface DeepEval provides" — had no door. MEASURED:
@@ -3488,6 +3540,33 @@ groups:
           something only a reader can decide, in one sentence. It is put to the
           model named in `graded-by:`. Whatever runs your agents has to have a
           judge for this to be measured; a run says so when it could not.
+      program:
+        # 02W §2.13. Held `pure` by `crates/pact-loader/src/suites.rs`: a grade
+        # is replayed from what was recorded, and a grader that could answer
+        # differently the second time would make a replayed verdict a new one.
+        type: text
+        names: programs
+        surface: S-GOV
+        tier: expert
+        help: >
+          a carried `pure` program that passes or fails the answer, with its
+          reason. It is given the answer, what the stage was given and what its
+          tools returned; an empty answer or `ok` passes, anything else is the
+          reason it failed.
+      library:
+        type: one-of
+        choices: [numbers-come-from-the-source, quotes-are-word-for-word,
+                  cites-its-sources, only-goes-up]
+        surface: S-GOV
+        tier: core
+        help: >
+          a ready-made check, which may read what the stage was given and what
+          its tools returned. `numbers-come-from-the-source`: every number in
+          the answer is one it was given or read. `quotes-are-word-for-word`:
+          every quoted passage appears exactly so in what it was given or read.
+          `cites-its-sources`: the answer cites something, and everything it
+          cites is something it was given or read. `only-goes-up`: no number it
+          was given comes back lower under the same name.
       because:
         type: text
         surface: S-GEN

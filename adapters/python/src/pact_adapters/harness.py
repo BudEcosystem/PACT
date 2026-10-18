@@ -250,6 +250,12 @@ class RunResult:
     #: rule has already had it rewritten by the time the run sees it, and this is
     #: what everything downstream — a promoted eval case above all — must read.
     asked: str = ""
+    #: What the run was given as VALUES, when it was given values rather than
+    #: only words: a workflow stage's bound inputs, an eval case's `with:`.
+    #: Read by the ready-made checks (`library_checks.py`), which hold the
+    #: answer to what it was given — `only-goes-up` needs a number under its
+    #: name, which no sentence carries.
+    given: Mapping[str, Any] = field(default_factory=dict)
     used: "Meter | None" = None
     #: Which stage of the authored loop ran at each step, in order. Deliberately
     #: NOT part of `trace()`: the trace is the cross-runtime contract that seven

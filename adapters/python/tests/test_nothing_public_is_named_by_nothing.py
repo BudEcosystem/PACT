@@ -44,6 +44,14 @@ SRC = Path(__file__).resolve().parents[1] / "src" / "pact_adapters"
 #: _gained_a_caller` deletes it again when one appears — a list of what must stay
 #: uncalled cannot notice a fix.
 HOST_API: dict[str, str] = {
+    # 02W §2.13: a sampled frame is drawn from finished LIVE runs. The reference
+    # harness keeps no runs, so nothing in `src/` samples; a runtime that keeps
+    # them (budflow-core's `budflow test --population sampled-frame`) asks this
+    # of each run's id, so every runtime puts the same runs to review.
+    "populations.in_sample": (
+        "whether a finished live run is in a `sample:` share, by its own id, for a "
+        "runtime that keeps runs; the harness keeps none"
+    ),
     # D24: PACT declares a port and the runtime connects it. The reference
     # harness serves no port, so nothing in `src/` lists them; a runtime that
     # does (budflow-core's `budflow serve`) reads every port through this one.

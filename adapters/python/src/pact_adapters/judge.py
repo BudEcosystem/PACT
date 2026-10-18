@@ -1,10 +1,10 @@
 """The judge — the one eval rule only a reader can decide (D19 on-ramp 5).
 
-Four of the five rule shapes are decidable by looking at the answer: does it say
-one of these words, does it avoid those, was that action called first. The fifth
-is not. *"Gives the reason in one sentence a customer can understand"* is the
-kind of thing a support lead actually writes down, and no amount of string
-matching decides it.
+Six of the seven rule shapes are decidable by looking at the answer: does it say
+one of these words, does it avoid those, was that action called first, what does
+a carried grader say, does it keep to its source. The seventh is not. *"Gives
+the reason in one sentence a customer can understand"* is the kind of thing a
+support lead actually writes down, and no amount of string matching decides it.
 
 For a round PACT read that rule and did not run it. `evals.Rule.read` returned it
 carrying the sentence *"judging needs a model, and this runtime has no judge

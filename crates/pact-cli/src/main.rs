@@ -1876,6 +1876,10 @@ fn validate(
         pact_loader::picked::check(root, &mut diags);
         // And the one pot a run has (WF-31), and what a ceiling is counted across.
         pact_loader::pots::check(root, &mut diags);
+        // And what a suite says about the runs it is a score of (02W §2.13):
+        // a line only another population reads, a slice no run is given, a
+        // schedule no clock can keep, and a grader that is not pure.
+        pact_loader::suites::check(root, &schema, &mut diags);
         diags.sort();
     }
     Ok((node, diags, substituted))

@@ -162,6 +162,7 @@ pub mod remote;
 pub mod report;
 pub mod review;
 pub mod schedules;
+pub mod suites;
 pub mod teams;
 pub mod teamwork;
 pub mod templates;

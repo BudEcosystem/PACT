@@ -72,17 +72,24 @@ cycle-limits.per-month	money | S-GOV | core | optional
 drift.at-most	percent | S-GOV | core | optional
 eval-rule.because	text | S-GEN | core | optional
 eval-rule.judged	text | S-GOV | core | optional
+eval-rule.library	one-of | S-GOV | core | optional
 eval-rule.must-call-before	group:call-order | S-GOV | core | optional
 eval-rule.must-contain	list of text | S-GOV | core | optional
 eval-rule.must-not-contain	list of text | S-GOV | core | optional
 eval-rule.must-say-one-of	list of text | S-GOV | core | optional
+eval-rule.program	text | S-GOV | expert | optional
 evals.cases	map of group:case | S-GOV | core | optional
 evals.description	text | S-GEN | core | optional
+evals.from-the-last	duration | S-GOV | core | optional
 evals.graded-by	text | S-GOV | core | optional
 evals.metrics	list of group:metric | S-GOV | expert | optional
 evals.must-pass	percent | S-GOV | core | optional
 evals.population	one-of | S-GOV | core | required
+evals.reviewed-by	list of text | S-GOV | core | optional
 evals.rules	list of group:eval-rule | S-GOV | core | optional
+evals.runs-every	text | S-GOV | core | optional
+evals.sample	percent | S-GOV | core | optional
+evals.sliced-by	list of text | S-GOV | core | optional
 figure.provenance	group:provenance | S-GOV | expert | optional
 figure.value	text | S-CAP | expert | required
 if-it-fails.after-that	one-of | S-EXEC | core | required

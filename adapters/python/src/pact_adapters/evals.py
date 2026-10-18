@@ -1,8 +1,9 @@
 """The eval runner — config only, no author code (G4, D19, AC-4.2).
 
 Cases come straight out of the PACT document, so the same YAML a support lead
-wrote is what runs. Four of the five assertions here are *deterministic*: string
-containment, forbidden phrases, tool usage. Decision AC-4.5 requires
+wrote is what runs. Six of the seven rule shapes here are *deterministic*: string
+containment, forbidden phrases, tool usage, a carried grader and the ready-made checks
+(`library_checks.py`). Decision AC-4.5 requires
 deterministic checkers to run before any judge, and a suite that can be decided
 without a model must never invoke one — which is also what lets the whole thing
 run air-gapped (D17). `check` holds that order structurally: every deterministic
@@ -38,12 +39,14 @@ from .harness import RunResult
 # alternative was the state this whole item exists to end, where the module was
 # imported by no file in the package at all.
 from .providers import MetricSpec, evaluate_metric, share, why_unavailable
+from .library_checks import LIBRARY, broken as library_broken
 
 if TYPE_CHECKING:  # `judge` reads the catalogue, which imports this module
     from .judge import Judge
 
 
-#: The five shapes a rule can have, and the only ones. Written here and in
+#: The first four of the seven shapes a rule can have (`program:` and `library:`
+#: are below, `judged:` after them), and the only ones. Written here and in
 #: `spec/schema.yaml`'s `eval-rule` group, so `pact check` refuses a shape this
 #: cannot carry out rather than accepting it and leaving the run to drop it.
 #:
@@ -61,6 +64,14 @@ DETERMINISTIC = ("must-say-one-of", "must-contain", "must-not-contain", "must-ca
 #: the model the author named in `graded-by:` — and it is reported rather than
 #: dropped whenever nothing could grade it (T7: nothing may vanish).
 JUDGED = "judged"
+
+#: The two shapes 02W §2.13 added, both decided without a model and so taken
+#: in the deterministic pass: a carried `pure` program that passes or fails the
+#: answer with its reason, and one of four ready-made checks
+#: (`library_checks.py`) that read what the run was given and what its tools
+#: returned.
+PROGRAM_RULE = "program"
+LIBRARY_RULE = "library"
 
 
 @dataclass(frozen=True)
@@ -131,6 +142,12 @@ class Rule:
             raw = entry[kind]
             values = [raw] if isinstance(raw, str) else list(raw or [])
             return Rule(kind, tuple(str(v) for v in values), because=because)
+        for kind in (PROGRAM_RULE, LIBRARY_RULE):
+            if kind in entry:
+                named = str(entry[kind] or "").strip()
+                if kind == LIBRARY_RULE and named not in LIBRARY:
+                    return None
+                return Rule(kind, (named,), because=because) if named else None
         if JUDGED in entry:
             said = str(entry[JUDGED] or "").strip()
             if not said:
@@ -227,7 +244,8 @@ def _read_rules(written: Any, where: str) -> tuple[tuple[Rule, ...], tuple[str, 
             unenforced.append(
                 f"{where}: {entry!r} is not a rule PACT knows how to carry out, so it "
                 f"was not applied. fix: write one of `must-say-one-of:`, "
-                f"`must-contain:`, `must-not-contain:`, `must-call-before:` or `judged:`."
+                f"`must-contain:`, `must-not-contain:`, `must-call-before:`, `judged:`, "
+                f"`program:` or `library:` (one of {', '.join(LIBRARY)})."
             )
             continue
         if rule.unenforced:
@@ -656,14 +674,14 @@ def check(
     written = list(case.must_also) + list(rules)
     scores = list(metrics or [])
 
+    unenforced: list[str] = []
     for rule in written:
         if rule.kind == JUDGED:
             continue
-        broken = _breaks(rule, result, text)
+        broken = _breaks(rule, result, text, unenforced=unenforced, run_program=run_program)
         if broken:
-            return CaseOutcome(case.key, False, broken)
+            return CaseOutcome(case.key, False, broken, tuple(unenforced))
 
-    unenforced: list[str] = []
     for spec in scores:
         if not spec.deterministic:
             continue
@@ -696,6 +714,7 @@ def first_broken(
     result: RunResult,
     judge: "Judge | None" = None,
     unenforced: "list[str] | None" = None,
+    run_program: "Callable[[str, dict[str, Any]], str] | None" = None,
 ) -> str:
     """Why this answer breaks one of `rules`, or `""` if it breaks none.
 
@@ -704,11 +723,15 @@ def first_broken(
     the answer first, a `judged:` one only after all of those passed, and only if
     something can grade it (otherwise it goes on `unenforced` with a line to
     type, exactly as `check` reports it). `result` carries the answer and the
-    run's own steps, which `must-call-before:` reads.
+    run's own steps, which `must-call-before:` reads, what it was given and its
+    tools' results, which `library:` reads. `run_program` runs a `program:`
+    rule's grader, as `check` is given it.
     """
     text = result.output.lower()
     for rule in rules:
-        if rule.kind != JUDGED and (broken := _breaks(rule, result, text)):
+        if rule.kind != JUDGED and (
+            broken := _breaks(rule, result, text, unenforced=unenforced, run_program=run_program)
+        ):
             return broken
     for rule in rules:
         if rule.kind == JUDGED and (broken := _breaks(rule, result, text, judge, unenforced)):
@@ -780,13 +803,25 @@ def _breaks(
     judge: "Judge | None" = None,
     unenforced: "list[str] | None" = None,
     case: "Case | None" = None,
+    run_program: "Callable[[str, dict[str, Any]], str] | None" = None,
 ) -> str:
     """Why this answer breaks `rule`, or `""` if it does not.
 
-    One function for all five shapes, so a sixth costs an arm here and a line in
-    `spec/schema.yaml` rather than a second grader.
+    One function for all seven shapes, so an eighth costs an arm here and a line
+    in `spec/schema.yaml` rather than a second grader.
     """
     why = f" ({rule.because})" if rule.because else ""
+    if rule.kind == LIBRARY_RULE:
+        broken = library_broken(
+            rule.sentence,
+            result.output,
+            asked=result.asked,
+            given=result.given,
+            returned=[r for s in result.steps for r in s.tool_results] + list(result.retrieved),
+        )
+        return f"{broken} (`library: {rule.sentence}`){why}" if broken else ""
+    if rule.kind == PROGRAM_RULE:
+        return _graded_by_program(rule, result, unenforced, run_program, why)
     if rule.kind == "must-say-one-of":
         if not any(_states(text, str(v)) for v in rule.values):
             return f"says none of {list(rule.values)!r}{why}"
@@ -863,6 +898,45 @@ def _breaks(
             return f"a reader would say it does not {rule.sentence!r}: {ruling.reason}{why}"
         return ""
     return ""
+
+
+def _graded_by_program(
+    rule: Rule,
+    result: RunResult,
+    unenforced: "list[str] | None",
+    run_program: "Callable[[str, dict[str, Any]], str] | None",
+    why: str,
+) -> str:
+    """A `program:` rule: the carried grader is handed the answer, what the run
+    was given and what its tools returned, and what it says back is the verdict
+    — empty, `ok`, `yes` or `true` passes (as a question's `checked-by:` program
+    says nothing is wrong), anything else is the reason it failed. With nothing
+    to run it, the rule is reported, never passed or failed; a grader that could
+    not run fails the answer with what went wrong, as a metric's does."""
+    where = rule.where or "evals/suite.yaml"
+    if run_program is None:
+        _note(
+            unenforced,
+            f"{where}: `program: {rule.sentence}` was not applied — nothing here can run a "
+            f"carried program. fix: run the suite where a locked room for programs is "
+            f"supplied.",
+        )
+        return ""
+    inputs = {
+        "answer": result.output,
+        "given": dict(result.given),
+        "asked": result.asked,
+        "returned": [r for s in result.steps for r in s.tool_results],
+    }
+    try:
+        said = run_program(rule.sentence, inputs)
+    except Exception as e:  # noqa: BLE001 — a grader's failure is data
+        return f"`program: {rule.sentence}` could not grade it: {e}{why}"
+    objection = str(said if said is not None else "").strip()
+    if objection and objection.lower() not in {"ok", "yes", "true"}:
+        return f"`program: {rule.sentence}` says: {objection}{why}"
+    return ""
+
 
 
 def _note(sentences: "list[str] | None", said: str) -> None:

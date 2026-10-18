@@ -213,6 +213,14 @@ const SENTENCES: &[(&str, &str, &str)] = &[
     // A `run-code` stage's fuel (02P A3): its help opens with the condition
     // (`on run-code, ...`), so it is named by a `summary:`.
     ("stage", "fuel", "how long and how much its code may run"),
+    // A sampled frame's share and reviewers (02W §2.13): their help opens with
+    // the condition (`with sampled-frame, ...`), so each is named by a `summary:`.
+    (
+        "evals",
+        "sample",
+        "the share of finished live runs a reviewer sees",
+    ),
+    ("evals", "reviewed-by", "who reviews the sample"),
 ];
 
 fn expected(pair: &Pair) -> Option<&'static str> {
@@ -316,12 +324,12 @@ fn the_settings_that_carry_a_summary_are_named_by_it_and_not_by_their_help() {
         .filter(|p| !field_strings(&p.group, &p.owed).0.is_empty())
         .count();
     assert_eq!(
-        with_summary, 15,
+        with_summary, 17,
         "seven of the ten pairings needed a `summary:` when this was written — `port.every`, \
          `teamwork.enough-is`, `teamwork.gives-up-after`, and the four `asks:` fields — and the \
          three a workflow's stage added (`call`, `chooses-between`, `over`) need one each, as do \
          the two a wait and a table added (`question.enough-is`, `value.rows-are`) and the two \
-         a failure plan added (its `asks:` and `undo:`), and a `run-code` stage's `fuel:`. If that count moved, the table above still holds; this line is here so a `summary:` \
+         a failure plan added (its `asks:` and `undo:`), a `run-code` stage's `fuel:`, and a sampled frame's `sample:` and `reviewed-by:`. If that count moved, the table above still holds; this line is here so a `summary:` \
          cannot be quietly deleted and replaced by a fallback that happens to read."
     );
 }
