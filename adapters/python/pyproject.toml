@@ -30,6 +30,10 @@ dependencies = [
     # `pydantic.TypeAdapter` (WP-38: never by writing its private `_state`). Pydantic AI
     # brings it; named because the source imports it directly.
     "pydantic>=2.10",
+    # `pydantic_graph_reading.py` reads a built `Graph` through its public attributes and
+    # `pydantic_graph_lowering.py` builds one (WP-39). Pydantic AI brings it at its own
+    # version; named because the source imports it directly.
+    "pydantic-graph>=2.54,<3",
     # The `pact` loader binary every command here shells out to, as a wheel
     # (`pyproject.toml` at the repository root, built from `crates/pact-cli`).
     # Exactly this package's own version: the loader writes the document these
@@ -61,7 +65,12 @@ all = ["pact-adapters[anthropic,autogen,langgraph,langchain,openai-agents,deepev
 # templates and checks the model reads the filled words (02P A4).
 # `pydantic-ai-harness` only so the parity suite can build agents that carry its capabilities
 # and check each import names them (02P §4: recognising live objects on import only).
-test = ["pytest>=9.1.1", "pydantic-handlebars>=0.1.0", "pydantic-ai-harness==0.54.0", "pydantic-monty>=1,<2"]
+# `pydantic-evals` only so S4 can read the evaluator classes it ships from its source: the
+# dataset importer reads a dataset FILE and never imports it (WP-39).
+test = [
+    "pytest>=9.1.1", "pydantic-handlebars>=0.1.0", "pydantic-ai-harness==0.54.0", "pydantic-monty>=1,<2",
+    "pydantic-evals==2.54.0",
+]
 
 
 # Without this the project is not a package: `uv` refuses to install the entry

@@ -1727,9 +1727,12 @@ USAGE = """\
 pact-pydantic-ai — a PACT agent as a Pydantic AI spec, with a loss report
 
 USAGE:
-    pact-pydantic-ai PATH AGENT
+    pact-pydantic-ai PATH AGENT [--skills DIR]
 
-Prints the `AgentSpec` as YAML, and the ExportReport underneath it.
+Prints the `AgentSpec` as YAML, and the ExportReport underneath it. With
+`--skills DIR`, the skills the agent uses are written there as a
+pydantic-ai-harness Skills directory (`pydantic_ai_skills.skills_directory`),
+which `Skills(DIR)` offers on demand, and their report follows.
 
 The file loads with `Agent.from_file()`. It is NOT the whole agent: an
 `AgentSpec` has no field for tools, ceilings, policy, the loop or the team, and
@@ -1749,7 +1752,12 @@ def main(argv: "list[str] | None" = None) -> int:
     import yaml
 
     args = list(sys.argv[1:] if argv is None else argv)
-    if len(args) != 2 or args[0] in ("-h", "--help"):
+    skills_to = None
+    if "--skills" in args:
+        at = args.index("--skills")
+        skills_to = args[at + 1] if at + 1 < len(args) else ""
+        del args[at : at + 2]
+    if len(args) != 2 or args[0] in ("-h", "--help") or skills_to == "":
         sys.stdout.write(USAGE)
         return 0 if args and args[0] in ("-h", "--help") else 1
 
@@ -1776,6 +1784,17 @@ def main(argv: "list[str] | None" = None) -> int:
     spec, report = to_pydantic_ai_spec(document, args[1], workspace=args[0])
     sys.stdout.write(yaml.safe_dump(spec, sort_keys=False, allow_unicode=True))
     sys.stdout.write("\n" + report.in_words() + "\n")
+    if skills_to is not None:
+        from pathlib import Path
+
+        from .pydantic_ai_skills import skills_directory
+
+        files, said = skills_directory(document, args[1], Path(args[0]))
+        for name, body in files.items():
+            (Path(skills_to) / name).parent.mkdir(parents=True, exist_ok=True)
+            (Path(skills_to) / name).write_bytes(body)
+        sys.stdout.write(f"\nWrote {len(files)} file(s) into {skills_to}.\n" + said.in_words() + "\n")
+        return 1 if report.silent_losses or said.silent_losses else 0
     return 1 if report.silent_losses else 0
 
 

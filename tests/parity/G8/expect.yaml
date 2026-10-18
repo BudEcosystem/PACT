@@ -1,0 +1,15 @@
+# 02P G8: a step that streams is read as a `call` stage and named.
+row: G8
+says: a step that streams is read as a `call` stage and named
+import:
+  mapped:
+  - input_type
+  - name
+  - nodes.__end__
+  - nodes.__start__
+  - nodes.count
+  - nodes.words
+  - output_type
+  not-portable:
+  - auto_instrument
+  - nodes.words.stream

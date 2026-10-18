@@ -1,5 +1,15 @@
-# 02P E5: `HasMatchingSpan` in a dataset is read by the pydantic-evals importer.
+# 02P E5: `HasMatchingSpan` is named: a tool's span with the `must-call-before:` line to write, any other span as a trace's.
 row: E5
-says: '`HasMatchingSpan` in a dataset is read by the pydantic-evals importer'
-import: none
-later: WP-39
+says: '`HasMatchingSpan` is named: a tool''s span with the `must-call-before:` line to write, any other
+  span as a trace''s'
+import:
+  mapped:
+  - cases
+  - cases.case-1
+  - cases.case-1.expected_output
+  - cases.case-1.inputs
+  - evaluators
+  - name
+  not-portable:
+  - evaluators.HasMatchingSpan
+  - evaluators.HasMatchingSpan#2

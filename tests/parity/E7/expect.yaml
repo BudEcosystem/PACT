@@ -1,5 +1,16 @@
-# 02P E7: a custom evaluator is code in an eval suite: nothing on an agent to import.
+# 02P E7: an evaluator of the author's and a report evaluator are code, each named with the `metrics:` line to write.
 row: E7
-says: 'a custom evaluator is code in an eval suite: nothing on an agent to import'
-import: none
-why: 'a custom evaluator is code in an eval suite: nothing on an agent to import'
+says: an evaluator of the author's and a report evaluator are code, each named with the `metrics:` line
+  to write
+import:
+  mapped:
+  - cases
+  - cases.case-1
+  - cases.case-1.expected_output
+  - cases.case-1.inputs
+  - evaluators
+  - name
+  not-portable:
+  - evaluators.TicketLabelMatches
+  - report_evaluators
+  - report_evaluators.ConfusionMatrixEvaluator

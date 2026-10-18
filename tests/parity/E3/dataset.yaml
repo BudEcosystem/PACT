@@ -1,0 +1,6 @@
+name: typed
+cases:
+  - inputs: Give the order number.
+    expected_output: A-1001
+evaluators:
+  - IsInstance: str

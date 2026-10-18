@@ -79,6 +79,12 @@ COMMANDS: dict[str, str] = {
     "combine": "reads the combine rules' spellings from `spec/schema.yaml`, shipped "
                "inside this package — the one copy `pact check` reads too, so the two "
                "cannot disagree; never an author file",
+    "pydantic_ai_files": "reads the folder of harness agent definitions `pact-import --as "
+                         "agent-folder` names; `from_mcp_json` reads nothing",
+    "pydantic_ai_skills": "reads the Skills directory `pact-import --as skills` names, and "
+                          "the skill folders of the tree `pact-pydantic-ai --skills` exports",
+    "pydantic_ai_interop": "`pact-pydantic-ai --skills DIR` writes the Skills directory a "
+                           "person named; the library halves read and write nothing",
     "pydantic_ai_registry": "reads its own table, shipped inside this package "
                             "beside it, and `pact-mapping` writes the page a "
                             "person named — neither is an author file",

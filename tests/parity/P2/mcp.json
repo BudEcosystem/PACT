@@ -1,0 +1,6 @@
+{
+  "mcpServers": {
+    "orders": {"url": "https://orders.example.com/mcp", "headers": {"Authorization": "Bearer ${ORDERS_TOKEN}"}},
+    "files": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "/data"], "env": {"LOG_LEVEL": "info"}}
+  }
+}

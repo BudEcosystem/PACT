@@ -5,7 +5,8 @@ The Python side of PACT: the harness that owns the loop, the loader boundary
 
 ## Install
 
-The core needs three Python packages (`pydantic-ai-slim`, `pyyaml`, `httpx`) and the loader:
+The core needs Pydantic AI (`pydantic-ai-slim`, with the `pydantic` and `pydantic-graph` it
+brings), `pyyaml`, `httpx` and the loader:
 
 ```bash
 pip install pact-adapters

@@ -759,11 +759,12 @@ capabilities:
 # `AgentSpec` file, `agent.<attr>` the attribute of a live `Agent` a report names,
 # `settings.<key>` a `ModelSettings` key outside the twelve
 # `pydantic_ai_transport._SETTINGS` maps (that table is the authority on those).
-# Four more doors are named so the completeness test (02P §6 S4) can hold every
+# Five more doors are named so the completeness test (02P §6 S4) can hold every
 # name the installed Pydantic AI has: `part.<Class>` a message part (what a
 # conversation is made of), `event.<Class>` a member of `AgentStreamEvent`,
-# `tool-definition.<field>` a field of `ToolDefinition`, and `graph.<method>` a
-# public member of pydantic-graph's `GraphBuilder`.
+# `tool-definition.<field>` a field of `ToolDefinition`, `graph.<method>` a
+# public member of pydantic-graph's `GraphBuilder`, and `evaluator.<Class>` an
+# evaluator pydantic-evals ships, as a dataset file names it.
 # `pact:` is PACT's spelling of one that crosses; `why:` the named loss; `left:`
 # what an export leaves to Pydantic AI's own default, and why.
 names:
@@ -1257,74 +1258,165 @@ names:
     rows: [T12, X1]
     why: *whose-tool
 
-  # ── pydantic-graph `GraphBuilder` (02P G1-G9). PACT has no workflow document yet
-  # (`workflows/<n>.yaml`, 02W), so a built graph does not cross. The G rows say
-  # what each becomes when it does.
+  # ── pydantic-graph `GraphBuilder` (02P G1-G9). A built graph is read as a workflow
+  # (`pydantic_graph_reading.workflow_of`, WP-39) through its public attributes, without
+  # running any step, and a workflow lowers to one (`pydantic_graph_lowering.graph_of`).
   graph.Source:
-    outcome: loss
+    outcome: mapped
     rows: [G1]
-    why: &no-workflows >-
-      part of a pydantic-graph graph. A PACT tree has no workflows yet, so a built
-      graph does not cross; 02P §2.13 says what each part becomes when workflows land
+    pact: "the stage a route leaves from"
   graph.Destination:
-    outcome: loss
+    outcome: mapped
     rows: [G1]
-    why: *no-workflows
+    pact: "the stage a route reaches, or `done`"
   graph.add:
-    outcome: loss
+    outcome: mapped
     rows: [G1]
-    why: *no-workflows
+    pact: "each stage's `then:`, one route per edge"
   graph.add_edge:
-    outcome: loss
+    outcome: mapped
     rows: [G1]
-    why: *no-workflows
+    pact: "a stage's `then: {answered: <stage>}`"
   graph.add_mapping_edge:
-    outcome: loss
+    outcome: mapped
     rows: [G5]
-    why: *no-workflows
+    pact: "`does: each` over the list, its own stages inside"
   graph.build:
-    outcome: loss
+    outcome: mapped
     rows: [G1]
-    why: *no-workflows
+    pact: "`workflows/<name>.yaml`, read from the built graph without running any step; each step's body is a host action to write"
   graph.decision:
-    outcome: loss
+    outcome: mapped
     rows: [G3]
-    why: *no-workflows
+    pact: "`does: decide` on the rules rung, one label per branch"
   graph.edge_from:
-    outcome: loss
+    outcome: mapped
     rows: [G1, G4]
-    why: *no-workflows
+    pact: "a stage's `then:`; a broadcast to fixed branches is `does: together`"
   graph.end_node:
-    outcome: loss
+    outcome: mapped
     rows: [G7]
-    why: *no-workflows
+    pact: "`done`; a path's label to the end is `stop-and-say-so` on an `ask-someone`'s `nobody-answered:`, the one outcome that names a route word, and any other label is named"
   graph.join:
-    outcome: loss
+    outcome: mapped
     rows: [G6]
-    why: *no-workflows
+    pact: "the end of an `each` or a `together`: `ReduceFirstValue` is `waits-for: anyone`, the list reducers keep all, `reduce_sum` and `reduce_dict_update` are `combines-by:` lines (`add-up`, `merge`); an author's own reducer is a loss"
   graph.match:
-    outcome: loss
+    outcome: mapped
     rows: [G3]
-    why: *no-workflows
+    pact: "one label of a `decide` (a `Literal`'s value, a class's name); a `matches=` function is a loss"
   graph.match_node:
     outcome: loss
-    rows: [G3]
-    why: *no-workflows
+    rows: [G3, G8]
+    why: >-
+      a branch to a v1 `BaseNode`, whose `run` is code that also picks what comes next (02P G8);
+      write the node as stages
   graph.node:
     outcome: loss
-    rows: [G1]
-    why: *no-workflows
+    rows: [G8]
+    why: >-
+      a v1 `BaseNode` step: its `run` is code that also picks what comes next (02P G8). It is read
+      as a `call` stage and named
   graph.start_node:
-    outcome: loss
+    outcome: mapped
     rows: [G7]
-    why: *no-workflows
+    pact: "`starts-at:`"
   graph.step:
-    outcome: loss
+    outcome: mapped
     rows: [G2]
-    why: *no-workflows
+    pact: "`does: call`, named for the step; its body is a host action to write in `tools/<graph>.yaml`"
   graph.stream:
     outcome: loss
     rows: [G8]
     why: >-
-      a step that streams. Streams are out of scope for PACT workflows (02P G8), so
-      it stays a loss when workflows land
+      a step that streams. Streams are out of scope for PACT workflows (02P G8): it is read as a
+      `call` stage and named
+
+  # ── pydantic-evals evaluators (02P E1-E10), read from a dataset file by
+  # `pydantic_evals_datasets.from_pydantic_evals` (WP-39); the package itself is never imported.
+  evaluator.EqualsExpected:
+    outcome: mapped
+    rows: [E2]
+    pact: "the case's `expect:`, which every case is held to"
+  evaluator.Equals:
+    outcome: mapped
+    rows: [E2]
+    pact: "`must-say-one-of: [<value>]`"
+  evaluator.Contains:
+    outcome: mapped
+    rows: [E2]
+    pact: "`must-contain: [<value>]`"
+  evaluator.IsInstance:
+    outcome: mapped
+    rows: [E3]
+    pact: "always on: `answers-with:` is validated on every run"
+  evaluator.MaxDuration:
+    outcome: mapped
+    rows: [E4]
+    pact: "`limits: {finishes-within: <n> seconds}` on the agent or workflow under test"
+  evaluator.LLMJudge:
+    outcome: carried
+    rows: [E6]
+    pact: "`judged: <rubric>`, graded by `graded-by:` (the catalogue row of its `model`)"
+  evaluator.HasMatchingSpan:
+    outcome: loss
+    rows: [E5]
+    why: >-
+      a span query states that a span was recorded, never in what order, and PACT's one rule about
+      calls (`must-call-before:`) states an order, never that a call happened: neither says the
+      other. A span of a tool call names the `must-call-before:` line to write; any other span is a
+      trace's, which a PACT case does not read
+  evaluator.GEval:
+    outcome: loss
+    rows: [E6, E7]
+    why: >-
+      a scored rubric graded in steps; PACT's judged rule is one sentence a grader passes or fails.
+      Write its criteria as `judged:`
+  evaluator.ToolCorrectness:
+    outcome: loss
+    rows: [E5]
+    why: >-
+      which tools were called, counted. PACT checks the order of calls (`must-call-before:`), not
+      their count
+  evaluator.TrajectoryMatch:
+    outcome: loss
+    rows: [E5]
+    why: >-
+      a score for how close the calls came to a sequence. Write each pair that must come in order as
+      `must-call-before: {call: <later>, first: <earlier>}`
+  evaluator.ArgumentCorrectness:
+    outcome: loss
+    rows: [E5]
+    why: >-
+      the arguments one call was given. A PACT case reads the answer and the order of calls, not the
+      arguments
+  evaluator.MaxToolCalls:
+    outcome: loss
+    rows: [E5]
+    why: >-
+      a ceiling checked after the run; PACT holds it during the run: `limits: {tool-calls-at-most:
+      <n>}` on the agent under test
+  evaluator.MaxModelRequests:
+    outcome: loss
+    rows: [E5]
+    why: >-
+      a ceiling checked after the run; PACT holds it during the run: `limits: {steps-at-most: <n>}`
+      on the agent under test
+  evaluator.ConfusionMatrixEvaluator:
+    outcome: loss
+    rows: [E7]
+    why: &report-evaluator >-
+      a report evaluator, which scores the whole run of a dataset in code. Write the measure as a
+      `metrics:` line (`program:` names a carried program of the tree's own)
+  evaluator.PrecisionRecallEvaluator:
+    outcome: loss
+    rows: [E7]
+    why: *report-evaluator
+  evaluator.ROCAUCEvaluator:
+    outcome: loss
+    rows: [E7]
+    why: *report-evaluator
+  evaluator.KolmogorovSmirnovEvaluator:
+    outcome: loss
+    rows: [E7]
+    why: *report-evaluator

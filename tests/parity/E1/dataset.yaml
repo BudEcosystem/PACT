@@ -1,0 +1,12 @@
+# A pydantic-evals dataset, as `Dataset.to_file` writes it.
+name: capitals
+cases:
+  - name: france
+    inputs: What is the capital of France?
+    expected_output: Paris
+    metadata: {difficulty: easy}
+    evaluators:
+      - Contains: Paris
+  - name: by-fields
+    inputs: {country: Japan, form: short}
+    expected_output: Tokyo

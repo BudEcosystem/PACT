@@ -1,5 +1,15 @@
-# 02P P2: `mcp.json` is read by the `mcp.json` importer.
+# 02P P2: an `mcp.json` is one `resources/<name>.yaml` per server; how a server is launched and what it is sent are the host's, never copied.
 row: P2
-says: '`mcp.json` is read by the `mcp.json` importer'
-import: none
-later: WP-39
+says: an `mcp.json` is one `resources/<name>.yaml` per server; how a server is launched and what it is
+  sent are the host's, never copied
+import:
+  mapped:
+  - mcpServers
+  - mcpServers.files
+  - mcpServers.files.command
+  - mcpServers.orders
+  - mcpServers.orders.url
+  not-portable:
+  - mcpServers.files.args
+  - mcpServers.files.env
+  - mcpServers.orders.headers

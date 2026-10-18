@@ -1,5 +1,12 @@
-# 02P E4: `MaxDuration` in a dataset is read by the pydantic-evals importer.
+# 02P E4: `MaxDuration` is `limits.finishes-within:` on what the suite tests, the line written for the author.
 row: E4
-says: '`MaxDuration` in a dataset is read by the pydantic-evals importer'
-import: none
-later: WP-39
+says: '`MaxDuration` is `limits.finishes-within:` on what the suite tests, the line written for the author'
+import:
+  mapped:
+  - cases
+  - cases.case-1
+  - cases.case-1.expected_output
+  - cases.case-1.inputs
+  - evaluators
+  - evaluators.MaxDuration
+  - name

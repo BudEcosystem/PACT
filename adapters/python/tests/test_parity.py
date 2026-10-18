@@ -20,14 +20,16 @@ Three standard checks (02P §6), and the behaviour of each row:
   turns `expect.yaml` gives under `model:`, and what the row's 02P test column
   asks for holds (`expect:`).
 
-**Which rows.** `AGENT_LEVEL`: every agent-level row of the matrix (WP-38). A
-row's fixture is a PACT tree (`tree/`, built by `build_agent` and imported back
-through the live door), an `AgentSpec` file (`spec.yaml`, the spec door), or a
-module that builds an `Agent` (`agent.py`, the live door); the live door reads
-the object through Pydantic AI's public API only (`pydantic_ai_reading`). A row
-with nothing on an agent to import (a run's, a host's or an export's) says so
-(`import: none`, `why:`), and a row another importer reads says which package
-brings it (`later:`). **S2** runs on each row that says what its export
+**Which rows.** `AGENT_LEVEL`: every agent-level row of the matrix (WP-38) and
+the graph rows (WP-39). A row's fixture is a PACT tree (`tree/`, built by
+`build_agent` and imported back through the live door), an `AgentSpec` file
+(`spec.yaml`, the spec door), or a module that builds an `Agent` (`agent.py`,
+the live door); the live door reads the object through Pydantic AI's public API
+only (`pydantic_ai_reading`). Or it is one of the other files an importer reads
+(WP-39, `OTHER_DOORS`): an `mcp.json`, a pydantic-evals `dataset.yaml`, a folder
+of harness `agents/`, a harness `skills/` directory, or a `graph.py` module that
+builds a pydantic-graph `Graph` (named `graph`). A row with nothing to import (a
+run's, a host's or an export's) says so (`import: none`, `why:`). **S2** runs on each row that says what its export
 cannot carry (`export:`); **S3**, PACT → Pydantic AI → PACT, on each tree row
 whose agent a spec file holds whole (`export: round-trip: the same digest`), and
 Pydantic AI → PACT → Pydantic AI on each `spec.yaml` and `agent.py` row with
@@ -62,7 +64,9 @@ from pact_adapters.pydantic_ai_interop import (  # noqa: E402
     to_pydantic_ai_spec,
     usage_limits_for,
 )
+from pact_adapters.importing import read_files  # noqa: E402
 from pact_adapters.pydantic_ai_registry import registry  # noqa: E402
+from pact_adapters.pydantic_graph_reading import workflow_of  # noqa: E402
 from trees import shown  # noqa: E402
 
 pydantic_ai = pytest.importorskip("pydantic_ai")
@@ -81,21 +85,30 @@ from pydantic_ai.usage import UsageLimits  # noqa: E402
 REPO = Path(__file__).resolve().parents[3]
 PARITY = REPO / "tests" / "parity"
 
-#: Every agent-level row of the 02P matrix (§2.1 to §2.12, §2.14 to §2.16; the
-#: graph rows, §2.13, are workflows'): each has a folder.
+#: Every agent-level row of the 02P matrix (§2.1 to §2.16, the graph rows of §2.13
+#: since WP-39 reads a built graph): each has a folder.
 AGENT_LEVEL = tuple(
     f"{letter}{n}"
     for letter, last in (
         ("A", 26), ("T", 14), ("H", 9), ("O", 8), ("S", 5), ("C", 12), ("M", 11), ("F", 5),
-        ("N", 7), ("P", 8), ("D", 4), ("E", 10), ("K", 6), ("X", 11), ("I", 2),
+        ("N", 7), ("P", 8), ("D", 4), ("E", 10), ("G", 9), ("K", 6), ("X", 11), ("I", 2),
     )
     for n in range(1, last + 1)
 )
 
 ROWS = sorted(p.name for p in PARITY.iterdir() if p.is_dir()) if PARITY.is_dir() else []
 
-#: What a fixture can be: a PACT tree, an `AgentSpec` file, or a module that builds an `Agent`.
-FIXTURES = ("tree", "spec.yaml", "agent.py")
+#: The files the other importers read (WP-39), and the reader of each.
+OTHER_DOORS = {
+    "mcp.json": lambda at: read_files("mcp-json", at),
+    "dataset.yaml": lambda at: read_files("pydantic-evals", at),
+    "agents": lambda at: read_files("agent-folder", at),
+    "skills": lambda at: read_files("skills", at),
+    "graph.py": lambda at: workflow_of(_module(at).graph),
+}
+#: What a fixture can be: a PACT tree, an `AgentSpec` file, a module that builds an `Agent`,
+#: or one of the files the other importers read.
+FIXTURES = ("tree", "spec.yaml", "agent.py", *OTHER_DOORS)
 
 
 def _expect(row: str) -> dict[str, Any]:
@@ -123,8 +136,8 @@ IMPORTED = [r for r in ROWS if _fixture(r)]
 
 def test_every_agent_level_row_has_a_folder_and_nothing_else_does() -> None:
     """Each row either has a fixture its import is checked on, or says why it has none:
-    `import: none` (nothing on an agent to import: the row is a run's, a host's or an
-    export's) with `why:`, or `later:` naming the package whose importer reads it."""
+    `import: none` (nothing to import: the row is a run's, a host's or an export's) with
+    `why:`. No row waits for an importer any more (WP-39 brought the last ones)."""
     assert ROWS, f"{PARITY} has no rows"
     assert set(ROWS) == set(AGENT_LEVEL), (
         f"missing: {sorted(set(AGENT_LEVEL) - set(ROWS))}; not a row: {sorted(set(ROWS) - set(AGENT_LEVEL))}"
@@ -136,24 +149,29 @@ def test_every_agent_level_row_has_a_folder_and_nothing_else_does() -> None:
         if _fixture(row):
             assert "import" in said and said["import"] != "none", f"{row} has a fixture and no buckets"
         else:
-            assert said.get("import") == "none" and (said.get("why") or said.get("later")), (
-                f"{row} has no fixture (`tree/`, `spec.yaml` or `agent.py`) and does not say why"
+            assert said.get("import") == "none" and said.get("why") and "later" not in said, (
+                f"{row} has no fixture ({', '.join(FIXTURES)}) and does not say why"
             )
 
 
 # ──────────────────────────────────────────────────────────────── S1, S5
 
 
-def _built(row: str) -> Any:
-    """`agent.py`'s `agent`: the module run as its own, as an author's process would."""
+def _module(at: Path) -> Any:
+    """The module at `at`, run as its own, as an author's process would."""
     import importlib.util
 
-    named = f"parity_{row.lower()}"
-    found = importlib.util.spec_from_file_location(named, PARITY / row / "agent.py")
+    named = f"parity_{at.parent.name.lower()}_{at.stem}"
+    found = importlib.util.spec_from_file_location(named, at)
     module = importlib.util.module_from_spec(found)
     sys.modules[named] = module
     found.loader.exec_module(module)
-    return module.agent
+    return module
+
+
+def _built(row: str) -> Any:
+    """`agent.py`'s `agent`."""
+    return _module(PARITY / row / "agent.py").agent
 
 
 def _imported(row: str, said: dict[str, Any]) -> Any:
@@ -169,6 +187,9 @@ def _imported_agent(row: str, said: dict[str, Any]) -> tuple[dict[str, Any], Any
     """The fixture as Pydantic AI has it, imported back: the PACT agent block and the report."""
     if _fixture(row) == "spec.yaml":
         return from_pydantic_ai_spec(_spec_file(row))
+    if _fixture(row) in OTHER_DOORS:
+        imported = OTHER_DOORS[_fixture(row)](PARITY / row / _fixture(row))
+        return {}, imported.report
     if _fixture(row) == "agent.py":
         return from_pydantic_ai_agent(_built(row))
     spec = _spec(row, said)
@@ -185,7 +206,7 @@ def _not_portable(row: str, said: dict[str, Any]) -> list[str]:
     """The named losses a row's import must report. Every import of a live agent also says
     `not_shown`, what Pydantic AI's public API does not show (`pydantic_ai_reading`)."""
     wanted = list((said.get("import") or {}).get("not-portable") or [])
-    return sorted(wanted + (["not_shown"] if _fixture(row) != "spec.yaml" else []))
+    return sorted(wanted + (["not_shown"] if _fixture(row) in ("tree", "agent.py") else []))
 
 
 @pytest.mark.parametrize("row", IMPORTED)
@@ -201,6 +222,20 @@ def test_s1_the_import_accounts_for_every_key(row: str) -> None:
     assert sorted(report.not_portable) == _not_portable(row, said), report.in_words()
     for key, value in (wanted.get("block") or {}).items():
         assert block.get(key) == value, f"{row}: the agent's `{key}:` is {block.get(key)!r}, not {value!r}"
+
+
+@pytest.mark.parametrize("row", [r for r in IMPORTED if _fixture(r) == "graph.py"])
+def test_s1_a_graph_rows_import_is_a_tree_that_loads(row: str, tmp_path: Path) -> None:
+    """What a graph's import writes (its steps served from one server, `connect`) loads: no
+    route names a word the schema does not take, which the report's buckets alone cannot show."""
+    from pact_adapters.openapi import write_into
+    from trees import pact, write
+
+    imported = workflow_of(_module(PARITY / row / "graph.py").graph, connect="host-steps")
+    root = write(tmp_path / "tree", {"workspace.yaml": "name: imported\nallow-egress: []\n"})
+    write_into(root, imported)
+    out = pact("check", str(root))
+    assert "rule: schema/" not in out.stdout, f"{row}: the imported tree does not load:\n{out.stdout}"
 
 
 #: 04 §14.2: never in a screen, a card or a reply unless technical details are on.
@@ -330,7 +365,12 @@ def _base_names(node: ast.ClassDef) -> set[str]:
 
 
 def capability_classes(root: Path) -> set[str]:
-    """Every public capability class in the package whose source is at `root`.
+    """Every public capability class in the package whose source is at `root`."""
+    return subclasses_in(root, "AbstractCapability")
+
+
+def subclasses_in(root: Path, base: str) -> set[str]:
+    """Every public class of the package whose source is at `root` that subclasses `base`.
 
     Read from the SOURCE, not by importing, because a capability sits wherever
     its provider is (`models/openai.py` holds `OpenAICompaction`,
@@ -357,7 +397,7 @@ def capability_classes(root: Path) -> set[str]:
                     public.add(node.name)
             if visible and isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "__all__" for t in node.targets):
                 public.update(ast.literal_eval(node.value))
-    found = {"AbstractCapability"}
+    found = {base}
     while grown := {n for n, b in bases.items() if n not in found and b & found}:
         found |= grown
     return {n for n in found & public if not n.startswith("_")}
@@ -373,6 +413,19 @@ def _harness_capabilities(pydantic_ai_source: "Path | None") -> set[str]:
     except ImportError:  # pragma: no cover - the test extra installs it
         return set()
     return capability_classes(Path(pydantic_ai_harness.__file__).parent) - {"AbstractCapability"}
+
+
+def _evaluator_classes(pydantic_ai_source: "Path | None") -> set[str]:
+    """The evaluators pydantic-evals ships (`Evaluator` and `ReportEvaluator` classes), read from
+    its source as capabilities are, which is how a dataset file names them (door `evaluator.`)."""
+    if pydantic_ai_source is not None:
+        return set()
+    try:
+        import pydantic_evals
+    except ImportError:  # pragma: no cover - the test extra installs it
+        return set()
+    shipped = subclasses_in(Path(pydantic_evals.__file__).parent, "BaseEvaluator")
+    return shipped - {"BaseEvaluator", "Evaluator", "ReportEvaluator"}
 
 
 def installed_names(pydantic_ai_source: "Path | None" = None) -> dict[str, set[str]]:
@@ -409,6 +462,7 @@ def installed_names(pydantic_ai_source: "Path | None" = None) -> dict[str, set[s
         "event": {c.__name__ for c in _members(messages.AgentStreamEvent)},
         "tool-definition": {f.name for f in dataclass_fields(tools.ToolDefinition)},
         "graph": {n for n, _ in inspect.getmembers(GraphBuilder) if not n.startswith("_")},
+        "evaluator": _evaluator_classes(pydantic_ai_source),
     }
 
 
@@ -470,6 +524,13 @@ def test_s4_a_capability_in_a_provider_module_fails_it(tmp_path: Path) -> None:
     )
     assert capability_classes(package) == {"AbstractCapability", "VendorCompaction", "EngineDurability"}
     assert unaccounted(installed_names(package)) == {"capability": ["EngineDurability", "VendorCompaction"]}
+
+
+def test_s4_an_evaluator_nobody_has_seen_fails_it() -> None:
+    """The evaluator door's control: a class pydantic-evals would ship and the registry lacks."""
+    names = installed_names()
+    names["evaluator"] = names["evaluator"] | {"SomebodysNewEvaluator"}
+    assert unaccounted(names) == {"evaluator": ["SomebodysNewEvaluator"]}
 
 
 def test_s4_reads_the_provider_compaction_capabilities() -> None:

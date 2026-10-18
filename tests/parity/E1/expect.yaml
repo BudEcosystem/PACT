@@ -1,5 +1,20 @@
-# 02P E1: an eval dataset is read by the pydantic-evals importer.
+# 02P E1: a dataset is a suite and its cases: inputs, expected output and a case's own evaluators carried; metadata named.
 row: E1
-says: an eval dataset is read by the pydantic-evals importer
-import: none
-later: WP-39
+says: 'a dataset is a suite and its cases: inputs, expected output and a case''s own evaluators carried;
+  metadata named'
+import:
+  mapped:
+  - cases
+  - cases.by-fields
+  - cases.by-fields.expected_output
+  - cases.by-fields.inputs
+  - cases.by-fields.name
+  - cases.france
+  - cases.france.evaluators
+  - cases.france.evaluators.Contains
+  - cases.france.expected_output
+  - cases.france.inputs
+  - cases.france.name
+  - name
+  not-portable:
+  - cases.france.metadata

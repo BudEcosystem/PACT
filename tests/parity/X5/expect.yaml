@@ -1,5 +1,13 @@
-# 02P X5: Skills directories are exported and imported by the Skills door.
+# 02P X5: a Skills directory is the tree's `skills/`; a key PACT has no field for is named.
 row: X5
-says: Skills directories are exported and imported by the Skills door
-import: none
-later: WP-39
+says: a Skills directory is the tree's `skills/`; a key PACT has no field for is named
+import:
+  mapped:
+  - refund-policy
+  - refund-policy.description
+  - refund-policy.name
+  - refund-policy/references
+  not-portable:
+  - refund-policy.license
+held-elsewhere:
+  carried as a Skills directory, both ways: adapters/python/tests/test_skills_cross_as_a_directory.py::test_a_trees_skills_go_out_as_a_directory_and_come_back_the_same

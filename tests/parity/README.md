@@ -1,8 +1,8 @@
 # The parity suite
 
-One folder per agent-level row of the PACT and Pydantic AI parity matrix (Bud
-Flow's `docs/02-PACT-PYDANTIC-AI-PARITY.md` §2: A, T, H, O, S, C, M, F, N, P, D,
-E, K, X and I; the graph rows are workflows'). Each holds:
+One folder per row of the PACT and Pydantic AI parity matrix (Bud Flow's
+`docs/02-PACT-PYDANTIC-AI-PARITY.md` §2: A, T, H, O, S, C, M, F, N, P, D, E, G,
+K, X and I). Each holds:
 
 - a fixture: `tree/`, a PACT workspace read by the real loader; `spec.yaml`, a
   Pydantic AI `AgentSpec` file; or `agent.py`, a module that builds an `Agent`
@@ -10,10 +10,16 @@ E, K, X and I; the graph rows are workflows'). Each holds:
   and imported back through the live door, as an `agent.py`'s is; the live door
   reads the object through Pydantic AI's public API only, and every live import
   also names `not_shown`, what that API does not show;
-- or no fixture, for a row with nothing on an agent to import (`import: none`
-  and `why:`: the row is a run's, a host's or an export's), or one another
-  importer reads (`later:` names the package: WP-39's `mcp.json`, pydantic-evals
-  datasets, harness agent folders and Skills);
+- or one of the other files of Pydantic AI's own an importer reads (WP-39):
+  `mcp.json` (P2, `pydantic_ai_files.from_mcp_json`), a pydantic-evals
+  `dataset.yaml` (E1 to E7, `pydantic_evals_datasets.from_pydantic_evals`, the
+  file only: the package is never imported), a folder of harness `agents/` (K3,
+  `pydantic_ai_files.from_agent_folder`), a harness `skills/` directory (X5,
+  `pydantic_ai_skills.from_skills_directory`), or a `graph.py` that builds a
+  pydantic-graph `Graph` named `graph` (G1 to G9,
+  `pydantic_graph_reading.workflow_of`, which runs no step);
+- or no fixture, for a row with nothing to import (`import: none` and `why:`:
+  the row is a run's, a host's or an export's);
 - `expect.yaml`: `row:`, what the row's test asks (`says:`), the buckets its
   import must land in (`import:`), and for a tree, the scripted model turns
   (`model:`) and what the run must show (`expect:`). Beside those:
@@ -59,6 +65,16 @@ not hold it.
 | T4 | "the gate holds on both sides for the same arguments" | The row holds that every call asks a person and the function is named; a gate on a call's arguments is the runtime's (Bud Agent Flow's policy rules) |
 | M6 | "#8 at 0.8: an answer below the threshold goes to the next rung" | The row holds that a decision model's id is carried; the threshold and its rungs are a run's, case #8 of Bud Agent Flow's corpus |
 | A12 | "the same tools are offered on both sides" | A `tool_choice` list is not translated yet (a named loss), so the row holds that it is named, not cut to its first |
+
+Two rows hold their export elsewhere, both named under `held-elsewhere:`: G1's
+*export then import of a workflow is the identity*, on #16's and #48's
+workflows and two more (`test_a_built_graph_reads_as_a_workflow.py`), and X5's
+skills written as a Skills directory and read back the same, which the
+harness's own `Skills` offers (`test_skills_cross_as_a_directory.py`). E5's
+`HasMatchingSpan` is a named loss where 02P says *mapped / loss*: a span query
+says a span was recorded and never in what order, and `must-call-before:` says
+an order and never that a call happened, so neither says the other; the loss
+names the `must-call-before:` line for a span of a tool call.
 
 `adapters/python/tests/test_parity.py` runs every folder:
 

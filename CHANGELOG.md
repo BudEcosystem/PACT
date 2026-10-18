@@ -10,6 +10,29 @@ Running PACT trees in production on Pydantic AI 2.54, through
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
 runs offline: 4114 tests, 1445 Rust and 2669 adapter.
 
+### The rest of what Pydantic AI keeps in files, and built graphs, imported (18 October)
+
+- **`pact-import --as mcp-json | pydantic-evals | agent-folder | skills`.** An `mcp.json` becomes
+  one `resources/<server>.yaml` per server (a command, a credential or `${...}` in an address is
+  `endpoint: host/<server>`; `args`, `env`, `cwd` and `headers` are named and never copied); a
+  pydantic-evals dataset file becomes `evals/suite.yaml` and `evals/cases/`, each evaluator as
+  the registry's new `evaluator.` door says and metadata a named loss (the package is never
+  imported); a folder of harness agent definitions becomes `agents/`; a Skills directory
+  becomes `skills/`. Each kind meets its reader in one place, `importing.read_files`, for
+  `pact-import` and a host alike; a file is read by `importing.read_mapping`, whose refusal
+  names the problem and its line, never the text there (an `mcp.json`'s lines hold tokens); a
+  folder's hidden entries and links are named and never read.
+- **Skills out as a directory.** `pact-pydantic-ai PATH AGENT --skills DIR` writes the agent's
+  skills as a harness Skills directory, every PACT line kept in `SKILL.md`'s frontmatter and
+  `references/`, `scripts/` and `assets/` copied, so importing it back gives the same skills.
+- **A built pydantic-graph `Graph` read as a workflow** (`pydantic_graph_reading.workflow_of`),
+  through public attributes and without running a step: steps as `call` stages on host actions
+  to write, decisions as rules-rung `decide`s, maps and broadcasts as `each` and `together`, a
+  branch back as `repeat`; `pydantic_graph_lowering.graph_of` goes the other way, and export
+  then import gives the workflow's structure again. `pydantic-graph` is now a declared core
+  dependency (Pydantic AI already brought it).
+- `tests/parity/` holds the graph rows G1 to G9 (147 rows), and no row waits for an importer.
+
 ### A workflow's policy question held to its call (16 October)
 
 - **`loader/shows-nothing-can-supply` reads a workflow's `policy:`.** A question a workflow's

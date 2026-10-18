@@ -1,0 +1,27 @@
+# 02P G6: each join's reducer is read: a sum is `add-up`, the first value `waits-for: anyone`, the author's own named.
+row: G6
+says: 'each join''s reducer is read: a sum is `add-up`, the first value `waits-for: anyone`, the author''s
+  own named'
+import:
+  mapped:
+  - input_type
+  - name
+  - nodes.__end__
+  - nodes.__start__
+  - nodes.amounts
+  - nodes.batches
+  - nodes.first-quote
+  - nodes.highest
+  - nodes.map
+  - nodes.map_2
+  - nodes.map_3
+  - nodes.quote
+  - nodes.quotes
+  - nodes.score
+  - nodes.total
+  - nodes.total.reducer
+  - nodes.weigh
+  - output_type
+  not-portable:
+  - auto_instrument
+  - nodes.highest.reducer

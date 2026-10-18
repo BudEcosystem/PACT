@@ -1,5 +1,16 @@
-# 02P K3: harness agent folders are read by the agent-folder importer.
+# 02P K3: harness agent folders are agent files; tool names and the ignored model are named.
 row: K3
-says: harness agent folders are read by the agent-folder importer
-import: none
-later: WP-39
+says: harness agent folders are agent files; tool names and the ignored model are named
+import:
+  mapped:
+  - researcher.md
+  - researcher.md.body
+  - researcher.md.description
+  - researcher.md.name
+  - reviewer.toml
+  - reviewer.toml.description
+  - reviewer.toml.developer_instructions
+  - reviewer.toml.name
+  not-portable:
+  - researcher.md.model
+  - researcher.md.tools

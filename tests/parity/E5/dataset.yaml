@@ -1,0 +1,9 @@
+name: calls
+cases:
+  - inputs: Cancel order A-1002.
+    expected_output: cancelled
+evaluators:
+  - HasMatchingSpan:
+      query: {has_attributes: {gen_ai.tool.name: look_up_order}}
+  - HasMatchingSpan:
+      query: {name_contains: model request, max_duration: 5}

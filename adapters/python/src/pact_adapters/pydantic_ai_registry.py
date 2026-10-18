@@ -67,8 +67,9 @@ class CapabilityRow:
 
 #: The doors a Pydantic AI name comes through: an `AgentSpec` file's key, a live
 #: `Agent`'s attribute, a `ModelSettings` key, a message part, a stream event, a
-#: `ToolDefinition` field, or a pydantic-graph `GraphBuilder` member.
-DOORS = ("spec", "agent", "settings", "part", "event", "tool-definition", "graph")
+#: `ToolDefinition` field, a pydantic-graph `GraphBuilder` member, or a pydantic-evals
+#: evaluator a dataset file names.
+DOORS = ("spec", "agent", "settings", "part", "event", "tool-definition", "graph", "evaluator")
 
 
 @dataclass(frozen=True)
@@ -260,8 +261,9 @@ def markdown(reg: Registry | None = None) -> str:
     out += ["", "## Other Pydantic AI names", "",
             "`spec.` is an `AgentSpec` file key, `agent.` a live `Agent` attribute, "
             "`settings.` a `ModelSettings` key outside the table above, `part.` a message "
-            "part, `event.` a stream event, `tool-definition.` a `ToolDefinition` field and "
-            "`graph.` a pydantic-graph `GraphBuilder` member.", "",
+            "part, `event.` a stream event, `tool-definition.` a `ToolDefinition` field, "
+            "`graph.` a pydantic-graph `GraphBuilder` member and `evaluator.` a pydantic-evals "
+            "evaluator a dataset file names.", "",
             "| Pydantic AI | Outcome | Rows | PACT |", "|---|---|---|---|"]
     for name, row in reg.names.items():
         out.append(f"| `{name}` | {row.outcome} | {', '.join(row.rows)} | {_cell(row.pact or row.why)} |")

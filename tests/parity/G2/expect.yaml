@@ -1,0 +1,14 @@
+# 02P G2: each step is a `call` stage whose body is a host action to write.
+row: G2
+says: each step is a `call` stage whose body is a host action to write
+import:
+  mapped:
+  - input_type
+  - name
+  - nodes.__end__
+  - nodes.__start__
+  - nodes.look_up
+  - nodes.reply
+  - output_type
+  not-portable:
+  - auto_instrument

@@ -1,0 +1,16 @@
+# 02P G9: a cycle through a decision is a `repeat`, its bound read from the decision's note.
+row: G9
+says: a cycle through a decision is a `repeat`, its bound read from the decision's note
+import:
+  mapped:
+  - input_type
+  - name
+  - nodes.__end__
+  - nodes.__start__
+  - nodes.check_length
+  - nodes.draft
+  - nodes.round
+  - nodes.send
+  - output_type
+  not-portable:
+  - auto_instrument

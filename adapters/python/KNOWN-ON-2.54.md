@@ -32,18 +32,22 @@ optional dependency is not installed is found too, such as
 `CAPABILITY_TYPES` entry, every `AgentSpec` field, every
 `ModelSettings` key, every message part (`ModelRequestPart`,
 `ModelResponsePart`), every `AgentStreamEvent` member, every `ToolDefinition`
-field and every public `GraphBuilder` member, and fails on any name
+field, every public `GraphBuilder` member and every evaluator class the installed
+`pydantic_evals` ships (read from its source; a test dependency, since the
+dataset importer reads a dataset file and never the package), and fails on any name
 `pydantic_ai_registry.yaml` has no row for. On 2.54 that is 19 message parts, 23
 stream events, 17 `ToolDefinition` fields and 16 `GraphBuilder` members beside
 the doors that were already held; each has its outcome and its 02P row. Moving
 the pin is a run of that one test: a name it prints is a row to write, never
 code.
 
-`tests/parity/<row>/` holds one folder per agent-level 02P row (138, since
-WP-38): a fixture (a PACT tree, an `AgentSpec` file, or an `agent.py` that builds
-an `Agent`) and an `expect.yaml`, or, for a row with nothing on an agent to
-import, `import: none` and why (a run's, a host's or an export's), or `later:`
-and the package whose importer reads it. The same test imports each fixture
+`tests/parity/<row>/` holds one folder per 02P row (147: the 138 agent-level
+rows of WP-38 and the graph rows G1 to G9 of WP-39): a fixture (a PACT tree, an
+`AgentSpec` file, an `agent.py` that builds an `Agent`, or one of the files the
+other importers read: an `mcp.json`, a pydantic-evals `dataset.yaml`, a folder of
+harness `agents/` or `skills/`, a `graph.py` that builds a `Graph`) and an
+`expect.yaml`, or, for a row with nothing to import, `import: none` and why (a
+run's, a host's or an export's). The same test imports each fixture
 back (S1), checks the plain-words report (S5), exports each tree row and names
 what its export cannot carry (S2), round-trips each agent a spec file holds whole
 to the same `pact show` digest (S3), and runs each tree's agent through

@@ -1,0 +1,16 @@
+# 02P G4: a broadcast to fixed branches and its join is a `together`.
+row: G4
+says: a broadcast to fixed branches and its join is a `together`
+import:
+  mapped:
+  - input_type
+  - name
+  - nodes.__end__
+  - nodes.__start__
+  - nodes.both
+  - nodes.broadcast
+  - nodes.check_price
+  - nodes.check_stock
+  - output_type
+  not-portable:
+  - auto_instrument

@@ -135,8 +135,8 @@ Two distributions, released together at one version:
 | `pact-loader` | the `pact` binary (`crates/pact-cli`), no Python code | Linux, manylinux 2.28, x86_64 and aarch64; elsewhere `pip` builds it from the source distribution, which needs a Rust toolchain |
 | `pact-adapters` | the Python harness, the loader boundary, the Pydantic AI bridge, the commands; depends on `pact-loader` at its own version | one wheel for every platform |
 
-The core of `pact-adapters` is three Python packages (`pydantic-ai-slim`, `pyyaml`, `httpx`) and
-the loader; every other framework is an extra (`adapters/python/README.md`). The adapters find
+The core of `pact-adapters` is Pydantic AI (`pydantic-ai-slim`, with the `pydantic` and
+`pydantic-graph` it brings), `pyyaml`, `httpx` and the loader; every other framework is an extra (`adapters/python/README.md`). The adapters find
 the loader by `PACT_BIN`, then a checkout's own build, then the `pact` the wheel installed beside
 the interpreter (whether or not that folder is on the `PATH`), then `pact` on the `PATH`.
 
@@ -660,11 +660,11 @@ framework is an extra.
 |---|---|
 | **Design** | Thesis, 28 binding decisions, FRD (120 requirements), 60-row refusal ledger — complete |
 | **Research** | 14 source-grounded studies, ~15,750 lines, over 140 repos (~15 GB) + 57 papers |
-| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **4320 tests (1464 Rust + 2856 adapter), clippy clean, TypeScript type-checked** |
+| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **4406 tests (1464 Rust + 2942 adapter), clippy clean, TypeScript type-checked** |
 | **Adapters** | **All 7 named targets**, proven against one shared conformance suite |
 
 ```bash
-./scripts/test-all.sh          # 4320 tests, Rust + 7 adapters, fully offline
+./scripts/test-all.sh          # 4406 tests, Rust + 7 adapters, fully offline
 ```
 
 **What is still owed** is not hidden — it lives in

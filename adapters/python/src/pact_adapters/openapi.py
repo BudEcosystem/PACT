@@ -58,8 +58,8 @@ class Imported:
 
     #: The name every `url:` begins with, which the host binds to the API's address.
     api: str
-    #: `{"tools/<name>.yaml": text}`.
-    files: dict[str, str]
+    #: `{"tools/<name>.yaml": text}`; bytes for a file copied as it is (a skill's asset).
+    files: dict[str, str | bytes]
     #: `{shape name: {part: line}}`, for `workspace.yaml`'s `shapes:`.
     shapes: dict[str, dict[str, str]]
     report: ImportReport
@@ -135,7 +135,7 @@ def write_into(root: Path, imported: Imported) -> list[str]:
     if not workspace.is_file():
         raise NotImported(f"{root} holds no workspace.yaml. Fix: import into a PACT tree, or make one there first.")
     try:
-        clash = [f for f, text in imported.files.items() if (root / f).exists() and (root / f).read_text() != text]
+        clash = [f for f, body in imported.files.items() if (root / f).exists() and (root / f).read_bytes() != _bytes(body)]
         text = workspace.read_text()
         found = yaml.safe_load(text) or {}
     except (OSError, UnicodeDecodeError, yaml.YAMLError) as trouble:
@@ -162,7 +162,7 @@ def write_into(root: Path, imported: Imported) -> list[str]:
             if path.exists():
                 continue
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(body)
+            path.write_bytes(_bytes(body))
             written.append(f)
     except OSError as trouble:
         raise NotImported(
@@ -171,6 +171,10 @@ def write_into(root: Path, imported: Imported) -> list[str]:
             "there already is left as it is)."
         ) from None
     return written
+
+
+def _bytes(body: str | bytes) -> bytes:
+    return body if isinstance(body, bytes) else body.encode("utf-8")
 
 
 def _with_shapes(text: str, new: Mapping[str, Mapping[str, str]]) -> str:

@@ -1,5 +1,15 @@
-# 02P E6: an LLM judge is part of an eval suite, not an agent: nothing on an agent to import.
+# 02P E6: `LLMJudge` is a `judged:` rule graded by its model's catalogue row; what a judged rule cannot say is named.
 row: E6
-says: 'an LLM judge is part of an eval suite, not an agent: nothing on an agent to import'
-import: none
-why: 'an LLM judge is part of an eval suite, not an agent: nothing on an agent to import'
+says: '`LLMJudge` is a `judged:` rule graded by its model''s catalogue row; what a judged rule cannot
+  say is named'
+import:
+  mapped:
+  - cases
+  - cases.case-1
+  - cases.case-1.expected_output
+  - cases.case-1.inputs
+  - evaluators
+  - evaluators.LLMJudge
+  - name
+  not-portable:
+  - evaluators.LLMJudge.include_input

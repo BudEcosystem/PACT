@@ -1,0 +1,16 @@
+# 02P G5: a map and its join is an `each`.
+row: G5
+says: a map and its join is an `each`
+import:
+  mapped:
+  - input_type
+  - name
+  - nodes.__end__
+  - nodes.__start__
+  - nodes.every-line
+  - nodes.lines
+  - nodes.map
+  - nodes.price_line
+  - output_type
+  not-portable:
+  - auto_instrument

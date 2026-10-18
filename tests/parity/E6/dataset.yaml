@@ -1,0 +1,9 @@
+name: judged
+cases:
+  - inputs: Explain the refund window in one sentence.
+    expected_output: 30 days
+evaluators:
+  - LLMJudge:
+      rubric: The answer is one sentence and names the 30-day window.
+      model: anthropic:claude-haiku-4-5
+      include_input: true

@@ -1,5 +1,16 @@
-# 02P E2: an evaluator in a dataset is read by the pydantic-evals importer.
+# 02P E2: `EqualsExpected`, `Equals` and `Contains` are `expect:`, `must-say-one-of:` and `must-contain:`.
 row: E2
-says: an evaluator in a dataset is read by the pydantic-evals importer
-import: none
-later: WP-39
+says: '`EqualsExpected`, `Equals` and `Contains` are `expect:`, `must-say-one-of:` and `must-contain:`'
+import:
+  mapped:
+  - cases
+  - cases.approve
+  - cases.approve.evaluators
+  - cases.approve.evaluators.Equals
+  - cases.approve.expected_output
+  - cases.approve.inputs
+  - cases.approve.name
+  - evaluators
+  - evaluators.Contains
+  - evaluators.EqualsExpected
+  - name

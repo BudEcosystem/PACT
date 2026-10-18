@@ -1,0 +1,8 @@
+name: own-code
+cases:
+  - inputs: Classify this ticket.
+    expected_output: bug
+evaluators:
+  - TicketLabelMatches
+report_evaluators:
+  - ConfusionMatrixEvaluator

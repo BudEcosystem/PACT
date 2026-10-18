@@ -31,7 +31,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping
+
+if TYPE_CHECKING:
+    from .openapi import Imported
 
 
 @dataclass
@@ -335,6 +338,7 @@ USAGE:
     pact-import FILE [--as a2a-card|anthropic-request|pydantic-ai-spec]
     pact-import FILE --as pydantic-ai-spec --out DIR
     pact-import FILE --as openapi [--out DIR]
+    pact-import FILE --as mcp-json|pydantic-evals|agent-folder|skills [--out DIR]
 
 Prints the agent as YAML, then the ImportReport: in plain words first, then
 key by key. Nothing is written: what comes back is a STUB, because these
@@ -358,6 +362,15 @@ refused and nothing is written. A Pydantic AI agent defined in Python instead
 has no file to read: hand the live object to
 `pact_adapters.pydantic_ai_trees.imported_agent()` from your own process, which
 reads the object through Pydantic AI's public API and runs no tool of yours.
+
+The other files of Pydantic AI's own are read as data, into a tree with `--out
+DIR` or printed file by file: `mcp-json` an `mcp.json` (one `resources/` file
+per server; nothing a server is launched with or sent is copied),
+`pydantic-evals` a pydantic-evals dataset (`evals/suite.yaml` and
+`evals/cases/`), `agent-folder` a folder of pydantic-ai-harness agent
+definitions (`agents/`) and `skills` a harness Skills directory (`skills/`). A
+built pydantic-graph `Graph` is a live object too: hand it to
+`pact_adapters.pydantic_graph_reading.workflow_of()`.
 """
 
 
@@ -423,14 +436,102 @@ def _into(spec: Mapping[str, Any], out: str) -> int:
     return 1 if report.silent_drops else 0
 
 
+def not_the_folders_own(path: Path, folder: Path) -> str:
+    """Why an entry found under `folder` is not read, or "" when it is the folder's own: a
+    hidden name (where secrets are kept: `.env`), or a link, which may lead anywhere (`~/.ssh`)
+    and is never followed, so a folder read through a confined door stays inside it."""
+    if any(part.startswith(".") for part in path.relative_to(folder).parts):
+        return "a hidden file or folder (its name starts with '.'), where secrets are kept: never read"
+    if path.is_symlink() or not path.resolve().is_relative_to(folder.resolve()):
+        return "a link, which may lead out of the folder: never followed. Put the file itself here"
+    return ""
+
+
+def read_text(path: Path, shown_as: str) -> str:
+    """A file's UTF-8 text, or `NotImported` naming it (`shown_as`) and the fix."""
+    from .openapi import NotImported
+
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        raise NotImported(f"{shown_as} is not UTF-8 text. Fix: save it as UTF-8.") from None
+    except OSError as trouble:
+        raise NotImported(f"{shown_as} could not be read ({trouble.strerror or type(trouble).__name__}). "
+                          "Fix: make it a readable file.") from None
+
+
+def read_mapping(source: Path, kind: str) -> Mapping[str, Any]:
+    """A YAML or JSON file's top-level mapping (JSON is YAML), or `NotImported`. The refusal
+    names the problem and where it is, never the text there: the file may be an `mcp.json`
+    whose headers hold a token, and a parser's message quotes the line it stopped at."""
+    import yaml
+
+    from .openapi import NotImported
+
+    text = read_text(source, f"{source.name} (the {kind} file)")
+    try:
+        said = yaml.safe_load(text)
+    except yaml.YAMLError as trouble:
+        mark = getattr(trouble, "problem_mark", None)
+        where = f" at line {mark.line + 1}, column {mark.column + 1}" if mark is not None else ""
+        raise NotImported(
+            f"{source.name} is not YAML or JSON ({getattr(trouble, 'problem', None) or 'it does not parse'}{where}). "
+            f"Fix: give the {kind} file, written in YAML or JSON."
+        ) from None
+    if not isinstance(said, Mapping):
+        raise NotImported(f"{source.name} holds no keys at the top. Fix: give the {kind} file itself.")
+    return said
+
+
+def read_files(kind: str, source: Path) -> "Imported":
+    """What `source` holds, read as one of Pydantic AI's other files (`TREE_FILES`), as a tree's
+    files and the report: the one place each kind meets its reader, for `pact-import` and a
+    host alike. An `mcp.json` or a dataset is a YAML or JSON file (`read_mapping`); a folder of
+    harness agents or a Skills directory is a folder, which its reader checks."""
+    from .pydantic_ai_files import from_agent_folder, from_mcp_json
+    from .pydantic_ai_skills import from_skills_directory
+    from .pydantic_evals_datasets import from_pydantic_evals
+
+    folders = {"agent-folder": from_agent_folder, "skills": from_skills_directory}
+    files = {"mcp-json": from_mcp_json, "pydantic-evals": from_pydantic_evals}
+    if kind in folders:
+        return folders[kind](source)
+    return files[kind](read_mapping(source, kind))
+
+
+def _tree_files(kind: str, source: Path, out: "str | None") -> int:
+    """`--as mcp-json|pydantic-evals|agent-folder|skills`: the files written into `out`, or
+    printed; then the report."""
+    import sys
+
+    from .openapi import NotImported, write_into
+
+    try:
+        imported = read_files(kind, source)
+        if out:
+            written = write_into(Path(out), imported)
+            sys.stdout.write(f"Wrote {len(written)} file(s) into {out}: {', '.join(written) or 'none new'}.\n")
+        else:
+            for name, body in imported.files.items():
+                sys.stdout.write(f"--- # {name}\n" + (body if isinstance(body, str) else f"({len(body)} bytes)\n"))
+    except NotImported as trouble:
+        sys.stderr.write(f"error: {trouble}\n")
+        return 1
+    report = imported.report
+    sys.stdout.write("\n" + report.in_plain_words() + "\n\n" + report.in_words() + "\n")
+    return 1 if report.silent_drops else 0
+
+
 #: What each `--as` reads, so the refusal can name them.
 READERS = {
     "a2a-card": from_a2a_card,
     "anthropic-request": from_anthropic_request,
     "pydantic-ai-spec": _from_pydantic_ai_spec,
 }
-#: Everything `--as` reads: the agents above, and an OpenAPI description's tool files.
-KINDS = (*READERS, "openapi")
+#: Pydantic AI's other files, each read into a tree's files (`_tree_files`).
+TREE_FILES = ("mcp-json", "pydantic-evals", "agent-folder", "skills")
+#: Everything `--as` reads: the agents above, an OpenAPI description's tool files, and the rest.
+KINDS = (*READERS, "openapi", *TREE_FILES)
 
 
 def main(argv: "list[str] | None" = None) -> int:
@@ -457,9 +558,10 @@ def main(argv: "list[str] | None" = None) -> int:
         at = args.index("--out")
         out = args[at + 1] if at + 1 < len(args) else ""
         del args[at : at + 2]
-        if kind not in ("openapi", "pydantic-ai-spec") or not out:
+        if kind not in ("openapi", "pydantic-ai-spec", *TREE_FILES) or not out:
             sys.stderr.write(
-                "error: `--out DIR` goes with `--as openapi` or `--as pydantic-ai-spec`\n"
+                "error: `--out DIR` goes with `--as openapi`, `--as pydantic-ai-spec` or one of "
+                f"{', '.join(f'`--as {k}`' for k in TREE_FILES)}\n"
                 "  fix: name the tree to write into\n"
             )
             return 1
@@ -467,25 +569,23 @@ def main(argv: "list[str] | None" = None) -> int:
         sys.stderr.write("error: no file was given\n  fix: name one\n")
         return 1
 
+    if kind in TREE_FILES:
+        return _tree_files(kind, Path(args[0]), out)
+
     import yaml
 
+    from .openapi import NotImported
+
     try:
-        # `yaml.safe_load` and not `json.loads`, because JSON is a subset of YAML
-        # and one of the three sources is written in YAML far more often than in
-        # JSON: `Agent.from_file()` infers the format from the extension and
-        # every example in `agent-spec.md` is a `.yaml`. Reading only JSON here
-        # would refuse the commonest spelling of the one artifact this reader
-        # exists for, with a parse error that named the wrong problem.
-        artifact = yaml.safe_load(Path(args[0]).read_text())
-    except (OSError, ValueError, yaml.YAMLError) as trouble:
-        sys.stderr.write(f"error: {args[0]} could not be read: {trouble}\n")
-        return 1
-    if not isinstance(artifact, Mapping):
-        sys.stderr.write(
-            f"error: {args[0]} is not an object — it parsed to a "
-            f"{type(artifact).__name__}.\n  fix: an agent artifact is a mapping "
-            "at the top level\n"
-        )
+        # YAML and not `json.loads`, because JSON is a subset of YAML and one of
+        # the three sources is written in YAML far more often than in JSON:
+        # `Agent.from_file()` infers the format from the extension and every
+        # example in `agent-spec.md` is a `.yaml`. Reading only JSON here would
+        # refuse the commonest spelling of the one artifact this reader exists
+        # for, with a parse error that named the wrong problem.
+        artifact = read_mapping(Path(args[0]), kind)
+    except NotImported as trouble:
+        sys.stderr.write(f"error: {trouble}\n")
         return 1
 
     if kind == "openapi":

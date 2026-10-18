@@ -101,8 +101,10 @@ def test_the_core_is_three_packages_and_the_loader_and_each_extra_exists() -> No
     project = tomllib.loads(MANIFEST.read_text())["project"]
     core = {d.split(">")[0].split("=")[0].split("<")[0].strip() for d in project["dependencies"]}
     # `pydantic` too, since WP-38: `pact_agent.py` imports its `TypeAdapter` to build an
-    # `AgentRunResult` from its public shape. Pydantic AI already brings it.
-    assert core == {"pydantic-ai-slim", "pydantic", "pyyaml", "httpx", "pact-loader"}, core
+    # `AgentRunResult` from its public shape. Pydantic AI already brings it. And
+    # `pydantic-graph` since WP-39: a built `Graph` is read and one is built from a workflow
+    # (`pydantic_graph_reading.py`, `pydantic_graph_lowering.py`); Pydantic AI brings it too.
+    assert core == {"pydantic-ai-slim", "pydantic", "pydantic-graph", "pyyaml", "httpx", "pact-loader"}, core
     extras = project["optional-dependencies"]
     for module, extra in NEEDS_AN_EXTRA.items():
         assert extra in extras, f"{module} names the extra {extra!r}, which does not exist"

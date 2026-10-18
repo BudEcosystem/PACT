@@ -1,0 +1,17 @@
+# 02P G7: a `.transform()` is named, a `.label()` on a decision's way to the end is named and the way is `done`.
+row: G7
+says: a `.transform()` is named, a `.label()` on a decision's way to the end is named and the way is `done`
+import:
+  mapped:
+  - input_type
+  - name
+  - nodes.__end__
+  - nodes.__start__
+  - nodes.check
+  - nodes.outcome
+  - nodes.tidy
+  - output_type
+  not-portable:
+  - auto_instrument
+  - edges.outcome.stuck.label
+  - edges.outcome.transform

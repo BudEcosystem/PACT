@@ -1,0 +1,18 @@
+# 02P G1: a built graph with typed state, deps, input and output is read as a workflow without running a step.
+row: G1
+says: a built graph with typed state, deps, input and output is read as a workflow without running a step
+import:
+  mapped:
+  - input_type
+  - name
+  - nodes.__end__
+  - nodes.__start__
+  - nodes.file_request
+  - nodes.read_request
+  - output_type
+  not-portable:
+  - auto_instrument
+  - deps_type
+  - state_type
+held-elsewhere:
+  export then import is the identity: adapters/python/tests/test_a_built_graph_reads_as_a_workflow.py::test_a_workflow_lowered_to_a_graph_reads_back_as_itself

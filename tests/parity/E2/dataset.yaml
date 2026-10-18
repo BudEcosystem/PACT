@@ -1,0 +1,10 @@
+name: verdicts
+cases:
+  - name: approve
+    inputs: Should a refund of 20 USD for a damaged mug be approved?
+    expected_output: approved
+    evaluators:
+      - Equals: approved
+evaluators:
+  - EqualsExpected
+  - Contains: {value: refund, case_sensitive: false}

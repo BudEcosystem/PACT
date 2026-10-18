@@ -38,6 +38,7 @@ DISTRIBUTION: dict[str, str] = {
     "langchain_core": "langchain-core",
     "agents": "openai-agents",
     "pydantic_ai": "pydantic-ai-slim",
+    "pydantic_graph": "pydantic-graph",
 }
 
 #: Imports that are guarded by a `try:` or sit inside a function precisely

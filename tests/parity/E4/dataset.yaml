@@ -1,0 +1,6 @@
+name: quick
+cases:
+  - inputs: Say hello.
+    expected_output: hello
+evaluators:
+  - MaxDuration: 10

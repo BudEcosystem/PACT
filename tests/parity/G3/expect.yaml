@@ -1,0 +1,18 @@
+# 02P G3: a decision is a rules-rung `decide`, one label per branch; a `matches=` function is named.
+row: G3
+says: a decision is a rules-rung `decide`, one label per branch; a `matches=` function is named
+import:
+  mapped:
+  - input_type
+  - name
+  - nodes.__end__
+  - nodes.__start__
+  - nodes.answer
+  - nodes.classify
+  - nodes.refund
+  - nodes.urgent
+  - nodes.which
+  - output_type
+  not-portable:
+  - auto_instrument
+  - nodes.which.branches.str.matches

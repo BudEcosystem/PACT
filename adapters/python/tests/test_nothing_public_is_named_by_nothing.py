@@ -237,6 +237,22 @@ HOST_API: dict[str, str] = {
         "finished — which is exactly why the check cannot live in the loader and "
         "has to be offered to whoever holds the connection"
     ),
+    # WP-39, 02P G1. A built pydantic-graph `Graph` is a live Python object, as an
+    # `Agent` is: only a process that runs the author's module holds one, and PACT's
+    # commands run no author's module. budflow-core's `budflow import --as graph` runs
+    # it and hands the graph here, as it hands a live agent to `imported_agent`.
+    "pydantic_graph_reading.workflow_of": (
+        "a built graph read as a workflow, for a host that ran the module that built it; "
+        "PACT's commands run no author's module"
+    ),
+    # The 03 §B.2 lowering is the export G1's test reads back (export then import is
+    # the identity). A runtime that hands a workflow to pydantic-graph as a whole
+    # graph lowers it here; budflow-core's compiler lowers each block for a run
+    # instead (each `each`, `repeat` and `together` a graph of its own in one step).
+    "pydantic_graph_lowering.graph_of": (
+        "a workflow as the structure of one built graph, for a runtime that hands it to "
+        "pydantic-graph whole; the reference harness runs no workflow"
+    ),
 }
 
 

@@ -1,7 +1,12 @@
-# 02P E3: `IsInstance` is always on: an answer is held to `answers-with:`; nothing on an agent to import.
+# 02P E3: `IsInstance` is always on: every answer is held to `answers-with:`.
 row: E3
-says: '`IsInstance` is always on: an answer is held to `answers-with:`; nothing on an agent
-  to import'
-import: none
-why: '`IsInstance` is always on: an answer is held to `answers-with:`; nothing on an agent to
-  import'
+says: '`IsInstance` is always on: every answer is held to `answers-with:`'
+import:
+  mapped:
+  - cases
+  - cases.case-1
+  - cases.case-1.expected_output
+  - cases.case-1.inputs
+  - evaluators
+  - evaluators.IsInstance
+  - name
