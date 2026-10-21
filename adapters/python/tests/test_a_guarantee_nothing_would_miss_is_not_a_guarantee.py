@@ -264,11 +264,15 @@ def test_a_write_that_is_put_back_is_still_something_the_watch_sees(tmp_path: Pa
 
     module = tmp_path / "module.py"
     module.write_text("if parked:\n    raise Suspended()\n")
+    source = _digest(tmp_path)
     with _watching(tmp_path) as seen:
         module.write_text("if False:\n    raise Suspended()\n")
+        mutant = _digest(tmp_path)
         time.sleep(0.3)
         module.write_text("if parked:\n    raise Suspended()\n")
-    assert len(seen) == 2, seen
+    # The watch may also catch a write half done (the file emptied before it is filled
+    # again): what it must see is the mutant, between the source and the source put back.
+    assert {source, mutant} <= seen and source != mutant, seen
 
 
 def test_nothing_in_the_tree_is_carrying_a_mutation_right_now() -> None:

@@ -753,6 +753,13 @@ capabilities:
     why: >-
       the harness's `SmolSandbox`: a place for files or commands. Write a `resource-kind:
       sandbox` resource and reach it with `connect:`
+  # pydantic-ai-harness 0.59 (with Pydantic AI 2.59, the latest 2.x on 21 October 2026).
+  DaytonaSandbox:
+    outcome: loss
+    rows: [X8]
+    why: >-
+      the harness's `DaytonaSandbox`: a place for files or commands. Write a `resource-kind:
+      sandbox` resource and reach it with `connect:`
 
 # Pydantic AI's own names that are not capabilities, and what PACT says of
 # each, read by the two importers and the exporter. `spec.<key>` is a key of an
@@ -966,6 +973,21 @@ names:
       per-token probability nudges, keyed by the tokeniser's own token ids. Those ids
       differ per model, so the setting is not portable by construction — the same block
       means something else on the next model
+  # Pydantic AI 2.59: two more of one request's transport, the host's as `timeout` is.
+  settings.request_timeout:
+    outcome: loss
+    rows: [A10]
+    why: >-
+      a deadline for one request to one model, every attempt and a stream's last chunk
+      included. The host's model binding owns it (budflow's `--model-timeout`); PACT's
+      `finishes-within:` is a promise about the RUN
+  settings.max_retries:
+    outcome: loss
+    rows: [A10]
+    why: >-
+      how often the provider's client asks again for one request. The host's model binding
+      owns it (budflow's `--model-retries`); PACT's `if-it-fails:` says what the agent does
+      when a call fails
   settings.extra_headers:
     outcome: loss
     rows: [A10]
@@ -989,6 +1011,18 @@ names:
       a system prompt that arrived inside a conversation. PACT builds the system text
       for each stage from the author's `instructions:`, skills and `answers-with:`, so
       one handed in from elsewhere does not cross
+  # Pydantic AI 2.59: a run's instructions kept in its history, as changes from a baseline.
+  part.InstructionDeltaPart:
+    outcome: loss
+    rows: [C1]
+    why: &instructions-in-history >-
+      operator instructions changed or withdrawn inside a conversation. PACT builds the
+      system text for each stage from the author's `instructions:`, skills and
+      `answers-with:`, so instructions kept in another framework's history do not cross
+  part.InstructionBaselinePart:
+    outcome: loss
+    rows: [C1]
+    why: *instructions-in-history
   part.UserPromptPart:
     outcome: mapped
     rows: [C1, F1]
