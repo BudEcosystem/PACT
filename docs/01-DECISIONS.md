@@ -247,6 +247,48 @@ desirable but is not a failure condition.
 
 ---
 
+## D29 — Runtime plugins: named, versioned, governed
+
+**Date:** 2026-10-26. **Status:** Binding, decided by the project owner. Narrows
+R17 (`50-NOT-COPIED.md` §3.3) and D15.
+
+A workspace may ask whatever runs its agents to load a package for them.
+`plugins/<name>.yaml` says which package (`<registry>:<name>`), which versions
+will do, its own settings, whether an agent may start without it, and which
+agents it is for; an agent names the plugins it needs on its `plugins:` line. The
+request is part of the document — read, diffed, digested and reviewed like every
+other line. The code never is.
+
+**Consequences:**
+
+1. `plugins:` is a kind at `S-EXEC` (`workspace.plugins`, `agent.plugins`, the
+   `plugin` group), so D23 classifies adding or changing one as needing a person.
+   The learning classifier holds it there with or without
+   `needs-a-person-to-approve: [plugins]`.
+2. Checking never resolves, downloads or opens a package: R5 and D17 hold.
+   `pact check` holds the request to its registry's grammar — a registry word PACT
+   knows, an npm or PEP 440 range, no secret written into `config:` — and notes
+   every agent a `refuse-to-start` plugin keeps to the runtimes that can load it.
+3. Runtimes advertise a `plugins` column in the lattice. A runtime that did not
+   load a `refuse-to-start` plugin stops the agent before its first model call
+   (`halted: plugins-not-loaded`, with the sentence naming the plugin, its package
+   and its range); one that did not load a `run-without-it` plugin names it on
+   `unenforced` on every run. Every transport this repository ships publishes
+   `plugins: unsupported`, because the reference harness loads nothing; a host
+   that loads one says what it loaded through `run(loaded_plugins=)`.
+4. D15 is narrowed. An agent with a `refuse-to-start` plugin is portable only to
+   runtimes that load its registry, and `pact discover` publishes each agent's
+   plugins with that line written out, so a runtime can decline the agent before
+   it takes it.
+5. D27's conformance claim covers agents with no plugins and agents whose plugins
+   are all `run-without-it`.
+6. What a plugin does once loaded is held by the runtime that loaded it. PACT
+   cannot govern code it never reads, so `allow-egress:`, `redaction.yaml` and
+   the interceptor chain bound the parts of a run PACT can see and say nothing
+   about a plugin's own traffic.
+
+---
+
 ## Consolidated impact on the thesis
 
 | Thesis element | Change from decisions |
@@ -255,7 +297,7 @@ desirable but is not a failure condition.
 | T2 Evals as oracle | **Strengthened** — D19 adds four no-code on-ramps plus full-fidelity expert upload; D13/D14 make no-code authoring mandatory for *every* feature. |
 | T3 Two-level lowering | **Confirmed** (D12), with D27 as the pass/fail rule and D26 the cost ceiling. |
 | T4 Model portability | **Extended** — D11 makes the Resolver a recommender, not only a gate. |
-| T5 Expansion Rule | **Promoted to the centre** — D2 makes the tree the native form, so the loader is normative and the Expansion Rule is the execution model's own semantics, not authoring sugar. |
+| T5 Expansion Rule | **Promoted to the centre** — D2 makes the tree the native form, so the loader is normative and the Expansion Rule is the execution model's own semantics, not authoring sugar. **Extended** by D29 to `plugins/`: a request for code a runtime loads is one more folder of definitions, and the code itself never enters the tree. |
 | T6 Learning emits source | **Strengthened** — D22 admits self-authored tools and topology change, so D23's blast-radius classifier and signed provenance become mandatory. |
 | T7 Structural honesty | Unchanged; D11 adds the recommendation obligation. |
 | NG1 "not a runtime" | **Revised.** D2 requires the tree to be natively executable and D12 gives PACT loop semantics. PACT is not a *server*, but it does own an execution model that `gaia-ai-runtime` implements. |

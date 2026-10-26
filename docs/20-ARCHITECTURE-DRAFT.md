@@ -377,8 +377,11 @@ zone computation and blob verification are new work.
 > it, `open` is gone from `Group` and from `from_doc`, and every field of the shipped
 > schema carries `surface:` and `tier:` — checked at startup by `governance_is_complete`,
 > which refuses to validate against a specification that leaves any field without them.
-> Point 2 (`spec/extensions/*.yaml`) is not built: there is no extension path at all, and
-> `x-` on a field is what an author has. Point 1's sha256 comparison against a compiled-in
+> Point 2 (`spec/extensions/*.yaml`) is not built: there is no extension path for the
+> schema, and `x-` on a field is what an author has — preserved in the IR and never emitted
+> into any substrate. The runtime extension path that does exist is `plugins:` (D29): a
+> named, versioned request for code the runtime loads, validated like every other kind and
+> never resolved, fetched or run by the checker. Point 1's sha256 comparison against a compiled-in
 > constant is deliberately NOT built — a constant compiled in beside the file it hashes can
 > only ever agree with itself, so the digest is COMPUTED and REPORTED instead, and the
 > property actually verified at startup is the one §8.2 depends on.

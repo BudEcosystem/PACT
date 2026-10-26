@@ -8,15 +8,15 @@ hides a difference is worse than one that admits it, because the difference
 still exists and now nobody is looking for it.
 
 ```
-              model_cal | tool_call | text_with | parallel_ | streaming | durable_r | connected
-reference     native    | native    | native    | native    | unsupport | unsupport | unsupport
-pydantic-ai   native    | native    | native    | native    | emulated  | unsupport | native
-langgraph     native    | emulated  | native    | emulated  | emulated  | native    | unsupport
-langchain     native    | native    | native    | native    | emulated  | unsupport | unsupport
-autogen       native    | native    | emulated  | native    | emulated  | unsupport | unsupport
-openai-agents native    | native    | native    | native    | emulated  | unsupport | unsupport
-anthropic     native    | native    | native    | native    | emulated  | unsupport | unsupport
-vercel-ai     native    | native    | native    | native    | emulated  | unsupport | unsupport
+              model_cal | tool_call | text_with | parallel_ | streaming | durable_r | connected | plugins
+reference     native    | native    | native    | native    | unsupport | unsupport | unsupport | unsupport
+pydantic-ai   native    | native    | native    | native    | emulated  | unsupport | native    | unsupport
+langgraph     native    | emulated  | native    | emulated  | emulated  | native    | unsupport | unsupport
+langchain     native    | native    | native    | native    | emulated  | unsupport | unsupport | unsupport
+autogen       native    | native    | emulated  | native    | emulated  | unsupport | unsupport | unsupport
+openai-agents native    | native    | native    | native    | emulated  | unsupport | unsupport | unsupport
+anthropic     native    | native    | native    | native    | emulated  | unsupport | unsupport | unsupport
+vercel-ai     native    | native    | native    | native    | emulated  | unsupport | unsupport | unsupport
 ```
 
 Seven targets plus `reference` — the framework-free control arm, which is not a
@@ -37,6 +37,12 @@ Three things worth reading:
   named …` — which is exactly the kind of thing that must be published before a
   run rather than discovered during one. A row that is `unsupported` here is not
   a broken adapter; it is an adapter you hand the call back to yourself.
+- **`plugins`** says whether the runtime loads the packages a `plugins:` line
+  names (D29). It is `unsupported` everywhere here, because the harness loads
+  nothing: a plugin an agent cannot start without stops it before the first
+  model call (`halted: plugins-not-loaded`), and one it can is named on
+  `unenforced`. A host that loads packages publishes `native` and hands the
+  harness what it loaded with `run(loaded_plugins=)`.
 
 ## The seams
 
