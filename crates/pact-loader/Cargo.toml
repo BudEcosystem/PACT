@@ -20,6 +20,8 @@ indexmap = { workspace = true }
 serde_json = { workspace = true }
 unicode-normalization = { workspace = true }
 minijinja = { workspace = true }
+nodejs-semver = { workspace = true }
+pep440_rs = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }

@@ -25,7 +25,7 @@ from an earlier document.
 
 ### Framework portability
 
-**55 agents across 26 workspaces**, loaded by the Rust CLI, execute over **seven
+**56 agents across 27 workspaces**, loaded by the Rust CLI, execute over **seven
 targets** across two language runtimes and produce byte-identical traces, tool
 sequences and model-call counts. The set is generated from `examples/`, so an
 agent added to the tree joins it by existing rather than by somebody remembering.

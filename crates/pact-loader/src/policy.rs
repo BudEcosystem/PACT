@@ -301,6 +301,10 @@ impl Default for Policy {
                 // after the kind, so the folder is the thing and the file
                 // describes it — the shape `agent` and `skill` already have.
                 "program",
+                // D29. `plugins/web-search/plugin.yaml` is the plugin, as
+                // `tools/weather/tool.yaml` is the tool: added with the kind
+                // rather than one round after it.
+                "plugin",
                 // `redaction` is deliberately NOT here, and the reason is the
                 // `learning.yaml` sentence above rather than an oversight.
                 // `agent.policy` is a NAME (`policy: approvals`), so the cost of
