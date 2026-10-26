@@ -204,6 +204,16 @@ def _there(spec: AgentSpec) -> dict[str, Any] | None:
             }
             for k in spec.knowledge
         ],
+        # D29, for the same reason: a plugin left off the wire would let Node
+        # answer where the reference port halted `plugins-not-loaded`, or say
+        # nothing where it named the plugin on `unenforced`.
+        "plugins": [
+            {
+                "name": p.name, "package": p.package, "version": p.version,
+                "if-it-cannot-be-loaded": p.if_cannot_load,
+            }
+            for p in spec.plugins
+        ],
         "team": dict(spec.team),
         "loop": spec.loop.name if spec.loop else "",
         "loops": _loops_of(spec),
