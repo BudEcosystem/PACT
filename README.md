@@ -665,7 +665,7 @@ framework is an extra.
 
 | | |
 |---|---|
-| **Design** | Thesis, 28 binding decisions, FRD (120 requirements), 60-row refusal ledger — complete |
+| **Design** | Thesis, 29 binding decisions, FRD (120 requirements), 60-row refusal ledger — complete |
 | **Research** | 14 source-grounded studies, ~15,750 lines, over 140 repos (~15 GB) + 57 papers |
 | **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **4683 tests (1556 Rust + 3127 adapter), clippy clean, TypeScript type-checked** |
 | **Adapters** | **All 7 named targets**, proven against one shared conformance suite |
@@ -690,7 +690,7 @@ SLOs **report**; they do not stop a run. That is deliberate and
 | | |
 |---|---|
 | [`docs/00-THESIS.md`](docs/00-THESIS.md) | The argument, goals, objectives, acceptance criteria |
-| [`docs/01-DECISIONS.md`](docs/01-DECISIONS.md) | 28 binding decisions — **read this before proposing anything** |
+| [`docs/01-DECISIONS.md`](docs/01-DECISIONS.md) | 29 binding decisions — **read this before proposing anything** |
 | [`docs/30-FRD.md`](docs/30-FRD.md) | 120 functional requirements, each traced to its justification |
 | [`docs/50-NOT-COPIED.md`](docs/50-NOT-COPIED.md) | The refusal ledger — what was deliberately not copied, and what would bring each back |
 | [`docs/70-PRODUCTION-GAP-REGISTER.md`](docs/70-PRODUCTION-GAP-REGISTER.md) | Every gap between claim and code, with its measurement |
