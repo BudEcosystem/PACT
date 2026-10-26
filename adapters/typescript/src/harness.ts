@@ -98,6 +98,17 @@ export type KnowledgeSpec = {
   "split-by"?: string;
 };
 
+// One plugin the agent needs (D29), in the author's own field names like
+// `SkillSpec`: the request for code a runtime loads, and never the code. This
+// port loads no plugin, so each one is missing here — refused before a model
+// call, or named on `unenforced` — in the reference port's own words.
+export type PluginSpec = {
+  name: string;
+  package: string;
+  version: string;
+  "if-it-cannot-be-loaded": string;
+};
+
 export type AgentSpec = {
   name: string;
   instructions: string;
@@ -151,6 +162,9 @@ export type AgentSpec = {
   // driver exists to catch: the Python run refused a `must-cite:` corpus it
   // could not read, and this one answered.
   knowledge?: KnowledgeSpec[];
+  // The plugins it needs: the ones it names and every one that applies to
+  // every agent, as `ir.AgentSpec.plugins` carries them.
+  plugins?: PluginSpec[];
   // What the agent hands back when it is done, as the author wrote it. Read by
   // nothing in EITHER port for a round, while `tier: core` and present in the
   // worked example — so every scripted answer in the eval suite hand-writes
@@ -202,7 +216,7 @@ export const AGENT_SPEC_FIELDS = [
   "name", "instructions", "tools", "skills", "team", "maxSteps", "limits",
   "loop", "loops", "interceptors", "contextPolicy", "policy", "teamwork",
   "settings", "slo", "model", "watches", "answersWith", "answersWithMode",
-  "knowledge",
+  "knowledge", "plugins",
 ] as const;
 
 //: Used when the payload carried no `maxSteps`. The same number `ir.py` uses,
@@ -465,6 +479,50 @@ export function neverLookedIn(spec: AgentSpec): string[] {
   );
 }
 
+//: The one `if-it-cannot-be-loaded:` answer that lets the agent start without
+//: the plugin — `ir.RUN_WITHOUT_IT`. Anything else refuses, `refuse-to-start`
+//: and an absent line alike, as in the reference port.
+export const RUN_WITHOUT_IT = "run-without-it";
+
+function pluginNamed(p: PluginSpec): string {
+  return `'${p.name}' (\`${p.package}\`, versions \`${p.version}\`)`;
+}
+
+function registryOf(p: PluginSpec): string {
+  return p.package.split(":", 1)[0].trim();
+}
+
+function refusesToStart(p: PluginSpec): boolean {
+  return p["if-it-cannot-be-loaded"] !== RUN_WITHOUT_IT;
+}
+
+//: Why the turn ended before it began. Word for word `harness._cannot_start_without`
+//: — the fix is true here too, because this port loads nothing and so runs no
+//: plugin anywhere.
+export function cannotStartWithout(needed: PluginSpec[]): string {
+  const named = needed.map(pluginNamed);
+  const listed = named.length === 1
+    ? named[0]
+    : `${named.slice(0, -1).join(", ")} and ${named[named.length - 1]}`;
+  const registries = [...new Set(needed.map((p) => `\`${registryOf(p)}:\``))].join(" or ");
+  return (
+    `This agent cannot start: it needs ${listed}, and nothing running it loaded ` +
+    `${needed.length === 1 ? "it" : "them"}. fix: run it where a runtime loads ` +
+    `${registries} packages, or write \`if-it-cannot-be-loaded: run-without-it\` in ` +
+    `the plugin's file under \`plugins/\` if the agent can do its job without it.`
+  );
+}
+
+//: The `unenforced` line for a plugin the agent started without — word for word
+//: `harness._ran_without`.
+export function ranWithout(p: PluginSpec): string {
+  return (
+    `plugin ${pluginNamed(p)} was not loaded by whatever runs this agent, so ` +
+    `nothing it adds is here and the agent ran without it. fix: run it where a ` +
+    `runtime loads \`${registryOf(p)}:\` packages.`
+  );
+}
+
 export async function run(
   spec: AgentSpec,
   transport: Transport,
@@ -486,6 +544,25 @@ export async function run(
         `AGENT_SPEC_FIELDS — a field that arrives and is silently dropped is ` +
         `neither honoured nor reported.`,
     );
+  }
+  // D29. No plugin is loaded here, so every one the agent needs is missing: one
+  // it may run without is named on `unenforced`, and one it may not ends the
+  // turn before a model call. Decided first, in the same place and the same
+  // order as the reference port, so a document needing both a plugin and a
+  // `must-cite:` corpus ends the same way on both.
+  const withoutPlugins = (spec.plugins ?? []).filter((p) => !refusesToStart(p)).map(ranWithout);
+  const needed = (spec.plugins ?? []).filter(refusesToStart);
+  if (needed.length > 0) {
+    return {
+      output: cannotStartWithout(needed),
+      steps: [],
+      halted: "plugins-not-loaded",
+      stoppedBy: null,
+      unmetered: [],
+      unenforced: withoutPlugins,
+      unretrieved: [],
+      phases: [],
+    };
   }
   // A7. Every declared set, named before anything else happens. PACT retrieves
   // nothing and this port has nowhere to be handed a retrieval either, so a set
@@ -636,7 +713,7 @@ export async function run(
   // Named one field at a time, with the sentence a person can act on, because
   // "this runtime is smaller" is not something a reader can check against their
   // own file.
-  const unenforced = notDoneHere(spec);
+  const unenforced = [...notDoneHere(spec), ...withoutPlugins];
   // The one line `notDoneHere` cannot see, appended where it can be: a stage's
   // `asks:`. It names WHICH question a person is put, which is a governance line
   // and not a wording choice — and it was parsed by `loops.ts` into `Phase.asks`

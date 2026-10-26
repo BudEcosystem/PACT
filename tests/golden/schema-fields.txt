@@ -30,6 +30,7 @@ agent.model	list of text | S-CAP | core | optional
 agent.model-for-checking	text | S-CAP | expert | optional
 agent.name	text | S-GEN | core | optional
 agent.needs	group:needs | S-CAP | core | optional
+agent.plugins	list of text | S-EXEC | expert | optional
 agent.policy	text | S-EXEC | core | optional
 agent.remembers	map of group:state | S-GOV | core | optional
 agent.run-inputs	map of answer-shape | S-CAP | core | optional
@@ -194,6 +195,12 @@ outcome.used-a-tool	text | S-CTRL | expert | optional
 ownership.locked	one-of | S-GOV | core | optional
 ownership.locked-until	moment | S-GOV | core | optional
 ownership.owned-by	text | S-GOV | core | optional
+plugin.applies-to	one-of | S-EXEC | expert | optional
+plugin.config	map of anything | S-EXEC | expert | optional
+plugin.description	text | S-GEN | core | required
+plugin.if-it-cannot-be-loaded	one-of | S-GOV | core | optional
+plugin.package	text | S-EXEC | expert | required
+plugin.version	text | S-EXEC | expert | required
 policy.applies-to	one-of | S-EXEC | core | optional
 policy.ask-a-person	list of group:question-rule | S-EXEC | core | optional
 port.accepts	map of answer-shape | S-CAP | core | optional
@@ -427,6 +434,7 @@ workspace.name	text | S-GOV | core | required
 workspace.owner	text | S-GOV | core | optional
 workspace.owners	map of group:ownership | S-GOV | core | optional
 workspace.pact-version	text | S-GOV | expert | optional
+workspace.plugins	map of group:plugin | S-EXEC | expert | optional
 workspace.policies	map of group:policy | S-EXEC | core | optional
 workspace.ports	map of group:port | S-TOPO | core | optional
 workspace.profile	text | S-GOV | core | optional

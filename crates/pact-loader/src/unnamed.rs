@@ -91,6 +91,13 @@ const KINDS: &[Kind] = &[
     // named by nobody, `pact check` printed "OK — loaded cleanly", and `pact
     // waits` silently lost the whole `needs-permission` entry: a human consent
     // gate on money, gone, from the list §9.4 G14 obliges a runtime to walk.
+    // D29. A plugin no agent names and that does not apply to every agent is
+    // loaded for nobody, and the author who wrote it believes some agent has it.
+    Kind {
+        section: "plugins",
+        what: "plugin",
+        attach: "`plugins:` with `- {}` under it, on an agent — or `applies-to: every-agent` in the plugin itself",
+    },
     Kind {
         section: "programs",
         what: "carried program",

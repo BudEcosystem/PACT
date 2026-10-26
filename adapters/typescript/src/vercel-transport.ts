@@ -114,6 +114,7 @@ export class VercelAITransport implements Transport {
       // or the two ports cannot be compared (P-2), which is what
       // `test_all_seven_targets_publish_the_same_lattice_features` holds.
       connected_tools: "unsupported",
+      plugins: "unsupported",
     };
   }
 

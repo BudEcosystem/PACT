@@ -17,13 +17,13 @@
 //!   cases, and the `evals:` line of a workflow or an agent), which grade a
 //!   run and govern none, so a new eval case keeps the version (02W §7.2
 //!   classes it additive). Everything else stays in:
-//!   its own stages, questions and policy, the tools, agents and programs of
-//!   the workspace (a program's body is in the document as its file's digest),
-//!   the workspace's settings. That is wider than 02W's list (its local
-//!   questions, its named policy, the actions it calls), and on purpose: a
-//!   policy that `applies-to: every-agent` or a redaction rule governs the
-//!   run without the workflow naming it, so leaving out what it does not name
-//!   would let a change the run depends on through it.
+//!   its own stages, questions and policy, the tools, agents, plugins and
+//!   programs of the workspace (a program's body is in the document as its
+//!   file's digest), the workspace's settings. That is wider than 02W's list
+//!   (its local questions, its named policy, the actions it calls), and on
+//!   purpose: a policy that `applies-to: every-agent` or a redaction rule
+//!   governs the run without the workflow naming it, so leaving out what it
+//!   does not name would let a change the run depends on through it.
 //! * **`contract-digest`** — what its callers rely on: `accepts:`,
 //!   `answers-with:`, `published-as:`, and each port that answers it with its
 //!   key (`same-conversation-when:`) and its `if-still-running:`. The derived

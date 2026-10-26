@@ -46,6 +46,11 @@ serde_json = { version = "1", features = ["preserve_order"] }
 thiserror = "2"
 unicode-normalization = "0.1"
 sha2 = "0.10"
+# D29: a plugin's `version:` is held to its own registry's grammar — npm ranges
+# as node-semver reads them, pypi specifiers as PEP 440 writes them — rather than
+# to a third grammar PACT would have to keep in step with both.
+nodejs-semver = { version = "7", default-features = false }
+pep440_rs = { version = "0.7", default-features = false }
 yaml-rust2 = "0.11"
 
 [workspace.lints.rust]

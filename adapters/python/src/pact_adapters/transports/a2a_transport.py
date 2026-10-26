@@ -150,6 +150,7 @@ class A2ATransport:
             "streaming": "unsupported",
             "durable_resume": "unsupported",
             "connected_tools": "unsupported",
+            "plugins": "unsupported",
         }
 
     def unenforced(self) -> tuple[str, ...]:

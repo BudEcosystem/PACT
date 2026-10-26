@@ -1,0 +1,3 @@
+description: Answers questions about a customer's account, out of the CRM.
+plugins:
+  - crm-tools

@@ -1,0 +1,23 @@
+# The smallest workspace that asks its runtime to load code (D29).
+#
+# One agent and one plugin, and nothing else, because the subject is a single
+# line: `plugins/web-search.yaml` names a package, a range of versions, the
+# plugin's own settings, and what the agent does on a runtime that cannot load
+# it. PACT reads those lines and never fetches or runs the package — `pact
+# check` holds the request to its registry's grammar, and the runtime says
+# whether it loaded it.
+name: plugin-desk
+description: Answers questions about what is published on the web, with a search plugin its runtime loads.
+owner: research-operations
+
+# NO `allow-egress:` LINE, and the absence is deliberate. That line governs the
+# parts of this system PACT can see — models, tools, programs — and a plugin is
+# code PACT never reads, so what it reaches once loaded is held by the runtime
+# that loaded it, not by a line here. Writing `allow-egress: []` beside a web
+# search would tell a reviewer something this file cannot make true.
+#
+# ONE AGENT, AND NO `team:`, for the reason `examples/mcp-desk/` gives: every
+# workspace under `examples/` is compared on seven Python targets and on Node,
+# and a run that parks for a teammate suspends in one and errors in the other.
+# The plugin is safe in that set: no shipped runtime loads one, so on every
+# target the run starts without it and says so, in the same words.
