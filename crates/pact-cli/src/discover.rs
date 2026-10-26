@@ -193,6 +193,10 @@ pub fn inventory(found: &Found) -> J {
         // delegates. Each is the author's own name, so the runtime can fetch the
         // document by it; a boolean would answer "is it governed" and not "how".
         o.insert("governance".into(), governance(a));
+        // D29. What this agent asks its runtime to load, and what happens where
+        // that cannot be done — the fact a runtime has to decide on BEFORE it
+        // takes the agent, so it is here rather than only in `pact show`.
+        o.insert("plugins".into(), plugins(doc, a));
         let runnable =
             a.get("instructions").is_some() || pact_loader::deciding::decides_alone(a, &decision);
         o.insert("runnable".into(), J::Bool(runnable));
@@ -355,6 +359,30 @@ fn governance(a: &Node) -> J {
     // whether the author wrote one — a runtime that needs the shares reads `show`.
     o.insert("teamwork".into(), J::Bool(a.get("teamwork").is_some()));
     J::Object(o)
+}
+
+/// The plugins an agent needs — the ones it names and the ones that apply to
+/// every agent — each with its package, its range and what happens on a
+/// runtime that cannot load it, the default written out.
+///
+/// `pact_loader::plugins::needed_by` decides which, so the inventory and the
+/// note `pact check` prints about the same agent cannot disagree.
+fn plugins(doc: &Node, a: &Node) -> J {
+    let list = pact_loader::plugins::needed_by(doc, a)
+        .into_iter()
+        .map(|(name, p)| {
+            let mut o = Map::new();
+            o.insert("name".into(), J::String(name.to_string()));
+            o.insert("package".into(), text(p, "package").unwrap_or(J::Null));
+            o.insert("version".into(), text(p, "version").unwrap_or(J::Null));
+            o.insert(
+                "if-it-cannot-be-loaded".into(),
+                J::String(pact_loader::plugins::if_it_cannot_be_loaded(p).to_string()),
+            );
+            J::Object(o)
+        })
+        .collect();
+    J::Array(list)
 }
 
 /// The latency half of `limits:`, and nothing else.

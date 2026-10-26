@@ -1742,6 +1742,12 @@ fn validate(
         // now stop this run — with nothing in this workspace changed and nobody
         // here having approved it.
         pact_loader::bundles::a_bundle_brings_only_what_it_said(root, &schema, &mut diags);
+        // D29. A plugin line asks a runtime to load code, and each half of the
+        // request has a grammar that is not PACT's — a registry word, a version
+        // range written that registry's way — which a runtime applies later,
+        // somewhere the author is not watching. Held here, where they are, and
+        // without resolving, downloading or opening the package (R5, D17).
+        pact_loader::plugins::check(root, &mut diags);
         // And the seventh, which was decided only by RUNNING the agent.
         // `spends-money:`'s own help promises the call is routed through the
         // author's approval policy; whether it is, is a fact about a different

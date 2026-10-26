@@ -1,0 +1,26 @@
+{
+  "name": "plugin-desk",
+  "description": "Answers questions about what is published on the web, with a search plugin its runtime loads.",
+  "owner": "research-operations",
+  "agents": {
+    "research-desk": {
+      "name": "Research desk",
+      "description": "Answers questions about what is published on the web, and says where it read it.",
+      "plugins": [
+        "web-search"
+      ],
+      "instructions": "Answer questions about what is published on the web.\n\nSearch before you answer, and say which page each part of the answer came from.\nIf you have no way to search on this run, say so first, then answer only from\nwhat you are sure of and say that it was not checked against anything.\n\nNever present something you remember as something you read."
+    }
+  },
+  "plugins": {
+    "web-search": {
+      "description": "Lets the desk search the web and read the pages it finds.",
+      "package": "npm:@budmh/tool-web",
+      "version": "^0.2.1-rc.3",
+      "if-it-cannot-be-loaded": "run-without-it",
+      "config": {
+        "searchMaxResults": 5
+      }
+    }
+  }
+}
