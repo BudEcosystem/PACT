@@ -109,6 +109,10 @@ const COVERED: &[(&str, &str)] = &[
     // and the driver only noticed once the payload started carrying the key,
     // which is the other half of what this file is for.
     ("knowledge", "knowledge:"),
+    // D29. In list A for the reason `knowledge:` is: no port loads a plugin, so
+    // both refuse a `refuse-to-start` one before a model call and name a
+    // `run-without-it` one on `unenforced`, in the same words.
+    ("plugins", "plugins:"),
 ];
 
 /// Declared, and no row anywhere, because nothing about the run turns on it.

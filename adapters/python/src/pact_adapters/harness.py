@@ -53,7 +53,7 @@ from .events import Bus
 from .facts import TURN_ENDS, Facts
 from .holes import fill
 from .interceptors import Chain
-from .ir import AgentSpec, SkillSpec
+from .ir import RUN_WITHOUT_IT, AgentSpec, PluginSpec, SkillSpec
 from .limits import RAN_OUT, Action, Meter, Reached, step_ceiling
 from .loops import DONE, Does, Loop, LoopError, Phase
 from .questions import AN_AGENT, ANYTHING, Gate, Question, Rejected, Wait
@@ -522,7 +522,43 @@ SUPPLIED_BY_THE_HOST: frozenset[str] = frozenset({
     # before the first call, because the failure otherwise is `error: no tool
     # named ...`, which reads as a mistake in the author's own file.
     "run_program",
+    # Which plugins the host loaded (D29). The DOCUMENT says which plugins an
+    # agent needs, which versions will do and what to do without one, and all
+    # of that reaches `AgentSpec.plugins`; loading a package is something only
+    # the process can do, and this harness loads none.
+    "loaded_plugins",
 })
+
+
+def _plugin_named(p: PluginSpec) -> str:
+    """`'web-search' (`npm:@acme/web-search`, versions `^0.2.0`)`."""
+    return f"'{p.name}' (`{p.package}`, versions `{p.version}`)"
+
+
+def _cannot_start_without(needed: "Sequence[PluginSpec]") -> str:
+    """Why the turn ended before it began, and the two ways out.
+
+    Word for word the second port's `cannotStartWithout`; the conformance
+    driver compares the two.
+    """
+    named = [_plugin_named(p) for p in needed]
+    listed = named[0] if len(named) == 1 else f"{', '.join(named[:-1])} and {named[-1]}"
+    registries = " or ".join(dict.fromkeys(f"`{p.registry}:`" for p in needed))
+    return (
+        f"This agent cannot start: it needs {listed}, and nothing running it loaded "
+        f"{'it' if len(needed) == 1 else 'them'}. fix: run it where a runtime loads "
+        f"{registries} packages, or write `if-it-cannot-be-loaded: run-without-it` in "
+        f"the plugin's file under `plugins/` if the agent can do its job without it."
+    )
+
+
+def _ran_without(p: PluginSpec) -> str:
+    """The `unenforced` line for a plugin the agent started without."""
+    return (
+        f"plugin {_plugin_named(p)} was not loaded by whatever runs this agent, so "
+        f"nothing it adds is here and the agent ran without it. fix: run it where a "
+        f"runtime loads `{p.registry}:` packages."
+    )
 
 
 def _and_list(names: "Sequence[str]") -> str:
@@ -569,6 +605,11 @@ async def run(
     #: `RunResult.unretrieved`. `None` means nothing retrieved anything, which is
     #: the honest state on a machine with no index.
     retrieved_by: "Mapping[str, Sequence[str]] | None" = None,
+    #: What the host loaded for this agent, as plugin name to the version it
+    #: loaded (D29). PACT loads no plugin itself; a host that does hands this
+    #: in, having held each package to its line's range. `None` means nothing
+    #: loaded anything, which is the honest state of every transport here.
+    loaded_plugins: "Mapping[str, str] | None" = None,
     approved: frozenset[str] = frozenset(),
     bus: Bus | None = None,
     chain: Chain | None = None,
@@ -1348,6 +1389,23 @@ async def run(
     # by `ir.ToolSpec`, and a tool here answers in TEXT, so nothing on this
     # runtime holds a result to it. Said, for `bind:`'s reason one line up.
     result.unenforced = result.unenforced + _unchecked_answers(spec) + _unheld(spec)
+    # D29. A plugin is code the host loads and this harness never does, so on
+    # every shipped transport each one is missing — and that must not be the
+    # SILENT state. One the agent may run without is named on `unenforced`, in
+    # the same door as every other line this run did not carry out. One it may
+    # not run without ends the turn HERE, before a single model call: an agent
+    # written to rely on code it did not get is not the agent that was reviewed,
+    # and paying for its first answer would look like working.
+    missing = [p for p in spec.plugins if p.name not in (loaded_plugins or {})]
+    result.unenforced = result.unenforced + tuple(
+        _ran_without(p) for p in missing if p.if_cannot_load == RUN_WITHOUT_IT
+    )
+    needed = [p for p in missing if p.if_cannot_load != RUN_WITHOUT_IT]
+    if needed:
+        result.halted = "plugins-not-loaded"
+        result.output = _cannot_start_without(needed)
+        bus.emit("turn.run.failed", at=(0,), reason="plugins-not-loaded")
+        return result
     # A7. PACT does not retrieve, so a set of documents this run never consulted
     # is the ordinary state on a machine with no index — and it must not be the
     # SILENT state, because the agent then answers from what the model already

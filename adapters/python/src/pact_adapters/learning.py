@@ -50,6 +50,7 @@ class Risk:
 HIGH_RISK_FIELDS = (
     "uses", "tools", "team", "model", "policy", "needs-approval-before",
     "limits", "needs", "evals", "learning", "answers-with", "run-inputs",
+    "plugins",
 )
 
 #: What each of `may-improve-on-its-own:`'s four choices names, as a field of a

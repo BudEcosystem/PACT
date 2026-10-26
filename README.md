@@ -434,8 +434,9 @@ note: 'refund-policy' holds 5 written rules under `## Rules` — lines a person
 One folder, loaded by the Rust CLI, executes over **all seven targets** and
 produces *byte-identical traces, tool sequences and model-call counts*. The claim
 is bounded and the bound is written down: it covers `instructions:`, `tools:`,
-`skills:`, `knowledge:`, `team:`, `answers-with:`, the `loop:` and the `limits:`
-ceilings — and **not** the ten governance keys the Node port reports on
+`skills:`, `knowledge:`, `team:`, `answers-with:`, the `loop:`, the `limits:`
+ceilings and whether a `plugins:` line stops the agent before it starts — and
+**not** the ten governance keys the Node port reports on
 `unenforced`, nor the documents under `knowledge/`, which nothing on that port
 can look anything up in and which it names on `unretrieved` for every set an
 answer did not come from. See
@@ -447,7 +448,7 @@ inside the claim and reported anyway, since the names are offered to the model
 and asking one only comes back as an error there — and every `limits:` key that
 port does not read gets its own line under a `limits.` prefix.
 
-The conformance suite compares 30 agents × 7 targets = **180 pairs, 0
+The conformance suite compares 31 agents × 7 targets = **186 pairs, 0
 divergences**, with every exclusion declared rather than discovered.
 
 Each target takes the framework's **lowest** seam, so none of them owns the loop:

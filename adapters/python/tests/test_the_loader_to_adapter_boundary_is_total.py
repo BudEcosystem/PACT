@@ -315,6 +315,12 @@ def test_every_spec_field_that_holds_authored_state_is_filled_from_the_document(
         # read is `test_a_shape_is_built_on_by_list_name_and_optional.py`.
         "shapes",
         "time_zone",
+        # Authored (D29), and this example asks its runtime to load nothing: it
+        # demonstrates the no-code ceiling, and a plugin is code. What proves
+        # the line reaches the spec, refuses a run or is named on `unenforced`
+        # is `test_a_plugin_the_agent_can_do_without_is_named_on_unenforced.py`
+        # over `examples/plugin-desk/`, the example that exists for it.
+        "plugins",
     }
     empty: list[str] = []
     for f in dataclass_fields(spec):
