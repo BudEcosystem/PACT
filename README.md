@@ -323,8 +323,8 @@ never runs a line of yours.
 
 ## What you can express
 
-**54 kinds, 384 fields.** 262 are `core` — what a non-technical author writes.
-122 are `expert`, and none of them is required for any core capability.
+**57 kinds, 454 fields.** 320 are `core` — what a non-technical author writes.
+134 are `expert`, and none of them is required for any core capability.
 
 <table>
 <tr><th align="left">Capability</th><th align="left">You write</th><th align="left">What it buys</th></tr>
@@ -339,6 +339,7 @@ never runs a line of yours.
 <tr><td><b>Teams</b></td><td><code>team:</code>, <code>teamwork:</code></td><td>Delegation, quorum, races, budget shares — eight worked patterns ship</td></tr>
 <tr><td><b>Memory</b></td><td><code>remembers:</code></td><td>A variable a run reads into a call and writes back from one</td></tr>
 <tr><td><b>Exact logic</b></td><td><code>programs/</code></td><td>WebAssembly in a locked room, with fuel and a consent gate</td></tr>
+<tr><td><b>Runtime plugins</b></td><td><code>plugins/*.yaml</code>, <code>plugins:</code></td><td>Code your runtime loads, named with a version range — refused or reported where it cannot be loaded</td></tr>
 <tr><td><b>How you know</b></td><td><code>evals/</code></td><td>The correctness oracle for portability, model swaps and learning</td></tr>
 <tr><td><b>Self-improvement</b></td><td><code>learning.yaml</code></td><td>Changes arrive as reviewable diffs, class-gated, never silent</td></tr>
 </table>
@@ -538,8 +539,8 @@ for things a framework would have let you do. Declaring `spends-money: yes`
 obliges you to say what makes two calls the same call. That is the point, and it
 is still friction.
 
-**There is a vocabulary to learn.** Not code, but 54 kinds and 384 fields. The
-core is 185 of them and the diagnostics name the exact line to type, but "no
+**There is a vocabulary to learn.** Not code, but 57 kinds and 454 fields. The
+core is 320 of them and the diagnostics name the exact line to type, but "no
 code" is not "nothing to learn".
 
 **The eval suite is work, and it is not optional.** Every portability claim is

@@ -474,6 +474,26 @@ groups:
           sets of ready-made capabilities this workspace uses. Each says where
           its folder is and which kinds it may contribute; anything else it
           contains is refused rather than quietly mounted.
+      plugins:
+        # D29, which narrows R17. A bundle above is definitions PACT reads; a
+        # plugin is CODE, and PACT never reads it, fetches it or runs it (R5).
+        # What lives here is the request for it — which package, which versions
+        # will do, its settings, and what an agent does on a runtime that cannot
+        # load it — so a reviewer reads the request in the folder they were
+        # handed, and every runtime answers it the same way: it loaded it, it
+        # refused to start, or the run says the plugin was not there.
+        #
+        # S-EXEC because a plugin can do anything its runtime lets it, which is
+        # what "touching tools" means to D23. A person approves adding one.
+        type: map of group:plugin
+        surface: S-EXEC
+        tier: expert
+        help: >
+          code that whatever runs these agents loads for them, one file each
+          under `plugins/`. Each says which package, which versions will do, its
+          settings, and whether an agent may start without it. PACT never
+          fetches or runs one: `pact check` reads the lines, and the runtime says
+          whether it loaded it. Adding one always needs a person to approve it.
       interceptors:
         type: map of group:interceptor
         surface: S-EXEC
@@ -889,6 +909,15 @@ groups:
         surface: S-EXEC
         tier: expert
         help: which rules may change what happens as it runs
+      plugins:
+        type: list of text
+        names: plugins
+        surface: S-EXEC
+        tier: expert
+        help: >
+          which of the workspace's plugins this agent needs, by name. One whose
+          `applies-to:` is `every-agent` is loaded for every agent here and need
+          not be named.
 
   variant:
     describe: something a variant can have
@@ -3773,7 +3802,12 @@ groups:
           `needs-a-person-to-approve:` below is for.
       needs-a-person-to-approve:
         type: list of one-of
-        choices: [tools, permissions, team, limits, evals, policy-clauses]
+        # `plugins` (D29): a plugin is code its runtime loads, so a change to
+        # which one an agent needs, or which versions will do, is a change to
+        # what it can do. The classifier holds it to a person with or without
+        # this line (`learning.HIGH_RISK_FIELDS`); listing it is how an author
+        # says so in the file.
+        choices: [tools, permissions, team, limits, evals, policy-clauses, plugins]
         surface: S-GOV
         tier: core
         help: changes to what it can DO, which always need review
@@ -5993,6 +6027,11 @@ groups:
           - shapes
           - remembers
           - owners
+          # D29. A plugin line is a definition like the rest — a name, a
+          # package and a range — and a bundle that starts carrying one asks
+          # every runtime to load code, so it is a kind `brings:` governs
+          # rather than one it is blind to.
+          - plugins
         required: yes
         surface: S-EXEC
         tier: core
@@ -6011,6 +6050,87 @@ groups:
         help: >
           what it defines, read exactly as if you had written it here. You do
           not type this — it is what is in the bundle's own folder.
+
+  # ── PLUGINS (D29) ─────────────────────────────────────────────────────────────
+  # A request for code the runtime loads, never the code. `pact check` holds each
+  # line to its own grammar (`crates/pact-loader/src/plugins.rs`) and never
+  # resolves, downloads or opens the package, so checking a workspace stays an act
+  # of reading (R5) and stays offline (D17). Whether the package was loaded is the
+  # runtime's answer, given on every run: the `plugins` lattice column says which
+  # registries a runtime can load at all, and a plugin it did not load either
+  # stops the agent before its first step or is named on `unenforced`.
+  plugin:
+    describe: something a plugin line can have
+    fields:
+      description:
+        type: text
+        required: yes
+        surface: S-GEN
+        tier: core
+        help: what it adds, in one line, for whoever has to approve it
+      package:
+        # The registry word is the portability fact. A runtime written in
+        # TypeScript can load an npm package and not a pypi one, so the word in
+        # front of the name says, before anything runs, which runtimes can
+        # honour the line at all — and `pact discover` publishes it.
+        type: text
+        required: yes
+        surface: S-EXEC
+        tier: expert
+        help: >
+          the package, written `<registry>:<name>` — `npm:@acme/crm-tools` or
+          `pypi:acme-crm-tools`. The registry word says which runtimes can load
+          it at all; a runtime with no loader for that registry treats it as a
+          plugin it cannot load.
+      version:
+        # A range and never "latest": an upgrade that changes what an agent can
+        # do is a line somebody edited and a reviewer read, not something that
+        # happened on the next install. Held to the registry's own grammar, so
+        # `^1.4` under pypi or `>=1.4,<2` under npm is refused where it is typed.
+        type: text
+        required: yes
+        surface: S-EXEC
+        tier: expert
+        help: >
+          which versions will do, written the registry's own way — `^1.4.0` for
+          npm, `>=1.4,<2` for pypi — so an upgrade that changes behaviour is a
+          line somebody edited rather than something that happened.
+      if-it-cannot-be-loaded:
+        # Two answers, because a runtime that cannot load the package has only
+        # two honest things to do. Refusing is the default: an agent written to
+        # rely on code it did not get is an agent that is not the one reviewed.
+        type: one-of
+        choices: [refuse-to-start, run-without-it]
+        surface: S-GOV
+        tier: core
+        help: >
+          what happens on a runtime that cannot load it. `refuse-to-start`, which
+          is what you get if you leave this out, stops the agent before its first
+          step and says which plugin and why. `run-without-it` starts the agent,
+          and every run says the plugin was not there.
+      config:
+        # Open, like `bundle.contributes`, because the settings are the
+        # plugin's and not PACT's: a second copy of every plugin's settings
+        # here would be a schema PACT cannot keep true. What PACT does hold is
+        # the one rule no plugin may waive — no secret in the file.
+        type: map of anything
+        surface: S-EXEC
+        tier: expert
+        help: >
+          the plugin's own settings, handed to it as written. A secret goes in as
+          `{by-reference: <name>}`, the name your platform team publishes for
+          where it is kept, never as the secret itself.
+      applies-to:
+        # The same polarity `interceptor.applies-to` and `policy.applies-to`
+        # record, on the same two words.
+        type: one-of
+        choices: [the-agents-that-name-it, every-agent]
+        surface: S-EXEC
+        tier: expert
+        help: >
+          who it is loaded for. `the-agents-that-name-it` is the default and is
+          for a plugin one job needs. `every-agent` loads it for every agent here,
+          and an agent cannot opt out by leaving it off its `plugins:` line.
 
   # ── TEAMWORK ────────────────────────────────────────────────────────────────
   # How an agent waits for the people it asked for help, and how what it may
