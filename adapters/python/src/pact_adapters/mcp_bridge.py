@@ -73,6 +73,7 @@ from .ir import AgentSpec, ResourceSpec, ToolSpec
 from .questions import NEEDS_PERMISSION
 
 __all__ = [
+    "Change",
     "Connection",
     "FENCE",
     "NOT_AUTHORITATIVE",
@@ -80,6 +81,7 @@ __all__ = [
     "check_against_authored",
     "check_pin",
     "check_snapshot",
+    "when_it_changed",
     "digest_of",
     "is_quarantined",
     "mcp_toolset_for",
@@ -1048,3 +1050,126 @@ def _days(seconds: float) -> str:
     if days >= 1:
         return f"{days:.0f} day(s)"
     return f"{seconds / 3600.0:.1f} hour(s)"
+
+
+# ───────────────────────────── what a run does when the server changed (96 §E)
+
+
+@dataclass(frozen=True)
+class Change:
+    """What a run does now that a server says something different from its snapshot.
+
+    `verdict` is one of `same`, `stop`, `ask`, `use-what-was-reviewed` and
+    `use-the-new-one`; `asks` is the question to put when it is `ask`; and
+    `why` names every difference, so whatever the verdict the run's report can
+    say what moved.
+    """
+
+    verdict: str
+    why: tuple[str, ...] = ()
+    asks: str = ""
+    #: Whether a difference touched something a decision rests on — in which
+    #: case no `if-it-changes:` may carry on past it.
+    governing: bool = False
+
+
+#: `if-it-changes:` word by word, and what each makes the run do. A word this
+#: does not know stops the run: `pact check` refuses it first, and a reader
+#: more generous than the checker would be a second specification.
+_ON_CHANGE = {
+    "stop-and-say-so": "stop",
+    "ask-a-person": "ask",
+    "use-what-was-reviewed": "use-what-was-reviewed",
+    "use-the-new-one": "use-the-new-one",
+}
+
+#: The action lines a decision about a call rests on (96 §E).
+_DECIDING_ARGUMENTS = ("inspects", "same-request-key", "bind")
+_DECIDING_ACTIONS = ("spends-money", "needs-a-person")
+
+
+def when_it_changed(document: Mapping[str, Any], server: str, live: Any, instructions: str = "") -> Change:
+    """Decide what a run does when `server` publishes `live` and its snapshot says otherwise.
+
+    Reads the resource's `published:` and `if-it-changes:` and every tool that
+    `connect:`s to it, from the loaded document. A change to an action that
+    spends money or needs a person, or to an argument an approval, a
+    same-request key or a host-bound value rests on, is GOVERNING: it stops the
+    run, or asks when `asks-when-it-changes:` names a question, whatever
+    `if-it-changes:` says. Anything else does what that line says, and
+    `stop-and-say-so` when it says nothing.
+    """
+    resource = ((document.get("resources") or {}).get(server)) or {}
+    recorded = resource.get("published") if isinstance(resource, Mapping) else None
+    if not isinstance(recorded, Mapping):
+        return Change("same")
+    if str(recorded.get("digest") or "") == digest_of(live, instructions):
+        return Change("same")
+    before = {str(k): v for k, v in (recorded.get("tools") or {}).items()}
+    now = _published_whole(live, instructions)["tools"]
+    why: list[str] = []
+    governing = False
+    if str(recorded.get("instructions") or "") != str(instructions or ""):
+        why.append(f"`{server}` rewrote the instructions it publishes about itself")
+    for name in sorted(set(before) | set(now)):
+        was = before.get(name)
+        if was is None:
+            why.append(f"`{server}` now offers `{name}`, which nobody reviewed")
+            continue
+        if name not in now:
+            why.append(f"`{server}` no longer offers `{name}`")
+            continue
+        if str(was.get("description") or "") != now[name]["description"]:
+            why.append(f"`{server}` reworded `{name}`")
+        if _jsonable(was.get("takes")) != now[name]["schema"]:
+            why.append(f"`{server}` changed what `{name}` takes")
+    for tool_name, tool in (document.get("tools") or {}).items():
+        if not isinstance(tool, Mapping) or tool.get("connect") != server:
+            continue
+        for action, line in (tool.get("actions") or {}).items():
+            if not isinstance(line, Mapping):
+                continue
+            calls = str(line.get("calls") or action)
+            was, is_now = before.get(calls), now.get(calls)
+            if was is not None and is_now is not None and (
+                _jsonable(was.get("takes")) == is_now["schema"]
+                and str(was.get("description") or "") == is_now["description"]
+            ):
+                continue
+            if any(str(line.get(k, "")).strip() in ("yes", "True", "true") for k in _DECIDING_ACTIONS):
+                governing = True
+                why.append(f"`{tool_name}/{action}` moves money or needs a person, and it changed")
+                continue
+            renamed = {str(v): str(k) for k, v in (line.get("passes") or {}).items()}
+            named: list[str] = [renamed.get(str(a), str(a)) for a in _as_list(line.get("inspects"))]
+            if line.get("same-request-key"):
+                key = str(line["same-request-key"])
+                named.append(renamed.get(key, key))
+            named += [renamed.get(str(a), str(a)) for a in (line.get("bind") or {})]
+            named += [str(k) for k in (line.get("passes") or {})]
+            properties = lambda schema: set(((schema or {}).get("properties") or {}) if isinstance(schema, Mapping) else ())
+            gone = [a for a in named if a in properties(was and was.get("takes")) and a not in properties(is_now and is_now["schema"])]
+            changed = [
+                a for a in named
+                if is_now is not None and was is not None
+                and ((was.get("takes") or {}).get("properties") or {}).get(a)
+                != ((is_now["schema"] or {}).get("properties") or {}).get(a)
+            ]
+            if is_now is None or gone or changed:
+                governing = True
+                why.append(
+                    f"`{tool_name}/{action}` rests on "
+                    f"{', '.join(sorted(set(gone + changed))) or 'a tool'} and that changed"
+                )
+    asks = str(resource.get("asks-when-it-changes") or "")
+    if governing:
+        return Change("ask" if asks else "stop", tuple(why), asks, governing=True)
+    said = str(resource.get("if-it-changes") or "stop-and-say-so")
+    verdict = _ON_CHANGE.get(said, "stop")
+    return Change(verdict, tuple(why), asks if verdict == "ask" else "")
+
+
+def _as_list(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    return list(value) if isinstance(value, (list, tuple)) else [value]

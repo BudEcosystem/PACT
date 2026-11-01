@@ -1,0 +1,49 @@
+# What an `accept-when:` line means — in BOTH ports, from one table (96 §B4).
+#
+#     needs:
+#       accept-when:
+#         - mmlu.score > 50
+#         - cost < 0.05 USD
+#
+# `crates/pact-loader/src/accept.rs` refuses a line it cannot read and
+# `adapters/python/src/pact_adapters/selection.py` decides the rest. Two readers
+# of one grammar drift the first time somebody touches one of them, so each has
+# a test that reads every row below and must reach the same answer.
+#
+# The rows are read against this table's own small world: two benchmarks — one
+# published out of a hundred, one out of one — and one metric of a suite.
+benchmarks:
+  mmlu: percent
+  terminal-bench: percent
+  win-rate: fraction
+metrics: [refund-tone]
+
+lines:
+  - {written: "mmlu.score > 50", measure: mmlu, kind: benchmark, part: score, op: ">", value: "50", unit: percent}
+  - {written: "mmlu > 50", measure: mmlu, kind: benchmark, part: score, op: ">", value: "50", unit: percent}
+  # A leaderboard's `81%` and `81` are the same score out of a hundred: the
+  # `%` on a percent benchmark is a unit, not a division by a hundred.
+  - {written: "mmlu.score >= 81%", measure: mmlu, kind: benchmark, part: score, op: ">=", value: "81", unit: percent}
+  - {written: "terminal-bench.score >= 40", measure: terminal-bench, kind: benchmark, part: score, op: ">=", value: "40", unit: percent}
+  - {written: "win-rate >= 60%", measure: win-rate, kind: benchmark, part: score, op: ">=", value: "0.6", unit: fraction}
+  - {written: "refund-tone.score >= 0.8", measure: refund-tone, kind: metric, part: score, op: ">=", value: "0.8", unit: fraction}
+  - {written: "refund-tone >= 80%", measure: refund-tone, kind: metric, part: score, op: ">=", value: "0.8", unit: fraction}
+  - {written: "refund-tone.pass-rate >= 90%", measure: refund-tone, kind: metric, part: pass-rate, op: ">=", value: "0.9", unit: fraction}
+  - {written: "pass-rate >= 90%", measure: pass-rate, kind: figure, part: "", op: ">=", value: "0.9", unit: fraction}
+  - {written: "cost < 0.05 USD", measure: cost, kind: figure, part: "", op: "<", value: "0.05", unit: money}
+  - {written: "input-price <= 3 USD", measure: input-price, kind: figure, part: "", op: "<=", value: "3", unit: money}
+  - {written: "output-price < 15 USD", measure: output-price, kind: figure, part: "", op: "<", value: "15", unit: money}
+  - {written: "context-window >= 32k", measure: context-window, kind: figure, part: "", op: ">=", value: "32000", unit: size}
+  - {written: "first-words-within < 500ms", measure: first-words-within, kind: figure, part: "", op: "<", value: "0.5", unit: duration}
+
+not-lines:
+  - {written: "cost > 0.050", rule: loader/a-comparison-in-the-wrong-unit, because: "an amount with no currency"}
+  - {written: "cost < 0.05 EUR", rule: loader/a-comparison-in-the-wrong-unit, because: "the catalogue prices in USD"}
+  - {written: "pass-rate > 80", rule: loader/a-comparison-in-the-wrong-unit, because: "a share is out of one"}
+  - {written: "refund-tone.score > 3", rule: loader/a-comparison-in-the-wrong-unit, because: "a metric's score is a share"}
+  - {written: "context-window >= lots", rule: loader/a-comparison-in-the-wrong-unit, because: "not a size"}
+  - {written: "mmlu.pass-rate > 50", rule: loader/a-part-a-measure-does-not-have, because: "a benchmark has a score and nothing else"}
+  - {written: "cost.mean < 0.05 USD", rule: loader/a-part-a-measure-does-not-have, because: "a figure has no parts"}
+  - {written: "banana > 3", rule: loader/no-such-measure, because: "nothing is called that"}
+  - {written: "mmlu", rule: loader/not-a-comparison, because: "no comparison at all"}
+  - {written: "mmlu >", rule: loader/not-a-comparison, because: "a comparison with nothing to compare against"}

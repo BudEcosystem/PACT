@@ -1,0 +1,11 @@
+description: Gmail, through the platform team's MCP server.
+implements: email
+connect: gmail-server
+schemas-from: the-snapshot
+actions:
+  search-messages:
+    calls: search_threads
+    passes: {q: query}
+  send-message:
+    calls: send_email
+    passes: {recipient: to, html_body: body}

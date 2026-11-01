@@ -241,6 +241,22 @@ groups:
           images: [images, a picture, pictures, list of images, an image]
           audio: [audio, a recording, a voice message, list of audio]
           file: [file, a file, an attachment, list of files]
+          # D16's "vision (images, documents, screenshots)" had a shape for
+          # one of its three nouns. `file` is opaque — something handed on to a
+          # tool — and `documents` is something a model READS: a contract, a
+          # scanned form, a PDF a model can take natively or a runtime has to
+          # turn into text first. The resolver needs the difference, because
+          # only the second one narrows which models can bind.
+          #
+          # NOT `document` or `a document`, though either reads naturally: a
+          # spelling here wins over a workspace's own named shape, and three
+          # Bud Agent Flow corpus workspaces already define a shape called
+          # `document` with parts of its own — `document: document` on an
+          # agent meant theirs, and would have silently meant this.
+          # `loader/a-shape-named-like-a-built-in` now refuses that collision
+          # whichever side moves next.
+          documents: [documents, a pdf, list of documents]
+          video: [video, a video, a clip, list of videos]
           agent: [agent, an agent, which agent, the name of an agent]
           # 02W §2.15. A date and time carries its zone; one written without a
           # zone is read in the workspace's `time-zone:`.
@@ -261,6 +277,24 @@ groups:
           number}` — so `lines: list of invoice-line` can be written anywhere
           a shape is. A part may be `, optional`, and may name another shape
           here, but never, through any number of others, itself.
+      template-language:
+        # 96 §C. One switch for the whole tree, not one per agent: two
+        # dialects in one workspace would mean the same `{{ }}` checked two
+        # ways two folders apart, and a reviewer reading either has to know
+        # which. `holes` stays the default and stays the no-code path.
+        type: one-of
+        choices: [holes, jinja]
+        surface: S-CTRL
+        tier: expert
+        help: >
+          how the words agents are given fill in what is only known when a run
+          starts. `holes`, what you get if you leave this out, is
+          `{{run-inputs.<name>}}` and nothing else. `jinja` lets those words
+          also choose — `{% if run_inputs.tier == "gold" %}…{% endif %}` — and
+          repeat, and use a short list of filters such as `upper` and
+          `default`. In `jinja` a name is written with `_` where PACT writes
+          `-`: `run_inputs.brand_voice`. Nothing it fills in is ever read as a
+          template itself.
       time-zone:
         type: text
         surface: S-GOV
@@ -520,6 +554,7 @@ groups:
           the folder name is used, which is the name everything else here
           resolves against anyway.
       description:
+        template: yes
         type: text
         required: yes
         surface: S-GEN
@@ -580,6 +615,9 @@ groups:
         #
         # No field may carry both this and `names:`, and a test says so.
         may-be-a-folder: yes
+        # `template: yes` is the list `holes.rs` used to keep as a Rust const of
+        # two names: which words a run fills in before a model reads them.
+        template: yes
         type: text
         required: yes
         surface: S-GEN
@@ -669,7 +707,7 @@ groups:
           what you can send it, one line per thing — for example
           `message: text` or `photos: images`. The shapes are `text`,
           `yes or no`, `money`, `number`, `whole number`, `images`, `audio`,
-          `file`, `agent` — the name of one of this workspace's agents —
+          `documents`, `video`, `file`, `agent` — the name of one of this workspace's agents —
           `date`, `time` and `date and time`, or `one of a, b, c` to choose
           between things you name. Write `list of <shape>` for several, a
           name from the workspace's `shapes:` for a shape with parts, and
@@ -788,6 +826,10 @@ groups:
         # time in a sovereign workspace, which is why the list lives in the
         # document and not only in the gateway.
         type: list of text
+        # 96 §A2: a model that does the agent's thinking reads and writes, so
+        # an embedding or a speech model here is refused by kind, not found
+        # out on the first call.
+        model-kind: [language, decision]
         # Resolved against the models PACT ships knowledge of, plus any this
         # workspace added in `models/catalog.yaml`. Until it was,
         # `model: qwen2.5-7b-instrukt` loaded clean and failed later, at run
@@ -824,6 +866,7 @@ groups:
         # not spellable.
         type: text
         names: pact:models
+        model-kind: [language, decision]
         needs-also: [loop]
         surface: S-CAP
         tier: expert
@@ -889,6 +932,42 @@ groups:
         surface: S-EXEC
         tier: expert
         help: which rules may change what happens as it runs
+      voice:
+        # 96 §A6. The CONTRACT of a voice agent was already writable and stays
+        # where it was: `accepts: {message: audio}`, `answers-with: {reply:
+        # audio}` and `limits.feel: voice`. What was missing is the STRATEGY —
+        # one speech model, or a transcriber, a language model and a speaker in
+        # a row — and the handful of things about talking that are true on
+        # every provider. Expert tier and optional: an author who writes none of
+        # it gets the resolver's choice, recorded, which is the contract /
+        # strategy split doing what it is for.
+        type: group:voice
+        surface: S-CAP
+        tier: expert
+        help: >
+          how it listens and speaks, for an agent people talk to out loud.
+          Leave it out and PACT picks — an agent whose `accepts:` takes audio
+          is heard, and one whose `answers-with:` gives audio is spoken. Write
+          it to choose the models, the voice, the languages, and whether a
+          person may interrupt it.
+      turns:
+        # 96 §D. A conversation that is put in front of every live one: the
+        # worked example a small model needs to see once (a question, the tool
+        # call it should make, what came back, the answer), or an opening the
+        # agent always says. Written as data rather than as prose inside
+        # `instructions:`, because "here is what the customer said, here is
+        # what you did" written as a paragraph is read by a model as a
+        # paragraph, and written as turns is read as a conversation — which is
+        # the whole reason few-shot examples work.
+        type: list of group:turn
+        surface: S-GEN
+        tier: expert
+        help: >
+          a short conversation that comes before every real one, one turn per
+          line — who speaks (`from:`) and what they say (`says:`). Use it for a
+          worked example the model should copy, including the tool it should
+          call and what came back. These words may carry the same
+          `{{run-inputs.<name>}}` holes as `instructions:`.
 
   variant:
     describe: something a variant can have
@@ -904,6 +983,7 @@ groups:
         # A folder of prose is a way of writing this. See
         # `agent.instructions` for what gating on the type alone forgave.
         may-be-a-folder: yes
+        template: yes
         type: text
         surface: S-GEN
         tier: expert
@@ -911,6 +991,7 @@ groups:
           what to say instead of the agent's own instructions. Leave it out to
           keep them.
       says:
+        template: yes
         type: text
         surface: S-GEN
         tier: expert
@@ -938,6 +1019,181 @@ groups:
         help: >
           narrow the tools, procedures and calculations to these, for this way of
           working only. Leave it out to keep all of them.
+      turns:
+        # The few-shot example is the other half of `says:`: the sentence that
+        # makes a smaller model reliable is often a worked example, and the
+        # variant is where "a smaller model needs more help" is written.
+        type: list of group:turn
+        surface: S-GEN
+        tier: expert
+        help: >
+          a worked conversation to show the model instead of the agent's own
+          `turns:`, for this way of working only — the example a smaller model
+          needs and a larger one does not. Leave it out to keep the agent's.
+  # ── VOICE ───────────────────────────────────────────────────────────────────
+  # How an agent listens and speaks (96 §A6). Every line is a fact that holds on
+  # every provider; nothing here is a provider's own setting. A voice id is the
+  # one exception, and it says so: it is checked against the catalogue row of
+  # the model that has to speak it, so a voice that only exists on one vendor
+  # is refused the day the agent moves rather than discovered on a phone call.
+  voice:
+    describe: something an agent's voice can have
+    fields:
+      pipeline:
+        type: one-of
+        choices: [pact-picks, transcribe-think-speak, one-speech-model]
+        surface: S-CAP
+        tier: expert
+        help: >
+          how listening and speaking are done. `transcribe-think-speak` turns
+          what was said into words, has the agent's model answer in words, and
+          speaks the answer — three models, any of which can run on this
+          machine. `one-speech-model` uses one model that hears and speaks
+          itself, which answers sooner and can be interrupted, and needs a
+          model that does both. Leave it out, or write `pact-picks`, and PACT
+          picks whichever passes the checks, and records which.
+      talking:
+        type: one-of
+        choices: [takes-turns, both-at-once]
+        surface: S-CAP
+        tier: expert
+        help: >
+          whether the person and the agent take turns, or can both talk at
+          once — the agent stops when it is interrupted and listens. Leave it
+          out for `takes-turns`. `both-at-once` needs `one-speech-model`, or a
+          model that can listen while it speaks.
+      hears-with:
+        type: text
+        names: pact:models
+        model-kind: [transcription]
+        plays-role: stt
+        surface: S-CAP
+        tier: expert
+        help: >
+          which model turns what the person says into words, by name. Leave it
+          out and PACT picks one. A model that only runs somewhere else is
+          refused here when `allow-egress:` does not list `stt`.
+      speaks-with:
+        type: text
+        names: pact:models
+        model-kind: [speech]
+        plays-role: tts
+        surface: S-CAP
+        tier: expert
+        help: >
+          which model speaks the answer, by name. Leave it out and PACT picks
+          one. A model that only runs somewhere else is refused here when
+          `allow-egress:` does not list `tts`.
+      speaks-as:
+        type: text
+        surface: S-CAP
+        tier: expert
+        help: >
+          which voice it speaks in, by the name the speaking model gives it.
+          Voices belong to the model that speaks them, so this is checked
+          against that model's `voices:` — move the agent to another speech
+          model and you choose the voice again.
+      languages:
+        type: list of text
+        surface: S-CAP
+        tier: expert
+        help: >
+          the languages it is spoken to and speaks, as language tags — `en-GB`,
+          `hi`. Every model doing the listening and speaking has to handle
+          each one.
+      turn-ends-after:
+        type: duration
+        surface: S-CAP
+        tier: expert
+        help: >
+          how long a pause means the person has finished speaking — `700ms`.
+          Too short and it answers people who were only taking a breath; too
+          long and every answer feels slow. Leave it out and the runtime picks.
+      may-be-interrupted:
+        type: yes-no
+        surface: S-CAP
+        tier: expert
+        help: >
+          whether it stops speaking when the person starts. Leave it out for
+          `yes` — a phone agent that talks over its caller is the one people
+          hang up on.
+      keeps-the-audio:
+        # A recording of somebody's voice is personal data in most of the
+        # places this runs, and the transcript is not a substitute for asking
+        # whether to keep it. S-GOV, so changing it is a person's decision.
+        type: one-of
+        choices: [no, for-this-run, with-the-run-record]
+        surface: S-GOV
+        tier: expert
+        help: >
+          whether the sound itself is kept, as well as what was said. `no` is
+          what you get if you leave this out: the words are kept with the run
+          and the sound is not. `for-this-run` keeps it until the run ends.
+          `with-the-run-record` keeps it as long as the run's record is kept.
+
+  # ── TURNS ───────────────────────────────────────────────────────────────────
+  # One message in a written conversation (96 §D). Five speakers, and these are
+  # the only ones, because they are the five every provider's chat format can
+  # carry — under different names, which is the lowering's job and not the
+  # author's: `agent` is the turn a provider calls `assistant` or `model`, and
+  # `developer` is OpenAI's own word for instructions from whoever built the
+  # application, sent to a provider with no such role in its system channel,
+  # after any `system` turn.
+  turn:
+    describe: something a turn in a conversation can have
+    fields:
+      from:
+        type: one-of
+        choices: [system, developer, user, agent, tool]
+        required: yes
+        surface: S-GEN
+        tier: expert
+        help: >
+          who says this. `user` is the person, `agent` is this agent, and
+          `tool` is what a tool handed back. `system` and `developer` are
+          standing instructions — `system` above everything, `developer` from
+          whoever built this — and come before anybody speaks, so they are
+          only allowed at the start.
+      says:
+        template: yes
+        type: text
+        surface: S-GEN
+        tier: expert
+        help: >
+          the words of this turn. On an agent they may carry the same
+          `{{run-inputs.<name>}}` holes as `instructions:`; in an eval case
+          they are exactly what was said.
+      attaches:
+        type: list of text
+        surface: S-GEN
+        tier: expert
+        help: >
+          pictures, recordings or documents that come with this turn, each
+          written as `run-inputs.<name>` naming one of the agent's own run
+          inputs of that kind — or, in an eval case, as one of the case's own
+          `with:` names.
+      calls:
+        type: text
+        surface: S-GEN
+        tier: expert
+        help: >
+          on an `agent` turn, the tool action it calls in this example, written
+          `<tool>/<action>` — one the agent may use. The turn after it is the
+          `tool` turn saying what came back.
+      with:
+        type: map of anything
+        needs-also: [calls]
+        surface: S-GEN
+        tier: expert
+        help: the arguments that call is made with, one line each
+      answer:
+        type: anything
+        surface: S-GEN
+        tier: expert
+        help: >
+          on a `tool` turn, what the tool handed back — text, or the lines of
+          its answer
+
   # ── VALUES ──────────────────────────────────────────────────────────────────
   # One figure, written once. `{use: <name>}` stands where the figure would and
   # the loader puts the figure there before anything else looks — before
@@ -1206,6 +1462,7 @@ groups:
         # B15 in the file that exists to end B15: the boundary held or did not
         # hold depending on which file the author wrote the same id in.
         names: pact:models
+        model-kind: [language]
         surface: S-CAP
         tier: expert
         help: >
@@ -1218,6 +1475,72 @@ groups:
         surface: S-CAP
         tier: expert
         help: one entry per model, named by whatever your runtime calls it
+      benchmarks:
+        # 96 §B4. The names a score may be recorded under, and how each is
+        # measured. Until this existed a row could record `MMLU`, another
+        # `mmlu` and a third `MMLU (5-shot)`, an agent asking for `mmlu > 50`
+        # matched whichever happened to be spelled its way, and nothing said
+        # where a figure could come from. The distribution's catalogue ships
+        # the well-known ones; a workspace adds its own here.
+        type: map of group:benchmark
+        surface: S-CAP
+        tier: expert
+        help: >
+          the benchmarks a model's `benchmarks:` may record a score for, and
+          how each one is measured, one entry per benchmark. PACT already knows
+          the common ones — `mmlu`, `gsm8k`, `humaneval`, `terminal-bench`,
+          `swe-bench-verified` and more — so you only need this for one of your
+          own.
+
+  # One named benchmark: what it measures, the scale its figures are on, and
+  # where a figure for it comes from (96 §B4).
+  benchmark:
+    describe: something a benchmark can have
+    fields:
+      description:
+        type: text
+        required: yes
+        surface: S-GEN
+        tier: expert
+        help: what it measures, in one line
+      also-known-as:
+        type: list of text
+        surface: S-CAP
+        tier: expert
+        help: >
+          other names it is published under — `MMLU`, `MMLU (5-shot)` — so a
+          score recorded under any of them is the same score
+      scale:
+        # The one fact a comparison cannot be read without. A leaderboard
+        # publishes MMLU as 81.2 and a pass rate as 0.81; `> 80%` means
+        # "at least 80 points" on the first and "at least 0.8" on the second.
+        type: one-of
+        choices: [percent, fraction]
+        surface: S-CAP
+        tier: expert
+        help: >
+          how its figures are written. `percent`, what you get if you leave
+          this out, is out of a hundred, as leaderboards publish them — `81.2`.
+          `fraction` is out of one — `0.812`.
+      runs:
+        type: text
+        surface: S-CAP
+        tier: expert
+        help: >
+          how a figure is measured, as who runs it, a colon, and its name:
+          `deepeval:MMLU` for one of the benchmarks DeepEval ships, which
+          whatever serves your models runs against one of them (Bud Agent
+          Flow: `budflow benchmark run`); `host:terminal-bench` for one a
+          separate harness runs, whose result is written down with where it
+          came from (`budflow benchmark record`). Leave it out for a benchmark
+          whose figures are only ever published.
+      with:
+        type: map of anything
+        surface: S-CAP
+        tier: expert
+        help: >
+          settings the runner takes, written exactly as its own documentation
+          names them — `n_shots: 5` for DeepEval's MMLU
 
   model:
     fields:
@@ -1275,14 +1598,58 @@ groups:
         # 02W §2.12. Read by `pact check` (`deciding.rs`: WF-17, and an agent
         # all of whose models are decision models needs no `instructions:`) and
         # by `resolve.ModelEntry.kind`.
+        #
+        # 96 §A2. Four kinds join, and they are the four model ABIs every
+        # framework already splits into (Vercel AI's language / embedding /
+        # transcription / speech peers, LangChain's chat / embeddings, Pydantic
+        # AI's model / embedder): a model of one kind cannot stand where another
+        # is called for, because what it computes is a different function, not
+        # a weaker version of the same one. A vision or "omni" model is NOT a
+        # kind — it is a `language` model whose `modality-in:` says so, because
+        # it is called the same way. A model that listens and speaks in one
+        # session is the same: `language`, with `sessions: [duplex]`.
+        #
+        # Which kind each model binding has to be is data, on the binding:
+        # `model-kind:` beside `names: pact:models` (`modelkinds.rs`).
         type: one-of
-        choices: [language, decision]
+        choices: [language, decision, embedding, transcription, speech, reranking]
         surface: S-CAP
         tier: expert
         help: >
-          `decision` for a trained classifier that answers a label and a score.
-          An agent on one needs no `instructions:`. Leave it out for a language
-          model.
+          what this model does. Leave it out for a language model — one that
+          reads and writes, whether it reads only words or pictures and sound
+          too. `decision` is a trained classifier that answers a label and a
+          score; an agent on one needs no `instructions:`. `embedding` turns
+          text (or pictures) into numbers for looking things up by meaning.
+          `transcription` turns speech into words. `speech` turns words into
+          speech. `reranking` puts passages in order of how well they answer a
+          question.
+      benchmarks:
+        # 96 §B3. `needs.scores:` has filtered the catalogue on benchmark
+        # figures since AC-3.2, `resolve._benchmarks` reads a `benchmarks:`
+        # block off every row — and this group had no such field. MEASURED: a
+        # workspace row with `benchmarks: {MMLU: {value: "81", ...}}` was refused
+        # with *"'benchmarks' is not something a model can have"*, so every
+        # `needs.scores:` line anybody wrote emptied the candidate set, always.
+        # Per-figure provenance, the shape `reasoning:` and `context-window:`
+        # already have: a score with no source is the figure §4.2 forbids.
+        type: map of group:figure
+        surface: S-CAP
+        tier: expert
+        help: >
+          published or measured scores, one line per benchmark, each with where
+          the number came from — `MMLU: {value: "81", provenance: {source: the
+          model card}}`. This is what an agent's `needs.scores:` is compared
+          with. A score nobody wrote here is not a zero: a model with no figure
+          for a benchmark an agent asks about is left out for that agent.
+      speed:
+        type: group:model-speed
+        surface: S-CAP
+        tier: expert
+        help: >
+          how quickly it answers, and where those figures came from. Read when
+          an agent says `prefer: fastest`, and when a `feel: voice` agent is
+          matched against how long the first words may take.
 
   served-by:
     describe: something a way of serving a model can have
@@ -1336,17 +1703,102 @@ groups:
           whether it can use tools, and how many at once. `parallel` means
           several in one go, which many local models cannot do.
       modality-in:
+        # `document` and `video` join (96 §A3). `document` is a model that takes
+        # a PDF as itself — pages, layout, the table as a table — which is not
+        # the same as `image` (one picture) and not the same as `text` (what is
+        # left once somebody extracted the words). The resolver needs all three
+        # apart: an agent that `accepts: documents` binds a `document` model
+        # directly and any other model only behind a runtime that extracts.
         type: list of one-of
-        choices: [text, image, audio]
+        choices: [text, image, audio, video, document]
         surface: S-CAP
         tier: expert
-        help: what it can be shown
+        help: >
+          what it can be shown — `text`, `image`, `audio`, `video`, or
+          `document` for a model that reads a PDF as pages rather than as text
+          somebody extracted for it
       modality-out:
         type: list of one-of
         choices: [text, image, audio]
         surface: S-CAP
         tier: expert
         help: what it can produce
+      sessions:
+        # 96 §A6. X20 deleted the realtime ABI from v1 on one stated condition —
+        # "re-admitted the day a local duplex model exists to test it against".
+        # The CONTRACT half of it comes back here and on `voice.talking:`, which
+        # is all X20 itself kept: a field the resolver can refuse honestly on.
+        # The wire protocol stays an adapter's business.
+        type: list of one-of
+        choices: [turns, duplex]
+        surface: S-CAP
+        tier: expert
+        help: >
+          how a conversation with it can go. `turns` means one side speaks and
+          then the other. `duplex` means it can listen while it speaks, so a
+          person can interrupt it mid-sentence. Leave it out for `turns`.
+      languages:
+        type: list of text
+        surface: S-CAP
+        tier: expert
+        help: >
+          the languages it understands or speaks, as language tags — `en`,
+          `en-GB`, `hi`. Leave it out when nobody has said; an agent's
+          `voice.languages:` is then not checked against this model.
+      voices:
+        type: list of text
+        surface: S-CAP
+        tier: expert
+        help: >
+          on a speech model, the voices it can speak in, by the names it calls
+          them. An agent's `voice.speaks-as:` has to be one of these.
+      ignores:
+        # 96 §B5. `settings:` was declared "closed on purpose: every key here
+        # works on every provider", and two providers say otherwise in the
+        # code this repository pins (Pydantic AI 2.54, `adapters/python/
+        # uv.lock`): OpenAI's chat models are never sent `top_k`
+        # (`models/openai.py` has no such key), and Anthropic's newest models
+        # drop `temperature`, `top_p` and `top_k` whatever is written
+        # (`anthropic_disallows_sampling_settings`). Both drops are a Python
+        # `UserWarning` and nothing on PACT's own report, so an author's
+        # `temperature: 0.2` loaded clean and ran at the model's own default.
+        # A row now says so, and `settings.rs` refuses the line it makes inert.
+        type: list of one-of
+        choices: &the-settings [max-tokens, thinking, temperature, top-p, top-k, stop-sequences,
+                                seed, presence-penalty, frequency-penalty, tool-choice,
+                                parallel-tool-calls, service-tier]
+        surface: S-CAP
+        tier: expert
+        help: >
+          the `settings:` this model takes no notice of, whatever they say —
+          `top-k` for a model whose API has no such thing. An agent that pins
+          this model and writes one of them is refused, because the line would
+          change nothing. Leave it out when nobody has said; nothing is checked.
+      ignores-while-thinking:
+        type: list of one-of
+        choices: *the-settings
+        surface: S-CAP
+        tier: expert
+        help: >
+          the `settings:` this model takes no notice of while it is thinking —
+          `temperature` and `top-p` on a model that only samples with its
+          reasoning turned off. Write `thinking: none` on the agent to keep
+          them.
+      thinks-unless-told:
+        type: yes-no
+        surface: S-CAP
+        tier: expert
+        help: >
+          whether this model thinks before it answers when an agent's
+          `thinking:` says nothing. Leave it out for no.
+      dimensions:
+        type: integer
+        at-least: 1
+        surface: S-CAP
+        tier: expert
+        help: >
+          on an embedding model, how many numbers it turns each passage into —
+          what whatever stores the documents sizes its index by.
       context-window:
         type: group:figure
         surface: S-CAP
@@ -1355,6 +1807,17 @@ groups:
           how much it can hold at once, in tokens, and where that number came
           from. Write `unknown` if you cannot find out — a made-up number here
           makes every tidying rule fire at the wrong moment.
+
+  model-speed:
+    describe: something a model's speed can have
+    fields:
+      first-words-within:
+        type: group:figure
+        surface: S-CAP
+        tier: expert
+        help: >
+          how long before the first words (or the first sound) come back, as a
+          length of time — `400ms` — with where that figure came from
 
   figure:
     describe: something a recorded figure can have
@@ -1467,6 +1930,77 @@ groups:
         surface: S-CAP
         tier: core
         help: whether it has to be able to drive a browser or a screen
+      documents:
+        # 96 §A5. Only for what the CONTRACT does not already say. An agent that
+        # `accepts: documents` needs a model that reads them, and that is
+        # derived from the line it wrote; this is for the agent whose documents
+        # arrive some other way — a tool hands one back — where nothing else in
+        # the tree says so.
+        type: yes-no
+        surface: S-CAP
+        tier: core
+        help: >
+          whether it has to read documents — PDFs, scanned forms — as pages,
+          for an agent that gets them from a tool rather than through
+          `accepts:`. An agent that `accepts:` documents needs no line here.
+      video:
+        type: yes-no
+        surface: S-CAP
+        tier: core
+        help: whether it has to be able to watch video
+      prefer:
+        # 96 §B3. D11 fixed ONE ranking — "the cheapest model that does pass" —
+        # and that is the wrong one for a voice desk, where the model that
+        # answers in 300ms beats the one that costs a tenth of a cent less and
+        # answers in two seconds. Every choice ranks only the models that
+        # passed: `needs:` and the evals are the gate, this is the order inside
+        # it. So a preference can never bind a model that fails.
+        type: one-of
+        choices: [cheapest, fastest, best-on-the-evals]
+        surface: S-CAP
+        tier: core
+        help: >
+          among the models that pass, which one PACT picks. `cheapest` is the
+          usual answer and what you get if you leave this out. `fastest`
+          picks the one whose first words come back soonest — what a voice
+          agent wants. `best-on-the-evals` picks the highest score whatever it
+          costs. A model that fails the checks is never picked, whichever you
+          write.
+      accept-when:
+        # 96 §B4. A model is ACCEPTED for this agent when every line holds —
+        # `mmlu.score > 50`, `refund-tone.score >= 0.8`, `cost < 0.05 USD` —
+        # and it is still subject to `evals:` and `must-pass:` like any other.
+        #
+        # One comparison per line and every line has to hold, which is the
+        # decision `scores:` above records: there is no `&&`, no `||` and no
+        # parentheses, so there is no precedence for a non-coder to get wrong.
+        # What a line may NAME is closed and checked (`accept.rs`): a benchmark
+        # the catalogue declares under `benchmarks:`, a metric of this
+        # workspace's suite by its `name:`, or one of six figures every model
+        # has — `pass-rate`, `cost`, `input-price`, `output-price`,
+        # `context-window`, `first-words-within`. Each has its own unit, so
+        # `cost > 0.05` (no currency) and `pass-rate > 80` (a share is at most
+        # 1) are refused where they are written rather than compared wrongly.
+        #
+        # Two moments, and the resolver keeps them apart: a catalogue figure is
+        # known before anything runs, so it narrows the candidates for free; a
+        # suite figure — a metric's mean score, the pass rate, what a case cost
+        # — is known only after the candidate has run the suite, and is held
+        # then. `spec/accept-when.yaml` pins the grammar for both ports.
+        type: list of text
+        surface: S-CAP
+        tier: core
+        help: >
+          the figures a model has to reach to be used for this agent, one
+          comparison per line, all of which have to hold — `mmlu.score > 50`,
+          `terminal-bench.score >= 40`, `refund-tone.score >= 0.8`, `pass-rate
+          >= 90%`, `cost < 0.05 USD`. A benchmark is named as the model
+          catalogue names it under `benchmarks:`; a check of your own by the
+          `name:` it has in your suite's `metrics:`. `pass-rate` and `cost` are
+          what a model scored and spent on your own cases, on average, and
+          `input-price`, `output-price` (per million tokens), `context-window`
+          and `first-words-within` are what the catalogue records. Leave it out
+          and every model that passes your checks is acceptable.
       context-at-least:
         # Was `type: text`, so `context-at-least: banana` loaded clean and
         # reached the resolver verbatim, where it was compared against a real
@@ -1806,9 +2340,12 @@ groups:
         tier: expert
         help: whether these are typical or worst-case numbers
 
-  # How the model is asked to behave. Closed on purpose: every key here works
-  # on every provider, and PACT publishes one default per key so two adapters
-  # cannot disagree about what "no setting" means.
+  # How the model is asked to behave. Closed on purpose: every key here has one
+  # meaning on every provider, and PACT publishes one default per key so two
+  # adapters cannot disagree about what "no setting" means. NOT every key is
+  # TAKEN by every model — a model's catalogue row says which it ignores
+  # (`model-can.ignores`, `ignores-while-thinking`), and `settings.rs` refuses
+  # a line the pinned model would throw away (96 §B5).
   settings:
     fields:
       max-tokens:
@@ -2106,6 +2643,59 @@ groups:
           age. On a machine with no network, set this to how long you are willing
           to run on a review nobody has repeated — `3650d` says "for as long as
           this install lasts", and says it out loud instead of by omission.
+      published:
+        # 96 §E. The snapshot R43 deleted `pinned:` waiting for: *"A snapshot
+        # returns when something writes one."* `pact-sync` writes this,
+        # nobody types it, and it is IN THE TREE rather than in `.pact/` for the
+        # reason Y17 moved the held-out ledger: `.pact/` is deletable and
+        # outside every digest, and this is the thing a reviewer approved. So a
+        # server that changed its tools shows up as a diff in a pull request —
+        # the review the hand-copied `takes:` lines were a poor substitute for —
+        # and `pact check` can hold `inspects:`, `same-request-key:`, `bind:`
+        # and `passes:` to argument names the server really publishes, offline.
+        type: group:published
+        surface: S-CAP
+        tier: expert
+        help: >
+          what this server said it offers, the last time somebody ran
+          `pact-sync` — every tool, its arguments and its wording, with when
+          that was. Written by that command, not by hand; leave it alone and
+          read the change in review when it moves. A tool that says
+          `schemas-from: the-snapshot` sends exactly what is recorded here.
+      if-it-changes:
+        # What is NOT up to this line, because no setting may loosen it: a
+        # change touching an argument a decision rests on — one named by
+        # `inspects:`, `same-request-key:`, `bind:` or `passes:` — or any change
+        # to an action that `spends-money:` or `needs-a-person:`, stops the run
+        # (or asks, when `asks-when-it-changes:` is written), whatever this
+        # says. A new tool is never offered because it appeared; that is
+        # `unlisted-actions:`'s decision, on the tool.
+        type: one-of
+        choices: [stop-and-say-so, ask-a-person, use-what-was-reviewed, use-the-new-one]
+        needed-when:
+          asks-when-it-changes: ask-a-person
+        surface: S-GOV
+        tier: expert
+        help: >
+          what a run does when the server, as it connects, says something
+          different from `published:`. `stop-and-say-so`, what you get if you
+          leave this out, ends the run and names the difference.
+          `ask-a-person` waits for somebody to accept it. `use-what-was-reviewed`
+          carries on with the recorded arguments and wording, and reports the
+          difference. `use-the-new-one` carries on with the server's, and
+          reports it. Whatever this says, a change to an argument an approval or
+          a same-request key depends on, or to an action that spends money or
+          needs a person, is never accepted without one.
+      asks-when-it-changes:
+        type: text
+        names: questions
+        surface: S-EXEC
+        tier: expert
+        summary: which question to put to them when the server changed
+        help: >
+          which question to put to a person when `if-it-changes:` says
+          `ask-a-person`, or when a change nobody may accept unasked arrives,
+          by name.
       description:
         type: text
         surface: S-GEN
@@ -2247,6 +2837,75 @@ groups:
         surface: S-ROUTE
         tier: core
         help: what to do when it is not clear whether this applies
+      embedded-by:
+        # 96 §A7. The embedder was a model role in `allow-egress:` and a
+        # requirement of `looked-up-by: meaning`, and no line could say WHICH
+        # model. It belongs here and not on the agent, and that is not a
+        # matter of taste: the passages were turned into numbers by one model
+        # when the documents were read, and a question turned into numbers by a
+        # different model is compared with them in a space it does not share.
+        # The answer that comes back is confidently unrelated. Two agents
+        # looking in the same documents have to use the same embedder, so the
+        # documents carry it.
+        type: text
+        names: pact:models
+        model-kind: [embedding]
+        plays-role: embedder
+        surface: S-CAP
+        tier: expert
+        help: >
+          which model turns these documents, and every question asked of them,
+          into numbers for looking things up by meaning — by name. It belongs to
+          the documents rather than to an agent, because a question has to be
+          turned into numbers by the same model the documents were. Change it
+          and the documents are read again. Leave it out and PACT picks.
+      reranked-by:
+        type: text
+        names: pact:models
+        model-kind: [reranking]
+        plays-role: embedder
+        surface: S-CAP
+        tier: expert
+        help: >
+          a model that puts the passages found in order of how well they
+          answer the question, before the best few are handed to the agent.
+          Leave it out to keep the order they were found in.
+      interface: &an-interface
+        # 96 §B1. The same idea for tools, procedures and documents: the
+        # CONTRACT is written once — what it is for, what it may be asked,
+        # what needs a person — and which one in particular does the work is a
+        # STRATEGY, chosen per run. That is what lets one templated agent read
+        # Gmail for one customer and Outlook for the next, and a policy about
+        # `email/send-message` hold on both, because it was written against the
+        # interface rather than against either of them.
+        type: yes-no
+        surface: S-CAP
+        tier: expert
+        help: >
+          whether this describes what several interchangeable ones have in
+          common — `email` for Gmail and Outlook, `refund-policy` for each
+          shop's own — rather than being one in particular. Agents name it in
+          `uses:` like any other; which one does the work is chosen for each
+          run, by `chosen-by:`, from the ones that say `implements:` it.
+      chosen-by: &chosen-by
+        type: text
+        surface: S-ROUTE
+        tier: expert
+        help: >
+          on an interface, who picks which one does the work. `the-host` —
+          what you get if you leave this out — means whatever runs your agents
+          picks for each person, from the accounts they connected. Or write
+          `run-inputs.<name>`, a run input of the agent using it written as
+          `one of` the names that implement it. Only the ones that say
+          `implements:` can ever be picked, whoever picks.
+      implements:
+        type: text
+        names: knowledge
+        surface: S-CAP
+        tier: expert
+        help: >
+          which interface these documents are one of, by name — an entry in
+          `knowledge` that says `interface: yes`.
 
   skill:
     fields:
@@ -2369,6 +3028,85 @@ groups:
         surface: S-GEN
         tier: expert
         help: pictures and other files this procedure refers to, in an `assets/` folder
+      interface: *an-interface
+      chosen-by: *chosen-by
+      implements:
+        type: text
+        names: skills
+        surface: S-CAP
+        tier: expert
+        help: >
+          which interface this procedure is one of, by name — an entry in
+          `skills` that says `interface: yes`.
+
+  # What an MCP server, or an agent reached over A2A, said it offers (96 §E).
+  # Machine-written by `pact-sync`; the shapes inside are the server's
+  # own JSON Schema, kept as published, because translating them into answer
+  # shapes on the way in would be PACT deciding what the server meant.
+  published:
+    describe: something a recorded server snapshot can have
+    fields:
+      taken-at:
+        type: text
+        required: yes
+        surface: S-GOV
+        tier: expert
+        help: when the server was asked, as a date and time — `2026-10-27T09:00:00Z`
+      digest:
+        type: text
+        required: yes
+        surface: S-GOV
+        tier: expert
+        help: >
+          one fingerprint over everything recorded below, worked out by
+          `pact-sync`. A run compares it with what the server says as it
+          connects.
+      server-version:
+        type: text
+        surface: S-GEN
+        tier: expert
+        help: the version the server gave for itself, if it gave one
+      instructions:
+        type: text
+        surface: S-GEN
+        tier: expert
+        help: >
+          the wording the server publishes about itself. It reaches a model
+          only fenced off and labelled as the server's, never as this
+          workspace's instructions.
+      tools:
+        type: map of group:published-tool
+        required: yes
+        surface: S-CAP
+        tier: expert
+        help: every tool the server offered, by the server's own name
+
+  published-tool:
+    describe: something a recorded server tool can have
+    fields:
+      description:
+        type: text
+        surface: S-GEN
+        tier: expert
+        help: the server's own wording for this tool
+      takes:
+        type: anything
+        surface: S-CAP
+        tier: expert
+        help: its arguments, as the JSON Schema the server published
+      answers-with:
+        type: anything
+        surface: S-CAP
+        tier: expert
+        help: what it answers with, as the JSON Schema the server published, if it did
+      hints:
+        type: anything
+        surface: S-GEN
+        tier: expert
+        help: >
+          what the server says about the tool's own behaviour — read-only,
+          destructive. Recorded and shown; never trusted to decide anything,
+          because the server wrote it.
 
   credential-reference:
     describe: something a credential reference can have
@@ -2526,6 +3264,77 @@ groups:
           the only actions this agent may call. Anything else the server
           offers is refused. For an agent reached over A2A, each action is one
           skill on its card, named by the skill's id.
+      category:
+        # 96 §B1. A label, not a contract. It is what `pact discover` groups by
+        # and what a builder's catalogue of connectors is browsed by — "which
+        # email tools are there?" — and it promises nothing about what the
+        # tools in it can be asked. What can be SUBSTITUTED for what is an
+        # interface's job (`interface:`, `implements:` below), because two
+        # tools in the same category may have nothing else in common: one CRM
+        # takes a deal id and another an opportunity number.
+        type: text
+        surface: S-GEN
+        tier: core
+        help: >
+          what sort of tool this is, in a word or two — `email`, `calendar`,
+          `crm`, `tickets`, `payments`, `files`, `chat`, `search`. It is for
+          finding and grouping tools, and changes nothing about how one runs.
+          Use the same word for the same sort of thing everywhere. Two tools
+          in one category are not interchangeable unless an interface says so.
+      interface: *an-interface
+      chosen-by: *chosen-by
+      implements:
+        # An implementation inherits the interface's ACTIONS, words and
+        # governance and adds only how they reach its own server: `calls:`,
+        # `passes:`, and anything that asks MORE of a person. Restating
+        # `takes:`, or saying less needs approval than the interface does, is
+        # refused (`interfaces.rs`) — otherwise the email interface's
+        # `needs-a-person: yes` on `send-message` would hold for whichever
+        # provider happened not to restate it.
+        type: text
+        names: tools
+        surface: S-CAP
+        tier: expert
+        help: >
+          which interface this tool is one of, by name — an entry in `tools`
+          that says `interface: yes`. It then offers exactly that interface's
+          actions, with their words and what they need approved, and says
+          only how each one reaches this tool's own server.
+      schemas-from:
+        # 96 §E. `actions:` was two things in one list: WHICH actions this
+        # agent may call — a decision, and the reviewer's — and what each one
+        # TAKES, which is a fact the server already publishes and the author
+        # had to copy by hand and keep copying. The second half moves; the
+        # first half does not. The allow-list, `needs-a-person:`,
+        # `spends-money:` and `inspects:` stay written here whatever this says,
+        # because "the server added a money-moving tool between two runs" is
+        # the failure the allow-list exists to stop.
+        type: one-of
+        choices: [this-file, the-snapshot, the-server]
+        surface: S-CAP
+        tier: expert
+        help: >
+          on a tool that connects to an MCP server or a remote agent, where
+          each action's arguments and answer come from. `this-file`, what you
+          get if you leave this out, means its `takes:` here. `the-snapshot`
+          means the copy `pact-sync` recorded in the server's resource
+          file, so a person reviewed exactly what will be sent. `the-server`
+          means whatever the server says each time it connects, with nothing
+          recorded. Either way, which actions it may call, and what needs a
+          person, stay written here.
+      unlisted-actions:
+        type: one-of
+        choices: [refused, each-call-asks-a-person]
+        surface: S-EXEC
+        tier: expert
+        help: >
+          what happens to an action the server offers that `actions:` does not
+          list. `refused` is what you get if you leave this out. With
+          `each-call-asks-a-person` the model is offered it, and every single
+          call stops and waits for somebody to say yes, showing them the action
+          and what it was called with. Needs `schemas-from:` to be
+          `the-snapshot` or `the-server`, because nothing here says what such
+          an action takes.
 
   action:
     fields:
@@ -2797,6 +3606,29 @@ groups:
           already happen?" before a retry, for systems that time out after
           doing the work. It is given this call's inputs, so each input it
           takes must be one of them, by name.
+      calls:
+        # 96 §B1, §E. The action's KEY is the name everything in this tree
+        # reads — `uses:`, a policy's `tool: email/send-message`, an eval's
+        # `must-call-before:`. The server's own name for it is a fact about one
+        # server, and on an interface's implementations it is a different fact
+        # per provider. One line to hold the second, so the first never has to
+        # change when the provider does.
+        type: text
+        surface: S-CAP
+        tier: expert
+        help: >
+          the server's own name for this action, when it is not the name you
+          gave it here — `send_email` for an action you call `send-message`.
+          Leave it out and the action's name is sent as it is.
+      passes:
+        type: map of text
+        surface: S-CAP
+        tier: expert
+        help: >
+          on a tool that `implements:` an interface, which argument the server
+          is given under which of its own names, one line each, written
+          `<server's name>: <this action's argument>` — `recipient: to`. An
+          argument not named here is sent under its own name.
 
   # A policy says WHEN a person is involved and WHAT must never leave. It no
   # longer says what the person is asked or what they may answer — that is a
@@ -3490,6 +4322,7 @@ groups:
         type: text
         names: pact:models
         surface: S-GOV
+        model-kind: [language]
         tier: core
         help: >
           which model grades the judged rules, by name — one of the entries in
@@ -3621,6 +4454,19 @@ groups:
           for you — one of these scores looks at the last 3 turns by default and
           another at the last 10, so a value quietly evened out here would change
           the number without changing the file anybody reads.
+      name:
+        # 96 §B4. What `needs.accept-when:` calls this score. Optional: a
+        # metric with one obvious name gets it from its address
+        # (`deepeval:faithfulness` is `faithfulness`), and two that would get
+        # the same one — two `deepeval:geval` judgements — are refused until
+        # each says which it is.
+        type: text
+        surface: S-GOV
+        tier: expert
+        help: >
+          what to call this score when an agent's `accept-when:` names it —
+          `refund-tone` for a `deepeval:geval` judging tone. Leave it out and
+          it is called by the part of `uri:` after the colon.
 
   call-order:
     describe: something a call-order rule can have
@@ -3651,6 +4497,21 @@ groups:
         surface: S-GOV
         tier: core
         help: anything that comes with it — a photo, an attachment
+      turns:
+        # 96 §D. DeepEval's ConversationalTestCase, D19's on-ramp (5), and the
+        # case every support desk actually has: the customer's third message
+        # only means something after the first two. `when:` stays required —
+        # it is the sentence a reviewer reads — and this is the conversation
+        # it describes.
+        type: list of group:turn
+        surface: S-GOV
+        tier: core
+        help: >
+          the conversation so far, when the situation is more than one message
+          — one turn per line, the same way an agent's `turns:` is written. The
+          agent's next reply is what `expect:` is about, so the last turn is
+          the person's (or a tool's). These words are exactly what was said:
+          nothing in them is filled in.
       expect:
         type: anything
         surface: S-GOV
@@ -5108,6 +5969,7 @@ groups:
         # like a path, was not a model id, named nothing in the workspace and
         # could never have resolved to anything.
         names: pact:models
+        model-kind: [language]
         surface: S-CAP
         tier: expert
         help: >

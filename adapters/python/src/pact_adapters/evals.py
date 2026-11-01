@@ -269,6 +269,10 @@ class CaseOutcome:
     #: silent non-enforcement T7 exists to forbid, and scoring it as a fail
     #: blames the agent for a missing grader.
     unenforced: tuple[str, ...] = ()
+    #: Every metric score this case was given, by the metric's `name:` (96 §B4)
+    #: — what `needs.accept-when:` averages into `<name>.score`. A metric not
+    #: reached because the case had already failed is absent, not zero.
+    scores: dict[str, float] = field(default_factory=dict)
 
 
 #: A suite that stopped because nothing on the other end of `--serving-at`
@@ -336,6 +340,10 @@ class Verdict:
     #: `verdict()` computes — it is set only by a run that stopped, and it is
     #: what tells a reader "unmeasured" apart from "measured at nought".
     silence: "Silence | None" = None
+    #: What the candidate scored and spent on the suite, by the names
+    #: `needs.accept-when:` reads (96 §B4, `selection.measured`): `pass-rate`,
+    #: `<metric>.score`, and `cost` when the runs were metered.
+    measured: dict[str, float] = field(default_factory=dict)
 
     @property
     def failures(self) -> list[CaseOutcome]:
@@ -675,6 +683,7 @@ def check(
     scores = list(metrics or [])
 
     unenforced: list[str] = []
+    scored: dict[str, float] = {}
     for rule in written:
         if rule.kind == JUDGED:
             continue
@@ -688,9 +697,9 @@ def check(
         # No `run_program` here: this pass takes `pact:` scores only, which are
         # decided by looking at the answer. A carried grader is run in the last
         # pass, and only for a case nothing cheaper already settled.
-        missed = _scores_below(spec, case, result, unenforced)
+        missed = _scores_below(spec, case, result, unenforced, scored=scored)
         if missed:
-            return CaseOutcome(case.key, False, missed, tuple(unenforced))
+            return CaseOutcome(case.key, False, missed, tuple(unenforced), dict(scored))
 
     for rule in written:
         if rule.kind != JUDGED:
@@ -702,11 +711,11 @@ def check(
     for spec in scores:
         if spec.deterministic:
             continue
-        missed = _scores_below(spec, case, result, unenforced, judge, run_program)
+        missed = _scores_below(spec, case, result, unenforced, judge, run_program, scored=scored)
         if missed:
-            return CaseOutcome(case.key, False, missed, tuple(unenforced))
+            return CaseOutcome(case.key, False, missed, tuple(unenforced), dict(scored))
 
-    return CaseOutcome(case.key, True, "", tuple(unenforced))
+    return CaseOutcome(case.key, True, "", tuple(unenforced), dict(scored))
 
 
 def first_broken(
@@ -746,8 +755,13 @@ def _scores_below(
     unenforced: "list[str] | None",
     judge: "Judge | None" = None,
     run_program: "Callable[[str, dict[str, Any]], str] | None" = None,
+    *,
+    scored: "dict[str, float] | None" = None,
 ) -> str:
     """Why this answer misses `spec`'s bar, or `""` if it does not.
+
+    `scored` collects the figure itself, by the metric's name, whenever one
+    was taken — so a score is kept whether or not it cleared the bar.
 
     The one line that runs an author's `metrics:` entry. Everything the metric is
     given comes off the case the author wrote — the situation as `input`, the
@@ -772,6 +786,8 @@ def _scores_below(
     if taken.unenforced:
         _note(unenforced, taken.unenforced)
         return ""
+    if scored is not None:
+        scored[spec.name] = float(taken.score)
     if taken.passed:
         return ""
     why = f" — {taken.reason}" if taken.reason else ""

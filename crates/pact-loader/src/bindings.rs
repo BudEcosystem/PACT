@@ -84,6 +84,7 @@ pub(crate) fn is_binding(said: &str) -> bool {
 pub fn check(document: &Node, schema: &Schema, diags: &mut Diagnostics) {
     let shapes = Shapes::of(document, schema);
     shapes.go_round(diags);
+    shapes.named_like_a_built_in(diags);
     memory_lines(document, diags);
     for (name, entry) in document
         .get("workflows")
@@ -157,6 +158,35 @@ impl<'a> Shapes<'a> {
 
     pub(crate) fn fits(&self, have: &Shape, want: &Shape) -> bool {
         have.fits(want, &|n| self.parts_of(n))
+    }
+
+    /// `loader/a-shape-named-like-a-built-in` (96 §A1): a named shape spelled
+    /// the way one of the built-in shapes is. A built-in spelling wins over a
+    /// workspace's own name, so every line naming this shape would quietly mean
+    /// the built-in one instead — which is how adding `document` to the
+    /// vocabulary would have rewritten three Bud Agent Flow workspaces whose
+    /// `document` has parts of their own. Refused, so whichever side moves next
+    /// is told at the line rather than changing what a tree means.
+    fn named_like_a_built_in(&self, diags: &mut Diagnostics) {
+        for name in self.named.iter().copied() {
+            let wanted = pact_schema::shape::normalised(name);
+            let Some((builtin, _)) = self.vocabulary.iter().find(|(_, words)| {
+                words
+                    .iter()
+                    .any(|w| pact_schema::shape::normalised(w) == wanted)
+            }) else {
+                continue;
+            };
+            diags.push(Diagnostic::error(
+                "loader/a-shape-named-like-a-built-in",
+                self.declared_at[name].clone(),
+                format!(
+                    "The shape '{name}' is spelled the way the built-in shape `{builtin}` is, so \
+                     every line that names it would mean `{builtin}` and never this one."
+                ),
+                format!("Give it a name of its own — `{name}-record`, say."),
+            ));
+        }
     }
 
     /// `loader/a-shape-made-of-itself`: a named shape that, through its parts,

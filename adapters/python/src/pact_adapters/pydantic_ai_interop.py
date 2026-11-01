@@ -1390,7 +1390,11 @@ def build_agent(
             "that rule being applied. fix: pass `judge=` (for a workspace, "
             "`judge.judge_of(...)`), or take the `judged:` line off `checked-by:`."
         )
-    filled = {"run_inputs": run_inputs, "remembers": remembered}
+    filled = {
+        "run_inputs": run_inputs,
+        "remembers": remembered,
+        "language": spec.template_language,
+    }
 
     needs_person = _tools_needing_approval(spec)
 

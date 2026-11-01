@@ -103,6 +103,15 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
         if fields.get(pact_doc::UNLOADED).is_some() {
             continue;
         }
+        // An interface reaches nowhere by design (96 §B1): each tool that
+        // `implements:` it says where, and is held to this rule itself.
+        // `interfaces.rs` refuses an interface that writes a transport line.
+        if fields
+            .get("interface")
+            .is_some_and(|e| crate::workflows::said_yes(&e.node))
+        {
+            continue;
+        }
         let written: Vec<&(&str, &str)> = WAYS
             .iter()
             .filter(|(field, _)| {

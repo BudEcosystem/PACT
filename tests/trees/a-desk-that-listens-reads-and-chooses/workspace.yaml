@@ -1,0 +1,9 @@
+# Every field 96 adds, written once, in a workspace where nothing may leave the
+# box: a voice desk that hears, reads and speaks on this machine, looks things
+# up by meaning with an embedder served here, reaches whichever mailbox each
+# customer connected, and fills its words in with Jinja.
+name: a-desk-that-listens-reads-and-chooses
+description: A shop's phone desk, written once for every shop that uses it.
+owner: support-operations
+allow-egress: []
+template-language: jinja

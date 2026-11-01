@@ -97,6 +97,9 @@ pact-export = "pact_adapters.exporting:main"
 # field for — and the report is where the difference is said.
 pact-pydantic-ai = "pact_adapters.pydantic_ai_interop:main"
 pact-improve = "pact_adapters.optimising:main"
+# 96 §E. Records what an MCP server offers into `resources/<server>.yaml`, so a
+# server's change is a diff somebody reviews. `pact check` never connects.
+pact-sync = "pact_adapters.syncing:main"
 # The one table from PACT field to Pydantic AI construct (02P §4), written out
 # as a page a person reads.
 pact-mapping = "pact_adapters.pydantic_ai_registry:main"

@@ -1,0 +1,37 @@
+resource-kind: mcp-server
+endpoint: host/gmail-mcp
+auth: {by-reference: host/gmail-credential}
+description: Gmail, as the platform team publishes it.
+if-it-changes: use-what-was-reviewed
+# Written by `pact-sync`. Review the change; do not edit by hand.
+published:
+  taken-at: '2026-10-27T13:46:49Z'
+  digest: sha256:4205872fb862e101de61b388d73b97d9078d8197eac6e0cf008d672e598fa993
+  server-version: 1.4.0
+  tools:
+    search_threads:
+      description: Search the mailbox.
+      takes:
+        type: object
+        properties:
+          q:
+            type: string
+        required:
+        - q
+      hints:
+        readOnlyHint: true
+    send_email:
+      description: Send an email.
+      takes:
+        type: object
+        properties:
+          recipient:
+            type: string
+          subject:
+            type: string
+          html_body:
+            type: string
+        required:
+        - recipient
+        - subject
+        - html_body

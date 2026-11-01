@@ -55,6 +55,12 @@ THE_RUN_PATH = (
 #: Modules that DO touch a disk, each with the reason it is not a P-1 breach.
 #: A module here is one somebody types, not one a run reaches.
 COMMANDS: dict[str, str] = {
+    "selection": "reads the distribution's `models/catalog.yaml` for the benchmarks it "
+                 "declares, the same price list `resolve` reads, never an author's file",
+    "benchmarks": "writes a benchmark figure a person measured or read into a workspace's "
+                  "`models/catalog.yaml`, run by a command (`budflow benchmark`), never by a run",
+    "syncing": "`pact-sync`: a person runs it to WRITE a server's recorded tools into "
+               "its resource file, which is then reviewed like any other change",
     "scoring": "the eval command. Reads the tree because a person pointed it at "
                "one, and hands the DOCUMENT to the harness",
     "conformance": "the Conformance Report, over every workspace under a path",

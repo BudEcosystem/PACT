@@ -1,0 +1,5 @@
+description: Acme's returns and delivery policies.
+implements: shop-policies
+looked-up-by: meaning-and-words
+embedded-by: nomic-embed-text
+reranked-by: bge-reranker-v2-m3

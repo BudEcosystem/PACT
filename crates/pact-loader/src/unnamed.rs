@@ -198,6 +198,7 @@ pub fn nothing_points_at_it(document: &Node, schema: &Schema, diags: &mut Diagno
             if mentioned.contains(name.as_str())
                 || in_sentences.contains(name.as_str())
                 || attaches_itself(&entry.node)
+                || reached_through_its_interface(&entry.node, &mentioned)
                 || a_room_nothing_can_point_at(kind.section, &entry.node, room_wanted)
             {
                 continue;
@@ -241,6 +242,15 @@ fn a_room_nothing_can_point_at(section: &str, node: &Node, wanted: bool) -> bool
     wanted
         && section == "resources"
         && node.get("resource-kind").and_then(Node::as_str) == Some("sandbox")
+}
+
+/// An implementation is never named by an agent — that is the point of it
+/// (96 §B1). It is reached through the interface it `implements:`, so it takes
+/// effect exactly when that interface is named.
+fn reached_through_its_interface(node: &Node, mentioned: &BTreeSet<&str>) -> bool {
+    node.get("implements")
+        .and_then(Node::as_str)
+        .is_some_and(|of| mentioned.contains(of.trim()))
 }
 
 /// A document that says, on its own line, that it applies to everything.

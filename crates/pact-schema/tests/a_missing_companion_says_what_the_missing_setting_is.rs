@@ -221,6 +221,13 @@ const SENTENCES: &[(&str, &str, &str)] = &[
         "the share of finished live runs a reviewer sees",
     ),
     ("evals", "reviewed-by", "who reviews the sample"),
+    // 96 §E: what a run asks when an MCP server changed. Its help opens with the
+    // condition (`when if-it-changes: says ask-a-person`), so it has a `summary:`.
+    (
+        "resource",
+        "asks-when-it-changes",
+        "which question to put to them when the server changed",
+    ),
 ];
 
 fn expected(pair: &Pair) -> Option<&'static str> {
@@ -324,12 +331,12 @@ fn the_settings_that_carry_a_summary_are_named_by_it_and_not_by_their_help() {
         .filter(|p| !field_strings(&p.group, &p.owed).0.is_empty())
         .count();
     assert_eq!(
-        with_summary, 17,
+        with_summary, 18,
         "seven of the ten pairings needed a `summary:` when this was written — `port.every`, \
          `teamwork.enough-is`, `teamwork.gives-up-after`, and the four `asks:` fields — and the \
          three a workflow's stage added (`call`, `chooses-between`, `over`) need one each, as do \
          the two a wait and a table added (`question.enough-is`, `value.rows-are`) and the two \
-         a failure plan added (its `asks:` and `undo:`), a `run-code` stage's `fuel:`, and a sampled frame's `sample:` and `reviewed-by:`. If that count moved, the table above still holds; this line is here so a `summary:` \
+         a failure plan added (its `asks:` and `undo:`), a `run-code` stage's `fuel:`, a sampled frame's `sample:` and `reviewed-by:`, and the question a changed MCP server is asked under (`asks-when-it-changes:`). If that count moved, the table above still holds; this line is here so a `summary:` \
          cannot be quietly deleted and replaced by a fallback that happens to read."
     );
 }

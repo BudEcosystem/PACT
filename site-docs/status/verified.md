@@ -12,14 +12,14 @@ from an earlier document.
 
 | Claim | Value | How to check |
 |---|---|---|
-| Rust tests | **1464** | `cargo test --workspace` |
-| Adapter tests | **2856** | `cd adapters/python && uv run pytest tests/ -q` |
-| Total | **4,320** | both of the above |
+| Rust tests | **1489** | `cargo test --workspace` |
+| Adapter tests | **3016** | `cd adapters/python && uv run pytest tests/ -q` |
+| Total | **4,505** | both of the above |
 | TypeScript type-checks | clean | `cd adapters/typescript && npx tsc --noEmit` |
 | Lints | clean | `cargo clippy --all-targets` |
 | Worked example loads | 498 settings | `cargo run -p pact-cli -- check examples/refund-desk` |
-| Schema kinds | **56** | `python3 -c "import yaml;print(len(yaml.safe_load(open('spec/schema.yaml'))['groups']))"` |
-| Fields that resolve a name | **56** | `grep -cE '^\s*names:' spec/schema.yaml` |
+| Schema kinds | **62** | `python3 -c "import yaml;print(len(yaml.safe_load(open('spec/schema.yaml'))['groups']))"` |
+| Fields that resolve a name | **64** | `grep -cE '^\s*names:' spec/schema.yaml` |
 
 ## What is proven, and what "proven" means
 

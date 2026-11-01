@@ -1271,7 +1271,7 @@ pub(crate) fn entry_span(entry: &pact_doc::Entry) -> Span {
     entry.key_span.clone().merge(&entry.node.span)
 }
 
-pub(crate) fn said_yes(n: &Node) -> bool {
+pub fn said_yes(n: &Node) -> bool {
     match &n.value {
         Value::Bool(b) => *b,
         Value::Str(s) => matches!(s.trim(), "yes" | "true" | "on"),

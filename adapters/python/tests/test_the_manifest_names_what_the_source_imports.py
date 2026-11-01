@@ -61,6 +61,14 @@ OPTIONAL: frozenset[str] = frozenset({
     # one that needs nothing installed at all — which is the condition this list
     # requires of everything in it.
     "fastmcp",
+    # 96 §C. Only a workspace that writes `template-language: jinja` renders a
+    # template, and `holes._render_jinja` turns a missing Jinja2 into a sentence
+    # naming the line to type, so an install for `holes` workspaces pulls nothing.
+    "jinja2",
+    # 96 §E. `pact-sync --url` asks a live server through the MCP SDK; its
+    # absence is a sentence naming `pip install mcp` and the `--from-file` path
+    # that needs nothing installed.
+    "mcp",
 })
 
 

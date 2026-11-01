@@ -1,0 +1,9 @@
+description: Outlook, through the platform team's MCP server.
+implements: email
+connect: outlook-server
+actions:
+  search-messages:
+    calls: search
+  send-message:
+    calls: sendMail
+    passes: {toRecipients: to}

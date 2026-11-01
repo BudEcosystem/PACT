@@ -149,18 +149,78 @@ def holes_in(text: str) -> tuple[Hole, ...]:
     return tuple(seen)
 
 
+#: 96 §C. The filters and tests `template-language: jinja` may use: the ones
+#: Jinja2 and MiniJinja both ship with one meaning. The SAME two lists as
+#: `crates/pact-loader/src/jinja.rs`, which refuses anything else at check time;
+#: `tests/test_a_template_is_rendered_as_it_was_checked.py` holds them equal.
+JINJA_FILTERS: frozenset[str] = frozenset({
+    "abs", "capitalize", "count", "d", "default", "first", "float", "indent", "int",
+    "items", "join", "last", "length", "list", "lower", "max", "min", "replace",
+    "reverse", "round", "sort", "string", "sum", "title", "trim", "unique", "upper",
+})
+JINJA_TESTS: frozenset[str] = frozenset({
+    "defined", "undefined", "none", "number", "string", "sequence", "mapping", "even", "odd",
+})
+
+
+def _template_names(values: Mapping[str, Any]) -> dict[str, Any]:
+    """`brand-voice` as a template writes it: `brand_voice`."""
+    return {str(k).replace("-", "_"): v for k, v in (values or {}).items()}
+
+
+def _render_jinja(text: str, run_inputs: Mapping[str, Any], remembers: Mapping[str, Any]) -> str:
+    """One authored template, rendered once, in the sandbox, from data.
+
+    `SandboxedEnvironment` with no globals and only the shared filters and
+    tests, so a template can reach nothing `pact check` did not allow;
+    `StrictUndefined`, so a value the run was not given is an error and never an
+    empty string; no autoescape, because these are words for a model, not HTML.
+    What is inserted is never rendered again — a customer who typed `{{ 7*7 }}`
+    is quoted, not obeyed.
+    """
+    try:
+        from jinja2 import StrictUndefined, TemplateError, UndefinedError
+        from jinja2.sandbox import SandboxedEnvironment
+    except ImportError as missing:  # pragma: no cover - depends on the machine
+        raise ImportError(
+            "this workspace says `template-language: jinja`, and Jinja2 is not installed "
+            "here. fix: `pip install jinja2`, or write `template-language: holes`."
+        ) from missing
+
+    env = SandboxedEnvironment(
+        undefined=StrictUndefined, autoescape=False, keep_trailing_newline=True
+    )
+    env.globals.clear()
+    env.filters = {k: v for k, v in env.filters.items() if k in JINJA_FILTERS}
+    env.tests = {k: v for k, v in env.tests.items() if k in JINJA_TESTS}
+    try:
+        return env.from_string(text).render(
+            run_inputs=_template_names(run_inputs), remembers=_template_names(remembers)
+        )
+    except UndefinedError as missing:
+        raise Unfilled(Hole(RUN_INPUTS, str(missing))) from missing
+    except TemplateError as broken:  # pragma: no cover - `pact check` refuses these first
+        raise ValueError(f"this template cannot be rendered: {broken}") from broken
+
+
 def fill(
     text: str,
     *,
     run_inputs: Mapping[str, Any] | None = None,
     remembers: Mapping[str, Any] | None = None,
+    language: str = "holes",
 ) -> str:
     """`text` with every hole replaced by its value, and every escaped `\\{{` as `{{`.
 
     Text goes in as written; any other value as JSON, so a list of examples
     reads as a list rather than as a Python repr. Raises `Unfilled` for a hole
     with no value, absent or `None`.
+
+    `language="jinja"` (the workspace's `template-language:`, 96 §C) renders
+    `text` as a template instead, through `_render_jinja`.
     """
+    if language == "jinja":
+        return _render_jinja(text, run_inputs or {}, remembers or {})
     sources = {RUN_INPUTS: run_inputs or {}, REMEMBERS: remembers or {}}
     parts: list[str] = []
     at = 0

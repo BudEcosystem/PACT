@@ -47,6 +47,12 @@ thiserror = "2"
 unicode-normalization = "0.1"
 sha2 = "0.10"
 yaml-rust2 = "0.11"
+# 96 §C. The checker for `template-language: jinja`. Pinned EXACTLY, and with
+# `unstable_machinery`, because what `holes.rs` reads is the compiled
+# instruction list — every filter, test, function and include a template uses —
+# and that list is the crate's unstable surface. Nothing renders here: the
+# document carries the template, and a runtime renders it.
+minijinja = { version = "=2.21.0", default-features = false, features = ["builtins", "unstable_machinery"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

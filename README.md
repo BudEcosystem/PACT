@@ -640,6 +640,11 @@ the spec. Every one is checked by `pact check` and held by the harness. The deta
 | **Learning, scored by the host** | `learning.yaml` | a cycle is scored by the host's own runner from a kept baseline, and "held for a person" is its own outcome |
 | **REST services, imported** | `pact-import --as openapi api.yaml --out .` | one reviewed tool file per operation of an OpenAPI description; an operation that does not declare what it does is marked *Needs a look* and treated as a write that cannot be undone; the report names everything PACT cannot say |
 | **Blanks in an address** | `url: host/pets/{pet-id}?tag={tag}` | each blank is filled from the call's argument of that name; a blank no argument fills is refused |
+| **Voice, documents and embeddings** | `voice:`, `accepts: {message: audio}`, `embedded-by:` | the transcriber, speaker, voice and languages are held against the catalogue; a voice heard on this machine stays here behind a hosted model |
+| **Interfaces** | `tools/email.yaml` with `interface: yes`; `tools/gmail.yaml` with `implements: email` | one contract, several providers, picked per person or per run; an implementation may never ask less of a person than its interface |
+| **Jinja and turns** | `template-language: jinja`; `turns:` from `system`, `developer`, `user`, `agent`, `tool` | words that choose and repeat, in the dialect both ports render one way; worked conversations and multi-turn eval cases |
+| **Models chosen by evals** | `accept-when: [mmlu.score > 50, refund-tone.score >= 0.8, cost < 0.05 USD]` | a benchmark the catalogue records, a check of your own suite, what a case cost — every line held, before and after the candidate runs your cases (`budflow choose-model`) |
+| **Tool schemas from the server** | `pact-sync <server>`; `schemas-from: the-snapshot` | the server's own arguments, recorded and reviewed; which actions may be called stays written here |
 | **A social security number, hidden** | `anything that looks like a social security number` in `redaction.yaml` | a US one is hidden however it is parted; a bank account in lower case is a bank account too |
 
 It also tightened what already existed: nobody is asked to approve a call that at-most-once
@@ -660,11 +665,11 @@ framework is an extra.
 |---|---|
 | **Design** | Thesis, 28 binding decisions, FRD (120 requirements), 60-row refusal ledger — complete |
 | **Research** | 14 source-grounded studies, ~15,750 lines, over 140 repos (~15 GB) + 57 papers |
-| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **4435 tests (1476 Rust + 2959 adapter), clippy clean, TypeScript type-checked** |
+| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **4505 tests (1489 Rust + 3016 adapter), clippy clean, TypeScript type-checked** |
 | **Adapters** | **All 7 named targets**, proven against one shared conformance suite |
 
 ```bash
-./scripts/test-all.sh          # 4435 tests, Rust + 7 adapters, fully offline
+./scripts/test-all.sh          # 4505 tests, Rust + 7 adapters, fully offline
 ```
 
 **What is still owed** is not hidden — it lives in

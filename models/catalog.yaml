@@ -116,6 +116,86 @@ version: 1
 # set and a default that needs a hosted API is a default that cannot run there.
 default: qwen2.5-7b-instruct
 
+# The benchmarks a row may record a score for (96 §B4), named once so that
+# `MMLU`, `mmlu` and `MMLU (5-shot)` are one benchmark and an agent's
+# `accept-when: mmlu.score > 50` finds every row that published one. `runs:` is
+# how a figure is MEASURED here: `deepeval:<name>` for the benchmarks DeepEval
+# 4.1 ships (`budflow benchmark run`), `host:<name>` for one a separate harness
+# runs, whose result `budflow benchmark record` writes down with its source. No
+# figures are recorded below for any model — none has been measured on this
+# distribution, and a figure copied from a leaderboard is recorded by whoever
+# copies it, with the leaderboard as its source.
+benchmarks:
+  mmlu:
+    description: Multiple-choice questions across 57 subjects, from school to professional level.
+    also-known-as: [MMLU, "MMLU (5-shot)"]
+    runs: deepeval:MMLU
+    with: {n_shots: 5}
+  mmlu-pro:
+    description: A harder ten-option successor to MMLU, weighted towards reasoning.
+    also-known-as: [MMLU-Pro]
+    runs: host:mmlu-pro
+  gpqa-diamond:
+    description: Graduate-level science questions written to defeat search.
+    also-known-as: [GPQA, GPQA Diamond]
+    runs: host:gpqa
+  gsm8k:
+    description: Grade-school maths word problems, answered step by step.
+    also-known-as: [GSM8K]
+    runs: deepeval:GSM8K
+  humaneval:
+    description: Writing Python functions that pass hidden unit tests.
+    also-known-as: [HumanEval]
+    runs: deepeval:HumanEval
+  hellaswag:
+    description: Choosing the sensible ending of an everyday situation.
+    also-known-as: [HellaSwag]
+    runs: deepeval:HellaSwag
+  truthfulqa:
+    description: Questions people commonly answer wrongly, scored for truthfulness.
+    also-known-as: [TruthfulQA]
+    runs: deepeval:TruthfulQA
+  big-bench-hard:
+    description: The 23 hardest BIG-Bench reasoning tasks.
+    also-known-as: [BBH, BIG-Bench Hard]
+    runs: deepeval:BigBenchHard
+  drop:
+    description: Reading a passage and reasoning over the numbers in it.
+    also-known-as: [DROP]
+    runs: deepeval:DROP
+  arc:
+    description: Grade-school science questions, challenge set.
+    also-known-as: [ARC, ARC-Challenge]
+    runs: deepeval:ARC
+  winogrande:
+    description: Resolving which thing a pronoun refers to, adversarially chosen.
+    also-known-as: [WinoGrande]
+    runs: deepeval:Winogrande
+  ifeval:
+    description: Following verifiable formatting and content instructions.
+    also-known-as: [IFEval]
+    runs: deepeval:IFEval
+  mathqa:
+    description: Multiple-choice maths word problems.
+    also-known-as: [MathQA]
+    runs: deepeval:MathQA
+  mmmu:
+    description: College-level questions about images, diagrams and charts.
+    also-known-as: [MMMU]
+    runs: host:mmmu
+  swe-bench-verified:
+    description: Fixing real GitHub issues in real repositories, human-verified subset.
+    also-known-as: [SWE-bench Verified, SWE-Verified]
+    runs: host:swe-bench
+  terminal-bench:
+    description: Completing real tasks in a terminal, end to end.
+    also-known-as: [Terminal-Bench, Terminal-Bench 2.0]
+    runs: host:terminal-bench
+  tau-bench:
+    description: Customer-service conversations with tools and policies to follow.
+    also-known-as: [τ-bench, tau2-bench]
+    runs: host:tau-bench
+
 models:
 
   # ───────────────────────────────────────────── locally served (D17: no network)
@@ -341,6 +421,11 @@ models:
       tool-calling: parallel
       modality-in: [text, image]
       modality-out: [text]
+      # 96 §B5, read from Pydantic AI 2.54 as pinned in `adapters/python/uv.lock`:
+      # `profiles/anthropic.py` sets `anthropic_disallows_sampling_settings` for this
+      # model, so `temperature`, `top_p` and `top_k` are dropped whatever is written.
+      ignores: [temperature, top-p, top-k]
+      thinks-unless-told: yes   # `thinking_enabled_by_default`
       context-window:
         value: 1000000
         provenance:
@@ -374,6 +459,11 @@ models:
       tool-calling: parallel
       modality-in: [text, image]
       modality-out: [text]
+      # 96 §B5, read from Pydantic AI 2.54 as pinned in `adapters/python/uv.lock`:
+      # `profiles/anthropic.py` sets `anthropic_disallows_sampling_settings` for this
+      # model, so `temperature`, `top_p` and `top_k` are dropped whatever is written.
+      ignores: [temperature, top-p, top-k]
+      thinks-unless-told: yes   # `thinking_enabled_by_default`
       context-window:
         value: 1000000
         provenance:
@@ -464,6 +554,12 @@ models:
       tool-calling: parallel
       modality-in: [text, image]
       modality-out: [text]
+      # 96 §B5, read from Pydantic AI 2.54 as pinned in `adapters/python/uv.lock`:
+      # `models/openai.py` never sends `top_k`; `_drop_sampling_params_for_reasoning`
+      # drops `profiles/openai.py`'s SAMPLING_PARAMS while reasoning is on.
+      ignores: [top-k]
+      ignores-while-thinking: [temperature, top-p, presence-penalty, frequency-penalty]
+      thinks-unless-told: no    # `thinking_enabled_by_default`
       context-window:
         value: 1050000
         provenance:
@@ -536,6 +632,12 @@ models:
       tool-calling: parallel
       modality-in: [text]
       modality-out: [text]
+      # 96 §B5, read from Pydantic AI 2.54 as pinned in `adapters/python/uv.lock`:
+      # `models/openai.py` never sends `top_k`; `_drop_sampling_params_for_reasoning`
+      # drops `profiles/openai.py`'s SAMPLING_PARAMS while reasoning is on.
+      ignores: [top-k]
+      ignores-while-thinking: [temperature, top-p, presence-penalty, frequency-penalty]
+      thinks-unless-told: no    # `thinking_enabled_by_default`
       context-window:
         value: 400000
         provenance:
@@ -588,6 +690,12 @@ models:
       tool-calling: parallel
       modality-in: [text]
       modality-out: [text]
+      # 96 §B5, read from Pydantic AI 2.54 as pinned in `adapters/python/uv.lock`:
+      # `models/openai.py` never sends `top_k`; `_drop_sampling_params_for_reasoning`
+      # drops `profiles/openai.py`'s SAMPLING_PARAMS while reasoning is on.
+      ignores: [top-k]
+      ignores-while-thinking: [temperature, top-p, presence-penalty, frequency-penalty]
+      thinks-unless-told: yes   # `thinking_enabled_by_default`
       context-window:
         value: 1000000
         provenance:

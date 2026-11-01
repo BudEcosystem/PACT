@@ -273,6 +273,9 @@ struct Reach<'a> {
     /// What travels besides the words, in the author's own words. `None` for a
     /// plain model call.
     carries: Option<String>,
+    /// The kinds of model the line takes (`model-kind:`, 96 §A2), so the model
+    /// offered instead is one that can do the job. Empty means any.
+    kinds: &'a [String],
 }
 
 fn yes(node: &Node) -> bool {
@@ -314,6 +317,8 @@ struct Bound<'a> {
     roles: Vec<&'a str>,
     /// What a refusal calls the model this line binds.
     noun: &'static str,
+    /// The kinds of model the line takes — see [`Reach::kinds`].
+    kinds: &'a [String],
 }
 
 /// Every model id in this tree, walked **through the specification**.
@@ -384,6 +389,7 @@ fn bindings<'a>(
                         id,
                         noun: noun(&f.name, &played),
                         roles: played.clone(),
+                        kinds: &f.model_kind,
                     });
                 }
                 continue;
@@ -511,6 +517,7 @@ fn noun(field: &str, roles: &[&str]) -> &'static str {
     match field {
         "model-for-checking" => "the model that checks the work",
         "summarised-by" => "the model that writes the summary",
+        "reranked-by" => "the model that puts the passages in order",
         _ => part(roles[0]),
     }
 }
@@ -536,6 +543,24 @@ fn plays<'a>(group: &'a pact_schema::Group, field: &str, owner: &Node) -> Option
     // the model an eval suite grades with and not about a word.
     if (group.name.as_str(), field) == ("evals", "graded-by") {
         return Some(vec!["judge", "llm"]);
+    }
+    // 96 §A7. The role a binding plays, said by the specification on the
+    // field itself (`plays-role:`) — `embedder` on `knowledge.embedded-by`,
+    // `stt` on `voice.hears-with`, `tts` on `voice.speaks-with`. The general
+    // `llm` grant carries it exactly when it carries the same word written as
+    // a `role:`, which is [`WORDS`]' one decision, read once.
+    if let Some(role) = group
+        .fields
+        .iter()
+        .find(|f| f.name == field)
+        .map(|f| f.plays_role.as_str())
+        .filter(|r| !r.is_empty())
+    {
+        let mut played = vec![role];
+        if WORDS.contains(&role) && role != "llm" {
+            played.push("llm");
+        }
+        return Some(played);
     }
     // The one place an author can write a role by hand. The schema's help for
     // `learning-model.role` promises it names "one of the model roles
@@ -661,6 +686,7 @@ fn reaches<'a>(
                 roles: b.roles,
                 noun: b.noun,
                 carries: None,
+                kinds: b.kinds,
             });
         }
     }
@@ -685,6 +711,13 @@ fn reaches<'a>(
                     // mistake gets one message.
                     continue;
                 }
+                // A transcriber or a speaker (96 §A6) handles the sound by
+                // being what it is, and is held to `stt` or `tts` on its own
+                // line. The recording and the reply are not ALSO "sent with
+                // the words" to it — a transcriber never hears the reply.
+                if b.roles.iter().any(|r| matches!(*r, "stt" | "tts")) {
+                    continue;
+                }
                 for (roles, written) in &carries {
                     out.push(Reach {
                         field: b.written,
@@ -692,6 +725,7 @@ fn reaches<'a>(
                         roles: roles.clone(),
                         noun: b.noun,
                         carries: Some(written.clone()),
+                        kinds: b.kinds,
                     });
                 }
             }
@@ -722,12 +756,27 @@ fn reaches<'a>(
 /// refuse a transcription agent for a reply it never speaks, which is a worse
 /// answer than the one this replaces — and it is only consulted when neither
 /// `accepts:` nor `answers-with:` has already said which way the audio goes.
+///
+/// 96 §A6: an agent that names its own transcriber (`voice.hears-with:`) has
+/// the recording stop THERE — every other model its conversation passes
+/// through is handed the words — and one that names its own speaker
+/// (`voice.speaks-with:`) hands that model words to say. The named model is
+/// held to `stt` or `tts` as a binding of its own, so a local transcriber in
+/// front of a hosted language model needs `llm` and nothing else: which is the
+/// whole point of writing one, for a desk whose callers' voices may not leave.
 fn carried(agent: &Node) -> Vec<(Vec<&'static str>, String)> {
     let mut out: Vec<(Vec<&'static str>, String)> = Vec::new();
-    if let Some(written) = audio_entry(agent, "accepts") {
+    let voice = agent.get("voice");
+    let cascade = voice
+        .and_then(|v| v.get("pipeline"))
+        .and_then(Node::as_str)
+        .map(str::trim)
+        != Some("one-speech-model");
+    let names = |field: &str| cascade && voice.and_then(|v| v.get(field)).is_some();
+    if let Some(written) = audio_entry(agent, "accepts").filter(|_| !names("hears-with")) {
         out.push((vec!["stt"], written));
     }
-    if let Some(written) = audio_entry(agent, "answers-with") {
+    if let Some(written) = audio_entry(agent, "answers-with").filter(|_| !names("speaks-with")) {
         out.push((vec!["tts"], written));
     }
     if out.is_empty()
@@ -824,6 +873,7 @@ fn envelope<'a>(
             id: default,
             roles: vec!["llm"],
             noun: part("llm"),
+            kinds: &[],
         });
     }
     found
@@ -952,8 +1002,23 @@ pub fn refusals(
             roles,
             noun,
             carries,
+            kinds,
             ..
         } = &reach;
+        // A model of the kind this line takes, served here (96 §A2) — a
+        // transcriber for `hears-with:`, never the chat model `offer` is. The
+        // usual offer stands whenever it is of a kind the line takes.
+        let rows = pact_loader::modelkinds::catalogue(crate::BUILTIN_CATALOGUE, root);
+        let fits =
+            |id: &str| kinds.is_empty() || rows.get(id).is_some_and(|r| kinds.contains(&r.kind));
+        let of_kind = (!fits(offer)).then(|| {
+            local
+                .iter()
+                .find(|l| fits(l))
+                .cloned()
+                .unwrap_or_else(|| format!("a locally-served {} model", kinds[0]))
+        });
+        let offer = of_kind.as_deref().unwrap_or(offer);
         let message = match carries {
             None => format!(
                 "`{field}: {id}` is only served off this machine, and this workspace \

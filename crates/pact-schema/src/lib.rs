@@ -396,6 +396,27 @@ pub struct Field {
     /// gives: the alternative buries a capability decision in the core and makes
     /// the next kind that shares a vocabulary cost a recompile (F-1).
     pub always_may: Vec<String>,
+    /// On a model binding, the kinds of model that may stand here (96 §A2).
+    ///
+    /// `names: pact:models` says a line names a model; it could not say WHICH
+    /// sort. Once the catalogue held embedders, transcribers and speakers as
+    /// well as language models, `model: an-embedder` and `embedded-by:
+    /// a-chat-model` would both have resolved — to a model that computes a
+    /// different function from the one the line calls. Empty means any kind.
+    /// Read by `pact_loader::modelkinds`.
+    pub model_kind: Vec<String>,
+    /// On a model binding, the `allow-egress:` role the model it names plays
+    /// (96 §A7) — `embedder` on `knowledge.embedded-by`, `stt` on
+    /// `voice.hears-with`. Empty means the ordinary rule: an `llm`, unless a
+    /// sibling `role:` says otherwise. Data for the reason `reaches_outside`
+    /// is data: the field that binds a transcriber joins the boundary by
+    /// existing, not by being remembered in `egress.rs`.
+    pub plays_role: String,
+    /// Whether a run fills this text in before a model reads it — the words a
+    /// `{{run-inputs.<name>}}` hole, or under `template-language: jinja` a
+    /// template, may appear in (96 §C). Read by `pact_loader::holes`, which
+    /// kept the same list as a Rust const of two field names.
+    pub template: bool,
 }
 
 impl Field {
@@ -420,6 +441,9 @@ impl Field {
             at_least: None,
             forms: None,
             always_may: Vec::new(),
+            model_kind: Vec::new(),
+            plays_role: String::new(),
+            template: false,
         }
     }
 

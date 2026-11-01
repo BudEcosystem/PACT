@@ -1,0 +1,4 @@
+resource-kind: mcp-server
+endpoint: host/outlook-mcp
+auth: {by-reference: host/outlook-credential}
+description: Outlook, as the platform team publishes it.

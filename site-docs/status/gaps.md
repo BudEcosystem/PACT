@@ -39,6 +39,22 @@ intention supported by careful diagnostics, not a measured fact.
 
 Real, working, and smaller than they sound.
 
+### Checked, carried, and not yet acted on at run time
+
+`pact check` holds every line of these and the document carries them; the runtime
+half is still to build (`docs/96-MODALITIES-INTERFACES-TEMPLATES-TURNS.md` §H):
+
+- **`turns:`** are not yet sent to a model by any transport.
+- **Interface implementations:** `calls:` and `passes:` are checked against the
+  server's snapshot, but no runtime yet renames a call on its way to the server,
+  or swaps an interface for the implementation `chosen-by:` picks.
+- **`unlisted-actions: each-call-asks-a-person`** is checked, not yet enforced.
+- **Voice:** `voice.plan_for` makes the plan, including the pipeline PACT picks;
+  no host in these repositories carries an audio stream.
+- **The TypeScript port** renders no Jinja and reads none of the new shapes.
+- **`pact-sync --url`** and **`budflow benchmark run`** are written against live
+  services and untested offline; `--from-file` and `benchmark record` are tested.
+
 ### The TypeScript port is a subset
 
 It implements the loop, the ceilings, stage routing and the answer shape the

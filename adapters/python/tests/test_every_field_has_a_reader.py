@@ -183,6 +183,9 @@ DELEGATED: dict[str, str] = {
         "§4 row: the store discards it on this schedule. A retention promise "
         "PACT records and something else keeps"
     ),
+    # 96 §A7. Kept by what stores the documents: PACT builds no index, and the
+    # host's document store sizes one from the embedder's own count.
+    "model-can.dimensions": "the host's document store sizes its index from it",
 }
 
 #: Fields that SHOULD be read and are not. Each is a defect, not a delegation.
