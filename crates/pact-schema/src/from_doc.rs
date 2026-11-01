@@ -263,6 +263,16 @@ impl Schema {
                         // for what it stops the shared sentence list handing to
                         // `redaction.hide`.
                         field.always_may = names(f, "always-may");
+                        // 96 §A2, §A7, §C — see `Field::model_kind`,
+                        // `Field::plays_role` and `Field::template`.
+                        field.model_kind = names(f, "model-kind");
+                        field.plays_role = f
+                            .get("plays-role")
+                            .and_then(Node::as_str)
+                            .unwrap_or("")
+                            .trim()
+                            .to_string();
+                        field.template = f.get("template").and_then(as_bool).unwrap_or(false);
                         group.fields.push(field);
                     }
                     None => diags.push(Diagnostic::error(
@@ -285,6 +295,7 @@ impl Schema {
         // names the `agent` group or a workspace collection, and neither exists
         // yet while the group that carries the attribute is being read.
         check_satisfiers_name_something_real(&schema, diags);
+        check_model_attributes_say_something(&schema, diags);
         schema
     }
 }
@@ -352,6 +363,75 @@ fn check_satisfiers_name_something_real(schema: &Schema, diags: &mut Diagnostics
                          Please report it.",
                     ));
                 }
+            }
+        }
+    }
+}
+
+/// `model-kind:` and `plays-role:` mean something only on a line that names a
+/// model, and only in the words the specification has for kinds and roles.
+///
+/// Either one anywhere else is a check that loads and does nothing — the
+/// shape `schema/key-names-without-keys` refuses for `key-names:` — and a kind
+/// spelt `embeding` would refuse every model the author could ever write. The
+/// two vocabularies are read off `model.kind` and `workspace.allow-egress`, so
+/// a kind or a role added there is admitted here by existing.
+fn check_model_attributes_say_something(schema: &Schema, diags: &mut Diagnostics) {
+    let words_of = |group: &str, field: &str| -> Vec<String> {
+        fn words(ty: &crate::Ty) -> Vec<String> {
+            match ty {
+                crate::Ty::OneOf(v) => v.clone(),
+                crate::Ty::ListOf(inner) => words(inner),
+                _ => Vec::new(),
+            }
+        }
+        schema
+            .group(group)
+            .and_then(|g| g.fields.iter().find(|f| f.name == field))
+            .map(|f| words(&f.ty))
+            .unwrap_or_default()
+    };
+    let kinds = words_of("model", "kind");
+    let roles = words_of("workspace", "allow-egress");
+    let refuse = |rule: &'static str, what: String, diags: &mut Diagnostics| {
+        diags.push(Diagnostic::error(
+            rule,
+            pact_diag::Span::whole_file(camino::Utf8Path::new("spec/schema.yaml")),
+            what,
+            "This is a problem with the specification itself, not with your file. \
+             Please report it.",
+        ));
+    };
+    for group in schema.groups() {
+        for field in &group.fields {
+            let names_a_model = field.names.iter().any(|n| n == "pact:models");
+            let at = format!("{}.{}", group.name, field.name);
+            if !names_a_model && (!field.model_kind.is_empty() || !field.plays_role.is_empty()) {
+                refuse(
+                    "schema/model-attribute-on-no-model",
+                    format!(
+                        "'{at}' says what kind of model it takes, or what role that model \
+                         plays, and it names no model."
+                    ),
+                    diags,
+                );
+            }
+            for kind in field.model_kind.iter().filter(|k| !kinds.contains(k)) {
+                refuse(
+                    "schema/no-such-model-kind",
+                    format!("'{at}' takes a '{kind}' model, and no model is that kind."),
+                    diags,
+                );
+            }
+            if !field.plays_role.is_empty() && !roles.contains(&field.plays_role) {
+                refuse(
+                    "schema/no-such-model-role",
+                    format!(
+                        "'{at}' plays the role '{}', and `allow-egress:` has no such role.",
+                        field.plays_role
+                    ),
+                    diags,
+                );
             }
         }
     }

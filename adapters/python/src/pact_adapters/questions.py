@@ -170,6 +170,18 @@ _KINDS: Mapping[str, _Kind] = {
         "a file", "a file",
         {"type": "array", "items": {"type": "string"}, "description": "references to files"},
     ),
+    # 96 §A1. A document is a file a model READS — a PDF, a scanned form — and
+    # a video one it watches; written down the way the other three are.
+    "documents": _Kind(
+        frozenset({"documents", "a pdf", "list of documents"}),
+        "one or more documents", "a document",
+        {"type": "array", "items": {"type": "string"}, "description": "references to documents"},
+    ),
+    "video": _Kind(
+        frozenset({"video", "a video", "a clip", "list of videos"}),
+        "a video", "a video",
+        {"type": "array", "items": {"type": "string"}, "description": "references to videos"},
+    ),
     # The example is a KIND, not a name, and it is the only row that has to be.
     #
     # `25.00 USD`, `3` and `yes` are literals anybody can type in any workspace;
@@ -216,7 +228,7 @@ _EXAMPLE: Mapping[str, str] = {k: v.example for k, v in _KINDS.items()}
 #: One name for one wire form. `images`, `audio` and `file` differ in what the
 #: model is told the file IS, not in how it is written down, and giving them
 #: three spellings is how `B19`'s currency divergence happened one type over.
-_A_PATH: frozenset[str] = frozenset({"images", "audio", "file"})
+_A_PATH: frozenset[str] = frozenset({"images", "audio", "file", "documents", "video"})
 
 
 def _a_path_inside_the_workspace(value: Any, described: str) -> str:

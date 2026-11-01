@@ -748,6 +748,9 @@ class AgentSpec:
     #: field's help). Kept apart from `facts`: the agent's own `remember` is
     #: not one of those two actions, so it never writes here.
     workspace_remembers: Facts = field(default_factory=Facts)
+    #: `template-language:` (96 §C): `holes`, or `jinja` when the agent's words
+    #: are templates — what `holes.fill` is told when it fills them.
+    template_language: str = "holes"
 
     #: The written procedures this agent may use — its own `uses:` line filtered
     #: to entries that are `skills:` rather than `tools:`. Carried beside `tools`
@@ -981,6 +984,7 @@ class AgentSpec:
             request_keys=RequestKeys.from_document(doc, agent_key),
             facts=Facts.from_document(doc, agent_key),
             workspace_remembers=Facts.of(doc.get("remembers")),
+            template_language=_text(doc.get("template-language", "")) or "holes",
             # `model:` is in the schema and the loader emits it; until this line
             # existed the adapter boundary dropped it, so no host could pass the
             # author's pin on even if it wanted to. Nothing pinned is "" and (),
@@ -1434,8 +1438,16 @@ def _resource(name: str, entry: Mapping[str, Any]) -> "ResourceSpec":
         # same object as the endpoint it is a pin ON. Absence is carried as
         # absence — `""` and `None` — because "no pin" and "a pin that no longer
         # matches" are different facts and only one of them is an attack.
-        tool_snapshot_digest=_text(entry.get("tool-snapshot-digest", "")),
-        tool_snapshot_taken_at=_text(entry.get("tool-snapshot-taken-at", "")),
+        # 96 §E. A server `pact-sync` recorded carries its pin inside
+        # `published:`, and `pact check` refuses a resource that writes both,
+        # so whichever one is there is the pin.
+        tool_snapshot_digest=_text(
+            entry.get("tool-snapshot-digest", "") or _published(entry).get("digest", "")
+        ),
+        tool_snapshot_taken_at=_text(
+            entry.get("tool-snapshot-taken-at", "")
+            or str(_published(entry).get("taken-at", ""))[:10]
+        ),
         # Through `limits.seconds`, not a table here: `30d` is the same length of
         # time in this field as in `runs-for-at-most`, and two readers of one
         # grammar drift the moment nobody is looking.
@@ -1445,6 +1457,12 @@ def _resource(name: str, entry: Mapping[str, Any]) -> "ResourceSpec":
         asks_to_run=_text(entry.get("asks-to-run", "")),
         available_when=_text(entry.get("available-when", "")),
     )
+
+
+def _published(entry: Mapping[str, Any]) -> Mapping[str, Any]:
+    """A resource's `published:` block (96 §E), or nothing."""
+    block = entry.get("published")
+    return block if isinstance(block, Mapping) else {}
 
 
 def _text(v: Any) -> str:

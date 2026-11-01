@@ -103,6 +103,9 @@ class MetricSpec:
     #: so a metric nothing could run names the line it came from rather than a
     #: generic one. Same reason `Rule.where` exists.
     where: str = "evals/suite.yaml:1"
+    #: What `needs.accept-when:` calls this score (96 §B4): the author's
+    #: `name:`, else the part of `uri:` after the colon, lower-cased.
+    written_name: str = ""
 
     @staticmethod
     def parse(raw: Any, where: str = "evals/suite.yaml:1") -> "MetricSpec":
@@ -115,7 +118,12 @@ class MetricSpec:
             threshold=share(raw.get("threshold"), DEFAULT_THRESHOLD),
             with_=dict(raw.get("with") or {}),
             where=where,
+            written_name=str(raw.get("name") or "").strip(),
         )
+
+    @property
+    def name(self) -> str:
+        return (self.written_name or self.metric).strip().lower()
 
     @property
     def scheme(self) -> str:

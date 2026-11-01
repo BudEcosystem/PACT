@@ -651,6 +651,15 @@ fn a_set_of_documents_has_documents_in_it(root: &pact_doc::Node, diags: &mut Dia
         return;
     };
     for (name, entry) in sets {
+        // An interface (96 §B1) is the documents NOBODY has yet — each shop's
+        // own set is an implementation and is held to this rule itself.
+        if entry
+            .node
+            .get("interface")
+            .is_some_and(pact_loader::workflows::said_yes)
+        {
+            continue;
+        }
         // A payload is `Value::Payload`, not a map — `pact show` renders it
         // with `$payload` and `files` keys, and reading it back through those
         // names finds nothing. A folder of files is also a legitimate `Map` when
@@ -717,6 +726,13 @@ fn looking_up_by_meaning_needs_an_embedder(root: &pact_doc::Node, diags: &mut Di
         if !matches!(how.trim(), "meaning" | "meaning-and-words") {
             continue;
         }
+        // 96 §A7. With `embedded-by:` written, the embedder is a named model
+        // and `egress.rs` holds THAT model to `allow-egress:` like every other
+        // binding — so one served on this machine passes, which is the
+        // air-gapped meaning search this rule used to make unwritable.
+        if entry.node.get("embedded-by").is_some() {
+            continue;
+        }
         let span = entry
             .node
             .as_map()
@@ -734,6 +750,7 @@ fn looking_up_by_meaning_needs_an_embedder(root: &pact_doc::Node, diags: &mut Di
             ),
             "Add `embedder` to `allow-egress:` in workspace.yaml — that needs somebody to \
              approve it, because the question a customer typed goes to that model — or \
+             name an embedding model served on this machine with `embedded-by:`, or \
              write `looked-up-by: words`, which matches the words themselves and needs \
              nothing outside."
                 .to_string(),
@@ -1508,6 +1525,16 @@ fn validate(
         pact_loader::derive::resolve(root, &spec, &mut diags, &mut substituted);
     }
 
+    // 96 §B1. An implementation is held to saying only how it reaches its own
+    // server, and THEN the interface's contract is written into it — before the
+    // schema and every check below, so an approval rule naming
+    // `gmail/send-message` reads the `inspects:` the email interface wrote,
+    // and a runtime reads Gmail as though it had been written out longhand.
+    if let Some(root) = node.as_mut() {
+        pact_loader::interfaces::check(root, &mut diags);
+        pact_loader::interfaces::inherit(root);
+    }
+
     if let Some(root) = node.as_ref() {
         let schema = spec
             .knowing("models", models_known_here(node.as_ref()))
@@ -1690,7 +1717,7 @@ fn validate(
         // A1: a `{{run-inputs.<n>}}` or `{{remembers.<n>}}` hole in an agent's
         // `instructions:` or `description:` that names nothing would reach the
         // model as literal braces. The schema cannot see inside the text.
-        pact_loader::holes::check(root, &mut diags);
+        pact_loader::holes::check(root, &schema, &mut diags);
         // And the fifth: a `team:` that comes back to where it started.
         // `key-names: agents` holds each name against the agents that exist and
         // cannot see the shape of the graph, so `team: {helper: I ask myself.}`
@@ -1880,6 +1907,19 @@ fn validate(
         // a line only another population reads, a slice no run is given, a
         // schedule no clock can keep, and a grader that is not pure.
         pact_loader::suites::check(root, &schema, &mut diags);
+        // 96 §A–§E: a model of the wrong kind on a line that names one, a
+        // voice whose lines disagree with each other or with the catalogue, a
+        // written conversation no provider can carry, and a server's recorded
+        // tools held to every line a decision here rests on.
+        pact_loader::modelkinds::check(root, &schema, BUILTIN_CATALOGUE, &mut diags);
+        pact_loader::voice::check(root, BUILTIN_CATALOGUE, &mut diags);
+        pact_loader::turns::check(root, &mut diags);
+        pact_loader::snapshots::check(root, &mut diags);
+        // 96 §B4: what an agent accepts a model on — a benchmark, a metric of
+        // its suite, a price — read the way the resolver will decide it.
+        pact_loader::accept::check(root, BUILTIN_CATALOGUE, &mut diags);
+        // 96 §B5: a `settings:` line the pinned model would throw away.
+        pact_loader::settings::check(root, BUILTIN_CATALOGUE, &mut diags);
         diags.sort();
     }
     Ok((node, diags, substituted))

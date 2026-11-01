@@ -1,0 +1,28 @@
+population: authored-enumeration
+must-pass: 100%
+graded-by: qwen2.5-7b-instruct
+metrics:
+  # A check of our own, in plain words, run by DeepEval's G-Eval and graded by
+  # the local model above. The agent accepts only a model whose mean score on
+  # it is at least 0.8 (`accept-when: refund-tone.score >= 0.8`).
+  - uri: deepeval:geval
+    name: refund-tone
+    threshold: 0.7
+    with:
+      criteria: The reply apologises once, offers the remedy plainly, and never blames the customer.
+      evaluation_params: [input, actual_output]
+cases:
+  the-second-call-about-a-kettle:
+    when: a caller rings back about a kettle they already emailed about
+    with:
+      receipt: receipt.pdf
+    turns:
+      - from: user
+        says: I rang yesterday about a cracked kettle.
+      - from: agent
+        says: I'm sorry to hear that. Have you sent us a photo?
+      - from: user
+        says: I emailed it last night, and here is the receipt.
+        attaches: [receipt]
+    expect: offers a full refund without asking for the kettle back
+    because: the policy refunds anything that arrived broken

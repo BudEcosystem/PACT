@@ -167,6 +167,14 @@ fields:
     outcome: mapped
     rows: [N3, X6]
     spec-file: "no field for what survives a summary"
+  agent.voice:
+    construct: "nothing: Pydantic AI has no audio session; the host's voice transport runs it, and pact check holds its lines against the catalogue"
+    outcome: loss
+    rows: [96-A6]
+  agent.turns:
+    construct: "nothing yet: the turns are carried on the document and not yet passed as message_history to Agent.run"
+    outcome: loss
+    rows: [96-D]
   agent.interceptors:
     construct: "an AbstractCapability whose before_model_request / before_tool_execute hooks run interceptors.Chain"
     outcome: mapped
@@ -204,6 +212,33 @@ fields:
     construct: "toolset.filtered(<declared action names>): anything else the server offers is never shown"
     outcome: carried
     rows: [T12]
+  # 96 §B1, §E. Said as they stand in this bridge today, which is the point of
+  # the table: three of these are a pact check and a host decision, and two are
+  # not yet applied here (docs/96 "What is pending").
+  tool.category:
+    construct: "nothing: a label pact discover groups tools by; no Pydantic AI construct needs it"
+    outcome: loss
+    rows: [96-B1]
+  tool.interface:
+    construct: "nothing: the loader writes the interface's contract into each implementation, and the host hands Pydantic AI the one it picked"
+    outcome: loss
+    rows: [96-B1]
+  tool.implements:
+    construct: "nothing: the loader resolves it, so the implementation arrives as an ordinary tool written out longhand"
+    outcome: loss
+    rows: [96-B1]
+  tool.chosen-by:
+    construct: "nothing: the host picks the implementation per run (the-host) or reads the run input it names"
+    outcome: loss
+    rows: [96-B1]
+  tool.schemas-from:
+    construct: "nothing: MCPToolset always reads the server's own schemas; mcp_bridge.when_it_changed holds them to the recorded snapshot"
+    outcome: loss
+    rows: [96-E]
+  tool.unlisted-actions:
+    construct: "nothing yet: toolset.filtered still offers only the listed actions, so each-call-asks-a-person is not yet applied by this bridge"
+    outcome: loss
+    rows: [96-E]
 
   # ── action ─────────────────────────────────────────────────────────────────
   action.description:
@@ -247,6 +282,14 @@ fields:
     construct: "nothing: the host asks it before retrying a write whose outcome is not known (02W §2.12)"
     outcome: loss
     rows: [D2]
+  action.calls:
+    construct: "nothing yet: toolset.filtered keeps the server's own names, so a calls: rename is held by pact check against the snapshot and not yet applied by this bridge"
+    outcome: loss
+    rows: [96-B1]
+  action.passes:
+    construct: "nothing yet: arguments reach the server under the action's own names; pact check holds each passes: line against the snapshot"
+    outcome: loss
+    rows: [96-B1]
   action.same-request-key-across:
     construct: "nothing: how far the host's at-most-once claim reaches (this run, the team, the workspace)"
     outcome: loss

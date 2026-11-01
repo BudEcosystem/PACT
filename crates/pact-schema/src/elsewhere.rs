@@ -141,12 +141,37 @@ fn kinds<'a>(groups: &'a IndexMap<String, Group>, root_group: &str) -> Vec<&'a s
 /// because it says where to *look* for the map, not what the map is called, and
 /// a `pact:` prefix is skipped because those are not sections of a workspace at
 /// all — see the module note.
+///
+/// A field that names an entry of ITS OWN section is left out: `implements:`
+/// on a skill names another skill (96 §B1), and it is a link between two
+/// skills, not a line where something that USES a skill names one. Offering it
+/// to an author whose agent's `uses:` was refused would send them to write
+/// `implements: refund-policy` on an agent.
 fn referable(groups: &IndexMap<String, Group>) -> BTreeMap<String, Vec<String>> {
+    // Which section each kind of entry lives in: `skill` in `skills`.
+    let home: BTreeMap<&str, &str> = groups
+        .get("workspace")
+        .map(|w| {
+            w.fields
+                .iter()
+                .filter_map(|f| match &f.ty {
+                    Ty::MapOf(inner) => match inner.as_ref() {
+                        Ty::Group(g) => Some((g.as_str(), f.name.as_str())),
+                        _ => None,
+                    },
+                    _ => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
     let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for g in groups.values() {
         for f in &g.fields {
             for want in f.names.iter().chain(f.key_names.iter()) {
                 if want.starts_with("pact:") {
+                    continue;
+                }
+                if home.get(g.name.as_str()) == Some(&want.as_str()) {
                     continue;
                 }
                 let section = want.trim_start_matches('^').to_string();

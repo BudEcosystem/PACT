@@ -238,6 +238,31 @@ HOST_API: dict[str, str] = {
         "differs between them is the placing and nothing else; this is the same "
         "guarantee for a host assembling a prompt outside `_system_for`"
     ),
+    # 96 §E. What a run does when a server changed: the live listing arrives at
+    # connect time on the host's machine, exactly as for `check_snapshot`.
+    "mcp_bridge.when_it_changed": (
+        "decides what a run does when what a server publishes at connect time "
+        "differs from the `published:` block `pact-sync` recorded — with every "
+        "change an approval rests on stopping the run whatever `if-it-changes:` "
+        "says. The live listing arrives over a session the host holds, after "
+        "`pact check` has finished, so nothing in `src/` has it to compare"
+    ),
+    # 96 §B4. Measuring a DeepEval benchmark asks a SERVED model hundreds of
+    # questions and downloads the benchmark's own dataset; PACT serves no model,
+    # so the runtime that does (Bud Agent Flow's `budflow benchmark run`) calls it.
+    "benchmarks.run_deepeval": (
+        "runs one of DeepEval's own benchmarks against a model a runtime serves and "
+        "answers the figure on the benchmark's scale. PACT serves no model and fetches "
+        "no dataset, so nothing in `src/` has a model to measure"
+    ),
+    # 96 §A6. PACT's harness carries no audio stream; the host's voice
+    # transport does, and this is what it is handed.
+    "voice.plan_for": (
+        "turns an agent's `voice:` lines and the catalogue into the plan a host's "
+        "voice transport carries out — which models listen, think and speak, "
+        "whether the caller may talk over it, and whether the sound is kept. "
+        "Nothing in `src/` opens an audio stream for it to steer"
+    ),
     "mcp_bridge.check_against_authored": (
         "compares the tool list a server publishes AT CONNECT TIME against what "
         "the author wrote. Nothing in `src/` has the first half: it arrives over "

@@ -10,6 +10,76 @@ Running PACT trees in production on Pydantic AI 2.54, through
 addition is checked by `pact check` (Rust) and held by the Python harness, and the whole suite
 runs offline: 4114 tests, 1445 Rust and 2669 adapter.
 
+### A pinned model's settings, held to what it takes (1 November)
+
+- **`model-can.ignores`, `ignores-while-thinking`, `thinks-unless-told`** on a catalogue row, read
+  from the Pydantic AI code this repository pins and recorded for GPT-5.5, GPT-5.4, GPT-5.4 mini,
+  Claude Opus 5 and Claude Sonnet 5. `pact check` refuses a `settings:` line the pinned model
+  would throw away (`settings.rs`: `loader/a-setting-the-model-ignores`,
+  `loader/a-setting-ignored-while-it-thinks`) — `temperature: 0.2` on GPT-5.5 with no
+  `thinking: none`, `top-k:` on any OpenAI model, any sampling on Claude Opus 5. Bud Agent Flow's
+  `choose-model` and its bind-time check hold candidates and bindings to the same reading
+  (`ModelEntry.ignored_settings`).
+
+### Choosing a model by evals: benchmarks, your own checks, cost (28 October)
+
+- **`needs.accept-when:`** — the figures a model has to reach to be used for an agent, one
+  comparison per line, all of which hold: `mmlu.score > 50`, `terminal-bench.score >= 40`,
+  `refund-tone.score >= 0.8` (any metric of the suite by its new `name:`, a DeepEval G-Eval
+  included), `pass-rate >= 90%`, `cost < 0.05 USD`, `input-price`, `output-price`,
+  `context-window`, `first-words-within`. Each name has its own unit and is refused where it is
+  written when it does not fit (`accept.rs`, ten rules); `spec/accept-when.yaml` holds the Rust
+  checker and the Python resolver to one reading. Catalogue figures are held before anything runs
+  (`ModelEntry.satisfies`), suite figures after the candidate runs its suite
+  (`selection.held_after`; `CaseOutcome.scores` keeps every metric score).
+- **Named benchmarks.** `models/catalog.yaml` declares `benchmarks:` — seventeen ship, eleven
+  measured by DeepEval (`runs: deepeval:MMLU`) and six by their own harness (`runs:
+  host:terminal-bench`) — each with its aliases and scale; a row's score under a name no
+  benchmark has is refused. `benchmarks.record` writes a figure with its provenance, and copies the
+  distribution's row first so recording a score never drops where a model is served.
+- **In Bud Agent Flow:** `budflow choose-model --candidate URL#MODEL …` runs the suite on each
+  candidate and chooses by `accept-when:` and `prefer:`; `budflow benchmark record|run` writes a
+  figure; `budflow run` refuses a bound model whose catalogue figures miss a line.
+
+### Modalities, interfaces, templates, turns and tool schemas from the server (27 October)
+
+Designed in [`docs/96-MODALITIES-INTERFACES-TEMPLATES-TURNS.md`](docs/96-MODALITIES-INTERFACES-TEMPLATES-TURNS.md),
+which also lists what is still pending at run time.
+
+- **Voice, documents, video, embeddings.** Two answer shapes, `documents` and `video`. Six model
+  kinds (`language`, `decision`, `embedding`, `transcription`, `speech`, `reranking`), held per
+  line by a new `model-kind:` attribute (`loader/the-wrong-kind-of-model`). `agent.voice:` says how
+  an agent listens and speaks — the pipeline, who may interrupt, the transcriber, the speaker and
+  its voice, the languages, how long a pause ends a turn, whether the sound is kept — each line
+  held against the catalogue (`voice.rs`). A transcriber and speaker on this machine now keep a
+  caller's voice here behind a hosted language model, needing only `llm` in `allow-egress:`.
+  `knowledge.embedded-by:` and `reranked-by:` name the models a set of documents is indexed and
+  ordered with, which makes meaning-search writable on an air-gapped box for the first time.
+- **`needs.scores:` can be satisfied.** A catalogue row may now record `benchmarks:` (it was
+  refused, so every score requirement emptied the candidate set), and `speed:`.
+  `needs.prefer: cheapest | fastest | best-on-the-evals` orders the models that pass.
+- **Interfaces.** `interface: yes`, `implements:` and `chosen-by:` on tools, skills and sets of
+  documents: one `email` contract, Gmail and Outlook as its implementations, picked per person by
+  the host or per run by a run input. An implementation says only how it reaches its server
+  (`calls:`, `passes:`), may ask more of a person and never less, and is written out longhand
+  from its interface by the loader (`interfaces.rs`, fourteen rules). `tool.category:` labels a
+  tool for finding.
+- **Jinja.** `template-language: jinja` lets an agent's words choose and repeat, in the dialect
+  Jinja2 and MiniJinja both render one way — no includes, macros or calls, the shared filters
+  only, names written with `_` (`jinja.rs`; `holes.fill(language="jinja")` renders it sandboxed).
+  Which texts are filled is now `template: yes` in the schema.
+- **Turns.** `agent.turns:`, `variant.turns:` and `case.turns:`, from `system`, `developer`,
+  `user`, `agent` and `tool`, with tool calls and attachments; standing instructions only at the
+  start, every call answered (`turns.rs`).
+- **Tool schemas from the server.** `pact-sync <server>` records what an MCP server offers into
+  `resources/<server>.yaml` as `published:`; `tool.schemas-from: the-snapshot | the-server` sends
+  the server's own arguments while which actions may be called, and what needs a person, stay
+  written here. `pact check` holds `inspects:`, `same-request-key:`, `bind:` and `passes:` to the
+  recorded arguments (`snapshots.rs`); `resource.if-it-changes:` says what a run does when the
+  server changed, and a change an approval rests on always stops it
+  (`mcp_bridge.when_it_changed`). `tool.unlisted-actions: each-call-asks-a-person` offers what the
+  server adds behind a person.
+
 ### Tests over recorded runs (18 October)
 
 - **A suite says which runs it is a score of.** `population: past-runs` with `from-the-last:`

@@ -519,7 +519,11 @@ models:
     # Both shapes read: the two-line provenance form and the bare number, for the
     # stated reason a hand-written override layer must not have to learn the
     # longer one first.
-    assert entry.scores == {"MMLU": 84.1, "SWE-Verified": 41.5}, entry.scores
+    # Under the names the row wrote, and (96 §B4) under each benchmark's own key the catalogue
+    # declares, so `MMLU` written here and `accept-when: mmlu.score > 80` are one score.
+    assert entry.scores == {
+        "MMLU": 84.1, "SWE-Verified": 41.5, "mmlu": 84.1, "swe-bench-verified": 41.5,
+    }, entry.scores
     # `unknown` is DROPPED, not kept as zero. Zero satisfies no threshold and
     # reads as a measurement; absent is the truth.
     assert "GPQA" not in entry.scores

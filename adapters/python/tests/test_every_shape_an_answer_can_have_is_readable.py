@@ -49,6 +49,8 @@ def test_every_shape_the_spellings_accept_can_be_read(kind: str) -> None:
         "images": "evals/attachments/receipt.png",
         "audio": "evals/attachments/call.wav",
         "file": "evals/attachments/policy.pdf",
+        "documents": "evals/attachments/contract.pdf",
+        "video": "evals/attachments/unboxing.mp4",
         "agent": "refund-desk",
         "date": "2026-10-09",
         "time": "14:30",

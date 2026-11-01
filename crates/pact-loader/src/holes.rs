@@ -40,16 +40,12 @@
 
 use pact_diag::{Diagnostic, Diagnostics, Span};
 use pact_doc::{Node, Value};
-use std::collections::BTreeSet;
+use pact_schema::{Group, Schema, Ty};
+use std::collections::{BTreeMap, BTreeSet};
 
 /// The two namespaces a hole may name.
 const RUN_INPUTS: &str = "run-inputs";
 const REMEMBERS: &str = "remembers";
-
-/// The agent fields whose text may carry holes.
-const FIELDS: [&str; 2] = ["instructions", "description"];
-/// The fields of one variant that become the agent's instructions.
-const VARIANT_FIELDS: [&str; 2] = ["instructions", "says"];
 
 /// One hole found in some text: the name between the braces, and how many
 /// lines into the text it sits.
@@ -133,10 +129,24 @@ pub fn holes_in(text: &str) -> Vec<Hole> {
 
 /// Refuse a hole that names an undeclared run input or remembered fact, and
 /// warn about braces that look like a hole and are not one.
-pub fn check(document: &Node, diags: &mut Diagnostics) {
+///
+/// WHICH texts are filled is `template: yes` in `spec/schema.yaml` (96 §C),
+/// reached from the agent through every group it declares — its own words, a
+/// variant's, and the `says:` of each turn either of them writes. It was a
+/// const of two field names here and a second of two more, so the first new
+/// place a run fills words in (`turns:`) would have loaded unchecked.
+///
+/// Under `template-language: jinja` each text is a template instead, and
+/// [`crate::jinja`] holds it; the declared names are the same names.
+pub fn check(document: &Node, schema: &Schema, diags: &mut Diagnostics) {
     let Some(agents) = document.get("agents").and_then(Node::as_map) else {
         return;
     };
+    let jinja = document
+        .get("template-language")
+        .and_then(Node::as_str)
+        .map(str::trim)
+        == Some("jinja");
     // The workspace's own `remembers:` is memory any agent here may read as
     // `remembers.<name>` (its help says so), so a hole may name it too.
     let workspace: BTreeSet<String> = document
@@ -182,28 +192,29 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
                 ));
             }
         }
-        // Each text that becomes this agent's words, with what to call it.
-        let mut texts: Vec<(String, &str, &Span)> = Vec::new();
-        for field in FIELDS {
-            if let Some(node) = entry.node.get(field) {
-                prose(node, field, &mut texts);
-            }
-        }
-        // A variant's words are filled like the agent's own, so they are held
+        // Each text that becomes this agent's words, with what to call it. A
+        // variant's words are filled like the agent's own, so they are held
         // like them: unchecked, a hole there loaded cleanly and stopped the
         // first run that chose the variant.
-        for (name, variant) in entry
-            .node
-            .get("variants")
-            .and_then(Node::as_map)
-            .into_iter()
-            .flatten()
-        {
-            for field in VARIANT_FIELDS {
-                if let Some(node) = variant.node.get(field) {
-                    prose(node, &format!("variants.{name}.{field}"), &mut texts);
-                }
+        let mut texts: Vec<(String, &str, &Span)> = Vec::new();
+        if let Some(group) = schema.group("agent") {
+            filled(&entry.node, group, schema, "", &mut texts);
+        }
+        if jinja {
+            let shapes: BTreeMap<String, String> = entry
+                .node
+                .get(RUN_INPUTS)
+                .and_then(Node::as_map)
+                .into_iter()
+                .flatten()
+                .map(|(k, e)| (k.clone(), e.node.as_str().unwrap_or("").to_string()))
+                .collect();
+            let scope =
+                crate::jinja::Scope::of(agent, &shapes, &remembered, &entry.key_span, diags);
+            for (field, text, span) in texts {
+                crate::jinja::check(agent, &field, text, span, &scope, diags);
             }
+            continue;
         }
         for (field, text, span) in texts {
             let found = scan(text);
@@ -217,6 +228,62 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
                 }
             }
         }
+    }
+}
+
+/// Every text under `node` that a run fills in, found through the specification:
+/// a field marked `template: yes` is collected, and every other field is
+/// followed into whatever groups its type declares. `at` is the path so far,
+/// for the message — `variants.small.turns[2].says`.
+fn filled<'a>(
+    node: &'a Node,
+    group: &Group,
+    schema: &Schema,
+    at: &str,
+    out: &mut Vec<(String, &'a str, &'a Span)>,
+) {
+    let Some(map) = node.as_map() else { return };
+    for field in &group.fields {
+        let Some(entry) = map.get(&field.name) else {
+            continue;
+        };
+        let here = if at.is_empty() {
+            field.name.clone()
+        } else {
+            format!("{at}.{}", field.name)
+        };
+        if field.template {
+            prose(&entry.node, &here, out);
+            continue;
+        }
+        into(&entry.node, &field.ty, schema, &here, out);
+    }
+}
+
+fn into<'a>(
+    node: &'a Node,
+    ty: &Ty,
+    schema: &Schema,
+    at: &str,
+    out: &mut Vec<(String, &'a str, &'a Span)>,
+) {
+    match ty {
+        Ty::Group(name) => {
+            if let Some(group) = schema.group(name) {
+                filled(node, group, schema, at, out);
+            }
+        }
+        Ty::ListOf(inner) => {
+            for (i, item) in node.as_list().into_iter().flatten().enumerate() {
+                into(item, inner, schema, &format!("{at}[{}]", i + 1), out);
+            }
+        }
+        Ty::MapOf(inner) => {
+            for (key, entry) in node.as_map().into_iter().flatten() {
+                into(&entry.node, inner, schema, &format!("{at}.{key}"), out);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -459,7 +526,9 @@ agents:
         let mut d = Diagnostics::new();
         // The file's text, as the loader registers it: a hole is located in it.
         d.add_source("w.yaml", text);
-        check(&node, &mut d);
+        const SPEC: &str = include_str!("../../../spec/schema.yaml");
+        let schema = pact_schema::from_doc::schema_from_yaml(SPEC, &mut Diagnostics::new());
+        check(&node, &schema, &mut d);
         d
     }
 
@@ -648,13 +717,31 @@ agents:
       Use the brand {{run-inputs.band}} by name.
 ";
         let d = check_text(folded);
-        let at: Vec<(usize, usize)> = d
+        let mut at: Vec<(usize, usize)> = d
             .items()
             .iter()
             .map(|e| (e.span.line, e.span.col))
             .collect();
-        // `instructions:` is read first, then `description:`.
-        assert_eq!(at, [(11, 21), (7, 16)], "{}", d.render());
+        // Which field is read first is the specification's order now (96 §C:
+        // the texts are found through `template: yes`), and `pact check` sorts
+        // what it prints, so what is held is where each one is.
+        at.sort_unstable();
+        assert_eq!(at, [(7, 16), (11, 21)], "{}", d.render());
+    }
+
+    /// 96 §C: the texts held are the specification's `template: yes` fields,
+    /// so a turn's words — which no const here ever listed — are held too.
+    #[test]
+    fn a_hole_in_a_turn_is_held_like_one_in_the_instructions() {
+        let d = check_text(
+            "agents:\n  desk:\n    run-inputs: {brand: text}\n    instructions: Help.\n    \
+             turns:\n      - from: user\n        says: Hi {{run-inputs.brnad}}\n    \
+             variants:\n      small:\n        turns:\n          - from: agent\n            \
+             says: As {{run-inputs.brand}}.\n",
+        );
+        let rules: Vec<&str> = d.items().iter().map(|e| e.rule).collect();
+        assert_eq!(rules, ["loader/no-such-run-input"], "{}", d.render());
+        assert!(d.render().contains("turns[1].says"), "{}", d.render());
     }
 
     #[test]

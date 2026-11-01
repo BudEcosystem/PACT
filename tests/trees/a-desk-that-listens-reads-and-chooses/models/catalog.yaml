@@ -1,0 +1,45 @@
+version: 1
+models:
+  whisper-large-v3:
+    kind: transcription
+    served-by: [{runtime: vllm, endpoint: local}]
+    capabilities:
+      modality-in: [audio]
+      modality-out: [text]
+      languages: [en, hi]
+  kokoro-82m:
+    kind: speech
+    served-by: [{runtime: vllm, endpoint: local}]
+    capabilities:
+      modality-in: [text]
+      modality-out: [audio]
+      languages: [en]
+      voices: [af_heart, bm_george]
+  nomic-embed-text:
+    kind: embedding
+    served-by: [{runtime: ollama, endpoint: local}]
+    capabilities:
+      modality-in: [text]
+      dimensions: 768
+  bge-reranker-v2-m3:
+    kind: reranking
+    served-by: [{runtime: vllm, endpoint: local}]
+  qwen2.5-vl-7b-instruct:
+    family: qwen2.5
+    served-by: [{runtime: vllm, endpoint: local}]
+    capabilities:
+      tool-calling: parallel
+      modality-in: [text, image, document]
+      modality-out: [text]
+      sessions: [turns]
+      context-window:
+        value: "32k"
+        provenance: {source: the model card}
+    benchmarks:
+      MMMU:
+        value: "58.6"
+        provenance: {source: the model card, as-of: "2026-10-01"}
+    speed:
+      first-words-within:
+        value: "350ms"
+        provenance: {source: measured on this machine, harness: pact slo probe}

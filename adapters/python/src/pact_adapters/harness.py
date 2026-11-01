@@ -720,6 +720,7 @@ async def run(
             spec.instructions,
             run_inputs=supplied,
             remembers={**spec.workspace_remembers.held, **spec.facts.held},
+            language=spec.template_language,
         ),
     )
     bus = bus or Bus()

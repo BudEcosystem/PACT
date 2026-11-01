@@ -41,8 +41,13 @@ nav:
       - Adding a tool: guide/tools.md
       - Gating an action on a person: guide/approvals.md
       - Evals and scoring: guide/evals.md
+      - Choosing and pinning a model: guide/models.md
+      - One contract, several providers: guide/interfaces.md
+      - Voice, documents and embeddings: guide/voice-and-media.md
+      - Templates and written conversations: guide/templates-and-turns.md
+      - Tool schemas from the server: guide/mcp-schemas.md
   - Reference:
-      - The 51 kinds: reference/kinds.md
+      - The 62 kinds: reference/kinds.md
       - Command line: reference/cli.md
       - Adapters and the lattice: reference/adapters.md
   - Status:

@@ -287,9 +287,100 @@ fn tree(group: &str, field: &str, id: &str) -> Option<Vec<(&'static str, String)
                 format!("version: 1\ndefault: {id}\n"),
             ),
         ],
+        // 96 §A6, §A7. Each of these takes a model of its own KIND, so the
+        // tree's catalogue says the id is one — served exactly where the
+        // shipped row serves it, which is the only thing this file measures.
+        ("voice", "hears-with") | ("voice", "speaks-with") => vec![
+            ("workspace.yaml", WORKSPACE.to_string()),
+            (
+                "agents/desk/agent.yaml",
+                format!(
+                    "{AGENT}accepts: {{message: audio}}\nanswers-with: {{reply: audio}}\n\
+                     voice:\n  {field}: {id}\n"
+                ),
+            ),
+            (
+                "models/catalog.yaml",
+                as_kind(
+                    id,
+                    if field == "hears-with" {
+                        "transcription"
+                    } else {
+                        "speech"
+                    },
+                ),
+            ),
+        ],
+        ("knowledge", "embedded-by") | ("knowledge", "reranked-by") => vec![
+            ("workspace.yaml", WORKSPACE.to_string()),
+            (
+                "agents/desk/agent.yaml",
+                format!("{AGENT}uses: [handbook]\n"),
+            ),
+            (
+                "knowledge/handbook/handbook.yaml",
+                format!(
+                    "description: The handbook.\nlooked-up-by: meaning\nembedded-by: {}\n{}",
+                    if field == "embedded-by" {
+                        id
+                    } else {
+                        "the-local-embedder"
+                    },
+                    if field == "reranked-by" {
+                        format!("reranked-by: {id}\n")
+                    } else {
+                        String::new()
+                    }
+                ),
+            ),
+            (
+                "knowledge/handbook/documents/leave.md",
+                "# Leave\n\nAsk your manager.\n".to_string(),
+            ),
+            (
+                "models/catalog.yaml",
+                format!(
+                    "{}  the-local-embedder:\n    kind: embedding\n    served-by: [{{runtime: ollama, endpoint: local}}]\n",
+                    as_kind(
+                        id,
+                        if field == "embedded-by" {
+                            "embedding"
+                        } else {
+                            "reranking"
+                        }
+                    )
+                ),
+            ),
+        ],
         _ => return None,
     };
     Some(files)
+}
+
+/// A workspace catalogue that says `id` is a model of `kind`, served where the
+/// shipped row for `id` serves it — on this machine for [`LOCAL`], over
+/// somebody's API for [`HOSTED`].
+fn as_kind(id: &str, kind: &str) -> String {
+    let served = if id == LOCAL {
+        "{runtime: ollama, endpoint: local}"
+    } else {
+        "{runtime: anthropic-api}"
+    };
+    format!("version: 1\nmodels:\n  {id}:\n    kind: {kind}\n    served-by: [{served}]\n")
+}
+
+/// The one `allow-egress:` word that admits the model each field binds.
+///
+/// `llm` for every binding over words — `embedder` is one, so a knowledge
+/// set's embedder is admitted by it too. `stt` and `tts` are the two the
+/// general grant deliberately does not carry (`egress::WORDS`), so the voice
+/// fields are granted their own.
+fn grant_for(group: &str, field: &str) -> &'static str {
+    match (group, field) {
+        ("voice", "hears-with") => "stt",
+        ("voice", "speaks-with") => "tts",
+        _ => "llm",
+    }
 }
 
 /// The same files, with the workspace granting `llm` instead of granting nothing.
@@ -299,7 +390,7 @@ fn tree(group: &str, field: &str, id: &str) -> Option<Vec<(&'static str, String)
 /// and `catalog.default` play `llm`; `evals.graded-by` plays `judge` or `llm`;
 /// the `learning.yaml` row writes `role: llm`. So one uniform grant serves every
 /// case, and a binding that stops being admitted by it has had its ROLE changed.
-fn granting_llm(files: Vec<(&'static str, String)>) -> Vec<(&'static str, String)> {
+fn granting(files: Vec<(&'static str, String)>, role: &str) -> Vec<(&'static str, String)> {
     files
         .into_iter()
         .map(|(path, body)| {
@@ -312,7 +403,7 @@ fn granting_llm(files: Vec<(&'static str, String)>) -> Vec<(&'static str, String
             );
             (
                 path,
-                body.replace("allow-egress: []", "allow-egress: [llm]"),
+                body.replace("allow-egress: []", &format!("allow-egress: [{role}]")),
             )
         })
         .collect()
@@ -351,6 +442,10 @@ fn noun_in_the_refusal(group: &str, field: &str) -> Option<&'static str> {
         // Every agent that pins nothing runs it, so it IS the model doing the
         // work — the general noun is the right one here rather than a missing one.
         ("catalog", "default") => "the model doing the work",
+        ("voice", "hears-with") => "the model that turns speech into words",
+        ("voice", "speaks-with") => "the model that turns words into speech",
+        ("knowledge", "embedded-by") => "the model that turns text into numbers",
+        ("knowledge", "reranked-by") => "the model that puts the passages in order",
         _ => return None,
     })
 }
@@ -476,15 +571,17 @@ fn the_same_workspaces_load_cleanly_when_the_workspace_grants_the_role_they_play
         };
         let root = written(
             &format!("granted-{}", slug(&group, &field)),
-            &granting_llm(files),
+            &granting(files, grant_for(&group, &field)),
         );
         let (ok, out) = check(&root);
         assert!(
             ok && out.contains("loaded cleanly"),
-            "`{group}.{field}: {HOSTED}` is a model call over words, and this workspace says \
-             `allow-egress: [llm]` — which is the grant for words leaving the box. Either \
+            "`{group}.{field}: {HOSTED}` plays `{}`, and this workspace says \
+             `allow-egress: [{}]` — which is the grant for that role leaving the box. Either \
              the role this binding is read as has changed, or a grant that admits it no \
-             longer does:\n{out}"
+             longer does:\n{out}",
+            grant_for(&group, &field),
+            grant_for(&group, &field)
         );
     }
 }

@@ -1,0 +1,18 @@
+description: The customer's own mailbox, whichever one they connected.
+category: email
+interface: yes
+chosen-by: run-inputs.mailbox
+actions:
+  search-messages:
+    description: Find messages in the mailbox that match some words.
+    takes:
+      query: text
+    reads-only: yes
+  send-message:
+    description: Send one message from the shop.
+    takes:
+      to: text
+      subject: text
+      body: text
+    needs-a-person: yes
+    inspects: [to]

@@ -130,6 +130,7 @@
 //! `02-summarise.yaml`), then by name. The resulting document — and therefore
 //! its digest — is reproducible on any machine.
 
+pub mod accept;
 pub mod approvals;
 pub mod arrivals;
 pub mod available;
@@ -147,7 +148,10 @@ pub mod failures;
 pub mod firstfile;
 pub mod handover;
 pub mod holes;
+pub mod interfaces;
+pub mod jinja;
 pub mod kindfiles;
+pub mod modelkinds;
 pub mod money;
 pub mod phrases;
 pub mod picked;
@@ -162,12 +166,16 @@ pub mod remote;
 pub mod report;
 pub mod review;
 pub mod schedules;
+pub mod settings;
+pub mod snapshots;
 pub mod suites;
 pub mod teams;
 pub mod teamwork;
 pub mod templates;
+pub mod turns;
 pub mod unnamed;
 pub mod values;
+pub mod voice;
 pub mod waits;
 pub mod workflows;
 

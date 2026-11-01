@@ -1,0 +1,56 @@
+description: Answers the phone for whichever shop it is working for.
+instructions: |
+  You answer the phone for {{ run_inputs.shop_name }}.
+  {% if run_inputs.tier == "gold" %}This caller is a gold customer: offer the free returns label.{% endif %}
+  Speak as {{ run_inputs.brand_voice | default("a friendly shop assistant") }}.
+  {% for note in remembers.caller_notes %}- {{ note }}
+  {% endfor %}
+model: qwen2.5-vl-7b-instruct
+run-inputs:
+  shop-name: text
+  brand-voice: text
+  tier: one of gold, silver
+  mailbox: one of gmail, outlook
+  receipt: documents, optional
+remembers:
+  caller-notes:
+    description: what this caller told us last time
+    lasts: forever
+    kept-for: 90 days
+accepts:
+  message: audio
+answers-with:
+  reply: audio
+uses: [email, shop-policies, refund-policy]
+needs:
+  documents: yes
+  prefer: fastest
+  accept-when:
+    - mmmu.score > 50
+    - refund-tone.score >= 0.8
+    - pass-rate >= 90%
+    - cost < 0.05 USD
+  because: callers read their receipt out or send a photo of it, and a phone call cannot wait
+voice:
+  pipeline: transcribe-think-speak
+  talking: takes-turns
+  hears-with: whisper-large-v3
+  speaks-with: kokoro-82m
+  speaks-as: af_heart
+  languages: [en-GB]
+  turn-ends-after: 700ms
+  may-be-interrupted: yes
+  keeps-the-audio: no
+turns:
+  - from: developer
+    says: Every caller has already been told the call may be recorded for training.
+  - from: user
+    says: Did you get my email about the broken kettle?
+    attaches: [run-inputs.receipt]
+  - from: agent
+    calls: email/search-messages
+    with: {query: broken kettle}
+  - from: tool
+    answer: One message, sent yesterday, subject "Kettle arrived cracked".
+  - from: agent
+    says: Yes — I have it here. I'm sorry it arrived cracked; let's sort it out.

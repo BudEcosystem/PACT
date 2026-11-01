@@ -45,6 +45,7 @@ from typing import Any, Callable, Mapping
 import yaml
 
 from . import egress as _egress
+from . import selection as _selection
 from .diagnostics import Problem
 from .evals import (
     NOT_A_RUNTIME,
@@ -189,6 +190,16 @@ class ModelEntry:
     #: only needs no instructions, and only a decision model may be unsure below
     #: a figure (`pact check`, WF-17).
     kind: str = "language"
+    #: `speed.first-words-within:` in milliseconds (96 §B3), or `None` when the
+    #: catalogue does not say — which ranks last under `prefer: fastest`, the
+    #: same rule an unpriced row obeys under `cheapest`.
+    first_words_ms: "float | None" = None
+    #: `model-can.ignores`, `ignores-while-thinking` and `thinks-unless-told`
+    #: (96 §B5): the `settings:` keys this model throws away, always or while it
+    #: thinks, and whether it thinks when `thinking:` says nothing.
+    ignores: frozenset[str] = frozenset()
+    ignores_while_thinking: frozenset[str] = frozenset()
+    thinks_unless_told: bool = False
     #: `served-by.region` — `(endpoint, region)` for each runtime that names the
     #: region it serves these weights in (`("local", "us-baa-region")`). A
     #: workflow's `data-stays-in:` names a region, and the call is held to the
@@ -211,6 +222,23 @@ class ModelEntry:
         a figure the catalogue RECORDS and that falls short **filters**; a figure
         the catalogue says is `unknown` **binds and ranks last**.
         """
+        # 96 §A2. An agent's model reads and writes. A row that embeds,
+        # transcribes, speaks or reranks computes a different function, and the
+        # catalogue now carries those rows too — so it is never a candidate,
+        # however cheap, rather than a recommendation that fails on its first call.
+        if self.kind not in ("language", "decision"):
+            return False, f"is a {self.kind} model, not one that reads and writes"
+        # 96 §B4: what `accept-when:` asks of the catalogue — a benchmark, a
+        # price, a window, a speed — is decided here, before anything runs, so
+        # every runtime that binds through `satisfies` holds it. A line nobody
+        # can read refuses every model rather than being skipped.
+        for unread in needs.get("accept-when-unread", ()):
+            return False, f"cannot be checked against {unread}"
+        for line in needs.get("accept-when", ()):
+            if line.before:
+                ok, why = _selection.held_before(line, self)
+                if not ok:
+                    return False, why
         for cap in needs.get("capabilities", ()):
             if cap not in self.capabilities:
                 # "cannot handle images", not "cannot images". `cap` is the
@@ -252,6 +280,24 @@ class ModelEntry:
             )
         return True, ""
 
+    def ignored_settings(self, settings: "Mapping[str, Any] | None") -> list[str]:
+        """Each `settings:` key this model would throw away, as a sentence (96 §B5).
+
+        The same reading `crates/pact-loader/src/settings.rs` gives a pinned
+        model, for the model a host actually binds — which `pact check` cannot
+        see when a host serves an agent on a model the tree does not name.
+        """
+        settings = settings or {}
+        thinking = str(settings.get("thinking") or "").strip()
+        thinks = thinking != "none" if thinking else self.thinks_unless_told
+        out = []
+        for key in settings:
+            if key in self.ignores:
+                out.append(f"takes no notice of `{key}:` at all")
+            elif thinks and key in self.ignores_while_thinking:
+                out.append(f"takes no notice of `{key}:` while it thinks (write `thinking: none` to keep it)")
+        return out
+
     def ranks_after(self, needs: dict[str, Any]) -> tuple:
         """Sort key for "cheapest that passes". Lower is offered first.
 
@@ -267,6 +313,17 @@ class ModelEntry:
             _tokens(needs.get("context-at-least")) is not None
             and self.context_window is None
         ) else 0
+        # 96 §B3: `prefer: fastest` puts the soonest first words before price.
+        # Price stays the tie-break, and an unmeasured speed sinks (Y12).
+        if needs.get("prefer") == "fastest":
+            return (
+                unplaced + unsized,
+                self.first_words_ms is None,
+                self.first_words_ms or 0.0,
+                self.cost is None,
+                self.cost or 0.0,
+                self.name,
+            )
         return (unplaced + unsized, self.cost is None, self.cost or 0.0, self.name)
 
     def price(self) -> str:
@@ -350,7 +407,7 @@ def load_catalogue(
     mention keeps the distribution's, and `default:` is overridden only if the
     workspace states one.
     """
-    builtin = _load(Path(path) if path is not None else BUILTIN_CATALOGUE)
+    builtin = _read(Path(path) if path is not None else BUILTIN_CATALOGUE)
     if workspace is None:
         return builtin
     local = Path(workspace)
@@ -358,7 +415,7 @@ def load_catalogue(
         local = local / "models" / "catalog.yaml"
     if not local.exists():
         return builtin
-    return _layer(builtin, _load(local))
+    return _layer(builtin, _read(local))
 
 
 def _layer(under: Catalogue, over: Catalogue) -> Catalogue:
@@ -446,8 +503,23 @@ def default_model(path: "str | Path | None" = None) -> str:
     return load_catalogue(path).default
 
 
+def _read(path: Path) -> Catalogue:
+    """`_load`, cached on the path AND when the file last changed (96 §B4).
+
+    On the path alone, a process that outlives one write — a server binding
+    models while `budflow benchmark record` adds a figure — went on reading the
+    catalogue as it was when it started, and `accept-when: mmlu.score > 50`
+    refused a model whose figure was already on disk.
+    """
+    try:
+        changed = path.stat().st_mtime_ns
+    except OSError:
+        changed = -1
+    return _load(path, changed)
+
+
 @lru_cache(maxsize=8)
-def _load(path: Path) -> Catalogue:
+def _load(path: Path, changed: int = 0) -> Catalogue:
     shown = _shown(path)
     try:
         text = path.read_text()
@@ -507,6 +579,9 @@ def _load(path: Path) -> Catalogue:
     problems: list[Problem] = []
     entries: list[ModelEntry] = []
     by_id: dict[str, ModelEntry] = {}
+    #: Every name a benchmark is published under, to its own key (96 §B4), so a
+    #: row recording `MMLU` and an agent asking for `mmlu` mean one score.
+    names = _selection.benchmarks_of({"models": raw})
 
     written = raw.get("models")
     if not isinstance(written, dict):
@@ -532,7 +607,7 @@ def _load(path: Path) -> Catalogue:
             cost=_cost(row.get("cost")),
             output_cost=_cost(row.get("cost"), "output-per-mtok"),
             capabilities=_capabilities(caps),
-            scores=_benchmarks(row.get("benchmarks")),
+            scores=_canonical(_benchmarks(row.get("benchmarks")), names),
             context_window=window,
             aliases=frozenset(
                 str(a) for a in (row.get("also-known-as") or []) if isinstance(a, str)
@@ -541,7 +616,13 @@ def _load(path: Path) -> Catalogue:
             served_locally=_served_locally(row.get("served-by")),
             runtimes=_runtimes(row.get("served-by")),
             regions=_regions(row.get("served-by")),
-            kind="decision" if str(row.get("kind") or "").strip() == "decision" else "language",
+            kind=str(row.get("kind") or "").strip() or "language",
+            ignores=frozenset(str(k) for k in (caps.get("ignores") or [])),
+            ignores_while_thinking=frozenset(str(k) for k in (caps.get("ignores-while-thinking") or [])),
+            thinks_unless_told=said_yes(caps.get("thinks-unless-told")),
+            first_words_ms=_milliseconds((row.get("speed") or {}).get("first-words-within"))
+            if isinstance(row.get("speed"), dict)
+            else None,
         )
         entries.append(entry)
         for key in (name, *entry.aliases):
@@ -774,6 +855,29 @@ def _benchmarks(written: Any) -> dict[str, float]:
     return out
 
 
+def _milliseconds(written: Any) -> "float | None":
+    """A `figure` holding a length of time, as milliseconds; `None` if unknown."""
+    from .limits import seconds
+
+    if isinstance(written, dict):
+        written = written.get("value")
+    try:
+        found = seconds(written)
+    except (TypeError, ValueError):
+        return None
+    return None if found is None else found * 1000.0
+
+
+def _canonical(scores: dict[str, float], names: dict[str, tuple[str, str]]) -> dict[str, float]:
+    """A row's scores under the names it wrote AND each benchmark's own key."""
+    out = dict(scores)
+    for written, figure in scores.items():
+        key = names.get(written.strip().lower())
+        if key is not None:
+            out.setdefault(key[0], figure)
+    return out
+
+
 def _served_locally(written: Any) -> bool:
     """Whether any runtime serves these weights on this machine.
 
@@ -808,6 +912,11 @@ def _capabilities(caps: dict[str, Any]) -> frozenset[str]:
             out.add("images")
         if "audio" in modality_in:
             out.add("audio_in")
+        # 96 §A3: a model that reads a PDF as pages, and one that watches.
+        if "document" in modality_in:
+            out.add("documents")
+        if "video" in modality_in:
+            out.add("video")
     modality_out = caps.get("modality-out") or []
     if isinstance(modality_out, list) and "audio" in modality_out:
         out.add("audio_out")
@@ -881,6 +990,18 @@ def needs_of(document: dict[str, Any], agent_key: str) -> dict[str, Any]:
         caps.extend(("audio_in", "audio_out"))
     if said_yes(block.get("computer-use")):
         caps.append("computer-use")
+    # 96 §A5. `documents:` and `video:` on `needs:` are for what the contract
+    # does not show; an agent whose `accepts:` takes them needs them whether or
+    # not it says so twice.
+    accepts = agent.get("accepts") if isinstance(agent.get("accepts"), dict) else {}
+    taken = {str(v).split(",")[0].strip().removeprefix("list of ").strip()
+             for v in accepts.values()}
+    for cap, spellings in (
+        ("documents", {"documents", "a pdf"}),
+        ("video", {"video", "a video", "a clip", "videos"}),
+    ):
+        if said_yes(block.get(cap)) or taken & spellings:
+            caps.append(cap)
 
     missing = _egress.missing_for(document, agent)
 
@@ -889,12 +1010,20 @@ def needs_of(document: dict[str, Any], agent_key: str) -> dict[str, Any]:
         "scores": block.get("scores") or {},
         "context-at-least": block.get("context-at-least"),
         "reasoning": block.get("reasoning") or "",
+        "prefer": str(block.get("prefer") or "cheapest").strip(),
+        **_accepting(document, block),
         "must-stay-on-this-machine": bool(missing),
         # Which grant is absent, so a refusal can ask for that one rather than
         # for `llm` every time. Advice that always says "grant everything" is
         # not a per-role gate however carefully it reads one.
         "egress-missing": missing,
     }
+
+
+def _accepting(document: dict[str, Any], block: dict[str, Any]) -> dict[str, Any]:
+    """`accept-when:` read (96 §B4): the lines, and why each unreadable one is."""
+    lines, unread = _selection.parse_all(document, list(block.get("accept-when") or []))
+    return {"accept-when": tuple(lines), "accept-when-unread": tuple(unread)}
 
 
 def _runtimes(written: Any) -> frozenset[str]:
@@ -1220,6 +1349,9 @@ def evaluate(
     suite than the author wrote — the same hole one construct over.
     """
     results: list[CaseOutcome] = []
+    #: What each case's run is known to have spent (96 §B4), `None` where no
+    #: price or no usage could say — so `cost` averages only what was metered.
+    spends: list["float | None"] = []
     # The approval gate is SUPPRESSED here, and it has to be said out loud rather
     # than left to a default argument. A run that parks for a person cannot be
     # scored — every governed case would come back "did not answer" and the model
@@ -1291,6 +1423,7 @@ def evaluate(
             )
             break
         results.append(check(case, result, rules, judge=judge, metrics=metrics))
+        spends.append(None if "cost-per-request-under" in (result.unmetered or ()) else result.spent)
     if silence is not None:
         # UNDECIDED with no RESULTS kept, where `_run_every_case` keeps what it
         # got. The divergence is this module's whole argument: a portability
@@ -1305,7 +1438,22 @@ def evaluate(
         # applied" report is the silent degradation T7 forbids by name, and
         # `Verdict.unenforced` reads it back so `render` still prints it.
         return Verdict("UNDECIDED", 0.0, bar, [], silence.as_sentence(model), silence)
-    return verdict(results, bar, min_cases=min_cases)
+    found = verdict(results, bar, min_cases=min_cases)
+    found.measured = _selection.measured(results, spends)
+    return found
+
+
+def _short_of(needs: dict[str, Any], v: Verdict, document: dict[str, Any]) -> str:
+    """Why a candidate that passed the suite still falls short of `accept-when:`, or `""`."""
+    lines = needs.get("accept-when") or ()
+    if not lines:
+        return ""
+    thresholds = {m.name: m.threshold for m in metrics_of(document)}
+    for line in lines:
+        ok, why = _selection.held_after(line, v.measured, thresholds, v.results)
+        if not ok:
+            return why
+    return ""
 
 
 def _went_quiet(v: Verdict) -> bool:
@@ -1474,6 +1622,14 @@ def resolve(
                      metrics=scores)
         last = v
         if v.outcome == "PASS":
+            # 96 §B4: passing the suite is necessary, not sufficient — what the
+            # model scored and spent on it is held to `accept-when:` too.
+            short = _short_of(needs, v, document)
+            if short:
+                v = Verdict("FAIL", v.score, v.bar, v.results, f"{requested} {short}",
+                            v.silence, v.measured)
+                last = v
+                continue
             return PortabilityReport(spec.name, requested, baseline, v, strategy_name)
 
     # `last is None` MEANS THE LOOP ABOVE DID NOT RUN, which happens on exactly
@@ -1598,6 +1754,13 @@ def _cheapest_passing(
     #: thing for the author to go and do.
     no_score: dict[str, Silence] = {}
     off_box = False
+    #: 96 §B3. `prefer: best-on-the-evals` does not stop at the first model
+    #: that passes: every qualifying row is measured and the highest score is
+    #: offered, a cheaper one winning a tie because the rows are tried in
+    #: price order. Every other preference is a sort order, and the first pass
+    #: in that order is the answer.
+    best: "Alternative | None" = None
+    keep_looking = needs.get("prefer") == "best-on-the-evals"
     for entry in sorted(catalogue, key=lambda m: m.ranks_after(needs)):
         if entry.name == exclude:
             continue
@@ -1627,20 +1790,33 @@ def _cheapest_passing(
             v = evaluate(transform(spec), cases, rules, bar, transport_for,
                          entry.name, strategy_name, tools, document=document,
                          judge=judge, metrics=scores)
+            if v.outcome == "PASS" and (short := _short_of(needs, v, document)):
+                ruled_out.append(f"{entry.name} passed the suite and {short}")
+                scored_it = True
+                continue
             if v.outcome == "PASS":
-                return Alternative(
+                found = Alternative(
                     entry.name,
                     f"{entry.name} — passes at {v.score:.0%} using the "
                     f"{strategy_name!r} strategy, {entry.price()}",
                     strategy_name,
                     v.score,
                 )
+                if not keep_looking:
+                    return found
+                if best is None or (found.score or 0.0) > (best.score or 0.0):
+                    best = found
+                scored_it = True
+                break
             if v.silence is None:
                 scored_it = True
             else:
                 why_not = v.silence
         if not scored_it and why_not is not None:
             no_score[entry.name] = why_not
+
+    if best is not None:
+        return best
 
     # Nothing passed, and there are two different reasons for that. Both get a
     # sentence, because "no recommendation" printed as an empty string is the

@@ -1,8 +1,10 @@
 action.answers-with	map of answer-shape | S-CAP | expert | optional
 action.bind	map of text | S-EXEC | core | optional
+action.calls	text | S-CAP | expert | optional
 action.description	text | S-ROUTE | core | optional
 action.inspects	list of text | S-EXEC | core | optional
 action.needs-a-person	yes-no | S-EXEC | core | optional
+action.passes	map of text | S-CAP | expert | optional
 action.program	text | S-EXEC | expert | optional
 action.projects-with	text | S-CTRL | expert | optional
 action.reads-only	yes-no | S-EXEC | core | optional
@@ -36,8 +38,15 @@ agent.run-inputs	map of answer-shape | S-CAP | core | optional
 agent.settings	group:settings | S-CTRL | core | optional
 agent.team	map of text | S-TOPO | core | optional
 agent.teamwork	group:teamwork | S-TOPO | core | optional
+agent.turns	list of group:turn | S-GEN | expert | optional
 agent.uses	list of text | S-ROUTE | core | optional
 agent.variants	map of group:variant | S-CTRL | expert | optional
+agent.voice	group:voice | S-CAP | expert | optional
+benchmark.also-known-as	list of text | S-CAP | expert | optional
+benchmark.description	text | S-GEN | expert | required
+benchmark.runs	text | S-CAP | expert | optional
+benchmark.scale	one-of | S-CAP | expert | optional
+benchmark.with	map of anything | S-CAP | expert | optional
 bundle.brings	list of one-of | S-EXEC | core | required
 bundle.contributes	map of anything | S-CAP | expert | optional
 bundle.description	text | S-GEN | core | required
@@ -50,8 +59,10 @@ case.expect	anything | S-GOV | core | optional
 case.from-these-passages	list of text | S-GOV | expert | optional
 case.must-also	list of group:eval-rule | S-GOV | core | optional
 case.split	one-of | S-GOV | expert | optional
+case.turns	list of group:turn | S-GOV | core | optional
 case.when	text | S-GOV | core | required
 case.with	map of anything | S-GOV | core | optional
+catalog.benchmarks	map of group:benchmark | S-CAP | expert | optional
 catalog.default	text | S-CAP | expert | optional
 catalog.models	map of group:model | S-CAP | expert | optional
 catalog.version	text | S-GEN | expert | optional
@@ -106,13 +117,18 @@ interceptor.may	list of one-of | S-EXEC | core | required
 interceptor.rules	list of text | S-EXEC | core | optional
 interceptor.runs-at	integer | S-CTRL | expert | optional
 interceptor.when	list of event-address | S-CTRL | core | required
+knowledge.chosen-by	text | S-ROUTE | expert | optional
 knowledge.description	text | S-GEN | core | required
 knowledge.do-not-use-when	text | S-ROUTE | core | optional
 knowledge.documents	anything | S-CAP | core | optional
+knowledge.embedded-by	text | S-CAP | expert | optional
 knowledge.if-unsure	text | S-ROUTE | core | optional
+knowledge.implements	text | S-CAP | expert | optional
+knowledge.interface	yes-no | S-CAP | expert | optional
 knowledge.looked-up-by	one-of | S-CTRL | expert | optional
 knowledge.must-cite	yes-no | S-GOV | core | optional
 knowledge.passages-at-most	integer | S-GOV | core | optional
+knowledge.reranked-by	text | S-CAP | expert | optional
 knowledge.split-by	one-of | S-CTRL | expert | optional
 knowledge.use-when	text | S-ROUTE | core | optional
 learning-model.model	text | S-CAP | expert | optional
@@ -151,17 +167,24 @@ loop.based-on	text | S-CTRL | core | optional
 loop.description	text | S-GEN | core | optional
 loop.starts-at	text | S-CTRL | expert | optional
 loop.steps	map of group:stage | S-CTRL | expert | optional
+metric.name	text | S-GOV | expert | optional
 metric.threshold	percent | S-GOV | expert | optional
 metric.uri	text | S-GOV | expert | required
 metric.with	map of anything | S-GOV | expert | optional
 model-can.computer-use	yes-no | S-CAP | expert | optional
 model-can.context-window	group:figure | S-CAP | expert | optional
+model-can.dimensions	integer | S-CAP | expert | optional
+model-can.languages	list of text | S-CAP | expert | optional
 model-can.modality-in	list of one-of | S-CAP | expert | optional
 model-can.modality-out	list of one-of | S-CAP | expert | optional
+model-can.sessions	list of one-of | S-CAP | expert | optional
 model-can.tool-calling	one-of | S-CAP | expert | optional
+model-can.voices	list of text | S-CAP | expert | optional
 model-cost.input-per-mtok	text | S-GOV | expert | optional
 model-cost.output-per-mtok	text | S-GOV | expert | optional
+model-speed.first-words-within	group:figure | S-CAP | expert | optional
 model.also-known-as	list of text | S-CAP | expert | optional
+model.benchmarks	map of group:figure | S-CAP | expert | optional
 model.capabilities	group:model-can | S-CAP | expert | optional
 model.cost	group:model-cost | S-GOV | expert | optional
 model.description	text | S-GEN | expert | optional
@@ -169,20 +192,25 @@ model.family	text | S-GEN | expert | optional
 model.kind	one-of | S-CAP | expert | optional
 model.reasoning	group:figure | S-CAP | expert | optional
 model.served-by	list of group:served-by | S-CAP | expert | optional
+model.speed	group:model-speed | S-CAP | expert | optional
 model.tier	one-of | S-CAP | expert | optional
 moment.after	duration | S-CTRL | core | optional
 moment.at	text | S-CTRL | core | optional
 moment.before	duration | S-CTRL | core | optional
 moment.counted-in	one-of | S-GOV | core | optional
 moment.in-time-zone	text | S-GOV | core | optional
+needs.accept-when	list of text | S-CAP | core | optional
 needs.audio	yes-no | S-CAP | core | optional
 needs.because	text | S-GEN | core | required
 needs.computer-use	yes-no | S-CAP | core | optional
 needs.context-at-least	size | S-CAP | core | optional
+needs.documents	yes-no | S-CAP | core | optional
 needs.images	yes-no | S-CAP | core | optional
+needs.prefer	one-of | S-CAP | core | optional
 needs.reasoning	one-of | S-CAP | core | optional
 needs.scores	map of threshold | S-CAP | expert | optional
 needs.tool-calling	one-of | S-CAP | core | optional
+needs.video	yes-no | S-CAP | core | optional
 outcome.answered	text | S-CTRL | expert | optional
 outcome.decided-by	text | S-CTRL | expert | optional
 outcome.declined	text | S-CTRL | core | optional
@@ -235,6 +263,15 @@ provenance.date	text | S-GOV | expert | optional
 provenance.harness	text | S-GOV | expert | optional
 provenance.recorded-by	text | S-GOV | expert | optional
 provenance.source	text | S-GOV | expert | required
+published-tool.answers-with	anything | S-CAP | expert | optional
+published-tool.description	text | S-GEN | expert | optional
+published-tool.hints	anything | S-GEN | expert | optional
+published-tool.takes	anything | S-CAP | expert | optional
+published.digest	text | S-GOV | expert | required
+published.instructions	text | S-GEN | expert | optional
+published.server-version	text | S-GEN | expert | optional
+published.taken-at	text | S-GOV | expert | required
+published.tools	map of group:published-tool | S-CAP | expert | required
 question-rule.because	text | S-GEN | core | required
 question-rule.first-times	integer | S-EXEC | core | optional
 question-rule.question	text | S-EXEC | core | required
@@ -269,11 +306,14 @@ reminder.runs	text | S-EXEC | core | optional
 reminder.tells	list of text | S-EXEC | core | optional
 resource.asks-to-connect	text | S-EXEC | core | optional
 resource.asks-to-run	text | S-EXEC | expert | optional
+resource.asks-when-it-changes	text | S-EXEC | expert | optional
 resource.auth	group:credential-reference | S-CAP | core | optional
 resource.available-when	one-of | S-ROUTE | expert | optional
 resource.description	text | S-GEN | core | optional
 resource.endpoint	text | S-CAP | core | optional
 resource.engines	list of one-of | S-CAP | expert | optional
+resource.if-it-changes	one-of | S-GOV | expert | optional
+resource.published	group:published | S-CAP | expert | optional
 resource.resource-kind	one-of | S-CAP | core | required
 resource.tool-snapshot-digest	text | S-GOV | expert | optional
 resource.tool-snapshot-max-age	duration | S-GOV | expert | optional
@@ -303,11 +343,14 @@ settings.top-k	integer | S-CTRL | expert | optional
 settings.top-p	number | S-CTRL | expert | optional
 skill.assets	anything | S-GEN | expert | optional
 skill.available-when	one-of | S-ROUTE | expert | optional
+skill.chosen-by	text | S-ROUTE | expert | optional
 skill.content	text | S-GEN | core | optional
 skill.costs-about	size | S-GOV | expert | optional
 skill.description	text | S-ROUTE | core | required
 skill.do-not-use-when	text | S-ROUTE | core | optional
 skill.if-unsure	text | S-ROUTE | core | optional
+skill.implements	text | S-CAP | expert | optional
+skill.interface	yes-no | S-CAP | expert | optional
 skill.name	text | S-GEN | core | optional
 skill.references	anything | S-GEN | core | optional
 skill.scripts	anything | S-GEN | expert | optional
@@ -367,11 +410,23 @@ tidy-step.down-to	text | S-CTRL | expert | optional
 tidy-step.what	one-of | S-CTRL | expert | required
 tool.actions	map of group:action | S-CAP | core | optional
 tool.available-when	one-of | S-ROUTE | expert | optional
+tool.category	text | S-GEN | core | optional
+tool.chosen-by	text | S-ROUTE | expert | optional
 tool.connect	text | S-CAP | core | optional
 tool.description	text | S-ROUTE | core | required
+tool.implements	text | S-CAP | expert | optional
+tool.interface	yes-no | S-CAP | expert | optional
 tool.method	one-of | S-CAP | core | optional
 tool.says	text | S-GEN | core | optional
+tool.schemas-from	one-of | S-CAP | expert | optional
+tool.unlisted-actions	one-of | S-EXEC | expert | optional
 tool.url	text | S-CAP | core | optional
+turn.answer	anything | S-GEN | expert | optional
+turn.attaches	list of text | S-GEN | expert | optional
+turn.calls	text | S-GEN | expert | optional
+turn.from	one-of | S-GEN | expert | required
+turn.says	text | S-GEN | expert | optional
+turn.with	map of anything | S-GEN | expert | optional
 value.description	text | S-GEN | core | optional
 value.rows-are	text | S-CAP | core | optional
 value.shape	one-of | S-CAP | expert | optional
@@ -380,7 +435,17 @@ variant.instructions	text | S-GEN | expert | optional
 variant.may-use	list of text | S-ROUTE | expert | optional
 variant.says	text | S-GEN | expert | optional
 variant.steps-at-most	integer | S-CTRL | expert | optional
+variant.turns	list of group:turn | S-GEN | expert | optional
 variant.when	text | S-GEN | expert | optional
+voice.hears-with	text | S-CAP | expert | optional
+voice.keeps-the-audio	one-of | S-GOV | expert | optional
+voice.languages	list of text | S-CAP | expert | optional
+voice.may-be-interrupted	yes-no | S-CAP | expert | optional
+voice.pipeline	one-of | S-CAP | expert | optional
+voice.speaks-as	text | S-CAP | expert | optional
+voice.speaks-with	text | S-CAP | expert | optional
+voice.talking	one-of | S-CAP | expert | optional
+voice.turn-ends-after	duration | S-CAP | expert | optional
 watch.description	text | S-GEN | core | required
 watch.when	event-address | S-GOV | core | required
 watch.writes-to	file-name | S-GOV | core | required
@@ -438,6 +503,7 @@ workspace.remembers	map of group:state | S-GOV | core | optional
 workspace.resources	map of group:resource | S-CAP | core | optional
 workspace.shapes	map of map of answer-shape | S-CAP | core | optional
 workspace.skills	map of group:skill | S-GEN | core | optional
+workspace.template-language	one-of | S-CTRL | expert | optional
 workspace.time-zone	text | S-GOV | core | optional
 workspace.tools	map of group:tool | S-CAP | core | optional
 workspace.values	map of group:value | S-GOV | core | optional
