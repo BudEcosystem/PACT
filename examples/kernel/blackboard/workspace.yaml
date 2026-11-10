@@ -1,0 +1,15 @@
+# BLACKBOARD — a team writes what it finds to one board, and a referee decides
+# what goes on it.
+#
+# The pattern docs/remediation/F7 refused because "there is nothing an agent can
+# write that another agent can read". The coordinator remembers `findings`
+# shared with its team: every finder is offered it to read and to add to. And
+# every entry passes the gate first — it must fit `shaped-like:`, meet
+# `admitted-when:`, and the referee must say yes. docs/92-SWARM.md §6.3: "the
+# accuracy lives in the admission gate, not the queue".
+#
+# What goes wrong: a board with no gate. A shared store anyone may write is
+# where the swarm systems that measured no benefit went wrong; the gate is the
+# point, which is why it is three lines and not none.
+name: Blackboard
+description: A team shares one board of findings, and a referee admits each entry.

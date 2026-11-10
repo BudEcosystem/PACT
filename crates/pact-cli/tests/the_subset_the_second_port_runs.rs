@@ -170,6 +170,8 @@ const REPORTED: &[(&str, &str, &str)] = &[
     // and there is nothing in a correctly-written `knowledge:` block to edit —
     // the only person who can act is whoever chose the runtime.
     ("knowledge", "knowledge/", "unretrieved"),
+    // docs/98 WP-8: a team's shared board, offered and not kept.
+    ("boards", "shared-with: the-team", "unenforced"),
 ];
 
 /// Rows of list B whose key is NOT a top-level `AgentSpec` field, because the
@@ -196,7 +198,7 @@ const REPORTED: &[(&str, &str, &str)] = &[
 /// is a governance line dropped in silence written down rather than fixed. The
 /// close was three lines at `notDoneHere`'s caller, where the resolved loop is
 /// already in scope.
-const REPORTED_INSIDE: &[(&str, &str)] = &[("asks:", "unenforced")];
+const REPORTED_INSIDE: &[(&str, &str)] = &[("asks:", "unenforced"), ("forks:", "unenforced")];
 
 /// English for a small count, because the front page writes the number in words
 /// — *"the ten governance keys the TypeScript port reports on `unenforced`"* —

@@ -103,6 +103,10 @@ export type Phase = {
   // Carried so the two ports agree about what the document said; this port has
   // no durable suspension to put it into (see `harness.ts`).
   asks: string;
+  // `forks: yes` — each attempt starts from a copy of the conversation as the
+  // stage began (docs/98 WP-10). Carried so it can be REPORTED: this port runs
+  // every attempt on the one conversation, which is what `forks:` exists to stop.
+  forks: boolean;
 };
 
 export type Loop = {
@@ -518,6 +522,7 @@ function readPhase(loopName: string, key: string, raw: unknown): Phase {
     mayUse,
     atMost,
     asks: String(raw["asks"] || "").trim(),
+    forks: ["yes", "true", true].includes(raw["forks"] as string | boolean),
   };
 }
 
@@ -528,6 +533,7 @@ function phaseToMapping(p: Phase): Record<string, unknown> {
   if (p.mayUse !== null) out["may-use"] = [...p.mayUse];
   if (p.atMost !== null) out["at-most"] = p.atMost;
   if (p.asks) out["asks"] = p.asks;
+  if (p.forks) out["forks"] = "yes";
   return out;
 }
 

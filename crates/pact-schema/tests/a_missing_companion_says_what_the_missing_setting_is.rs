@@ -213,6 +213,9 @@ const SENTENCES: &[(&str, &str, &str)] = &[
     // A `run-code` stage's fuel (02P A3): its help opens with the condition
     // (`on run-code, ...`), so it is named by a `summary:`.
     ("stage", "fuel", "how long and how much its code may run"),
+    // docs/98 WP-10: a `stop` stage ends a run a `call` started without
+    // waiting for it, and the sentence names that run, not the word `stop`.
+    ("stage", "stops", "which detached run it ends"),
     // A sampled frame's share and reviewers (02W §2.13): their help opens with
     // the condition (`with sampled-frame, ...`), so each is named by a `summary:`.
     (
@@ -331,7 +334,7 @@ fn the_settings_that_carry_a_summary_are_named_by_it_and_not_by_their_help() {
         .filter(|p| !field_strings(&p.group, &p.owed).0.is_empty())
         .count();
     assert_eq!(
-        with_summary, 18,
+        with_summary, 19,
         "seven of the ten pairings needed a `summary:` when this was written — `port.every`, \
          `teamwork.enough-is`, `teamwork.gives-up-after`, and the four `asks:` fields — and the \
          three a workflow's stage added (`call`, `chooses-between`, `over`) need one each, as do \

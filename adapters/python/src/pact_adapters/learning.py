@@ -32,6 +32,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from .checking import Uncheckable, check_instructions
 from .evals import Case, CaseOutcome, Verdict, check, verdict
 from .harness import run
 from .ir import AgentSpec
@@ -1220,6 +1221,14 @@ class Learner:
     #: and is what `_unmeasured` reports rather than enforcing a month against a
     #: total that starts at zero every process.
     month: MonthlySpend = field(default_factory=MonthlySpend)
+    #: The loaded document the spec came from, and the agent's key in it (law 8,
+    #: docs/98 WP-15). Given, a proposed change is written into a copy and held
+    #: to `pact check` before anything is spent scoring it; a change the checker
+    #: refuses is never applied. `None`: not checked, and the outcome says so.
+    document: "Mapping[str, Any] | None" = None
+    agent_key: str = ""
+    #: Why the last proposal could not be put in front of the checker, or "".
+    unchecked: str = ""
     #: Whether every transport this cycle scored through could put a price on its
     #: calls. `None` until something has been scored, which is a third state and
     #: not a false: an early refusal has priced nothing and knows nothing, and
@@ -1289,9 +1298,18 @@ class Learner:
             # The version a person last approved, as the workspace kept it, so
             # `drift.at-most:` is measured from something (`Baselines`).
             baseline=Baselines.at(spec.workspace).of(spec.key),
+            # Law 8 (docs/98 WP-15): what a proposal would make of this document
+            # is held to `pact check` before it is scored.
+            document=doc,
+            agent_key=spec.key,
         )
 
     def _unmeasured(self) -> tuple[str, ...]:
+        """[`_unmeasured_ceilings`], and a change law 8 could not check."""
+        said = self._unmeasured_ceilings()
+        return (*said, self.unchecked) if self.unchecked else said
+
+    def _unmeasured_ceilings(self) -> tuple[str, ...]:
         """Ceilings the author wrote that this cycle could not hold.
 
         `cycle-limits.per-month` used to be here unconditionally, with the
@@ -1654,6 +1672,36 @@ class Learner:
 
         after = self._with(proposal)
         spent_before, runs_before = self.money_spent, self.evals_spent
+        # LAW 8 (docs/98 WP-15): the same checker as the tree an author wrote.
+        # A proposed change is written into a copy of the document and held to
+        # `pact check` before a single case is scored — after the author's own
+        # gates, which decide without spending anything, and before the first
+        # paid one, so a change that breaks a
+        # rule the author's own tree is held to never takes effect — whoever, or
+        # whatever, proposed it.
+        if self.document is not None and proposal.field == "instructions":
+            try:
+                refused = check_instructions(
+                    self.document,
+                    self.agent_key or self.spec.key or self.spec.name,
+                    proposal.after,
+                    source=self.spec.workspace or None,
+                )
+            except Uncheckable as why:
+                # Not a refusal: said on every outcome, as a ceiling nobody
+                # could hold is (`_unmeasured`).
+                refused = []
+                self.unchecked = f"law 8: this change was not held to `pact check`: {why}"
+            if refused:
+                self.rejected.append(proposal)
+                return Outcome(
+                    False,
+                    "the proposed change does not pass `pact check`, the checker the "
+                    "author's own tree is held to: " + "; ".join(refused[:3]),
+                    cls,
+                    unmeasured=self._unmeasured(),
+                )
+
         if score is None:
             before_v = self._score(self.spec, self.holdout, transport_for)
             after_v = self._score(after, self.holdout, transport_for)

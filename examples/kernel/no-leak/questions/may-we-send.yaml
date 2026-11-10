@@ -1,0 +1,10 @@
+description: Whether this email may go.
+says: Read this email before it is sent. May it go?
+answer:
+  approved: yes or no
+shows:
+  - to
+  - body
+asked-of: [account-managers]
+answer-within: 1h
+if-nobody-answers: stop-and-say-so

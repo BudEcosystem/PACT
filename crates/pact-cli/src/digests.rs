@@ -72,6 +72,13 @@ pub fn of(doc: &Node) -> J {
                 "contract-digest".into(),
                 J::String(contract_digest(doc, name)),
             );
+            // Law 1 (docs/98 WP-2): its effect, the worst of every stage. Printed
+            // beside the digests and not yet folded into `contract-digest`, so a
+            // runtime comparing digests it already stored is not told every
+            // workflow changed on the day this was added.
+            let effect = pact_loader::effects::of(doc, name, &mut BTreeSet::new());
+            o.insert("effect".into(), J::String(effect.word().into()));
+            o.insert("moves-money".into(), J::Bool(effect.moves_money));
             // The workflows its doc-digest keeps (itself among them), in name
             // order: what a runtime comparing two versions of the document a
             // run relies on must compare, and nothing else (02W §7.2's drift

@@ -1,0 +1,10 @@
+description: Turns findings into an ordered plan.
+instructions: Write an ordered plan from the findings. Each step is one sentence a builder can act on.
+accepts:
+  brief: text
+  findings: list of text
+answers-with:
+  plan: list of text
+needs:
+  reasoning: careful
+  because: the plan is fixed before building starts, so it has to be right

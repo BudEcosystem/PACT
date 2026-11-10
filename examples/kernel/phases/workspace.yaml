@@ -1,0 +1,17 @@
+# PHASES — research, plan, build, each in its own agent with a fresh context.
+#
+# The pattern: three stages, three agents, and the only thing that crosses from
+# one to the next is the shaped answer the stage before it handed back. The
+# builder never sees the researcher's transcript, only its findings. This is
+# what the catalogue calls discrete phase separation, and the same shape is a
+# three-stage perception architecture or a retrieval-model, big-model,
+# small-model edit pipeline.
+#
+# What it costs: three model calls where one agent might have managed, and a
+# plan that is fixed before building starts. That last part is also the point:
+# the builder may fill in details, it may not change the plan.
+#
+# What goes wrong: a later stage reading `input.*` again instead of the stage
+# before it. Then the phases share nothing and separate nothing.
+name: Phases
+description: Research, then plan, then build, with only shaped answers crossing between them.

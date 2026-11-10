@@ -1,0 +1,8 @@
+description: The dead man's switch. Checks that the reconciler has written a heartbeat lately.
+kind: schedule
+every: every hour
+answers: reconciler
+says: |
+  Check that a heartbeat was written in the last hour. If none was, say so
+  loudly as your answer; a person reads the hourly report.
+if-still-running: skip

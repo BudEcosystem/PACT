@@ -11,8 +11,8 @@ looking through the wrong transcript for a payment that is not in it.
 **B13.** This field is also the whole of what a contended `claim` on a shared
 board can say: a key plus a scope wider than one run IS mutual exclusion. What a
 claim additionally needs — releasing it, seeing who holds it, expiring it — is a
-lease, and `Ledger` has no release and no introspection, so that stays deferred
-with a fixture rather than invented here.
+lease, which `claims.py` adds (`claim-lasts:`, docs/98 WP-7) and
+`test_a_claim_reaches_the_team_and_expires.py` holds.
 """
 
 from __future__ import annotations

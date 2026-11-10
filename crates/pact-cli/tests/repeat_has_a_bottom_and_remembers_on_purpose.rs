@@ -93,7 +93,10 @@ fn repeat_with_no_bottom_is_refused_and_told_how_to_end() {
         "{text}"
     );
     assert!(
-        text.contains("fix: Add `at-most:` — `at-most: 5`. \"Forever\" is a schedule plus memory."),
+        text.contains(
+            "fix: Add `at-most:` — `at-most: 5`. \"Forever\" is a schedule plus memory, or an \
+             owner's `unbounded: yes` on the workflow's `limits:`."
+        ),
         "{text}"
     );
     assert!(

@@ -13,8 +13,10 @@ every prior "universal agent format" attempted, and is why they were lossy.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import time
+import uuid
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
@@ -35,6 +37,11 @@ from .context_policy import (
 #: the check-time half and says the runtime half is a separate question; this is
 #: the answer, and without it the field was a guarantee nothing kept.
 from .at_most_once import WITHHELD, Ledger
+from .boards import Admit, Board
+from .placeholders import Vault
+from .rests import Rests
+from .boards import tool_for as board_tool
+from .claims import ClaimStore
 from .delegation import (
     Asker,
     Grant,
@@ -50,13 +57,13 @@ from .delegation import (
 )
 from .diagnostics import locate
 from .events import Bus
-from .facts import TURN_ENDS, Facts
+from .facts import TURN_ENDS, Fact, Facts
 from .holes import fill
 from .interceptors import Chain
 from .ir import AgentSpec, SkillSpec
-from .limits import RAN_OUT, Action, Meter, Reached, step_ceiling
+from .limits import RAN_OUT, Action, Meter, Reached, money, step_ceiling
 from .loops import DONE, Does, Loop, LoopError, Phase
-from .questions import AN_AGENT, ANYTHING, Gate, Question, Rejected, Wait
+from .questions import AN_AGENT, ANYTHING, Gate, Question, Rejected, Wait, quoted
 #: Three outcomes where this file used to read two. `_cleared` returned a bare
 #: bool, so "a person said no" and "nobody has answered" were the same value and
 #: every caller re-parked on both — see `rulings` for the measured shape of that.
@@ -71,6 +78,7 @@ from .yes_no import said_yes
 #: stays the only rendering there is (ASK-4, Y18/AD-46).
 from .shown import a_stage, spent, teammate, tidying, words_for
 from .suspension import (
+    request_digest,
     ASKED_A_PERSON,
     CONTEXT_TOO_LONG,
     GO_AHEAD,
@@ -397,6 +405,53 @@ class Transport(Protocol):
 
 ToolFn = Callable[[dict[str, Any]], str]
 
+
+@dataclass(frozen=True)
+class Part:
+    """One part of a streamed reply (docs/98 WP-14): what kind of thing it is,
+    and its words — or, for a tool call, the call."""
+
+    kind: str  # "answer", "reasoning" or "tool-call"
+    text: str = ""
+    call: "ToolCall | None" = None
+
+
+#: Which bus subject each kind of part is announced under.
+_PART_SUBJECT = {"answer": "message", "reasoning": "reasoning", "tool-call": "tool"}
+
+
+async def _ask(
+    transport: Any,
+    system: str,
+    history: list[dict[str, Any]],
+    tools: list[dict[str, Any]],
+    *,
+    bus: "Bus",
+    at: tuple[int, ...],
+) -> tuple[str, list[ToolCall]]:
+    """One model reply: streamed, when the transport streams; whole otherwise.
+
+    A transport that offers `model_stream` yields `Part`s as they arrive. The
+    reply is built from the ANSWER parts only — reasoning parts are announced
+    and never joined into it — so a model's thinking cannot leak into what it
+    says, however the provider interleaves the two (the reasoning-token
+    firewall: assembled by kind, never by stripping text). Each part is
+    announced on the bus as it arrives, for a host that shows it live."""
+    stream = getattr(transport, "model_stream", None)
+    if stream is None:
+        return await transport.model_call(system, history, tools)
+    said: list[str] = []
+    calls: list[ToolCall] = []
+    async for part in stream(system, history, tools):
+        subject = _PART_SUBJECT.get(part.kind, "message")
+        phase = "requested" if part.kind == "tool-call" else "started"
+        bus.emit(f"step.{subject}.{phase}", at=at, kind=part.kind, text=part.text)
+        if part.kind == "answer":
+            said.append(part.text)
+        elif part.kind == "tool-call" and part.call is not None:
+            calls.append(part.call)
+    return "".join(said), calls
+
 #: What a CodeAct stage asks the locked room to run. Not a program name from the
 #: tree — the code was written this second, by the model — so the room is asked
 #: under a reserved word rather than a name an author could collide with.
@@ -487,6 +542,19 @@ SUPPLIED_BY_THE_HOST: frozenset[str] = frozenset({
     "transport", "user_input", "tool_impls", "bus", "now", "clock",
     "resume", "answer", "approved", "needs_approval", "gates",
     "ask_member", "run_inputs",
+    # Where claims wider than one run are kept, and the team they belong to
+    # (docs/98 WP-7). WHICH actions claim, how far and for how long is authored
+    # (`same-request-key-across:`, `claim-lasts:`); the record every run of a
+    # team shares is a store, and the store is the host's.
+    "claims", "claims_team",
+    # The team's shared memory, and who judges what may go in it (docs/98
+    # WP-8). Which facts are shared, their shapes and their admission rules are
+    # authored (`shared-with:`, `admitted-when:`, `admitted-by:`); the entries
+    # written during a request, and running the admitting agent, are the host's.
+    "board", "board_facts", "admit",
+    # The circuit breaker's record (docs/98 WP-13). The RULE is authored
+    # (`rests-after:`, `rests-for:`); which tools failed lately is the host's.
+    "rests",
     # The value side of `remembers:`. The NAMES, their shapes and who may write
     # them are all authored and reach `AgentSpec.facts`; what this conversation
     # already knows is not a fact about the document at all — `lasts:
@@ -607,6 +675,31 @@ async def run(
     #: `Facts.record` follows on the way out: a fact the author did not write
     #: down is not one a run may invent.
     remembered: Mapping[str, Any] | None = None,
+    #: Where claims wider than one run are kept (`same-request-key-across:
+    #: the-team` / `the-workspace`; docs/98 WP-7). A host parameter for the
+    #: reason `remembered=` is one: what outlives the run is the surrounding
+    #: system's to keep. `None` holds such a claim for this run only and says so
+    #: on `RunResult.unenforced`.
+    claims: "ClaimStore | None" = None,
+    #: The team a `the-team` claim belongs to: the agent at the root of the
+    #: request. `None` means this agent is the root.
+    claims_team: str | None = None,
+    #: The team's shared memory for this request (docs/98 WP-8). The root run
+    #: makes one when its agent shares a fact; every member it starts gets the
+    #: same object, riding the grant as `at_work` does.
+    board: "Board | None" = None,
+    #: Facts the LEAD shares that this member may read and write, handed down
+    #: with the board. A member does not declare them; the lead does.
+    board_facts: "tuple[Fact, ...]" = (),
+    #: Who judges an entry before it is written, when a fact says `admitted-by:`:
+    #: `admit(judge, fact, entry) -> (yes, because)`. The host's, because the
+    #: judge is a run and a run needs a transport. `None` refuses every such
+    #: write rather than letting it in unread.
+    admit: "Admit | None" = None,
+    #: Which tools are resting after failing too often (docs/98 WP-13). Per run
+    #: unless the host shares one record across runs, so a tool that is down for
+    #: everyone stays rested for everyone.
+    rests: "Rests | None" = None,
 ) -> RunResult:
     """Drive `spec` to completion over `transport`.
 
@@ -695,7 +788,20 @@ async def run(
     once = Ledger(spec.request_keys) if resume is None else Ledger.resumed(
         spec.request_keys, resume.spent_keys
     )
+    once.store = claims
+    rested = rests if rests is not None else Rests()
+    once.team = claims_team or spec.name
+    # Who holds a claim this run takes: the run, by name and a fresh id, so a
+    # renewed lease (the same holder taking again) is this run and nobody else.
+    once.holder = f"{spec.name}:{uuid.uuid4().hex}"
     supplied: dict[str, Any] = dict(run_inputs or {})
+    # A money ceiling handed in for this run (`cost-per-request-from:`, docs/98
+    # WP-14), through the same door a teammate's share comes through: the
+    # smaller of the two binds, so the written figure is the most it can be.
+    if spec.limits.cost_from.startswith("run-inputs."):
+        handed = money(supplied.get(spec.limits.cost_from.removeprefix("run-inputs.")))
+        if handed is not None:
+            spec = granted(spec, handed[0], handed[1])
     # What the conversation already knows, seeded into the one store `remember-as:`
     # writes to and `bind: remembers.<n>` reads from. Through `record` rather than
     # into `held` directly, so an undeclared name is dropped here exactly as it
@@ -750,6 +856,13 @@ async def run(
     #: so replacing it with a generated one would make a documented teammate
     #: describe itself worse whenever the surrounding system happened to name it.
     named_by_value: dict[str, str] = {}
+    # The team store (docs/98 WP-8): what this agent shares with its team, and
+    # what its lead shared with it.
+    shared: tuple[Fact, ...] = tuple(
+        f for f in spec.facts.declared.values() if f.shared_with == "the-team"
+    ) + tuple(board_facts)
+    if shared and board is None:
+        board = Board()
     if ask_member is not None:
         for declared in spec.agent_valued_inputs:
             try:
@@ -785,6 +898,11 @@ async def run(
 
         async def sharing_the_meter(grant: Grant) -> str:
             grant.at_work = at_work
+            # The team store rides the same way: one board for the request,
+            # and the facts this lead shares, so a member reads and writes what
+            # its teammates do (docs/98 WP-8).
+            grant.board = board
+            grant.board_facts = shared
             # HOW this member was reached, which is what decides whether it owes
             # a figure of its own (P4). It rides the grant for the reason the
             # meter does: `Asker` takes one argument, and the check belongs
@@ -800,6 +918,11 @@ async def run(
     # documents in the worked example loaded, validated and did nothing, and
     # the card numbers they say they stop reached the model.
     chain = spec.chain if chain is None else chain
+    # A vault of this run's own, when an action it uses gets hidden values back
+    # (docs/98 WP-11). A copy of the chain, so one run's placeholders are never
+    # another's: the spec's chain is shared by every run of the agent.
+    if spec.gets_hidden:
+        chain = dataclasses.replace(chain, vault=Vault())
     # AND THE RUNNER THE CHAIN COULD NOT HAVE BEEN BUILT WITH. `AgentSpec.
     # from_document` is handed a loaded document and nothing else (P-1), so it
     # has no host to ask for one; `run()` has one and never passed it on. Through
@@ -1039,6 +1162,17 @@ async def run(
         {"name": m, "description": f"ask {m} for help: {brief}", "parameters": {}}
         for m, brief in sorted(named_by_value.items())
     ]
+    # Each shared fact, offered as one tool named after it (docs/98 WP-8). Its
+    # body is the board's, so a call goes through the same rule chain, the
+    # same approvals and the same at-most-once record as any other tool.
+    if shared and board is not None:
+        tool_impls = dict(tool_impls)
+        for fact in shared:
+            if fact.name in tool_impls or any(d["name"] == fact.name for d in tool_defs):
+                continue
+            definition, body = board_tool(fact, board, spec.name, admit, spec.detectors)
+            tool_defs.append(definition)
+            tool_impls[fact.name] = body
     # A stage may only narrow what the agent already has. Checked once, before
     # the first model call, so a typo in a branch taken on the fortieth step
     # fails on the first one instead.
@@ -1429,6 +1563,10 @@ async def run(
         )
     phase_name = loop.starts_at
     visits: dict[str, int] = {}
+    # `forks: yes` (docs/98 WP-10): where each forked stage's conversation
+    # starts, and what each finished attempt at it answered.
+    fork_base: dict[str, int] = {}
+    fork_answers: dict[str, list[str]] = {}
     #: Answers a person has given to an `ask-someone` stage, keyed by stage.
     person_said: dict[str, str] = {}
 
@@ -1596,6 +1734,7 @@ async def run(
                 bus.emit("turn.run.completed", at=(i,))
             return _turn_ended(result, spec.facts)
         phase_name = phase.name
+        _fork(phase, result, history, fork_base, fork_answers)
         result.phases.append(phase_name)
 
         bus.emit("step.run.started", at=(i,))
@@ -1882,7 +2021,8 @@ async def run(
                 phase_name = nxt
                 continue
 
-            text, calls = await asking_now.model_call(
+            text, calls = await _ask(
+                asking_now,
                 _system_for(
                     spec.instructions, phase, step_skills,
                     # The author's declared answer shape, on every stage. Not
@@ -1899,6 +2039,8 @@ async def run(
                 ),
                 history,
                 step_tools,
+                bus=bus,
+                at=(i,),
             )
             bus.emit("step.model.completed", at=(i,), text=text, tools=[c.name for c in calls])
             # What that call cost. Checked immediately: a spend cap enforced one
@@ -2633,7 +2775,26 @@ async def run(
             # has run: a redaction rule still sees the real value, and the
             # model never saw the name at all. Merged once, above, because the
             # at-most-once record reads the same call the tool receives.
-            out = _call_tool(tool_impls.get(call.name), sent)
+            # The one place a hidden value comes back (docs/98 WP-11): in the
+            # arguments of an action that says it gets them, after every rule
+            # ran, so the trace and any approval saw only the placeholder.
+            if chain.vault is not None and (call.name, str(sent.args.get("action") or "")) in spec.gets_hidden:
+                sent = ToolCall(sent.name, chain.vault.restored(sent.args))
+            # A tool resting after failing too often is not called (docs/98
+            # WP-13); the model is told until when, and can do something else.
+            back = rested.resting(call.name, clock()) if call.name in spec.rests else None
+            if back is not None:
+                out = (
+                    f"not done: {call.name!r} failed too often in a row and is resting "
+                    f"for another {round(back - clock())}s — do without it for now"
+                )
+            else:
+                out = _call_tool(tool_impls.get(call.name), sent)
+                if call.name in spec.rests:
+                    rested.record(
+                        call.name, isinstance(out, str) and out.startswith("error:"),
+                        clock(), spec.rests[call.name],
+                    )
             meter.tool_calls += 1
             # SHORTENED AT THE SOURCE, before anything reads it (P8 wave 5).
             #
@@ -2838,6 +2999,10 @@ def _park_state(
         parked.text = text
     if awaiting:
         parked.awaiting = awaiting
+        # Bound to the EXACT request (docs/98 WP-12): an answer applies to these
+        # calls with these arguments, and to nothing changed after a person saw
+        # them (`Suspension.accepts`).
+        parked.request_digest = request_digest(awaiting)
     return parked
 
 
@@ -3105,6 +3270,13 @@ def _keep_what_it_answered(spec: AgentSpec, call: "ToolCall", answered: str) -> 
     elif len(tool.remembers) == 1 and not named:
         where = next(iter(tool.remembers.values()))
     else:
+        return
+    # `never-from: tool output` held at run time too (docs/98 WP-11): `pact
+    # check` refuses the tree that writes this (`loader/a-tool-may-not-write-
+    # there`), and a host that loaded a document nobody checked gets the same
+    # answer here — the answer is not kept.
+    fact = spec.facts.declared.get(where)
+    if fact is not None and "tool output" in fact.never_from:
         return
     spec.facts.record(where, answered)
 
@@ -3563,11 +3735,65 @@ def _request(call: ToolCall, step_text: str) -> str:
     return json.dumps(call.args, sort_keys=True) if call.args else step_text
 
 
+def _fork(
+    phase: Any,
+    result: RunResult,
+    history: list[dict[str, Any]],
+    base: dict[str, int],
+    answers: dict[str, list[str]],
+) -> None:
+    """Keep forked attempts independent (`forks: yes`, docs/98 WP-10).
+
+    A forked stage remembers where the conversation stood when it was first
+    entered. Each time it is entered again for a NEW attempt — after an answer,
+    not after a tool step, which is the same attempt carrying on — what the
+    last attempt said is set aside and the conversation goes back to that
+    point, so the next attempt never reads the last one. When the run moves on
+    to another stage, the conversation goes back once more and every attempt's
+    answer is put in front of the next stage as a quoted record. This is what
+    turns `answer-more-than-once` into independent samples, which its own
+    description says it is not without this line.
+    """
+    prev = result.phases[-1] if result.phases else ""
+    same_attempt = bool(result.steps and result.steps[-1].tool_calls)
+
+    def end_attempt(stage: str) -> None:
+        start = base[stage]
+        said = next(
+            (m.get("content") for m in reversed(history[start:]) if m.get("role") == "assistant"),
+            None,
+        )
+        if said:
+            answers.setdefault(stage, []).append(str(said))
+        del history[start:]
+
+    if prev and prev != phase.name and prev in base:
+        end_attempt(prev)
+        got = answers.pop(prev, [])
+        del base[prev]
+        if got:
+            listed = "\n".join(f"{n}. {quoted(a)}" for n, a in enumerate(got, 1))
+            history.append(
+                {
+                    "role": "user",
+                    "content": f"[recorded earlier] independent attempts at '{prev}' answered:\n{listed}",
+                }
+            )
+    if getattr(phase, "forks", False):
+        if phase.name not in base:
+            base[phase.name] = len(history)
+        elif prev == phase.name and not same_attempt:
+            end_attempt(phase.name)
+
+
 def delegate_by_running(
     document: dict[str, Any],
     transport_for: Callable[[AgentSpec], Transport],
     tool_impls: dict[str, ToolFn] | None = None,
     bus: Bus | None = None,
+    claims: "ClaimStore | None" = None,
+    team: str | None = None,
+    admit: "Admit | None" = None,
 ) -> Asker:
     """Ask a team member by *running* it — this same harness, one level down.
 
@@ -3688,6 +3914,13 @@ def delegate_by_running(
             # the line keeps the old behaviour to the byte: a teammate is work
             # happening elsewhere, and its run suspends for it.
             ask_member=ask if figure is not None else None,
+            # One claim store and one team for the whole request (docs/98
+            # WP-7): a member's `the-team` claim is the team's, not its own.
+            claims=claims,
+            claims_team=team,
+            board=getattr(grant, "board", None),
+            board_facts=tuple(getattr(grant, "board_facts", ()) or ()),
+            admit=admit,
         )
         # What it cost comes off its share. `OverBudget` is raised as this
         # member's failure rather than allowed out of the join, so the author's

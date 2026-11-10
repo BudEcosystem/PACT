@@ -1,0 +1,19 @@
+# RECONCILE — every fifteen minutes, read what is, compare with what should be, fix the gap.
+#
+# The pattern: the clock is a port. The reconciler re-reads the tracker on every
+# tick and corrects the difference, so a missed event, a restart or a person's
+# edit all heal on the next tick. `if-missed: run-when-back` makes a tick that
+# passed while nothing was running run once when it is back. `if-still-running:
+# skip` means two ticks never overlap. What the reconciler last did is kept per
+# project, so it does not redo it.
+#
+# A second timer is the dead man's switch: it asks whether the first one has
+# written its mark lately, and raises a hand if not.
+#
+# This is what the catalogue calls tracker-as-desired-state reconciliation, a
+# dead man's switch for scheduled jobs, and working memory via task tracking.
+#
+# What goes wrong: a reconciler that remembers what it did but not per project.
+# Then one project's "done" hides another's "not yet".
+name: Reconcile
+description: Level-triggered reconciliation of a tracker on a timer, with a watchdog timer beside it.

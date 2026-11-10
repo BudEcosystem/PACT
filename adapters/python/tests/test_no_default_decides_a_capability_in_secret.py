@@ -73,6 +73,7 @@ SRC = REPO / "adapters/python/src/pact_adapters"
 #: different behaviour changes their document, not this file.
 AUTHOR_SETS_IT: dict[str, str] = {
     "ir.DEFAULT_STEPS": "`limits.steps-at-most:`",
+    "ir.UNBOUNDED_STEPS": "`limits.unbounded:` (an owner's, named under `owners:`; docs/98 WP-3)",
     "slo.FEELS": "`limits.feel:`, and any of the four latency figures written directly",
     "learning.SHRINK_LIMIT": "`learning.max-drift:`, through `Permissions`",
     "context_policy.SUMMARY_RESERVE": "`context-policy:`'s own `keep-under:`",

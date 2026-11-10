@@ -1,0 +1,47 @@
+description: Review every document, then summarise two ways.
+accepts:
+  documents: text
+answers-with:
+  verdict: text, optional
+starts-at: each-document
+steps:
+  each-document:
+    does: each
+    over: input.documents
+    identified-by: [content-hash]
+    combines-by:
+      verdict: vote
+      score: top 1 highest by score
+    teamwork:
+      waits-for: everyone
+    limits:
+      items-at-most: 50
+      when-it-runs-out: stop-and-say-so
+    starts-at: review
+    steps:
+      review:
+        does: call
+        call: reviewer
+        bind:
+          document: item.content-hash
+    then:
+      answered: both
+  both:
+    does: together
+    combines-by:
+      summary: keep-all
+    steps:
+      short:
+        does: call
+        call: summariser
+        bind:
+          verdicts: steps.each-document.verdict
+      long:
+        does: call
+        call: summariser
+        bind:
+          verdicts: steps.each-document.reason
+    then:
+      answered: reply
+  reply:
+    does: answer

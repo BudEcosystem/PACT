@@ -193,6 +193,11 @@ export type AgentSpec = {
   slo?: Record<string, unknown>;
   model?: string;
   watches?: string[];
+  // A `remembers` entry `shared-with: the-team` (docs/98 WP-8), by name and
+  // description. Offered under the same name and description `boards.py` gives
+  // it, so both ports show the model the same tools; this port keeps no board,
+  // so a call to one is refused and the line is reported (`notDoneHere`).
+  boards?: Array<{ name: string; description: string }>;
 };
 
 //: Every key an `AgentSpec` declares. The conformance driver takes its payload
@@ -202,7 +207,7 @@ export const AGENT_SPEC_FIELDS = [
   "name", "instructions", "tools", "skills", "team", "maxSteps", "limits",
   "loop", "loops", "interceptors", "contextPolicy", "policy", "teamwork",
   "settings", "slo", "model", "watches", "answersWith", "answersWithMode",
-  "knowledge",
+  "knowledge", "boards",
 ] as const;
 
 //: Used when the payload carried no `maxSteps`. The same number `ir.py` uses,
@@ -370,6 +375,13 @@ export function notDoneHere(spec: AgentSpec): string[] {
   }
   for (const key of Object.keys(spec.slo ?? {})) {
     out.push(`${key}: a latency promise nothing on this runtime measures.`);
+  }
+  for (const b of spec.boards ?? []) {
+    out.push(
+      `remembers.${b.name}: shared-with: the-team — offered to the model here and ` +
+        `not kept on this runtime, so reading or writing it comes back as an error. ` +
+        `The Python harness keeps one board per request, behind its admission gate.`,
+    );
   }
   if (spec.model) {
     out.push(
@@ -579,7 +591,28 @@ export async function run(
       }),
     ),
   ];
-  const toolNames = toolDefs.map((d) => d.name);
+  // Each shared board, after the teammates — the order `harness.py` appends
+  // them in. Kept out of `reachable` below for the same reason Python keeps it
+  // out of `check_against`: a stage's `may-use:` is checked against what the
+  // author declared on the agent, and a board is declared on memory.
+  const boardNames = new Set<string>();
+  for (const b of spec.boards ?? []) {
+    if (toolDefs.some((d) => d.name === b.name)) continue;
+    boardNames.add(b.name);
+    toolDefs.push({
+      name: b.name,
+      description: `the team's shared ${b.description}: \`read\` it, or \`write\` one entry to it`,
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["read", "write"] },
+          entry: { type: "object" },
+        },
+        required: ["action"],
+      },
+    });
+  }
+  const toolNames = toolDefs.map((d) => d.name).filter((n) => !boardNames.has(n));
   const skills = (spec.skills ?? []).slice().sort((a, b) =>
     a.name < b.name ? -1 : a.name > b.name ? 1 : 0
   );
@@ -693,7 +726,29 @@ export async function run(
   // `feel`, `first-reply-within`, `per-word-under`, `measured-at` and `asks` — and
   // §7.28 accounted for them under `slo.*`, a row that could never fire because
   // `pact show` nests them inside `limits:` and nothing ever arrives under `slo:`.
+  // Two lines the primitives round added (docs/98 WP-3, WP-10), each said in its
+  // own words because the generic sentence below would be false of them.
+  for (const stage of Object.keys(loop.steps).sort()) {
+    if (!loop.steps[stage].forks) continue;
+    unenforced.push(
+      `forks: yes — stage '${stage}' asks for each attempt to start from a copy ` +
+        `of the conversation; this port runs every attempt on the one conversation, ` +
+        `so a later attempt reads the earlier ones. The Python harness starts each ` +
+        `from a copy.`,
+    );
+  }
+  const unbounded = ["yes", "true", true].includes(
+    (spec.limits ?? {})["unbounded"] as string | boolean,
+  );
+  if (unbounded) {
+    unenforced.push(
+      `limits.unbounded: yes — an owner lifted the step ceiling; this port still ` +
+        `stops at ${maxSteps} steps, so a run the owner meant to go on is cut short ` +
+        `here. The Python harness sets no step ceiling.`,
+    );
+  }
   for (const key of limitsNotRead(spec.limits ?? {})) {
+    if (key === "unbounded") continue;
     unenforced.push(
       `limits.${key} — read and not applied on this runtime, so it holds nothing ` +
         `on this run. The Python harness carries the latency promises to a report ` +
@@ -816,7 +871,7 @@ export async function run(
     // What exists in this stage. Eve resolves the tool set once per run, which
     // is why a planning step there can see the payment tool; here it is the
     // stage's own line.
-    const offered = new Set(toolsOffered(phase, reachable));
+    const offered = new Set(toolsOffered(phase, [...reachable, ...boardNames]));
     const stepTools = toolDefs.filter((d) => offered.has(d.name));
     const readable = new Set(skillsOffered(phase, skills.map((s) => s.name)));
     const stepSkills = skills.filter((s) => readable.has(s.name));
@@ -847,7 +902,7 @@ export async function run(
     // model really took (T7); running it would make `may-use:` advisory. The two
     // refusals stay distinguishable because they call for opposite fixes: a name
     // to correct, or a `may-use:` line to widen.
-    const have = new Set(toolNames);
+    const have = new Set([...toolNames, ...boardNames]);
     const refused: Record<string, string> = {};
     for (const c of calls) {
       if (!offered.has(c.name)) {
@@ -894,7 +949,14 @@ export async function run(
       // `no tool named` refusal, not `Object.prototype.constructor`.
       const fn = Object.hasOwn(toolImpls, c.name) ? toolImpls[c.name] : undefined;
       meter.toolCalls += 1;
-      results.push(fn ? fn(c.args) : `error: no tool named '${c.name}'`);
+      results.push(
+        fn
+          ? fn(c.args)
+          : boardNames.has(c.name)
+            ? `error: the team's shared '${c.name}' is not kept on this runtime, so ` +
+              `nothing was read or written`
+            : `error: no tool named '${c.name}'`,
+      );
       ran.push(c);
     }
 

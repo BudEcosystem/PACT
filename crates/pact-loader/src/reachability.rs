@@ -542,9 +542,21 @@ fn walkable(steps: &pact_doc::Map) -> bool {
             let Some(routes) = block.node.as_map() else {
                 return false;
             };
-            for outcome in routes.values() {
-                let targets: Vec<&Node> = match outcome.node.as_map() {
-                    Some(heard) if key == "then" => heard.values().map(|e| &e.node).collect(),
+            for (word, outcome) in routes {
+                // `decided-by:` names a program, not a stage; `may-go-to:` is
+                // the list of stages that program may send the run to. Both are
+                // read as edges by `workflows::lines_to`. Treating the program's
+                // name as a stage made this walk give up on every loop that uses
+                // one, which silently switched off the two checks below (docs/98
+                // WP-1, law 6).
+                if key == "then" && word == "decided-by" {
+                    continue;
+                }
+                let targets: Vec<&Node> = match (outcome.node.as_map(), outcome.node.as_list()) {
+                    (Some(heard), _) if key == "then" => heard.values().map(|e| &e.node).collect(),
+                    (_, Some(listed)) if key == "then" && word == "may-go-to" => {
+                        listed.iter().collect()
+                    }
                     _ => vec![&outcome.node],
                 };
                 for t in targets {

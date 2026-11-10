@@ -1,0 +1,6 @@
+description: Writes a one-paragraph summary of a set of review verdicts.
+instructions: Summarise the verdicts in one paragraph a manager would read.
+accepts:
+  verdicts: text
+answers-with:
+  summary: text

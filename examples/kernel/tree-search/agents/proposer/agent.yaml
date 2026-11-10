@@ -1,0 +1,8 @@
+description: Proposes next steps from the best ideas so far.
+instructions: |
+  You are given the best ideas so far. Propose three new ideas that build on
+  them, each different from the others.
+accepts:
+  frontier: list of idea, optional
+answers-with:
+  ideas: list of text

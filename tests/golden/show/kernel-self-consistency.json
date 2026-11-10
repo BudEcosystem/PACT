@@ -1,0 +1,37 @@
+{
+  "name": "Self-consistency",
+  "description": "Three independent attempts at a question, and the answer they agree on.",
+  "agents": {
+    "solver": {
+      "description": "Answers a hard question by three independent attempts.",
+      "instructions": "Answer the question you are given.",
+      "loop": "three-independent-tries"
+    }
+  },
+  "loops": {
+    "three-independent-tries": {
+      "description": "Work the question through three times, independently, then settle.",
+      "starts-at": "attempt",
+      "steps": {
+        "attempt": {
+          "does": "think",
+          "forks": "yes",
+          "says": "Work the question through from the beginning and give your answer.",
+          "at-most": 3,
+          "then": {
+            "used-a-tool": "attempt",
+            "answered": "attempt",
+            "too-many-times": "settle"
+          }
+        },
+        "settle": {
+          "does": "answer",
+          "says": "You are shown three independent attempts. Give the answer most of them reached, and say plainly if they disagreed.",
+          "then": {
+            "answered": "done"
+          }
+        }
+      }
+    }
+  }
+}

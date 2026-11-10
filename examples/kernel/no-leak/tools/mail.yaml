@@ -1,0 +1,9 @@
+description: Outgoing email.
+connect: office-server
+carries: [a-way-out]
+actions:
+  send:
+    description: Send an email.
+    takes:
+      to: text
+      body: text

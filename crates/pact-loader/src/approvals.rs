@@ -312,7 +312,11 @@ fn one(when: &Node, tools: Option<&Map>, diags: &mut Diagnostics) {
     let names: Vec<&str> = actions
         .map(|m| m.keys().map(String::as_str).collect())
         .unwrap_or_default();
-    if action.is_empty() {
+    // `effect:` beside it (docs/98 WP-12) narrows the rule to the actions that
+    // do that — `{ tool: payments, effect: spends }` — so a whole tool is the
+    // point, and the read-only actions are not stopped along with the rest.
+    let by_effect = when.as_map().is_some_and(|m| m.contains_key("effect"));
+    if action.is_empty() && !by_effect {
         diags.push(Diagnostic::error(
             "loader/rule-names-no-action",
             entry.node.span.clone(),
@@ -335,7 +339,7 @@ fn one(when: &Node, tools: Option<&Map>, diags: &mut Diagnostics) {
         ));
         return;
     }
-    if !names.contains(&action) {
+    if !action.is_empty() && !names.contains(&action) {
         diags.push(Diagnostic::error(
             "loader/no-such-action-to-guard",
             entry.node.span.clone(),

@@ -193,6 +193,13 @@ pub fn inventory(found: &Found) -> J {
         // delegates. Each is the author's own name, so the runtime can fetch the
         // document by it; a boolean would answer "is it governed" and not "how".
         o.insert("governance".into(), governance(a));
+        // WHAT IT DOES TO THE WORLD, computed and never declared (law 1, docs/98
+        // WP-2): the worst of everything it uses and everyone on its team. A
+        // runtime routing work, or deciding whether a caller needs the
+        // exactly-once machinery, reads it here instead of trusting a label.
+        let effect = pact_loader::effects::of_agent(doc, a, &mut std::collections::BTreeSet::new());
+        o.insert("effect".into(), J::String(effect.word().into()));
+        o.insert("moves-money".into(), J::Bool(effect.moves_money));
         let runnable =
             a.get("instructions").is_some() || pact_loader::deciding::decides_alone(a, &decision);
         o.insert("runnable".into(), J::Bool(runnable));

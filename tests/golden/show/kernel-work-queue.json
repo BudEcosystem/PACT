@@ -1,0 +1,109 @@
+{
+  "name": "Work queue",
+  "description": "Work a growing queue, each task claimed across the team with a lease.",
+  "durability": "checkpoint",
+  "resources": {
+    "queue-server": {
+      "resource-kind": "mcp-server",
+      "endpoint": "host/queue",
+      "description": "Where the work queue is reached."
+    }
+  },
+  "tools": {
+    "queue": {
+      "description": "The team's work queue.",
+      "connect": "queue-server",
+      "actions": {
+        "do": {
+          "description": "Do one task.",
+          "takes": {
+            "task": "text"
+          },
+          "same-request-key": "task",
+          "same-request-key-across": "the-team",
+          "claim-lasts": "5m",
+          "writes": [
+            "the queue"
+          ],
+          "undone-by": "queue/undo"
+        },
+        "undo": {
+          "description": "Undo one task.",
+          "takes": {
+            "task": "text"
+          },
+          "same-request-key": "task"
+        },
+        "watch": {
+          "description": "Watch the queue and report how it is going.",
+          "reads-only": "yes",
+          "takes": {
+            "queue": "text"
+          }
+        }
+      }
+    }
+  },
+  "workflows": {
+    "work": {
+      "description": "Work every task on the queue, including the ones that arrive while it runs.",
+      "accepts": {
+        "queue": "text",
+        "tasks": "text"
+      },
+      "answers-with": {
+        "done": "text, optional"
+      },
+      "starts-at": "watch",
+      "steps": {
+        "watch": {
+          "does": "call",
+          "call": "queue/watch",
+          "waits-for-result": "no",
+          "bind": {
+            "queue": "input.queue"
+          },
+          "then": {
+            "answered": "work"
+          }
+        },
+        "work": {
+          "does": "each",
+          "over": "input.tasks",
+          "keeps-taking": "yes",
+          "identified-by": [
+            "id"
+          ],
+          "limits": {
+            "items-at-most": 200,
+            "at-once-at-most": 1,
+            "when-it-runs-out": "stop-and-say-so"
+          },
+          "starts-at": "do",
+          "steps": {
+            "do": {
+              "does": "call",
+              "call": "queue/do",
+              "bind": {
+                "task": "item.id"
+              }
+            }
+          },
+          "then": {
+            "answered": "halt-watch"
+          }
+        },
+        "halt-watch": {
+          "does": "stop",
+          "stops": "steps.watch.run",
+          "then": {
+            "answered": "reply"
+          }
+        },
+        "reply": {
+          "does": "answer"
+        }
+      }
+    }
+  }
+}

@@ -184,6 +184,18 @@ fields:
       capability, which is a Python object and not a sentence
 
   # ── tool ───────────────────────────────────────────────────────────────────
+  tool.carries:
+    construct: "nothing: what a tool brings into a run, read by `pact check`'s leak rule"
+    outcome: loss
+    rows: [D2]
+  tool.rests-after:
+    construct: "nothing: the harness rests a tool after this many failures in a row (rests.Rests)"
+    outcome: loss
+    rows: [D2]
+  tool.rests-for:
+    construct: "nothing: how long the harness rests a tool (rests.Rests)"
+    outcome: loss
+    rows: [D2]
   tool.available-when:
     construct: "decided once when the agent is built (ir.available): what is not offered is never built, which toolset.prepared(<static filter>) would do per step"
     outcome: mapped
@@ -292,6 +304,18 @@ fields:
     rows: [96-B1]
   action.same-request-key-across:
     construct: "nothing: how far the host's at-most-once claim reaches (this run, the team, the workspace)"
+    outcome: loss
+    rows: [D2]
+  action.writes:
+    construct: "nothing: the places an action changes, read by `pact check` to find branches writing the same place"
+    outcome: loss
+    rows: [D2]
+  action.gets-hidden-values:
+    construct: "nothing: the host restores a hidden value's placeholder in this action's arguments only (placeholders.Vault)"
+    outcome: loss
+    rows: [D2]
+  action.claim-lasts:
+    construct: "nothing: how long the host's claim on a same-request key lasts before the key is free again (claims.ClaimStore lease)"
     outcome: loss
     rows: [D2]
   action.bind:

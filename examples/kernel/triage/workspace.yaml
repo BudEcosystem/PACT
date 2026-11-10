@@ -1,0 +1,17 @@
+# TRIAGE — decide by written rules first, then a cheap classifier, then a person.
+#
+# The pattern: one `decide` stage with three rungs. Rules you wrote are tried
+# first and cost nothing. A small classifier agent is tried next; it answers one
+# of the labels or `not-sure`, and `not-sure` passes the decision on. A person
+# is last and always answers. Whatever rung decides, the label is one of a
+# closed list, and every label leads somewhere the author wrote down.
+#
+# This is the shape the catalogue calls "classify then act", "non-generative
+# judgment routing", "action selector" and "budget-aware routing": the model
+# never chooses an action by name, only a label from a list, and the cheapest
+# rung that can decide, does.
+#
+# What goes wrong: a label with nowhere to go. `chooses-between:` must name a
+# stage for every label the rungs can produce, and `pact check` refuses a gap.
+name: Triage
+description: Route a message by rules, then a classifier, then a person, to one of three desks.

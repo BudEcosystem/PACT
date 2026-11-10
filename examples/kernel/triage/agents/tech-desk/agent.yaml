@@ -1,0 +1,6 @@
+description: Handles technical problems.
+instructions: Work out what is broken and say what to try first.
+accepts:
+  message: text
+answers-with:
+  reply: text

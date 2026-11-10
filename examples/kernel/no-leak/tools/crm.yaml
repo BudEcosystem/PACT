@@ -1,0 +1,9 @@
+description: Customer records.
+connect: office-server
+carries: [private-data]
+actions:
+  look-up:
+    description: Look a customer up.
+    reads-only: yes
+    takes:
+      customer: text

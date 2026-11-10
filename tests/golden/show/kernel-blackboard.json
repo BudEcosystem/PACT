@@ -1,0 +1,58 @@
+{
+  "name": "Blackboard",
+  "description": "A team shares one board of findings, and a referee admits each entry.",
+  "agents": {
+    "coordinator": {
+      "description": "Puts a question to the finders and answers from the board.",
+      "instructions": "Ask both finders to look into the question and write what they find to the\nfindings board. Then read the board, and answer from what is on it — only\nfrom what is on it. Say which finder found each point.",
+      "team": {
+        "finder-a": "looks for evidence for the claim",
+        "finder-b": "looks for evidence against the claim"
+      },
+      "teamwork": {
+        "waits-for": "everyone",
+        "starts": "all-at-once",
+        "divides-the-budget": "evenly",
+        "if-someone-fails": "carry-on"
+      },
+      "remembers": {
+        "findings": {
+          "description": "what the finders found, admitted one entry at a time",
+          "lasts": "one-conversation",
+          "shared-with": "the-team",
+          "shaped-like": {
+            "claim": "text",
+            "source": "text",
+            "status": "one of supports, contradicts"
+          },
+          "admitted-when": [
+            {
+              "value": "entry.status",
+              "is-one-of": [
+                "supports",
+                "contradicts"
+              ]
+            }
+          ],
+          "admitted-by": "referee"
+        }
+      }
+    },
+    "finder-a": {
+      "description": "Looks for evidence for the claim.",
+      "instructions": "Look for evidence that supports the claim. Write each piece to the findings\nboard with its source, as one entry each. Do not argue; find."
+    },
+    "finder-b": {
+      "description": "Looks for evidence against the claim.",
+      "instructions": "Look for evidence that contradicts the claim. Write each piece to the\nfindings board with its source, as one entry each. Do not argue; find."
+    },
+    "referee": {
+      "description": "Decides whether a finding may go on the board.",
+      "instructions": "You are shown one proposed finding. Say yes only if its source is named and\nthe claim is something the source could actually show. Say why either way.",
+      "answers-with": {
+        "admit": "yes or no",
+        "because": "text"
+      }
+    }
+  }
+}

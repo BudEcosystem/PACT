@@ -1,0 +1,13 @@
+description: Drafts plain-language policy summaries from a policy document.
+instructions: |
+  Summarise the policy you are given in plain language. Every number in the
+  summary must appear in the policy. Quote, never paraphrase, a rule.
+accepts:
+  policy: text
+answers-with:
+  summary: text
+evals: /evals/suite.yaml
+limits:
+  cost-per-request-under: 0.10 USD
+  steps-at-most: 6
+  when-it-runs-out: stop-and-say-so

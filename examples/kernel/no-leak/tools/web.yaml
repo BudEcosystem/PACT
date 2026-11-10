@@ -1,0 +1,9 @@
+description: The open web.
+connect: office-server
+carries: [untrusted-content]
+actions:
+  fetch:
+    description: Fetch a page.
+    reads-only: yes
+    takes:
+      url: text

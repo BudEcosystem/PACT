@@ -1,0 +1,4 @@
+description: What the model and the logs never see.
+hide:
+  - anything that looks like a card number
+  - anything that looks like an order reference

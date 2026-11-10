@@ -64,6 +64,8 @@ COMMANDS: dict[str, str] = {
     "scoring": "the eval command. Reads the tree because a person pointed it at "
                "one, and hands the DOCUMENT to the harness",
     "conformance": "the Conformance Report, over every workspace under a path",
+    "checking": "writes a proposed document out as a scratch tree and runs `pact "
+                "check` on it (law 8, docs/98 WP-15) — the checker's door, not the run's",
     "exploding": "writes a tree from a document — the inverse of loading, and "
                  "the only module here whose job is to CREATE author files",
     # Both moved here from THE_RUN_PATH the moment they gained a `main`, and this

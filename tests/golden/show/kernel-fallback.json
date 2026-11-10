@@ -1,0 +1,86 @@
+{
+  "name": "Fallback",
+  "description": "Two tries on the cheap reader, then the careful one with the same inputs.",
+  "agents": {
+    "careful-reader": {
+      "description": "Answers a customer question from the product notes, slowly and carefully.",
+      "instructions": "Read the whole of the product notes before answering. Quote the passage the\nanswer rests on. If the notes do not answer the question, say exactly what is\nmissing.",
+      "accepts": {
+        "question": "text",
+        "notes": "text"
+      },
+      "answers-with": {
+        "answer": "text",
+        "confidence": "one of high, low"
+      },
+      "needs": {
+        "reasoning": "careful",
+        "because": "this agent only sees the questions the quick reader could not answer"
+      }
+    },
+    "quick-reader": {
+      "description": "Answers a customer question from the product notes, quickly.",
+      "instructions": "Answer the customer's question from the product notes you are given. If the\nnotes do not answer it, say so in one sentence rather than guessing.",
+      "accepts": {
+        "question": "text",
+        "notes": "text"
+      },
+      "answers-with": {
+        "answer": "text",
+        "confidence": "one of high, low"
+      },
+      "checked-by": [
+        {
+          "must-not-contain": [
+            "I think",
+            "probably"
+          ],
+          "because": "a hedge is not an answer the customer can act on"
+        }
+      ],
+      "checks-at-most": 2,
+      "needs": {
+        "reasoning": "simple",
+        "prefer": "cheapest",
+        "because": "most questions are answered by one passage of the notes"
+      }
+    }
+  },
+  "workflows": {
+    "answer": {
+      "description": "Answer one customer question, cheaply when possible and carefully when not.",
+      "accepts": {
+        "question": "text",
+        "notes": "text"
+      },
+      "answers-with": {
+        "answer": "text"
+      },
+      "starts-at": "quick",
+      "steps": {
+        "quick": {
+          "does": "call",
+          "call": "quick-reader",
+          "at-most": 2,
+          "bind": {
+            "question": "input.question",
+            "notes": "input.notes"
+          },
+          "if-it-fails": {
+            "after-that": "use-a-backup",
+            "backup": "careful-reader"
+          },
+          "then": {
+            "answered": "reply"
+          }
+        },
+        "reply": {
+          "does": "answer",
+          "bind": {
+            "answer": "steps.quick.answer"
+          }
+        }
+      }
+    }
+  }
+}

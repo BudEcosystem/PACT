@@ -1,0 +1,12 @@
+description: The /incident command in the on-call channel.
+kind: conversation
+through: slack
+answers: handle-incident
+# A thread is one service's incident; the command carries the service name.
+same-conversation-when: [service]
+# Someone running the command twice inside ten minutes gets the first run's
+# answer, not a second run.
+if-still-running: skip
+counts-as-the-same-for: 10m
+who-can-reach-it:
+  - people in the on-call channel

@@ -209,6 +209,14 @@ def _there(spec: AgentSpec) -> dict[str, Any] | None:
         "loops": _loops_of(spec),
         "answersWith": dict(spec.answers_with),
         "answersWithMode": spec.answers_with_mode,
+        # docs/98 WP-8: each memory shared with the team, which Python offers as
+        # a tool named after it. Sent so the port offers the same names and says
+        # it keeps no board, rather than offering fewer tools in silence.
+        "boards": [
+            {"name": f.name, "description": f.description}
+            for f in spec.facts.declared.values()
+            if f.shared_with == "the-team"
+        ],
     })
     out = subprocess.run(
         ["node", "--experimental-strip-types", "src/run-trace.ts",
@@ -242,7 +250,14 @@ def test_the_set_is_generated_from_the_tree_not_listed_here() -> None:
     drift check, which covered two of six shapes and said nothing."""
     if not GOLDEN:
         pytest.skip("build the CLI first: cargo build -p pact-cli")
-    on_disk = {p.relative_to(EXAMPLES).as_posix() for p in _workspaces()}
+    # Every workspace with an `agents/` folder — read off the disk, not off
+    # `pact show`, so the loader cannot vouch for its own coverage. A workspace
+    # with none (`kernel/work-queue` is one workflow over tools) has no agent to
+    # put in a set of agents; its workflow is run as shipped by
+    # `test_the_shipped_work_queue_runs.py`.
+    on_disk = {
+        p.relative_to(EXAMPLES).as_posix() for p in _workspaces() if (p / "agents").is_dir()
+    }
     assert {w for w, _ in GOLDEN} == on_disk, (
         f"workspaces on disk: {sorted(on_disk)}; in the set: "
         f"{sorted({w for w, _ in GOLDEN})}"

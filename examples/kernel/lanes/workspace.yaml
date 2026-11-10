@@ -1,0 +1,17 @@
+# LANES — every way in is a port, and each port says what a second arrival does.
+#
+# The pattern: three ports onto one workflow. The alerting webhook is signed,
+# filtered to the severities worth waking anyone for, and QUEUED behind a run
+# that is already open for the same service, taken in order of severity. The
+# chat command is the same work in a different lane: a repeat inside ten minutes
+# is skipped and told so. The ticketing event joins an open run instead of
+# starting a second.
+#
+# This is what the catalogue calls lane-based queueing, multi-platform webhook
+# triggers with idempotency and signature checks, and signal-driven activation.
+# None of it is code. Each is a line on a port.
+#
+# What goes wrong: a webhook with no `signed-with:`. Then anyone who can reach
+# the address can start a run, and `who-can-reach-it:` is a wish.
+name: Lanes
+description: Three ways in, one workflow, and a rule on each for what a second arrival does.

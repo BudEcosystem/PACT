@@ -1,0 +1,17 @@
+enabled: propose-only
+may-improve-on-its-own:
+  - phrasing
+  - examples
+needs-a-person-to-approve:
+  - tools
+  - permissions
+  - limits
+  - policy-clauses
+keep-only-if: scores-higher-on-evals
+review: weekly
+cycle-limits: { per-cycle: 3, per-month: 10 USD, evals: 500 }
+drift:
+  at-most: 15%
+models:
+  execution:  { role: llm }
+  reflection: { role: reflector }

@@ -1,0 +1,16 @@
+# WORK QUEUE — a list that grows while it is worked, items claimed across the
+# team with a lease, and a watcher stopped when the work is done.
+#
+# `keeps-taking: yes` on the `each`: a task that turns up while the queue is
+# being worked is taken too, and the stage ends once the list stops growing and
+# nothing it started is still running — LLMCompiler's shape. `do` claims each
+# task across the team (`same-request-key-across: the-team`) for five minutes
+# (`claim-lasts: 5m`): two runs never work the same task, and a task whose
+# worker crashed is free again after the lease. The watcher is started without
+# waiting for it, and `does: stop` ends it once the queue is empty.
+#
+# What goes wrong: the claim without `durability:`. A claim nobody keeps past
+# the run cannot stop another run taking the same task, and `pact check` says so.
+name: Work queue
+description: Work a growing queue, each task claimed across the team with a lease.
+durability: checkpoint

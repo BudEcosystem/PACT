@@ -1,0 +1,9 @@
+description: A ticket opened in the tracker for a service that is already being worked.
+kind: event
+through: tracker
+answers: handle-incident
+same-conversation-when: [service]
+# The ticket joins the open run as its latest update instead of starting another.
+if-still-running: join
+who-can-reach-it:
+  - tracker

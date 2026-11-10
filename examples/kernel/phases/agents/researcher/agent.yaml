@@ -1,0 +1,6 @@
+description: Finds out what is already true about a request before anyone plans.
+instructions: Gather the facts that bear on this request. Report findings, not opinions.
+accepts:
+  brief: text
+answers-with:
+  findings: list of text

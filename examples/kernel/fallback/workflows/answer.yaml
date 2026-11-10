@@ -1,0 +1,25 @@
+description: Answer one customer question, cheaply when possible and carefully when not.
+accepts:
+  question: text
+  notes: text
+answers-with:
+  answer: text
+starts-at: quick
+steps:
+  quick:
+    does: call
+    call: quick-reader
+    at-most: 2
+    bind:
+      question: input.question
+      notes: input.notes
+    # Every attempt failed: call the careful reader with the same inputs.
+    if-it-fails:
+      after-that: use-a-backup
+      backup: careful-reader
+    then:
+      answered: reply
+  reply:
+    does: answer
+    bind:
+      answer: steps.quick.answer

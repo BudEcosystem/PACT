@@ -8,7 +8,7 @@ determinism: pure
 takes:
   said: text
 answers-with:
-  next: text
+  next: one of reply, think-again
 fuel:
   instructions-at-most: 10m
   runs-for-at-most: 2s

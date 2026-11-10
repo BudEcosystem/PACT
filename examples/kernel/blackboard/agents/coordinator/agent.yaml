@@ -1,0 +1,25 @@
+description: Puts a question to the finders and answers from the board.
+instructions: |
+  Ask both finders to look into the question and write what they find to the
+  findings board. Then read the board, and answer from what is on it — only
+  from what is on it. Say which finder found each point.
+team:
+  finder-a: looks for evidence for the claim
+  finder-b: looks for evidence against the claim
+teamwork:
+  waits-for: everyone
+  starts: all-at-once
+  divides-the-budget: evenly
+  if-someone-fails: carry-on
+remembers:
+  findings:
+    description: what the finders found, admitted one entry at a time
+    lasts: one-conversation
+    shared-with: the-team
+    shaped-like:
+      claim: text
+      source: text
+      status: one of supports, contradicts
+    admitted-when:
+      - { value: entry.status, is-one-of: [supports, contradicts] }
+    admitted-by: referee

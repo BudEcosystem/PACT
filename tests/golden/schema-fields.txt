@@ -1,7 +1,9 @@
 action.answers-with	map of answer-shape | S-CAP | expert | optional
 action.bind	map of text | S-EXEC | core | optional
 action.calls	text | S-CAP | expert | optional
+action.claim-lasts	duration | S-EXEC | expert | optional
 action.description	text | S-ROUTE | core | optional
+action.gets-hidden-values	yes-no | S-GOV | expert | optional
 action.inspects	list of text | S-EXEC | core | optional
 action.needs-a-person	yes-no | S-EXEC | core | optional
 action.passes	map of text | S-CAP | expert | optional
@@ -15,6 +17,7 @@ action.spends-money	yes-no | S-EXEC | core | optional
 action.status-check	text | S-EXEC | expert | optional
 action.takes	map of answer-shape | S-CAP | core | optional
 action.undone-by	text | S-EXEC | core | optional
+action.writes	list of text | S-EXEC | expert | optional
 agent.accepts	map of answer-shape | S-CAP | core | optional
 agent.answers-with	map of answer-shape | S-CAP | core | optional
 agent.answers-with-mode	one-of | S-CAP | expert | optional
@@ -80,6 +83,9 @@ credential-reference.by-reference	text | S-CAP | core | required
 cycle-limits.evals	integer | S-GOV | core | optional
 cycle-limits.per-cycle	integer | S-GOV | core | optional
 cycle-limits.per-month	money | S-GOV | core | optional
+detector.description	text | S-GEN | core | required
+detector.examples	list of text | S-GEN | expert | optional
+detector.looks-like	list of text | S-GOV | expert | required
 drift.at-most	percent | S-GOV | core | optional
 eval-rule.because	text | S-GEN | core | optional
 eval-rule.judged	text | S-GOV | core | optional
@@ -144,6 +150,7 @@ learning.review	one-of | S-GOV | core | optional
 limits.asks	text | S-EXEC | core | optional
 limits.asks-itself-at-most	integer | S-GOV | expert | optional
 limits.at-once-at-most	integer | S-GOV | core | optional
+limits.cost-per-request-from	text | S-GOV | expert | optional
 limits.cost-per-request-under	money | S-GOV | core | optional
 limits.counted-per	text | S-GOV | core | optional
 limits.feel	one-of | S-GOV | core | optional
@@ -162,6 +169,7 @@ limits.starts-from	text | S-GOV | core | optional
 limits.steps-at-most	integer | S-GOV | core | optional
 limits.tokens-at-most	integer | S-GOV | core | optional
 limits.tool-calls-at-most	integer | S-GOV | core | optional
+limits.unbounded	yes-no | S-GOV | expert | optional
 limits.when-it-runs-out	one-of | S-GOV | core | optional
 loop.based-on	text | S-CTRL | core | optional
 loop.description	text | S-GEN | core | optional
@@ -174,10 +182,13 @@ metric.with	map of anything | S-GOV | expert | optional
 model-can.computer-use	yes-no | S-CAP | expert | optional
 model-can.context-window	group:figure | S-CAP | expert | optional
 model-can.dimensions	integer | S-CAP | expert | optional
+model-can.ignores	list of one-of | S-CAP | expert | optional
+model-can.ignores-while-thinking	list of one-of | S-CAP | expert | optional
 model-can.languages	list of text | S-CAP | expert | optional
 model-can.modality-in	list of one-of | S-CAP | expert | optional
 model-can.modality-out	list of one-of | S-CAP | expert | optional
 model-can.sessions	list of one-of | S-CAP | expert | optional
+model-can.thinks-unless-told	yes-no | S-CAP | expert | optional
 model-can.tool-calling	one-of | S-CAP | expert | optional
 model-can.voices	list of text | S-CAP | expert | optional
 model-cost.input-per-mtok	text | S-GOV | expert | optional
@@ -365,9 +376,11 @@ stage.checks-at-most	integer | S-GOV | core | optional
 stage.chooses-between	map of text | S-CTRL | core | optional
 stage.combines-by	map of combine-rule | S-CTRL | core | optional
 stage.does	one-of | S-CTRL | core | required
+stage.forks	yes-no | S-EXEC | expert | optional
 stage.fuel	group:program-fuel | S-GOV | expert | optional
 stage.identified-by	list of text | S-EXEC | core | optional
 stage.if-it-fails	group:if-it-fails | S-EXEC | core | optional
+stage.keeps-taking	yes-no | S-EXEC | expert | optional
 stage.limits	group:limits | S-GOV | core | optional
 stage.may-call	list of text | S-EXEC | core | optional
 stage.may-use	list of text | S-ROUTE | expert | optional
@@ -378,12 +391,15 @@ stage.runs-in	text | S-EXEC | expert | optional
 stage.says	text | S-GEN | core | optional
 stage.starts-at	text | S-CTRL | core | optional
 stage.steps	map of group:stage | S-CTRL | core | optional
+stage.stops	text | S-EXEC | expert | optional
 stage.teamwork	group:teamwork | S-TOPO | core | optional
 stage.then	group:outcome | S-CTRL | expert | optional
 stage.undone-by	text | S-EXEC | core | optional
 stage.until	list of group:when-this | S-CTRL | core | optional
 stage.version	text | S-GOV | core | optional
 stage.waits-for-result	yes-no | S-CTRL | core | optional
+state.admitted-by	text | S-GOV | expert | optional
+state.admitted-when	list of group:when-this | S-GOV | expert | optional
 state.combines-by	combine-rule | S-CTRL | core | optional
 state.comes-from	text | S-CTRL | core | optional
 state.description	text | S-GEN | core | required
@@ -393,6 +409,7 @@ state.kept-per	text | S-GOV | core | optional
 state.lasts	one-of | S-GOV | core | required
 state.never-from	list of one-of | S-EXEC | core | optional
 state.shaped-like	map of answer-shape | S-CAP | expert | optional
+state.shared-with	one-of | S-EXEC | expert | optional
 state.starts-as	anything | S-GEN | expert | optional
 state.stops-being-true-when	list of text | S-EXEC | core | optional
 state.survives-shortening	yes-no | S-EXEC | core | optional
@@ -410,6 +427,7 @@ tidy-step.down-to	text | S-CTRL | expert | optional
 tidy-step.what	one-of | S-CTRL | expert | required
 tool.actions	map of group:action | S-CAP | core | optional
 tool.available-when	one-of | S-ROUTE | expert | optional
+tool.carries	list of one-of | S-GOV | expert | optional
 tool.category	text | S-GEN | core | optional
 tool.chosen-by	text | S-ROUTE | expert | optional
 tool.connect	text | S-CAP | core | optional
@@ -417,6 +435,8 @@ tool.description	text | S-ROUTE | core | required
 tool.implements	text | S-CAP | expert | optional
 tool.interface	yes-no | S-CAP | expert | optional
 tool.method	one-of | S-CAP | core | optional
+tool.rests-after	integer | S-GOV | expert | optional
+tool.rests-for	duration | S-GOV | expert | optional
 tool.says	text | S-GEN | core | optional
 tool.schemas-from	one-of | S-CAP | expert | optional
 tool.unlisted-actions	one-of | S-EXEC | expert | optional
@@ -451,10 +471,13 @@ watch.when	event-address | S-GOV | core | required
 watch.writes-to	file-name | S-GOV | core | required
 when-this.arg	text | S-EXEC | core | optional
 when-this.contains-any-of	list of text | S-EXEC | core | optional
+when-this.effect	one-of | S-GOV | expert | optional
+when-this.in-share	percent | S-GOV | expert | optional
 when-this.is	comparand | S-EXEC | core | optional
 when-this.is-empty	yes-no | S-EXEC | core | optional
 when-this.is-one-of	list of text | S-EXEC | core | optional
 when-this.less-than	comparand | S-EXEC | core | optional
+when-this.looks-like	text | S-GOV | expert | optional
 when-this.more-than	comparand | S-EXEC | core | optional
 when-this.tool	text | S-EXEC | core | optional
 when-this.value	text | S-EXEC | core | optional
@@ -481,6 +504,7 @@ workspace.bundles	map of group:bundle | S-CAP | expert | optional
 workspace.calendar	text | S-GOV | core | optional
 workspace.context-policies	map of group:context-policy | S-CTRL | core | optional
 workspace.description	text | S-GEN | core | optional
+workspace.detectors	map of group:detector | S-GOV | expert | optional
 workspace.durability	one-of | S-GOV | expert | optional
 workspace.evals	group:evals | S-GOV | core | optional
 workspace.interceptors	map of group:interceptor | S-EXEC | expert | optional

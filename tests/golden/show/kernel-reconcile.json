@@ -1,0 +1,93 @@
+{
+  "name": "Reconcile",
+  "description": "Level-triggered reconciliation of a tracker on a timer, with a watchdog timer beside it.",
+  "agents": {
+    "reconciler": {
+      "description": "Reads the tracker, compares it with what was last done, and closes the gap.",
+      "instructions": "List the open items for the project. Compare with what you last did for this\nproject. Set the status of anything that has moved. Then write a heartbeat.",
+      "uses": [
+        "tracker"
+      ],
+      "accepts": {
+        "project": "text"
+      },
+      "answers-with": {
+        "changed": "whole number"
+      },
+      "remembers": {
+        "last-reconciled": {
+          "description": "what was last done, by project, so it is not done twice",
+          "lasts": "forever",
+          "kept-for": "90 days",
+          "never-from": [
+            "tool output"
+          ]
+        }
+      },
+      "limits": {
+        "tool-calls-at-most": 30,
+        "finishes-within": "5m",
+        "when-it-runs-out": "stop-and-say-so"
+      }
+    }
+  },
+  "ports": {
+    "every-quarter-hour": {
+      "description": "Reconcile each project with the tracker every fifteen minutes.",
+      "kind": "schedule",
+      "every": "every 15 minutes",
+      "answers": "reconciler",
+      "says": "Reconcile the project with the tracker.",
+      "if-still-running": "skip",
+      "if-missed": "run-when-back"
+    },
+    "watchdog": {
+      "description": "The dead man's switch. Checks that the reconciler has written a heartbeat lately.",
+      "kind": "schedule",
+      "every": "every hour",
+      "answers": "reconciler",
+      "says": "Check that a heartbeat was written in the last hour. If none was, say so\nloudly as your answer; a person reads the hourly report.",
+      "if-still-running": "skip"
+    }
+  },
+  "resources": {
+    "tracker-server": {
+      "resource-kind": "mcp-server",
+      "endpoint": "host/tracker",
+      "description": "Where the team's issue tracker is reached."
+    }
+  },
+  "tools": {
+    "tracker": {
+      "description": "The issue tracker, where desired state lives.",
+      "connect": "tracker-server",
+      "actions": {
+        "list-open": {
+          "description": "List the open items for one project.",
+          "reads-only": "yes",
+          "takes": {
+            "project": "text"
+          },
+          "answers-with": {
+            "items": "list of text"
+          }
+        },
+        "set-status": {
+          "description": "Set one item's status.",
+          "takes": {
+            "item": "text",
+            "status": "text"
+          },
+          "same-request-key": "item"
+        },
+        "write-heartbeat": {
+          "description": "Record that the reconciler ran.",
+          "takes": {
+            "ran-at": "text"
+          },
+          "same-request-key": "ran-at"
+        }
+      }
+    }
+  }
+}

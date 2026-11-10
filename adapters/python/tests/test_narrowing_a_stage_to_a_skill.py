@@ -156,8 +156,25 @@ def test_a_stage_that_narrows_to_a_skill_the_agent_does_not_have_is_refused_befo
     # agent never listed is a mistake whichever kind the name turns out to be,
     # and it has to fail at the start of the run rather than in whichever branch
     # happens to enter that stage.
-    doc = loaded(a_tree_whose_checking_stage_reads_the_policy(tmp_path, uses_it=False))
-    loop = Loop.resolve(doc, doc["agents"][AGENT].get("loop", ""))
+    #
+    # TWO lines hold it now. The checker refuses the tree before anything runs
+    # (`loader/a-stage-may-use-what-the-agent-cannot`, docs/98 WP-1); the run's
+    # own check below stays for a host that loads a document the checker never
+    # saw. The run's half is driven on the good tree with the skill taken off
+    # `uses:` in memory, because `pact show` no longer hands out the bad one.
+    bad = a_tree_whose_checking_stage_reads_the_policy(tmp_path, uses_it=False)
+    checked = subprocess.run(
+        [str(PACT_BIN), "check", str(bad)], capture_output=True, text=True
+    )
+    assert checked.returncode != 0, checked.stdout
+    assert "loader/a-stage-may-use-what-the-agent-cannot" in checked.stdout + checked.stderr
+
+    good = tmp_path / "good"
+    good.mkdir()
+    doc = loaded(a_tree_whose_checking_stage_reads_the_policy(good))
+    agent = doc["agents"][AGENT]
+    agent["uses"] = [u for u in agent.get("uses", []) if u != "refund-policy"]
+    loop = Loop.resolve(doc, agent.get("loop", ""))
     tools, skills = what_the_agent_has(doc)
     assert "refund-policy" not in skills
 

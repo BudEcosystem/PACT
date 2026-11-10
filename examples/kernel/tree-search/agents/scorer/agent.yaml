@@ -1,0 +1,9 @@
+description: Scores ideas.
+instructions: |
+  Score each idea from 0 to 1 for how likely it is to solve the problem. Give
+  the best score as well.
+accepts:
+  ideas: list of text
+answers-with:
+  scored: list of idea
+  best: number

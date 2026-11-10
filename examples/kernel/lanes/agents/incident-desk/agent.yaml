@@ -1,0 +1,8 @@
+description: Works one incident from first alert to a written summary.
+instructions: Work out what is wrong with the service named, say what to do first, and write it up.
+accepts:
+  service: text
+  severity: text
+  details: text
+answers-with:
+  summary: text

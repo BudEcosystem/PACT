@@ -1,0 +1,17 @@
+# MAP-REDUCE — one reviewer per document, each in its own run, then one vote.
+#
+# The pattern: `each` over the documents, with an item ceiling, one reviewer
+# call per item, and a combine rule per field. `identified-by:` says what makes
+# an item that item, so a retry is the same item and never a second review. A
+# failed item is kept, marked failed, never dropped. Then `together` asks two
+# summarisers side by side and keeps both.
+#
+# This is what the catalogue calls LLM map-reduce, swarm migration, a subagent
+# compilation checker, and multi-platform aggregation: many isolated calls over
+# a list, then deterministic combining.
+#
+# What goes wrong: `combines-by` with `keep-the-latest` under a parallel each.
+# Which item is "latest" depends on arrival order, which is a race. Use a rule
+# that does not care about order: vote, add-up, top-n, keep-all.
+name: Map-reduce
+description: Review each document in its own run, then combine by vote.

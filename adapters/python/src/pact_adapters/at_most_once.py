@@ -70,9 +70,14 @@ than guessed at in either direction.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping
 
+from .claims import scoped
+from .limits import seconds
 from .questions import quoted
+
+if TYPE_CHECKING:
+    from .claims import ClaimStore
 
 #: What `step.tool.cancelled` carries when a duplicate was withheld. One
 #: spelling, because the event's `reason` is read by watches and by anyone
@@ -114,6 +119,9 @@ class RequestKeys:
     #: document. Only used to decide whether a call that named no action is
     #: unambiguous.
     actions: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    #: How long one call's claim lasts, in seconds, per action, from
+    #: `claim-lasts:` (docs/98 WP-7). Absent: as long as its scope.
+    leases: dict[tuple[str, str], float] = field(default_factory=dict)
 
     def __bool__(self) -> bool:
         return bool(self.keys)
@@ -130,6 +138,7 @@ class RequestKeys:
         used = set(_as_list(agent.get("uses")))
         keys: dict[tuple[str, str], str] = {}
         scopes: dict[tuple[str, str], str] = {}
+        leases: dict[tuple[str, str], float] = {}
         actions: dict[str, tuple[str, ...]] = {}
         for tool, spec in sorted((doc.get("tools") or {}).items()):
             if tool not in used or not isinstance(spec, Mapping):
@@ -147,7 +156,10 @@ class RequestKeys:
                     across = str(body.get("same-request-key-across") or "").strip()
                     if across:
                         scopes[(str(tool), str(action))] = across
-        return RequestKeys(keys=keys, actions=actions, scopes=scopes)
+                    lease = seconds(body.get("claim-lasts"))
+                    if lease is not None:
+                        leases[(str(tool), str(action))] = lease
+        return RequestKeys(keys=keys, actions=actions, scopes=scopes, leases=leases)
 
     def action_of(self, tool: str, args: Mapping[str, Any]) -> str | None:
         """Which action this call names, or `None` when nothing can say.
@@ -233,6 +245,17 @@ class Claim:
             f"`bind: {{ {argument}: run-inputs.<name> }}`."
         )
 
+    def kept_here_only(self) -> str:
+        """The `unenforced` sentence when a wider claim had nowhere to be kept."""
+        where = f"{self.tool}/{self.action}"
+        return (
+            f"same-request-key-across: {where} says the same call reaches "
+            f"{self.across}, and this run was given no claim store "
+            f"(`claims=`) — so it was held for this run only, and another run "
+            f"could make the same call. Pass a `claims.SqliteClaims` (or any "
+            f"`ClaimStore`) that every run of this team or workspace shares."
+        )
+
     def refusal(self) -> str:
         """What the model is handed instead of a second call.
 
@@ -275,6 +298,18 @@ class Ledger:
     #: call. Per action rather than per call: an author who left the argument
     #: out has one line to fix, not one per refund.
     cannot_tell: dict[tuple[str, str], str] = field(default_factory=dict)
+    #: Where claims wider than this run are kept (`same-request-key-across:
+    #: the-team` / `the-workspace`), supplied by the host (`claims.ClaimStore`).
+    #: `None`: such a claim is held for this run only, and said so on
+    #: `unenforced` rather than quietly narrowed (docs/98 WP-7).
+    store: "ClaimStore | None" = None
+    #: The team a `the-team` claim is namespaced by: the agent at the root of
+    #: the request, handed down to every member.
+    team: str = ""
+    #: Who holds what this run claims, in the store: this run, by name.
+    holder: str = ""
+    #: One sentence per `<tool>/<action>` whose wider scope had no store.
+    cannot_keep: dict[tuple[str, str], str] = field(default_factory=dict)
 
     def __bool__(self) -> bool:
         return bool(self.keys)
@@ -319,6 +354,17 @@ class Ledger:
             return ""
         if claim.key in self.spent:
             return claim.refusal()
+        if claim.across != "this-run":
+            if self.store is None:
+                self.cannot_keep.setdefault((tool, claim.action), claim.kept_here_only())
+            else:
+                taken = self.store.take(
+                    scoped(claim.across, self.team, tool, claim.action, claim.value),
+                    self.holder,
+                    self.keys.leases.get((tool, claim.action)),
+                )
+                if not taken.ok:
+                    return claim.refusal()
         self.spent[claim.key] = None
         return ""
 
@@ -338,9 +384,17 @@ class Ledger:
         nothing, because it permits nothing.
         """
         claim = self.keys.claim(tool, args)
-        if claim is None or claim.value is None or claim.key not in self.spent:
+        if claim is None or claim.value is None:
             return ""
-        return claim.refusal()
+        if claim.key in self.spent:
+            return claim.refusal()
+        if claim.across != "this-run" and self.store is not None:
+            held = self.store.holder(
+                scoped(claim.across, self.team, tool, claim.action, claim.value)
+            )
+            if held is not None and held != self.holder:
+                return claim.refusal()
+        return ""
 
     def unenforced(self) -> tuple[str, ...]:
         """Every `same-request-key:` line this run could not hold a call to.
@@ -350,7 +404,8 @@ class Ledger:
         driver and an order that depends on dictionary insertion is a divergence
         nobody wrote.
         """
-        return tuple(self.cannot_tell[k] for k in sorted(self.cannot_tell))
+        said = {**self.cannot_tell, **self.cannot_keep}
+        return tuple(said[k] for k in sorted(said))
 
 
 def _as_list(value: Any) -> list[str]:

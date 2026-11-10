@@ -1,0 +1,3 @@
+description: Answers a hard question by three independent attempts.
+instructions: Answer the question you are given.
+loop: three-independent-tries

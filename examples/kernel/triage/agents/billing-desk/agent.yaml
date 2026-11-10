@@ -1,0 +1,6 @@
+description: Handles billing questions.
+instructions: Answer the billing question. Never promise a refund date.
+accepts:
+  message: text
+answers-with:
+  reply: text

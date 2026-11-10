@@ -1,0 +1,11 @@
+# CANARY — one request in twenty goes to the new desk, always the same ones.
+#
+# `in-share: 5%` holds for a stable share of the values it could be, decided by
+# a fingerprint of the value: the same request id always lands on the same
+# side, so a customer does not flip between desks, and the slice is the size it
+# says. Raising it to 20%, then 100%, is a one-line change somebody reviews.
+#
+# What goes wrong: a random slice. A request retried after a timeout would land
+# on the other desk, and the comparison between the two would be noise.
+name: Canary
+description: Route a stable five per cent of requests to the new desk.

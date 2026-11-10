@@ -1,0 +1,41 @@
+description: Search over ideas until one scores 0.9 or four rounds have run.
+accepts:
+  problem: text
+answers-with:
+  ideas: list of idea
+starts-at: rounds
+steps:
+  rounds:
+    does: repeat
+    forks: yes
+    at-most: 4
+    until:
+      - { value: steps.score.best, more-than: 0.9 }
+    remembers:
+      frontier:
+        description: the best three ideas so far
+        lasts: one-run
+        comes-from: steps.score.scored
+        combines-by: top 3 highest by score
+    starts-at: propose
+    steps:
+      propose:
+        does: call
+        call: proposer
+        bind:
+          frontier: remembers.frontier
+        then:
+          answered: score
+      score:
+        does: call
+        call: scorer
+        bind:
+          ideas: steps.propose.ideas
+    then:
+      answered: reply
+      too-many-times: reply
+  reply:
+    does: answer
+    bind:
+      # What the repeat remembers is what it hands back: the best three.
+      ideas: steps.rounds.frontier

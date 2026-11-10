@@ -101,6 +101,14 @@ class Fact:
     #: `pact check` refuses both anywhere else (`bindings.rs`).
     comes_from: str = ""
     combines_by: str = ""
+    #: `shared-with:` (docs/98 WP-8): `this-agent` (the default) or `the-team`,
+    #: whose members are offered it to read and write (`boards.py`).
+    shared_with: str = "this-agent"
+    #: `admitted-when:`: the lines every entry written here must meet, read
+    #: with `entry.<part>` bound to the entry.
+    admitted_when: tuple[Mapping[str, Any], ...] = ()
+    #: `admitted-by:`: the agent that says yes or no to each entry.
+    admitted_by: str = ""
 
     def said(self, value: Any) -> str:
         """How the fact reads once the messages behind it are gone.
@@ -166,6 +174,11 @@ class Facts:
                 kept_per=str(raw.get("kept-per") or ""),
                 comes_from=str(raw.get("comes-from") or ""),
                 combines_by=str(raw.get("combines-by") or ""),
+                shared_with=str(raw.get("shared-with") or "this-agent"),
+                admitted_when=tuple(
+                    w for w in (raw.get("admitted-when") or []) if isinstance(w, Mapping)
+                ),
+                admitted_by=str(raw.get("admitted-by") or ""),
             )
         return Facts(declared=out)
 

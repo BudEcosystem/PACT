@@ -272,6 +272,7 @@ def object_schema(parts: Mapping[str, "Shape"]) -> dict[str, Any]:
 #: `<shape>, optional` at the end of a line (02W §2.15).
 _OPTIONAL = re.compile(r",\s*optional\s*$")
 _LIST_OF = "list of "
+_STREAM_OF = "stream of "
 
 
 @dataclass(frozen=True)
@@ -357,6 +358,11 @@ class Shape:
                 for part, line in pairs
             )
             return Shape("named", name=named, parts=parts)
+        if s.startswith(_STREAM_OF):
+            # docs/98 WP-14: a value that arrives in parts. What it answers once
+            # it has all arrived is the shape inside, which is what is checked;
+            # the parts are how it got there (`harness._streamed`).
+            return Shape._read_line(s[len(_STREAM_OF):].strip(), written, shapes, zone, seen)
         if s.startswith(_LIST_OF):
             inner = Shape._read_line(s[len(_LIST_OF):].strip(), written, shapes, zone, seen)
             return Shape("list", of=inner)
@@ -1548,6 +1554,9 @@ class Rule:
     #: free as it was — the check follows the author's line, and where there is no
     #: line there is nothing to enforce.
     may_read: Mapping[str, frozenset[str]] = field(default_factory=dict)
+    #: `(tool, action) -> the effect words true of it` (docs/98 WP-12), for a
+    #: condition that says `effect:`.
+    effects: Mapping[tuple[str, str], frozenset[str]] = field(default_factory=dict)
     #: `first-times:` — ask only the first N times this rule matches, counted
     #: per workspace. The count is the runtime's to keep (a store across runs);
     #: a runtime that keeps none asks every time, which asks more, never less.
@@ -1618,7 +1627,9 @@ class Rule:
         — and it is a named argument rather than a second method because it
         changes one clause of one atom, not what strict means.
         """
-        return all(_atom_stops(a, args, as_action, self.may_read, zone) for a in self.when)
+        return all(
+            _atom_stops(a, args, as_action, self.may_read, zone, self.effects) for a in self.when
+        )
 
 
 #: The argument that says which of a tool's actions a call is. `ir._takes`
@@ -1645,6 +1656,31 @@ def _action_of(args: Mapping[str, Any]) -> str:
     """Which action a call says it is, or "" when it does not say."""
     value = args.get(ACTION)
     return value.strip() if isinstance(value, str) else ""
+
+
+def effects_of(doc: Mapping[str, Any]) -> dict[tuple[str, str], frozenset[str]]:
+    """Each action's effect words, from its own lines — the Python reading of
+    `pact-loader`'s `effects.rs` (docs/98 WP-2): `reads` for `reads-only: yes`,
+    else `writes`; `cannot-be-undone` for a write with no `undone-by:`; and
+    `spends` for `spends-money: yes`."""
+    out: dict[tuple[str, str], frozenset[str]] = {}
+    for tool, body in (doc.get("tools") or {}).items():
+        if not isinstance(body, Mapping):
+            continue
+        for action, line in (body.get("actions") or {}).items():
+            if not isinstance(line, Mapping):
+                continue
+            words: set[str] = set()
+            if said_yes(line.get("reads-only")):
+                words.add("reads")
+            else:
+                words.add("writes")
+                if not line.get("undone-by"):
+                    words.add("cannot-be-undone")
+            if said_yes(line.get("spends-money")):
+                words.add("spends")
+            out[(str(tool), str(action))] = frozenset(words)
+    return out
 
 
 def _reads_something_it_may_not(
@@ -1698,6 +1734,7 @@ def _atom_stops(
     as_action: str = "",
     may_read: Mapping[str, frozenset[str]] = {},
     zone: str | None = None,
+    effects: Mapping[tuple[str, str], frozenset[str]] = {},
 ) -> bool:
     """Does one condition hold for this call — and so, read by
     [`Rule.stops_on`], stop it?
@@ -1732,6 +1769,17 @@ def _atom_stops(
     action = _action_named(atom)
     if action and called and called != action:
         return False
+    # `effect:` (docs/98 WP-12): the rule is about calls that DO this. A call
+    # that does not say which action it is cannot be told, and stops — the same
+    # side a malformed threshold falls on.
+    wanted = str(atom.get("effect") or "").strip()
+    if wanted:
+        tool = str(atom.get("tool") or atom.get("name") or "").partition("/")[0].strip()
+        which = action or called
+        if not which:
+            return True
+        if wanted not in effects.get((tool, which), frozenset()):
+            return False
     if _reads_something_it_may_not(atom, may_read):
         return True
     return _compared(atom, args, zone) is not False
@@ -1948,6 +1996,7 @@ def questions_for(
               # goes back to being a help string with a check behind it and no
               # reader.
               may_read=_inspects_of(doc),
+              effects=effects_of(doc),
               first_times=raw.get("first-times") if isinstance(raw.get("first-times"), int) else None,
           )
           for about in dict.fromkeys(_things_named(raw.get("when"))):

@@ -1,0 +1,99 @@
+{
+  "name": "Canary",
+  "description": "Route a stable five per cent of requests to the new desk.",
+  "agents": {
+    "desk": {
+      "description": "Answers support questions, as it always has.",
+      "instructions": "Answer the customer's question.",
+      "accepts": {
+        "question": "text"
+      },
+      "answers-with": {
+        "reply": "text"
+      }
+    },
+    "new-desk": {
+      "description": "Answers support questions with the new instructions.",
+      "instructions": "Answer the customer's question. Lead with what they can do next, then the\nreason.",
+      "accepts": {
+        "question": "text"
+      },
+      "answers-with": {
+        "reply": "text"
+      }
+    }
+  },
+  "workflows": {
+    "support": {
+      "description": "Answer one support question, five per cent of them on the new desk.",
+      "accepts": {
+        "request-id": "text",
+        "question": "text"
+      },
+      "answers-with": {
+        "reply": "text"
+      },
+      "starts-at": "which-desk",
+      "steps": {
+        "which-desk": {
+          "does": "decide",
+          "chooses-between": {
+            "canary": "try-new",
+            "stable": "as-before"
+          },
+          "by": [
+            {
+              "rules": [
+                {
+                  "when": [
+                    {
+                      "value": "input.request-id",
+                      "in-share": "5%"
+                    }
+                  ],
+                  "choose": "canary",
+                  "because": "One request in twenty, always the same ones, tries the new desk."
+                },
+                {
+                  "choose": "stable"
+                }
+              ]
+            }
+          ]
+        },
+        "try-new": {
+          "does": "call",
+          "call": "new-desk",
+          "bind": {
+            "question": "input.question"
+          },
+          "then": {
+            "answered": "reply-new"
+          }
+        },
+        "as-before": {
+          "does": "call",
+          "call": "desk",
+          "bind": {
+            "question": "input.question"
+          },
+          "then": {
+            "answered": "reply-old"
+          }
+        },
+        "reply-new": {
+          "does": "answer",
+          "bind": {
+            "reply": "steps.try-new.reply"
+          }
+        },
+        "reply-old": {
+          "does": "answer",
+          "bind": {
+            "reply": "steps.as-before.reply"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+# TREE SEARCH — propose, score, keep the best three, go again from them.
+#
+# A frontier the `repeat` remembers, combined `top 3 highest by score`: each
+# round proposes from the best ideas so far and scores what it proposed, and
+# the merge rule IS the pruning. A branch that lost one round stays in the
+# frontier, and wins the next if the branch that beat it scores badly — which
+# is backtracking without a special move. `forks: yes` gives every round a fresh
+# start from what the run knew before the stage, so no round reads a sibling's
+# working.
+#
+# What goes wrong: `keep-the-latest` instead of `top 3`. Then each round sees
+# only the last round's ideas, and the search is a chain.
+name: Tree search
+description: Search over ideas, keeping the best three each round, until one scores high enough.
+shapes:
+  idea:
+    text: text
+    score: number

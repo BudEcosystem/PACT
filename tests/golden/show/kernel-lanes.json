@@ -1,0 +1,107 @@
+{
+  "name": "Lanes",
+  "description": "Three ways in, one workflow, and a rule on each for what a second arrival does.",
+  "agents": {
+    "incident-desk": {
+      "description": "Works one incident from first alert to a written summary.",
+      "instructions": "Work out what is wrong with the service named, say what to do first, and write it up.",
+      "accepts": {
+        "service": "text",
+        "severity": "text",
+        "details": "text"
+      },
+      "answers-with": {
+        "summary": "text"
+      }
+    }
+  },
+  "ports": {
+    "alerts": {
+      "description": "Alerts from the monitoring system, as signed webhooks.",
+      "kind": "inbound-call",
+      "through": "monitoring",
+      "answers": "handle-incident",
+      "signed-with": {
+        "by-reference": "host/monitoring-webhook-secret"
+      },
+      "only-when": [
+        {
+          "value": "input.severity",
+          "is-one-of": [
+            "high",
+            "critical"
+          ]
+        }
+      ],
+      "same-conversation-when": [
+        "service"
+      ],
+      "if-still-running": "queue",
+      "ordered-by": "severity",
+      "who-can-reach-it": [
+        "monitoring"
+      ]
+    },
+    "chat": {
+      "description": "The /incident command in the on-call channel.",
+      "kind": "conversation",
+      "through": "slack",
+      "answers": "handle-incident",
+      "same-conversation-when": [
+        "service"
+      ],
+      "if-still-running": "skip",
+      "counts-as-the-same-for": "10m",
+      "who-can-reach-it": [
+        "people in the on-call channel"
+      ]
+    },
+    "tickets": {
+      "description": "A ticket opened in the tracker for a service that is already being worked.",
+      "kind": "event",
+      "through": "tracker",
+      "answers": "handle-incident",
+      "same-conversation-when": [
+        "service"
+      ],
+      "if-still-running": "join",
+      "who-can-reach-it": [
+        "tracker"
+      ]
+    }
+  },
+  "workflows": {
+    "handle-incident": {
+      "description": "Handle one incident on one service.",
+      "accepts": {
+        "service": "text",
+        "severity": "text",
+        "details": "text"
+      },
+      "answers-with": {
+        "summary": "text"
+      },
+      "starts-at": "work",
+      "steps": {
+        "work": {
+          "does": "call",
+          "call": "incident-desk",
+          "bind": {
+            "service": "input.service",
+            "severity": "input.severity",
+            "details": "input.details"
+          },
+          "then": {
+            "answered": "reply"
+          }
+        },
+        "reply": {
+          "does": "answer",
+          "bind": {
+            "summary": "steps.work.summary"
+          }
+        }
+      }
+    }
+  }
+}

@@ -34,6 +34,7 @@ from enum import Enum
 from typing import Any, Callable, Mapping
 
 from .programs import ProgramFuel
+from .yes_no import said_yes
 
 
 class LoopError(ValueError):
@@ -130,6 +131,10 @@ class Phase:
     #: back to the tools, so such a stage names nothing in `may-use:`. "" when
     #: the code runs where it can call what `may-use:` names.
     runs_in: str = ""
+    #: `forks: yes` (docs/98 WP-10): each attempt at this stage starts from the
+    #: conversation as it stood when the stage was first entered, so attempts
+    #: are independent samples; the next stage sees only what each answered.
+    forks: bool = False
 
     def instruction(self) -> str:
         """The extra wording for this stage, authored or built in."""
@@ -528,6 +533,7 @@ def _read_phase(loop_name: str, key: str, raw: Any) -> Phase:
         asks=str(raw.get("asks") or "").strip(),
         fuel=ProgramFuel.from_document(raw["fuel"]) if raw.get("fuel") is not None else None,
         runs_in=str(raw.get("runs-in") or "").strip(),
+        forks=said_yes(raw.get("forks")),
     )
 
 
@@ -542,6 +548,8 @@ def _phase_to_mapping(p: Phase) -> dict[str, Any]:
         out["at-most"] = p.at_most
     if p.asks:
         out["asks"] = p.asks
+    if p.forks:
+        out["forks"] = "yes"
     if p.fuel is not None:
         out["fuel"] = p.fuel.to_document()
     if p.runs_in:

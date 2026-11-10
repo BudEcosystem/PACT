@@ -1,0 +1,14 @@
+# NO LEAK — private data, a stranger's words and a way out, with a person at the
+# door.
+#
+# The lethal trifecta: the assistant reads customer records (`private-data`),
+# reads web pages (`untrusted-content`), and can send email (`a-way-out`). A
+# sentence on a web page can then tell it to mail somebody's records out. Each
+# tool says what it carries, and `pact check` refuses an agent that reaches all
+# three with nobody at the way out. The policy here puts a person there: every
+# send is read before it goes, so a stranger's sentence can at most make the
+# assistant ASK to send.
+#
+# What goes wrong: delete `policies/sending.yaml` and this tree does not load.
+name: No leak
+description: An assistant with records, the web and email, and a person before anything is sent.

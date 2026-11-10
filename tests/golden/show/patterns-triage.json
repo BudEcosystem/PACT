@@ -1,0 +1,137 @@
+{
+  "name": "Triage",
+  "description": "Route a message by rules, then a classifier, then a person, to one of three desks.",
+  "agents": {
+    "billing-desk": {
+      "description": "Handles billing questions.",
+      "instructions": "Answer the billing question. Never promise a refund date.",
+      "accepts": {
+        "message": "text"
+      },
+      "answers-with": {
+        "reply": "text"
+      }
+    },
+    "sorter": {
+      "description": "Says which desk a message belongs to, or that it is not sure.",
+      "instructions": "Read the message and say which desk should handle it. Billing is money,\ninvoices and refunds. Tech is anything broken. Out-of-scope is anything that is neither. If you are not sure, say\nnot-sure; a person will decide.",
+      "accepts": {
+        "message": "text"
+      },
+      "answers-with": {
+        "desk": "one of billing, tech, out-of-scope, not-sure"
+      },
+      "needs": {
+        "reasoning": "simple",
+        "prefer": "cheapest",
+        "because": "sorting is a one-word answer and most messages are obvious"
+      }
+    },
+    "tech-desk": {
+      "description": "Handles technical problems.",
+      "instructions": "Work out what is broken and say what to try first.",
+      "accepts": {
+        "message": "text"
+      },
+      "answers-with": {
+        "reply": "text"
+      }
+    }
+  },
+  "questions": {
+    "which-desk": {
+      "description": "Asked when neither the rules nor the sorter could place a message.",
+      "says": "Neither the rules nor the sorter could place this message. Which desk should take it?",
+      "answer": {
+        "desk": "one of billing, tech, out-of-scope"
+      },
+      "shows": [
+        "input.message"
+      ],
+      "asked-of": [
+        "support-leads"
+      ],
+      "answer-within": "1h"
+    }
+  },
+  "workflows": {
+    "route": {
+      "description": "Send one message to the right desk.",
+      "accepts": {
+        "message": "text",
+        "channel": "text"
+      },
+      "answers-with": {
+        "reply": "text, optional"
+      },
+      "starts-at": "where",
+      "steps": {
+        "where": {
+          "does": "decide",
+          "chooses-between": {
+            "billing": "bill",
+            "tech": "fix",
+            "out-of-scope": "decline"
+          },
+          "by": [
+            {
+              "rules": [
+                {
+                  "when": [
+                    {
+                      "value": "input.channel",
+                      "is": "invoices-mailbox"
+                    }
+                  ],
+                  "choose": "billing",
+                  "because": "Everything in the invoices mailbox is billing."
+                }
+              ]
+            },
+            {
+              "agent": "sorter"
+            },
+            {
+              "asks": "which-desk"
+            }
+          ]
+        },
+        "bill": {
+          "does": "call",
+          "call": "billing-desk",
+          "bind": {
+            "message": "input.message"
+          },
+          "then": {
+            "answered": "reply-bill"
+          }
+        },
+        "fix": {
+          "does": "call",
+          "call": "tech-desk",
+          "bind": {
+            "message": "input.message"
+          },
+          "then": {
+            "answered": "reply-fix"
+          }
+        },
+        "reply-bill": {
+          "does": "answer",
+          "bind": {
+            "reply": "steps.bill.reply"
+          }
+        },
+        "reply-fix": {
+          "does": "answer",
+          "bind": {
+            "reply": "steps.fix.reply"
+          }
+        },
+        "decline": {
+          "does": "answer"
+        }
+      }
+    }
+  }
+}
