@@ -1,0 +1,6 @@
+description: Answers support questions, as it always has.
+instructions: Answer the customer's question.
+accepts:
+  question: text
+answers-with:
+  reply: text

@@ -1,0 +1,8 @@
+description: Reviews one document and says whether it passes.
+instructions: Review the document for the stated rules. Say pass or fail and give one reason.
+accepts:
+  document: text
+answers-with:
+  verdict: one of pass, fail
+  score: number
+  reason: text

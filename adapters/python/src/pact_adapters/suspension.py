@@ -171,6 +171,16 @@ def clears(reason: str, answer: Any) -> bool:
         return False
 
 
+def request_digest(calls: Sequence[Any]) -> str:
+    """A fingerprint of exactly these calls: their names and arguments."""
+    material = json.dumps(
+        [[getattr(c, "name", ""), getattr(c, "args", {})] for c in calls],
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
 def correlation_key(reason: str, at: int, about: Sequence[str]) -> str:
     """Which wait an answer answers.
 
@@ -640,6 +650,9 @@ class Suspension:
     #: it. Empty for a record written before this field existed, which resumes
     #: with no keys spent — the same honest degradation `used` already has.
     spent_keys: tuple[tuple[str, str, str], ...] = ()
+    #: A fingerprint of the calls this run is waiting to make, taken when it
+    #: parked (docs/98 WP-12, the exact-action binding). Empty: nothing to bind.
+    request_digest: str = ""
 
     def __post_init__(self) -> None:
         check_reason(self.reason)
@@ -673,7 +686,12 @@ class Suspension:
 
     def accepts(self, resumption: Resumption) -> bool:
         """The one guard. An answer to a wait this run has moved past is not an
-        answer to this wait, however plausible it looks."""
+        answer to this wait, however plausible it looks — and an answer to a
+        request is not an answer to a different one: if the calls this run is
+        waiting to make were changed after it parked, the person approved
+        something else (docs/98 WP-12), and the answer does not apply."""
+        if self.request_digest and request_digest(self.awaiting) != self.request_digest:
+            return False
         return resumption.correlation_key == self.correlation_key
 
     # -- waiting -----------------------------------------------------------
@@ -760,6 +778,7 @@ class Suspension:
                 # tuples below, so the record's shape on this side of the
                 # process boundary is the same one it had on the other.
                 "spent-keys": [list(k) for k in self.spent_keys],
+                "request-digest": self.request_digest,
             },
             sort_keys=True,
         )
@@ -807,6 +826,7 @@ class Suspension:
             spent_keys=tuple(
                 (str(t), str(a), str(v)) for t, a, v in (d.get("spent-keys") or ())
             ),
+            request_digest=str(d.get("request-digest") or ""),
         )
 
 

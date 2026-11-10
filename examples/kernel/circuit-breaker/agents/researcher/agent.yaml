@@ -1,0 +1,9 @@
+description: Answers questions from the company's documents.
+instructions: |
+  Search the documents and answer from what you find. If search is resting,
+  say what you could not check rather than guessing.
+uses:
+  - search
+limits:
+  steps-at-most: 10
+  when-it-runs-out: stop-and-say-so

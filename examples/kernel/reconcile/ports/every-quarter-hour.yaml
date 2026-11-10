@@ -1,0 +1,7 @@
+description: Reconcile each project with the tracker every fifteen minutes.
+kind: schedule
+every: every 15 minutes
+answers: reconciler
+says: Reconcile the project with the tracker.
+if-still-running: skip
+if-missed: run-when-back

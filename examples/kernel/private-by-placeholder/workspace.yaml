@@ -1,0 +1,23 @@
+# PRIVATE BY PLACEHOLDER — the model never sees the card number; the payment
+# action is the one place it comes back.
+#
+# `redaction.yaml` hides card numbers, and this workspace's own detector, order
+# references, everywhere. Because the `charge` action says `gets-hidden-values:
+# yes`, a hidden value becomes a placeholder (`⟦card-number-1⟧`) instead of
+# `[removed]`: the model can still say "charge this card", the logs and the
+# person approving see only the placeholder, and the real number is put back
+# in that action's arguments and nowhere else. This is PII tokenisation and the
+# credential broker, written as two lines.
+#
+# What goes wrong: `gets-hidden-values:` on an action that does not need it.
+# Every action that says it is a door the number can come back through; there
+# is exactly one here.
+name: Private by placeholder
+description: A cashier that charges a card the model never sees.
+detectors:
+  order reference:
+    description: An order reference, as the shop prints them.
+    looks-like:
+      - ORD-[0-9]{8}
+    examples:
+      - ORD-12345678

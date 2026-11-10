@@ -26,6 +26,7 @@
 //! | `loader/unlisted-actions-nobody-can-describe` | `unlisted-actions: each-call-asks-a-person` with nothing to read their arguments from |
 //! | `loader/two-pins-on-one-server` | a resource with `published:` and the older `tool-snapshot-digest:` both |
 //! | `loader/a-change-to-nothing-recorded` | `if-it-changes:` on a server with no `published:` to compare with |
+//! | `loader/declared-lighter-than-the-server-says` | an action says `reads-only: yes` and the server's recorded `hints:` say it is destructive or not read-only (law 1, warning) |
 
 use pact_diag::{Diagnostic, Diagnostics, Span};
 use pact_doc::Node;
@@ -189,8 +190,69 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
                 server_name,
                 diags,
             );
+            lighter_than_the_server_says(
+                name,
+                action,
+                &line.node,
+                &server_tool.node,
+                server_name,
+                diags,
+            );
         }
     }
+}
+
+/// Law 1 (`docs/98` WP-2): an action's effect is never lighter than what it
+/// does. The one place a second opinion is written down is the server's own
+/// `hints:`, recorded by `pact-sync`. The schema says those are "never trusted
+/// to decide anything, because the server wrote it", and nothing here decides
+/// on them: the author's `reads-only: yes` still stands. What this says is that
+/// the two disagree in the dangerous direction, and an action marked as only
+/// looking things up skips every protection a write gets — an approval rule
+/// keyed on writes, the exactly-once claim, the undo plan.
+fn lighter_than_the_server_says(
+    tool: &str,
+    action: &str,
+    line: &Node,
+    server_tool: &Node,
+    server_name: &str,
+    diags: &mut Diagnostics,
+) {
+    if !line
+        .get("reads-only")
+        .is_some_and(crate::teams::said_yes_node)
+    {
+        return;
+    }
+    let Some(hints) = server_tool.get("hints") else {
+        return;
+    };
+    let flag = |k: &str| hints.get(k).map(crate::teams::said_yes_node);
+    let destructive = flag("destructiveHint") == Some(true);
+    let not_read_only = flag("readOnlyHint") == Some(false);
+    if !destructive && !not_read_only {
+        return;
+    }
+    let what = if destructive {
+        "`destructiveHint: true`"
+    } else {
+        "`readOnlyHint: false`"
+    };
+    diags.push(Diagnostic::warning(
+        "loader/declared-lighter-than-the-server-says",
+        at(line, "reads-only", &line.span),
+        format!(
+            "'{tool}/{action}' says `reads-only: yes`, and '{server_name}' publishes it with \
+             {what}. Marked as only looking things up, it gets none of what a write gets: no \
+             approval rule keyed on writes reaches it, no exactly-once claim is required, and \
+             no undo plan is asked for."
+        ),
+        format!(
+            "If it does change something, take out `reads-only: yes`. If the server's hint is \
+             wrong, keep the line and say why in a comment beside it, and tell whoever runs \
+             '{server_name}'."
+        ),
+    ));
 }
 
 /// Every argument a decision rests on is one the recorded tool takes, and

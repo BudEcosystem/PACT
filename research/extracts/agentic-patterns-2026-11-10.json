@@ -1,0 +1,1835 @@
+{
+ "source": "https://www.agentic-patterns.com/patterns.json",
+ "taken": "2026-11-10",
+ "note": "Trimmed snapshot: slug, title, category, status, one-line summary, updated_at, source. Full text stays on the site. Used by scripts/pattern-coverage.py.",
+ "count": 203,
+ "patterns": [
+  {
+   "slug": "agent-powered-codebase-qa-onboarding",
+   "title": "Agent-Powered Codebase Q&A / Onboarding",
+   "category": "Context & Memory",
+   "status": "validated-in-production",
+   "summary": "Agent indexes the codebase with embeddings and code graphs and answers natural-language questions about where code is and how it behaves",
+   "updated_at": "2026-10-13",
+   "source": "https://www.youtube.com/watch?v=BGgsoIgbT_Y"
+  },
+  {
+   "slug": "context-budget-as-a-governed-resource",
+   "title": "Context Budget as a Governed Resource",
+   "category": "Context & Memory",
+   "status": "validated-in-production",
+   "summary": "Measures always-loaded context per source, alerts on trend growth, and puts hard spend caps and fan-out bounds on unattended agent runs",
+   "updated_at": "2026-07-23",
+   "source": "https://github.com/jimy-r/agent-workspace-architecture/blob/main/PATTERNS.md#9-context-is-a-budget-not-a-constant"
+  },
+  {
+   "slug": "context-window-anxiety-management",
+   "title": "Context Window Anxiety Management",
+   "category": "Context & Memory",
+   "status": "emerging",
+   "summary": "Enables a large context window but caps usage lower, and adds prompts that state the token budget so the model does not rush to finish",
+   "updated_at": "2026-10-13",
+   "source": "https://cognition.com/blog/devin-sonnet-4-5-lessons-and-challenges (September 2025)"
+  },
+  {
+   "slug": "context-window-auto-compaction",
+   "title": "Context Window Auto-Compaction",
+   "category": "Context & Memory",
+   "status": "validated-in-production",
+   "summary": "Catches context overflow errors, compacts and validates the transcript with capped reserve headroom, and retries the request automatically",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/openclaw/openclaw/blob/main/src/agents/embedded-agent-runner/compact.ts"
+  },
+  {
+   "slug": "context-minimization-pattern",
+   "title": "Context-Minimization Pattern",
+   "category": "Context & Memory",
+   "status": "emerging",
+   "summary": "Removes untrusted user text and tool output from context after it becomes a safe structured artifact, so later steps see only trusted data",
+   "updated_at": "2026-03-11",
+   "source": "https://arxiv.org/abs/2506.08837"
+  },
+  {
+   "slug": "cross-agent-lesson-sharing",
+   "title": "Cross-Agent Lesson Sharing via Git",
+   "category": "Context & Memory",
+   "status": "emerging",
+   "summary": "Agents write solved problems as markdown lessons in a shared Git repo and search them before debugging, with GitHub Issues as the coordination layer",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/Ikalus1988/MisakaNet"
+  },
+  {
+   "slug": "curated-code-context-window",
+   "title": "Curated Code Context Window",
+   "category": "Context & Memory",
+   "status": "validated-in-production",
+   "summary": "A search subagent finds the few relevant files for a task and injects only top snippets or summaries into the main coding agent's context",
+   "updated_at": "2026-10-14",
+   "source": "https://www.youtube.com/watch?v=Xkwok_XXQgw"
+  },
+  {
+   "slug": "dynamic-context-injection",
+   "title": "Dynamic Context Injection",
+   "category": "Context & Memory",
+   "status": "established",
+   "summary": "Lets users inject files, folders, or saved prompts into the agent's context mid-session with @-mentions and custom slash commands",
+   "updated_at": "2026-10-14",
+   "source": "https://www.nibzard.com/claude-code"
+  },
+  {
+   "slug": "episodic-memory-retrieval-injection",
+   "title": "Episodic Memory Retrieval & Injection",
+   "category": "Context & Memory",
+   "status": "established",
+   "summary": "Writes a structured memory record after each episode and injects the top-k similar past memories as hints when a new task starts",
+   "updated_at": "2026-10-13",
+   "source": "https://help.openai.com/en/articles/8590148-memory-and-new-controls-for-chatgpt"
+  },
+  {
+   "slug": "filesystem-based-agent-state",
+   "title": "Filesystem-Based Agent State",
+   "category": "Context & Memory",
+   "status": "established",
+   "summary": "Agents persist intermediate results and working state to files, creating durable checkpoints that enable workflow resumption, recovery from failures, and support for long-running tasks.",
+   "updated_at": "2026-10-13",
+   "source": "https://www.anthropic.com/engineering/code-execution-with-mcp"
+  },
+  {
+   "slug": "layered-configuration-context",
+   "title": "Layered Configuration Context",
+   "category": "Context & Memory",
+   "status": "established",
+   "summary": "Loads context files from enterprise, user, project, and local levels automatically and merges them into the agent's baseline context",
+   "updated_at": "2026-10-13",
+   "source": "https://code.claude.com/docs/en/memory"
+  },
+  {
+   "slug": "memory-synthesis-from-execution-logs",
+   "title": "Memory Synthesis from Execution Logs",
+   "category": "Context & Memory",
+   "status": "emerging",
+   "summary": "Has the agent write a structured diary per task, then runs synthesis agents over many diaries to turn recurring patterns into rules, commands, and tests",
+   "updated_at": "2026-10-13",
+   "source": "https://every.to/podcast/transcript-how-to-use-claude-code-like-the-people-who-built-it"
+  },
+  {
+   "slug": "proactive-agent-state-externalization",
+   "title": "Proactive Agent State Externalization",
+   "category": "Context & Memory",
+   "status": "emerging",
+   "summary": "Gives agents note templates, completeness checks, and an external memory fallback so self-written notes keep objectives, decisions, and knowledge gaps",
+   "updated_at": "2026-10-13",
+   "source": "https://cognition.com/blog/devin-sonnet-4-5-lessons-and-challenges"
+  },
+  {
+   "slug": "progressive-disclosure-large-files",
+   "title": "Progressive Disclosure for Large Files",
+   "category": "Context & Memory",
+   "status": "emerging",
+   "summary": "Puts only file metadata in the prompt and gives the agent load, peek, and extract tools to pull file content into context on demand",
+   "updated_at": "2026-10-13",
+   "source": "https://lethain.com/agents-large-files/"
+  },
+  {
+   "slug": "prompt-caching-via-exact-prefix-preservation",
+   "title": "Prompt Caching via Exact Prefix Preservation",
+   "category": "Context & Memory",
+   "status": "emerging",
+   "summary": "Keeps static prompt content first in a fixed order and only appends new messages, including config changes, so each request reuses the cached prefix",
+   "updated_at": "2026-10-13",
+   "source": "https://openai.com/index/unrolling-the-codex-agent-loop/"
+  },
+  {
+   "slug": "schema-guided-graph-retrieval",
+   "title": "Schema-Guided Graph Retrieval for Multi-Hop Reasoning",
+   "category": "Context & Memory",
+   "status": "emerging",
+   "summary": "Use one shared domain schema to align graph construction, schema evolution, query decomposition, and typed retrieval so multi-hop reasoning over private knowledge stays precise as domains change.",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/TencentCloudADP/youtu-graphrag"
+  },
+  {
+   "slug": "self-identity-accumulation",
+   "title": "Self-Identity Accumulation",
+   "category": "Context & Memory",
+   "status": "emerging",
+   "summary": "Injects a persistent identity document at session start and updates it with new user insights at session end through lifecycle hooks",
+   "updated_at": "2026-10-13",
+   "source": "https://code.claude.com/docs/en/hooks"
+  },
+  {
+   "slug": "semantic-context-filtering",
+   "title": "Semantic Context Filtering Pattern",
+   "category": "Context & Memory",
+   "status": "emerging",
+   "summary": "Extracts only the semantic or interactive parts of raw data, such as accessibility trees or relevant fields, before sending it to the LLM",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/hyperbrowserai/HyperAgent"
+  },
+  {
+   "slug": "session-scoped-context-runtime-for-agent-tools",
+   "title": "Session-Scoped Context Runtime for Agent Tools",
+   "category": "Context & Memory",
+   "status": "emerging",
+   "summary": "Interpose a context runtime that caches structured reads and normalizes tool output so sessions reuse compact representations instead of repeating raw tokens.",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/yvgude/lean-ctx"
+  },
+  {
+   "slug": "surface-scoped-system-prompt",
+   "title": "Surface-Scoped System Prompt",
+   "category": "Context & Memory",
+   "status": "established",
+   "summary": "Ships one system prompt per invocation surface and selects it at launch, so an interactive session, a headless run and a task mode each get instructions written for that surface",
+   "updated_at": "2026-09-30",
+   "source": "https://github.com/MiniMax-AI/minimax-code"
+  },
+  {
+   "slug": "tool-search-lazy-loading",
+   "title": "Tool Search Lazy Loading",
+   "category": "Context & Memory",
+   "status": "established",
+   "summary": "Dynamically load tools via search instead of preloading all available tools to reduce context usage",
+   "updated_at": "2026-10-13",
+   "source": "https://x.com/trq212/status/2011523109871108570"
+  },
+  {
+   "slug": "working-memory-via-todos",
+   "title": "Working Memory via Task Tracking",
+   "category": "Context & Memory",
+   "status": "emerging",
+   "summary": "Keeps an explicit task list with status, blockers, and next steps during the session so agent and user can track progress",
+   "updated_at": "2026-10-13",
+   "source": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+  },
+  {
+   "slug": "ai-assisted-code-review-verification",
+   "title": "AI-Assisted Code Review / Verification",
+   "category": "Feedback Loops",
+   "status": "established",
+   "summary": "Uses AI tools to flag issues, summarize change intent, and explain code so human reviewers focus on intent and business logic",
+   "updated_at": "2026-10-13",
+   "source": "https://www.youtube.com/watch?v=BGgsoIgbT_Y"
+  },
+  {
+   "slug": "background-agent-ci",
+   "title": "Background Agent with CI Feedback",
+   "category": "Feedback Loops",
+   "status": "validated-in-production",
+   "summary": "Runs the agent in the background on its own branch and uses CI results as feedback to patch failures until green or blocked",
+   "updated_at": "2026-10-13",
+   "source": "https://ampcode.com/docs/orbs"
+  },
+  {
+   "slug": "deterministic-grader-in-the-loop",
+   "title": "Deterministic Grader in the Loop",
+   "category": "Feedback Loops",
+   "status": "emerging",
+   "summary": "Replace the LLM-as-judge in an agent's self-review loop with a deterministic scorer that returns the raw counts behind each sub-score, so the agent has something specific to fix.",
+   "updated_at": "2026-08-21",
+   "source": "https://github.com/parweb/mcp-ai-slop-checker"
+  },
+  {
+   "slug": "dogfooding-with-rapid-iteration-for-agent-improvement",
+   "title": "Dogfooding with Rapid Iteration for Agent Improvement",
+   "category": "Feedback Loops",
+   "status": "best-practice",
+   "summary": "The agent team uses its own agent for daily work, collects feedback in low-friction channels, and ships features internally first to validate or discard them",
+   "updated_at": "2026-01-05",
+   "source": "https://www.youtube.com/watch?v=BGgsoIgbT_Y"
+  },
+  {
+   "slug": "graph-of-thoughts",
+   "title": "Graph of Thoughts (GoT)",
+   "category": "Feedback Loops",
+   "status": "emerging",
+   "summary": "Represents reasoning as a directed graph of thoughts so the model can branch, aggregate, refine, and revisit reasoning paths",
+   "updated_at": "2026-10-13",
+   "source": "https://arxiv.org/abs/2308.09687"
+  },
+  {
+   "slug": "incident-to-eval-synthesis",
+   "title": "Incident-to-Eval Synthesis",
+   "category": "Feedback Loops",
+   "status": "emerging",
+   "summary": "Converts each production incident into executable eval cases with pass/fail criteria and gates future releases on them",
+   "updated_at": "2026-10-13",
+   "source": "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests"
+  },
+  {
+   "slug": "inference-healed-code-review-reward",
+   "title": "Inference-Healed Code Review Reward",
+   "category": "Feedback Loops",
+   "status": "proposed",
+   "summary": "Replaces a binary tests-passed reward with a critic that scores correctness, style, performance, and security, explains low scores, and combines them",
+   "updated_at": "2026-10-13",
+   "source": "https://www.youtube.com/watch?v=Xkwok_XXQgw"
+  },
+  {
+   "slug": "iterative-prompt-skill-refinement",
+   "title": "Iterative Prompt & Skill Refinement",
+   "category": "Feedback Loops",
+   "status": "emerging",
+   "summary": "Combines a feedback channel, editable prompt documents, log-driven skill fixes, and usage dashboards to improve agent prompts and skills continuously",
+   "updated_at": "2026-10-13",
+   "source": "https://lethain.com/agents-iterative-refinement/"
+  },
+  {
+   "slug": "reflection",
+   "title": "Reflection Loop",
+   "category": "Feedback Loops",
+   "status": "established",
+   "summary": "Scores each draft against a fixed rubric, feeds the critique into a revision, and repeats until the draft passes a threshold or the retry budget ends",
+   "updated_at": "2026-10-13",
+   "source": "https://arxiv.org/abs/2303.11366"
+  },
+  {
+   "slug": "rendered-ui-finish-gate",
+   "title": "Rendered UI Finish Gate",
+   "category": "Feedback Loops",
+   "status": "emerging",
+   "summary": "Verify an agent-built interface against its intended design contract, required states, interaction semantics, and rendered output before merging.",
+   "updated_at": "2026-08-21",
+   "source": "https://github.com/uizze/uizze/tree/main/skills/anti-ui-slop"
+  },
+  {
+   "slug": "rich-feedback-loops",
+   "title": "Rich Feedback Loops > Perfect Prompts",
+   "category": "Feedback Loops",
+   "status": "validated-in-production",
+   "summary": "Returns compiler errors, test failures, lint output, and human feedback to the agent after each tool call so it can plan fixes and self-correct",
+   "updated_at": "2026-10-13",
+   "source": "https://www.nibzard.com/ampcode"
+  },
+  {
+   "slug": "self-critique-evaluator-loop",
+   "title": "Self-Critique Evaluator Loop",
+   "category": "Feedback Loops",
+   "status": "established",
+   "summary": "Trains a judge model on its own synthetic comparisons of candidate outputs and uses it as a reward model or quality gate for the main agent",
+   "updated_at": "2026-10-13",
+   "source": "https://arxiv.org/abs/2408.02666"
+  },
+  {
+   "slug": "spec-as-test-feedback-loop",
+   "title": "Spec-As-Test Feedback Loop",
+   "category": "Feedback Loops",
+   "status": "emerging",
+   "summary": "Generates executable tests from the spec on every spec or code commit and opens agent PRs that fix code or flag unclear spec parts",
+   "updated_at": "2026-10-13",
+   "source": "http://jorypestorious.com/blog/ai-engineer-spec/"
+  },
+  {
+   "slug": "tool-use-incentivization-via-reward-shaping",
+   "title": "Tool Use Incentivization via Reward Shaping",
+   "category": "Feedback Loops",
+   "status": "emerging",
+   "summary": "Gives dense RL rewards for useful intermediate tool calls such as compile, lint, and test so the agent learns to use tools instead of only thinking",
+   "updated_at": "2026-10-13",
+   "source": "https://www.youtube.com/watch?v=Xkwok_XXQgw"
+  },
+  {
+   "slug": "agent-reinforcement-fine-tuning",
+   "title": "Agent Reinforcement Fine-Tuning (Agent RFT)",
+   "category": "Learning & Adaptation",
+   "status": "emerging",
+   "summary": "Trains model weights with reinforcement learning on real tool calls and custom graders to improve domain-specific tool use and multi-step reasoning",
+   "updated_at": "2026-10-13",
+   "source": "https://youtu.be/1s_7RMG4O4U"
+  },
+  {
+   "slug": "commitment-ledger-reality-gated-credit",
+   "title": "Commitment Ledger with Reality-Gated Credit",
+   "category": "Learning & Adaptation",
+   "status": "proposed",
+   "summary": "Records agent promises and credits retrieved memory only after an externally verifiable outcome settles.",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/maxbaluev/accreted-intelligence"
+  },
+  {
+   "slug": "compounding-engineering-pattern",
+   "title": "Compounding Engineering Pattern",
+   "category": "Learning & Adaptation",
+   "status": "emerging",
+   "summary": "After each feature, codifies agent mistakes and learnings into CLAUDE.md, slash commands, subagents, and hooks so the next feature is easier to build",
+   "updated_at": "2026-10-13",
+   "source": "https://every.to/podcast/transcript-how-to-use-claude-code-like-the-people-who-built-it"
+  },
+  {
+   "slug": "frontier-focused-development",
+   "title": "Frontier-Focused Development",
+   "category": "Learning & Adaptation",
+   "status": "emerging",
+   "summary": "Targets only state-of-the-art models, picks the best model per use case with no user model selector, and expects to rework the product every few months",
+   "updated_at": "2026-10-13",
+   "source": "https://www.youtube.com/watch?v=2wjnV6F2arc"
+  },
+  {
+   "slug": "memory-reinforcement-learning-memrl",
+   "title": "Memory Reinforcement Learning (MemRL)",
+   "category": "Learning & Adaptation",
+   "status": "proposed",
+   "summary": "Stores memories with learned utility scores, retrieves by similarity then re-ranks by utility, and updates scores from outcomes while the LLM stays frozen",
+   "updated_at": "2026-10-13",
+   "source": "https://arxiv.org/abs/2601.03192"
+  },
+  {
+   "slug": "merged-code-language-skill-model",
+   "title": "Merged Code + Language Skill Model",
+   "category": "Learning & Adaptation",
+   "status": "emerging",
+   "summary": "Fine-tunes separate language and code specialists from the same base model, then merges their weights into one model instead of one large joint training run",
+   "updated_at": "2026-10-13",
+   "source": "https://www.youtube.com/watch?v=Xkwok_XXQgw"
+  },
+  {
+   "slug": "persistent-test-memory-feedback-loop",
+   "title": "Persistent Test Memory Feedback Loop",
+   "category": "Learning & Adaptation",
+   "status": "emerging",
+   "summary": "Preserve validated test lessons so an agent can reuse successful paths, recognize recurring failures, and retire stale knowledge.",
+   "updated_at": "2026-08-16",
+   "source": "https://github.com/vostride/agent-qa"
+  },
+  {
+   "slug": "self-discover-reasoning-structures",
+   "title": "Self-Discover: LLM Self-Composed Reasoning Structures",
+   "category": "Learning & Adaptation",
+   "status": "emerging",
+   "summary": "Has the LLM select, adapt, and compose reasoning modules into a task-specific reasoning structure, then solve the task by following that structure",
+   "updated_at": "2026-10-13",
+   "source": "https://arxiv.org/abs/2402.03620"
+  },
+  {
+   "slug": "shipping-as-research",
+   "title": "Shipping as Research",
+   "category": "Learning & Adaptation",
+   "status": "emerging",
+   "summary": "Releases reversible, instrumented features to learn whether they work, then doubles down or removes them based on usage data and feedback",
+   "updated_at": "2026-10-13",
+   "source": "https://www.youtube.com/watch?v=4rx36wc9ugw"
+  },
+  {
+   "slug": "skill-library-evolution",
+   "title": "Skill Library Evolution",
+   "category": "Learning & Adaptation",
+   "status": "established",
+   "summary": "Saves working agent code as reusable skills in a skills directory, documents and tests them over time, and loads skill details only on demand",
+   "updated_at": "2026-10-13",
+   "source": "https://www.anthropic.com/engineering/code-execution-with-mcp"
+  },
+  {
+   "slug": "variance-based-rl-sample-selection",
+   "title": "Variance-Based RL Sample Selection",
+   "category": "Learning & Adaptation",
+   "status": "emerging",
+   "summary": "Runs the base model several times per sample and trains RL only on samples with score variance, skipping ones that are always right or always wrong",
+   "updated_at": "2026-10-13",
+   "source": "https://youtu.be/1s_7RMG4O4U"
+  },
+  {
+   "slug": "402-first-machine-payments",
+   "title": "402-First Machine Payments (Price-Before-Work Tool Purchases)",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Server returns an HTTP 402 price quote before doing work, and the agent pays the exact amount only if it fits its budget cap",
+   "updated_at": "2026-09-26",
+   "source": "https://github.com/x402-foundation/x402"
+  },
+  {
+   "slug": "action-selector-pattern",
+   "title": "Action-Selector Pattern",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "LLM maps user intent to a pre-approved action ID with schema-validated parameters, and tool outputs never return to the selector",
+   "updated_at": "2026-10-13",
+   "source": "https://arxiv.org/abs/2506.08837"
+  },
+  {
+   "slug": "agent-modes-by-model-personality",
+   "title": "Agent Modes by Model Personality",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Offers separate working modes, each with its own prompts, tools, UI, and expectations, tuned to one model's working style",
+   "updated_at": "2026-10-13",
+   "source": "https://www.youtube.com/watch?v=4rx36wc9ugw"
+  },
+  {
+   "slug": "agent-driven-research",
+   "title": "Agent-Driven Research",
+   "category": "Orchestration & Control",
+   "status": "established",
+   "summary": "Agent plans its own search queries, runs them across sources, reflects on gaps, and iterates until it can write a sourced report",
+   "updated_at": "2026-10-13",
+   "source": "https://eu.36kr.com/en/p/3352908436796289"
+  },
+  {
+   "slug": "multi-step-analysis-pipeline-orchestration",
+   "title": "Artifact-Driven Analysis Pipeline Orchestration",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Has an agent run independent analysis scripts, read their structured reports, and merge them into one final report or visualization",
+   "updated_at": "2026-07-23",
+   "source": "https://github.com/shmlkv/dna-claude-analysis"
+  },
+  {
+   "slug": "autonomous-workflow-agent-architecture",
+   "title": "Autonomous Workflow Agent Architecture",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Runs multi-step engineering workflows in containers with tmux sessions, sleep-based monitoring, checkpoints, and context-aware error recovery",
+   "updated_at": "2026-10-13",
+   "source": "https://www.together.ai/blog/ai-agents-to-automate-complex-engineering-tasks"
+  },
+  {
+   "slug": "board-mediated-inter-agent-coordination",
+   "title": "Board-Mediated Async Inter-Agent Coordination",
+   "category": "Orchestration & Control",
+   "status": "validated-in-production",
+   "summary": "Routes agent-to-agent messages through comment threads on board cards, with a prefix that creates an inbox card to notify the target agent",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/AgileSmagile/smagile-agentic-kanban-blueprint"
+  },
+  {
+   "slug": "budget-aware-model-routing-with-hard-cost-caps",
+   "title": "Budget-Aware Model Routing with Hard Cost Caps",
+   "category": "Orchestration & Control",
+   "status": "established",
+   "summary": "Routes each request to the cheapest model that meets its needs under hard cost caps, and escalates only when quality gates fail",
+   "updated_at": "2026-10-13",
+   "source": "https://arxiv.org/abs/2305.05176"
+  },
+  {
+   "slug": "burn-the-boats",
+   "title": "Burn the Boats",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Removes working but obsolete features on a hard, announced deadline so the team and users move to the new approach",
+   "updated_at": "2026-10-13",
+   "source": "https://www.youtube.com/watch?v=4rx36wc9ugw"
+  },
+  {
+   "slug": "capability-escrow-receipt",
+   "title": "Capability-Escrow-Receipt",
+   "category": "Orchestration & Control",
+   "status": "experimental-but-awesome",
+   "summary": "Binds a signed capability listing, an atomic escrow-plus-hire step, and a signed work receipt into one loop for agent-to-agent payment",
+   "updated_at": "2026-10-13",
+   "source": "https://voidly.ai/developers"
+  },
+  {
+   "slug": "classify-then-act-for-background-agents",
+   "title": "Classify-Then-Act for Background Agents",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Sorts each task into has-default, needs-intent, or out-of-scope, builds only has-default work in a sandbox, and queues it for human review",
+   "updated_at": "2026-09-26",
+   "source": "https://github.com/jimy-r/agent-workspace-architecture/blob/main/PATTERNS.md#2-classify-then-act-not-ask-then-wait"
+  },
+  {
+   "slug": "parallel-tool-execution",
+   "title": "Conditional Parallel Tool Execution",
+   "category": "Orchestration & Control",
+   "status": "validated-in-production",
+   "summary": "Runs a batch of tool calls in parallel when all are read-only and in sequence when any modifies state, then returns results in request order",
+   "updated_at": "2026-10-13",
+   "source": "https://gerred.github.io/building-an-agentic-system/parallel-tool-execution.html"
+  },
+  {
+   "slug": "continuous-autonomous-task-loop-pattern",
+   "title": "Continuous Autonomous Task Loop Pattern",
+   "category": "Orchestration & Control",
+   "status": "established",
+   "summary": "Runs a loop where subagents pick the next task from a todo file, execute it in fresh context, commit it, and back off on rate limits",
+   "updated_at": "2026-10-13",
+   "source": "https://gist.github.com/nibzard/a97ef0a1919328bcbc6a224a5d2cfc78"
+  },
+  {
+   "slug": "cross-cycle-consensus-relay",
+   "title": "Cross-Cycle Consensus Relay",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Each loop cycle reads a structured relay document, does its work, and atomically writes back decisions, open questions, and the single next action",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/NikitaDmitrieff/auto-co-meta"
+  },
+  {
+   "slug": "cross-domain-agent-conflict-resolution",
+   "title": "Cross-Domain Agent Conflict Resolution",
+   "category": "Orchestration & Control",
+   "status": "proposed",
+   "summary": "A coordination layer that cross-references recommendations from independent domain agents, detects conflicts on shared resources, and resolves them through policy-as-code.",
+   "updated_at": "2026-10-13",
+   "source": "https://arxiv.org/abs/2508.18765"
+  },
+  {
+   "slug": "custom-sandboxed-background-agent",
+   "title": "Custom Sandboxed Background Agent",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Builds an in-house background coding agent that runs in sandboxed dev environments, streams progress over WebSocket, and iterates on compiler and test feedback",
+   "updated_at": "2026-10-13",
+   "source": "https://engineering.ramp.com/post/why-we-built-our-background-agent"
+  },
+  {
+   "slug": "declarative-multi-agent-topology-definition",
+   "title": "Declarative Multi-Agent Topology Definition",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Define multi-agent systems declaratively in a single topology file — agents, flows, gates, hooks, group chats — then compile to platform-specific configurations for any agentic framework.",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/agentopology/agentopology"
+  },
+  {
+   "slug": "design-time-file-partition",
+   "title": "Design-Time File Partition as Concurrency Control",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Each task declares every path it will write; overlapping tasks get a blocking dependency so only disjoint work runs at once on a shared checkout",
+   "updated_at": "2026-09-26",
+   "source": "https://github.com/jedarden/NEEDLE/blob/main/docs/adr/015-concurrent-same-repo-worker-isolation.md"
+  },
+  {
+   "slug": "deterministic-zero-llm-orchestration",
+   "title": "Deterministic Zero-LLM Orchestration",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "A deterministic code orchestrator splits goals, runs parallel coding agents, verifies with tests, and commits, spending LLM tokens only on the one-time goal decomposition",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/sipyourdrink-ltd/bernstein"
+  },
+  {
+   "slug": "discrete-phase-separation",
+   "title": "Discrete Phase Separation",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Splits work into separate research, planning, and implementation conversations, each with fresh context, passing only distilled outputs between phases",
+   "updated_at": "2026-10-13",
+   "source": "https://claude.com/blog/building-companies-with-claude-code"
+  },
+  {
+   "slug": "disposable-scaffolding-over-durable-features",
+   "title": "Disposable Scaffolding Over Durable Features",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Treats code around the model as temporary scaffolding: build the simplest thing that works now, mark it disposable, and remove it when models improve",
+   "updated_at": "2026-10-13",
+   "source": "https://www.youtube.com/watch?v=b4rOVZWLW6E"
+  },
+  {
+   "slug": "distributed-execution-cloud-workers",
+   "title": "Distributed Execution with Cloud Workers",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Runs many agent sessions in parallel on cloud workers, each in its own git worktree, with dependency-aware scheduling, merge coordination, and approval gates",
+   "updated_at": "2026-10-13",
+   "source": "https://claude.com/blog/building-companies-with-claude-code"
+  },
+  {
+   "slug": "dual-llm-pattern",
+   "title": "Dual LLM Pattern",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Splits work between a privileged LLM that calls tools but never sees untrusted data and a quarantined LLM that reads untrusted data but has no tools",
+   "updated_at": "2026-10-13",
+   "source": "https://arxiv.org/abs/2506.08837"
+  },
+  {
+   "slug": "dual-rail-message-delivery",
+   "title": "Dual-Rail Message Delivery",
+   "category": "Orchestration & Control",
+   "status": "validated-in-production",
+   "summary": "Sends every inter-agent message on two independent channels through one entry point, alerts when the rails diverge, and requires ACKs to confirm completion",
+   "updated_at": "2026-08-21",
+   "source": "https://www.cs.utexas.edu/~lorenzo/corsi/cs380d/papers/p225-chandra.pdf"
+  },
+  {
+   "slug": "explicit-posterior-sampling-planner",
+   "title": "Explicit Posterior-Sampling Planner",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Embeds Posterior Sampling for RL in the LLM's reasoning: sample a task model, plan, act, observe reward, and update the posterior",
+   "updated_at": "2026-03-11",
+   "source": "https://arxiv.org/abs/2504.20997"
+  },
+  {
+   "slug": "factory-over-assistant",
+   "title": "Factory over Assistant",
+   "category": "Orchestration & Control",
+   "status": "validated-in-production",
+   "summary": "Spawns several autonomous agents in parallel with automated feedback loops such as tests and builds, and checks on them later instead of watching one agent",
+   "updated_at": "2026-10-13",
+   "source": "https://www.youtube.com/watch?v=2wjnV6F2arc"
+  },
+  {
+   "slug": "fair-share-task-queues-with-heartbeat-leases",
+   "title": "Fair-Share Task Queues with Heartbeat Leases",
+   "category": "Orchestration & Control",
+   "status": "proposed",
+   "summary": "Distributes tasks across a shared agent fleet using weighted deficit-round-robin scheduling, with heartbeat leases and dead-letter retries to recover from crashed workers",
+   "updated_at": "2026-10-14",
+   "source": "https://github.com/Retsumdk/agent-decentralized-task-allocation-framework"
+  },
+  {
+   "slug": "feature-list-as-immutable-contract",
+   "title": "Feature List as Immutable Contract",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Defines every feature up front in a JSON list with acceptance steps; the agent may only flip a feature to passing after it verifies it",
+   "updated_at": "2026-10-13",
+   "source": "https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents"
+  },
+  {
+   "slug": "hybrid-llm-code-workflow-coordinator",
+   "title": "Hybrid LLM/Code Workflow Coordinator",
+   "category": "Orchestration & Control",
+   "status": "proposed",
+   "summary": "Lets each workflow pick an LLM or a code script as its coordinator, so teams prototype with the LLM and move to reviewed code when determinism matters",
+   "updated_at": "2026-10-13",
+   "source": "https://lethain.com/agents-coordinators/"
+  },
+  {
+   "slug": "inference-time-scaling",
+   "title": "Inference-Time Scaling",
+   "category": "Orchestration & Control",
+   "status": "established",
+   "summary": "Spends extra compute at inference time with best-of-N sampling, longer reasoning, self-refinement, search, and verification to improve output quality",
+   "updated_at": "2026-10-13",
+   "source": "https://arxiv.org/abs/2408.03314"
+  },
+  {
+   "slug": "initializer-maintainer-dual-agent",
+   "title": "Initializer-Maintainer Dual Agent Architecture",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Uses a one-time initializer agent to create the feature list, progress files, and bootstrap script, then a coding agent that resumes from them one feature per session",
+   "updated_at": "2026-10-13",
+   "source": "https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents"
+  },
+  {
+   "slug": "inversion-of-control",
+   "title": "Inversion of Control",
+   "category": "Orchestration & Control",
+   "status": "validated-in-production",
+   "summary": "Gives the agent tools, a high-level objective, and guardrails, then lets it choose sequencing and recovery while humans set policy and review",
+   "updated_at": "2026-10-13",
+   "source": "https://www.nibzard.com/ampcode"
+  },
+  {
+   "slug": "iterative-multi-agent-brainstorming",
+   "title": "Iterative Multi-Agent Brainstorming",
+   "category": "Orchestration & Control",
+   "status": "experimental-but-awesome",
+   "summary": "Spawns several agents in parallel on the same problem, often with different perspectives, then merges their ideas into one set of options",
+   "updated_at": "2026-10-13",
+   "source": "https://www.nibzard.com/claude-code"
+  },
+  {
+   "slug": "judge-gated-finding-exchange-between-sub-agents",
+   "title": "Judge-Gated Finding Exchange Between Parallel Sub-Agents",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Puts an append-only board between parallel sub-agents and lets a small judge decide what goes on it, who receives each note, and when a later note retracts an earlier one",
+   "updated_at": "2026-10-07",
+   "source": "https://github.com/qybaihe/mu#the-hive"
+  },
+  {
+   "slug": "llm-map-reduce-pattern",
+   "title": "LLM Map-Reduce Pattern",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Processes each untrusted document in its own sandboxed LLM call with a constrained output, then aggregates the results with deterministic code",
+   "updated_at": "2026-10-13",
+   "source": "https://arxiv.org/abs/2506.08837"
+  },
+  {
+   "slug": "lane-based-execution-queueing",
+   "title": "Lane-Based Execution Queueing",
+   "category": "Orchestration & Control",
+   "status": "validated-in-production",
+   "summary": "Routes work into named lanes, each with its own queue and concurrency limit, so sessions never interleave and background jobs never block users",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/openclaw/openclaw/blob/main/src/process/command-queue.ts"
+  },
+  {
+   "slug": "language-agent-tree-search-lats",
+   "title": "Language Agent Tree Search (LATS)",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Runs Monte Carlo Tree Search over reasoning steps, with the LLM generating candidate actions and scoring partial solutions to pick the best path",
+   "updated_at": "2026-10-13",
+   "source": "https://arxiv.org/abs/2310.04406"
+  },
+  {
+   "slug": "markdown-polis-coordination",
+   "title": "Markdown Polis — Multi-Vendor Agent Coordination via Filesystem Constitution",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Coordinates agents from different vendors through versioned markdown files: capability cards, work contracts, and bandit routing that learns from settled work",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/ymxlx/polis-protocol"
+  },
+  {
+   "slug": "multi-model-orchestration-for-complex-edits",
+   "title": "Multi-Model Orchestration for Complex Edits",
+   "category": "Orchestration & Control",
+   "status": "validated-in-production",
+   "summary": "Splits complex code edits across specialized models: a retrieval model gathers context, a large model writes the changes, and smaller models apply them",
+   "updated_at": "2026-03-11",
+   "source": "https://www.youtube.com/watch?v=BGgsoIgbT_Y"
+  },
+  {
+   "slug": "non-generative-judgment-routing",
+   "title": "Non-Generative Judgment Routing with Typed Escalation",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Sends decision-only loop steps as batched typed questions to a non-generative judgment model and escalates what it cannot answer back to the LLM",
+   "updated_at": "2026-09-26",
+   "source": "https://github.com/shitianfang/jev-use"
+  },
+  {
+   "slug": "opponent-processor-multi-agent-debate",
+   "title": "Opponent Processor / Multi-Agent Debate Pattern",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Spawns agents with opposing roles on the same context, lets them critique each other, then synthesizes their positions to expose bias and blind spots",
+   "updated_at": "2026-10-13",
+   "source": "https://every.to/podcast/transcript-how-to-use-claude-code-like-the-people-who-built-it"
+  },
+  {
+   "slug": "oracle-and-worker-multi-model",
+   "title": "Oracle and Worker Multi-Model Approach",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Uses a fast, low-cost worker model for most tool use and code generation, and lets it consult an expensive oracle model when it is stuck",
+   "updated_at": "2026-10-13",
+   "source": "https://youtu.be/hAEmt-FMyHA?si=6iKcGnTavdQlQKUZ"
+  },
+  {
+   "slug": "parallel-tool-call-learning",
+   "title": "Parallel Tool Call Learning",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Uses agent reinforcement fine-tuning to teach the model to issue independent tool calls in parallel, which cuts sequential rounds and latency",
+   "updated_at": "2026-10-13",
+   "source": "https://youtu.be/1s_7RMG4O4U"
+  },
+  {
+   "slug": "plan-then-execute-pattern",
+   "title": "Plan-Then-Execute Pattern",
+   "category": "Orchestration & Control",
+   "status": "established",
+   "summary": "Has the LLM fix the full sequence of tool calls before it reads untrusted data, then runs that sequence so tool outputs change only parameters",
+   "updated_at": "2026-10-13",
+   "source": "https://arxiv.org/abs/2506.08837"
+  },
+  {
+   "slug": "planner-worker-separation-for-long-running-agents",
+   "title": "Planner-Worker Separation for Long-Running Agents",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Splits agents into planners that create tasks, workers that complete them in isolation, and a judge that decides each cycle whether to continue",
+   "updated_at": "2026-10-13",
+   "source": "https://cursor.com/blog/scaling-agents"
+  },
+  {
+   "slug": "progressive-autonomy-with-model-evolution",
+   "title": "Progressive Autonomy with Model Evolution",
+   "category": "Orchestration & Control",
+   "status": "best-practice",
+   "summary": "Audits prompts and orchestration after each model upgrade and removes the scaffolding that evals show the new model no longer needs",
+   "updated_at": "2026-10-13",
+   "source": "https://every.to/podcast/transcript-how-to-use-claude-code-like-the-people-who-built-it"
+  },
+  {
+   "slug": "progressive-complexity-escalation",
+   "title": "Progressive Complexity Escalation",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Deploys agents on low-complexity, high-reliability tasks first and unlocks higher capability tiers when metrics and human review gates show proven reliability",
+   "updated_at": "2026-10-13",
+   "source": "https://vercel.com/blog/what-we-learned-building-agents-at-vercel"
+  },
+  {
+   "slug": "recursive-best-of-n-delegation",
+   "title": "Recursive Best-of-N Delegation",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Runs several parallel candidate workers per subtask in a recursive agent tree, scores them with tests and a judge, and promotes the best result upward",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/nibzard/labruno-agent"
+  },
+  {
+   "slug": "self-rewriting-meta-prompt-loop",
+   "title": "Self-Rewriting Meta-Prompt Loop",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Has the agent reflect after each episode, draft edits to its own system prompt, validate them through guardrails, and save the new version",
+   "updated_at": "2026-10-13",
+   "source": "https://noahgoodman.substack.com/p/meta-prompt-a-simple-self-improving"
+  },
+  {
+   "slug": "signal-driven-agent-activation",
+   "title": "Signal-Driven Agent Activation",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Watches external sources for structured signals and starts predefined agent workflows when declarative rules with thresholds and cooldowns match",
+   "updated_at": "2026-10-13",
+   "source": "https://lethain.com/agents-triggers/"
+  },
+  {
+   "slug": "specification-driven-agent-development",
+   "title": "Specification-Driven Agent Development",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Makes a version-controlled spec file the agent's main input, scaffolds code from it, and links each artifact back to a spec clause",
+   "updated_at": "2026-10-13",
+   "source": "https://jorypestorious.com/blog/ai-engineer-spec/"
+  },
+  {
+   "slug": "stop-hook-auto-continue-pattern",
+   "title": "Stop Hook Auto-Continue Pattern",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Runs a stop hook after each agent turn that checks success criteria and makes the agent continue until tests or checks pass",
+   "updated_at": "2026-10-13",
+   "source": "https://every.to/podcast/transcript-how-to-use-claude-code-like-the-people-who-built-it"
+  },
+  {
+   "slug": "sub-agent-spawning",
+   "title": "Sub-Agent Spawning",
+   "category": "Orchestration & Control",
+   "status": "validated-in-production",
+   "summary": "Lets the main agent spawn sub-agents with fresh context and scoped tools to work on subtasks in parallel, then merges their results",
+   "updated_at": "2026-10-13",
+   "source": "https://lethain.com/agents-subagents/"
+  },
+  {
+   "slug": "subject-hygiene",
+   "title": "Subject Hygiene for Task Delegation",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Requires a specific action-plus-target subject on every subagent task so each delegated job stays traceable and easy to reference",
+   "updated_at": "2026-10-13",
+   "source": "https://code.claude.com/docs/en/sub-agents"
+  },
+  {
+   "slug": "swarm-migration-pattern",
+   "title": "Swarm Migration Pattern",
+   "category": "Orchestration & Control",
+   "status": "validated-in-production",
+   "summary": "Main agent orchestrates 10+ parallel subagents working simultaneously on independent migration chunks for large-scale framework upgrades, lint rule rollouts, and API migrations.",
+   "updated_at": "2026-10-13",
+   "source": "https://every.to/podcast/transcript-how-to-use-claude-code-like-the-people-who-built-it"
+  },
+  {
+   "slug": "three-stage-perception-architecture",
+   "title": "Three-Stage Perception Architecture",
+   "category": "Orchestration & Control",
+   "status": "established",
+   "summary": "Splits the agent into separate perception, processing, and action stages so each stage can be built, tested, and scaled on its own",
+   "updated_at": "2026-10-13",
+   "source": "https://arxiv.org/abs/2601.01743"
+  },
+  {
+   "slug": "tool-capability-compartmentalization",
+   "title": "Tool Capability Compartmentalization",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Splits tools into reader, processor, and writer classes with scoped permissions and blocks tool chains that combine private data, untrusted input, and external writes",
+   "updated_at": "2026-10-13",
+   "source": "https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/"
+  },
+  {
+   "slug": "tool-selection-guide",
+   "title": "Tool Selection Guide",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Maps each task type to a preferred tool: Glob, Grep, and Read to explore, Edit to modify, Bash to verify, and Task with a clear subject to delegate",
+   "updated_at": "2026-10-13",
+   "source": "https://www.anthropic.com/engineering/claude-code-best-practices"
+  },
+  {
+   "slug": "tracker-as-desired-state-reconciliation",
+   "title": "Tracker-as-Desired-State Reconciliation",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Derive agent dispatch by re-reading workflow states in the team's issue tracker every tick, keeping only a short-lived claim locally, so missed events, restarts, and human edits all self-heal.",
+   "updated_at": "2026-08-11",
+   "source": "https://github.com/kubernetes/design-proposals-archive/blob/main/architecture/principles.md"
+  },
+  {
+   "slug": "tree-of-thought-reasoning",
+   "title": "Tree-of-Thought Reasoning",
+   "category": "Orchestration & Control",
+   "status": "established",
+   "summary": "Expands a tree of candidate reasoning steps, scores partial states, prunes weak branches, and picks the best path instead of one linear chain",
+   "updated_at": "2026-10-13",
+   "source": "https://arxiv.org/abs/2305.10601"
+  },
+  {
+   "slug": "workspace-native-multi-agent-orchestration",
+   "title": "Workspace-Native Multi-Agent Orchestration",
+   "category": "Orchestration & Control",
+   "status": "emerging",
+   "summary": "Runs agents inside the team's workspace platform so they share its memory, knowledge sources, event triggers, and integrations with humans",
+   "updated_at": "2026-10-13",
+   "source": "https://doi.org/10.1145/6499.6503"
+  },
+  {
+   "slug": "action-caching-replay",
+   "title": "Action Caching & Replay Pattern",
+   "category": "Reliability & Eval",
+   "status": "emerging",
+   "summary": "Records each agent action with XPath and frame metadata so later runs replay it without LLM calls, with LLM fallback when replay fails",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/hyperbrowserai/HyperAgent"
+  },
+  {
+   "slug": "adaptive-sandbox-fanout-controller",
+   "title": "Adaptive Sandbox Fan-Out Controller",
+   "category": "Reliability & Eval",
+   "status": "proposed",
+   "summary": "Starts a small batch of parallel sandboxes, then scales up, stops early, or refines the prompt based on early success, variance, and error signals",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/zeynepyorulmaz/openclaw-orchestrator"
+  },
+  {
+   "slug": "agent-circuit-breaker",
+   "title": "Agent Circuit Breaker",
+   "category": "Reliability & Eval",
+   "status": "emerging",
+   "summary": "Prevents agents from wasting tokens and time on repeatedly failing tools by tracking failure rates and temporarily disabling broken tool endpoints",
+   "updated_at": "2026-10-13",
+   "source": "https://martinfowler.com/bliki/CircuitBreaker.html"
+  },
+  {
+   "slug": "anti-reward-hacking-grader-design",
+   "title": "Anti-Reward-Hacking Grader Design",
+   "category": "Reliability & Eval",
+   "status": "emerging",
+   "summary": "Design reward functions with multi-criteria evaluation and iterative hardening to prevent models from gaming graders, ensuring training rewards align with actual task quality.",
+   "updated_at": "2026-10-13",
+   "source": "https://youtu.be/1s_7RMG4O4U"
+  },
+  {
+   "slug": "approval-bound-transactional-write",
+   "title": "Approval-Bound Transactional Write",
+   "category": "Reliability & Eval",
+   "status": "emerging",
+   "summary": "Binds a human approval to one exact plan version, then applies the write, checks the postcondition and records the idempotency key in a single database transaction",
+   "updated_at": "2026-10-08",
+   "source": "https://brandur.org/idempotency-keys"
+  },
+  {
+   "slug": "asynchronous-coding-agent-pipeline",
+   "title": "Asynchronous Coding Agent Pipeline",
+   "category": "Reliability & Eval",
+   "status": "emerging",
+   "summary": "Splits inference, tool execution, reward modeling, and learning into asynchronous workers linked by message queues so GPUs stay busy",
+   "updated_at": "2026-10-13",
+   "source": "https://www.youtube.com/watch?v=Xkwok_XXQgw"
+  },
+  {
+   "slug": "canary-rollout-and-automatic-rollback-for-agent-policy-changes",
+   "title": "Canary Rollout and Automatic Rollback for Agent Policy Changes",
+   "category": "Reliability & Eval",
+   "status": "established",
+   "summary": "Ships agent policy changes to a small traffic slice first, monitors guardrail metrics, and rolls back to the last stable version automatically",
+   "updated_at": "2026-10-13",
+   "source": "https://martinfowler.com/bliki/CanaryRelease.html"
+  },
+  {
+   "slug": "criticgpt-style-evaluation",
+   "title": "CriticGPT-Style Code Review",
+   "category": "Reliability & Eval",
+   "status": "emerging",
+   "summary": "Runs a specialized critic model over generated code to find bugs, security flaws, and quality issues, and feeds critical findings back for regeneration",
+   "updated_at": "2026-10-13",
+   "source": "https://arxiv.org/abs/2407.00215"
+  },
+  {
+   "slug": "dead-mans-switch-for-scheduled-agent-jobs",
+   "title": "Dead-Man's Switch for Scheduled Agent Jobs",
+   "category": "Reliability & Eval",
+   "status": "validated-in-production",
+   "summary": "Each scheduled job writes a success sentinel to its log, and a separate checker files a task when the sentinel is missing or stale",
+   "updated_at": "2026-07-23",
+   "source": "https://github.com/jimy-r/agent-workspace-architecture/blob/main/PATTERNS.md"
+  },
+  {
+   "slug": "evidence-layered-evaluation-for-interactive-agents",
+   "title": "Evidence-Layered Evaluation for Interactive Agents",
+   "category": "Reliability & Eval",
+   "status": "emerging",
+   "summary": "Scores interactive agent runs on a task outcome assertion and links each result to layered evidence: actions, screenshots, replays, network, and messages",
+   "updated_at": "2026-08-21",
+   "source": "https://github.com/TIGER-AI-Lab/ClawBench"
+  },
+  {
+   "slug": "extended-coherence-work-sessions",
+   "title": "Extended Coherence Work Sessions",
+   "category": "Reliability & Eval",
+   "status": "rapidly-improving",
+   "summary": "Combines models with long coherence windows with context compaction, prompt caching, and persisted state so agents stay on task for hours",
+   "updated_at": "2026-10-13",
+   "source": "https://www.nibzard.com/silent-revolution"
+  },
+  {
+   "slug": "failover-aware-model-fallback",
+   "title": "Failover-Aware Model Fallback",
+   "category": "Reliability & Eval",
+   "status": "validated-in-production",
+   "summary": "Classifies each model failure by reason and falls back along a model chain only for retryable errors, failing fast on auth, billing, and user aborts",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/openclaw/openclaw/blob/main/src/agents/model-fallback-runner.ts"
+  },
+  {
+   "slug": "llm-observability",
+   "title": "LLM Observability",
+   "category": "Reliability & Eval",
+   "status": "emerging",
+   "summary": "Sends agent runs to an LLM observability platform for span-level traces of each LLM call and tool use, plus aggregate cost, latency, and success metrics",
+   "updated_at": "2026-10-13",
+   "source": "https://lethain.com/agents-logging/"
+  },
+  {
+   "slug": "no-token-limit-magic",
+   "title": "No-Token-Limit Magic",
+   "category": "Reliability & Eval",
+   "status": "experimental-but-awesome",
+   "summary": "Removes hard token limits during prototyping to learn what good behavior needs, then compresses context only after quality is stable and measured",
+   "updated_at": "2026-03-11",
+   "source": "https://www.nibzard.com/ampcode"
+  },
+  {
+   "slug": "orchestration-prompt-writing-benchmark",
+   "title": "Orchestration Prompt-Writing Benchmark",
+   "category": "Reliability & Eval",
+   "status": "emerging",
+   "summary": "Scores an orchestrator on whether its sub-agent prompts give the right information fragments to the right roles, separate from end-task success",
+   "updated_at": "2026-07-17",
+   "source": "https://arxiv.org/abs/2606.08878"
+  },
+  {
+   "slug": "out-of-process-provider-boundary-replay",
+   "title": "Out-of-Process Provider-Boundary Replay",
+   "category": "Reliability & Eval",
+   "status": "emerging",
+   "summary": "Capture an agent run at the model-provider HTTP boundary from outside the process, then serve those bytes back so the agent re-executes its own logic with no provider call.",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/Continuum-AI-Corp/OrcaReplay"
+  },
+  {
+   "slug": "output-verification-loop",
+   "title": "Output Verification Loop",
+   "category": "Reliability & Eval",
+   "status": "emerging",
+   "summary": "Verify LLM outputs by extracting individual claims, checking each against evidence sources, and returning per-claim trust scores before acting on the result.",
+   "updated_at": "2026-10-13",
+   "source": "https://aclanthology.org/2023.emnlp-main.741/"
+  },
+  {
+   "slug": "own-check-fault-injection",
+   "title": "Own-Check Fault Injection",
+   "category": "Reliability & Eval",
+   "status": "emerging",
+   "summary": "Plant a controlled fault inside a running agent pipeline and score whether the pipeline's own checks emit a detection act, keeping detected, reacted and recovered as separate verdicts.",
+   "updated_at": "2026-08-21",
+   "source": "https://github.com/Jott2121/sabot"
+  },
+  {
+   "slug": "rlaif-reinforcement-learning-from-ai-feedback",
+   "title": "RLAIF (Reinforcement Learning from AI Feedback)",
+   "category": "Reliability & Eval",
+   "status": "established",
+   "summary": "Uses an AI model guided by written principles to critique outputs and label preferences, which train a reward model that optimizes the policy",
+   "updated_at": "2026-10-13",
+   "source": "https://arxiv.org/abs/2212.08073"
+  },
+  {
+   "slug": "reasoning-token-firewall",
+   "title": "Reasoning-Token Firewall",
+   "category": "Reliability & Eval",
+   "status": "emerging",
+   "summary": "Assemble an agent's result only from answer-typed stream events, never by string-stripping interleaved reasoning tokens.",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/aeonfun/aeon/tree/main/harness-adapter"
+  },
+  {
+   "slug": "wfgy-reliability-problem-map",
+   "title": "Reliability Problem Map Checklist for RAG and Agents",
+   "category": "Reliability & Eval",
+   "status": "proposed",
+   "summary": "Runs a fixed 16-question failure checklist on each RAG or agent incident, maps the result to repair actions, and re-tests the same failing case",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/onestardao/WFGY/blob/main/ProblemMap/README.md"
+  },
+  {
+   "slug": "schema-validation-retry-cross-step-learning",
+   "title": "Schema Validation Retry with Cross-Step Learning",
+   "category": "Reliability & Eval",
+   "status": "emerging",
+   "summary": "Retries failed structured outputs with the validation errors as feedback and adds recent errors from earlier steps to later prompts so mistakes do not repeat",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/hyperbrowserai/HyperAgent"
+  },
+  {
+   "slug": "skill-activation-as-precision-recall",
+   "title": "Skill Activation as a Precision/Recall Measurement",
+   "category": "Reliability & Eval",
+   "status": "emerging",
+   "summary": "Measures skill routing as classification with a labelled prompt dataset, per-skill precision and recall, and CI thresholds that fail the build",
+   "updated_at": "2026-09-26",
+   "source": "https://github.com/UiPath/coder_eval"
+  },
+  {
+   "slug": "structured-output-specification",
+   "title": "Structured Output Specification",
+   "category": "Reliability & Eval",
+   "status": "established",
+   "summary": "Constrain agent outputs using deterministic schemas that enforce structured, machine-readable results, enabling reliable validation, parsing, and integration with downstream systems.",
+   "updated_at": "2026-10-13",
+   "source": "https://vercel.com/blog/what-we-learned-building-agents-at-vercel"
+  },
+  {
+   "slug": "subagent-compilation-checker",
+   "title": "Subagent Compilation Checker",
+   "category": "Reliability & Eval",
+   "status": "emerging",
+   "summary": "Spawns one subagent per module to build and check it, and returns only a short structured error list or artifact reference to the main agent",
+   "updated_at": "2026-10-13",
+   "source": "https://www.youtube.com/watch?v=Xkwok_XXQgw"
+  },
+  {
+   "slug": "tier-auto-apply-by-mechanical-impact",
+   "title": "Tier Auto-Apply by Mechanical Impact",
+   "category": "Reliability & Eval",
+   "status": "emerging",
+   "summary": "Decides which self-proposed changes auto-apply by matching the real diff's file paths and change kinds against a trusted tier table, not by finding text",
+   "updated_at": "2026-09-26",
+   "source": "https://github.com/jimy-r/agent-workspace-architecture/blob/main/PATTERNS.md#4-tier-by-mechanical-impact-not-by-tone"
+  },
+  {
+   "slug": "versioned-constitution-governance",
+   "title": "Versioned Constitution Governance",
+   "category": "Reliability & Eval",
+   "status": "emerging",
+   "summary": "Stores the agent constitution in a signed Git repository where the agent can only propose changes and reviewers or CI gates merge them",
+   "updated_at": "2026-10-13",
+   "source": "https://model-spec.openai.com/"
+  },
+  {
+   "slug": "workflow-evals-with-mocked-tools",
+   "title": "Workflow Evals with Mocked Tools",
+   "category": "Reliability & Eval",
+   "status": "established",
+   "summary": "Runs complete agent workflows against mocked tools in CI and checks which tools were called plus agent-as-judge quality criteria",
+   "updated_at": "2026-10-13",
+   "source": "https://lethain.com/agents-evals/"
+  },
+  {
+   "slug": "authenticated-authority-channel",
+   "title": "Authenticated Authority Channel",
+   "category": "Security & Safety",
+   "status": "emerging",
+   "summary": "Preserve a distinguishable channel for authenticated intent so retrieved content can inform reasoning without granting itself authority.",
+   "updated_at": "2026-08-08",
+   "source": "https://arxiv.org/abs/2503.18813"
+  },
+  {
+   "slug": "black-box-skill-invocation",
+   "title": "Black-Box Skill Invocation",
+   "category": "Security & Safety",
+   "status": "emerging",
+   "summary": "Shares skills through input and output schemas only and runs them on the provider side, so prompts and code never cross the boundary",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/ZiwayZhao/agent-coworker"
+  },
+  {
+   "slug": "consequence-family-coverage-audit",
+   "title": "Consequence-Family Coverage Audit",
+   "category": "Security & Safety",
+   "status": "emerging",
+   "summary": "Audit an agent's risk policy by enumerating families of consequence and asking which rule covers each, because a hand-written risk list reliably encodes one family and stays silent on the rest",
+   "updated_at": "2026-10-13",
+   "source": "https://tulipagents.ai/research/policy-blindness/"
+  },
+  {
+   "slug": "cryptographic-governance-audit-trail",
+   "title": "Cryptographic Governance Audit Trail",
+   "category": "Security & Safety",
+   "status": "emerging",
+   "summary": "Middleware checks each tool call against a policy file, then signs a receipt of the action with ML-DSA and appends it to a tamper-evident chain",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/jagmarques/asqav-sdk"
+  },
+  {
+   "slug": "denial-tracking-permission-escalation",
+   "title": "Denial Tracking & Permission Escalation",
+   "category": "Security & Safety",
+   "status": "proposed",
+   "summary": "Track repeated tool denials and auto-escalate to blanket permission prompts or fallback strategies, preventing wasted iterations in non-interactive contexts.",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/muriloscigliano/ai-playbook"
+  },
+  {
+   "slug": "deterministic-security-scanning-build-loop",
+   "title": "Deterministic Security Scanning Build Loop",
+   "category": "Security & Safety",
+   "status": "proposed",
+   "summary": "Adds SAST, SCA, and secret scanners to the build target that the agent must run after each change, so scanner failures force the agent to fix the code",
+   "updated_at": "2026-10-13",
+   "source": "https://ghuntley.com/secure-codegen/"
+  },
+  {
+   "slug": "deterministic-threat-rule-scanning",
+   "title": "Deterministic Threat Rule Scanning",
+   "category": "Security & Safety",
+   "status": "proposed",
+   "summary": "Apply deterministic regex rules as a first-pass security layer to detect known threat patterns in AI agent tool calls and skill definitions.",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/panguard-ai/agent-threat-rules"
+  },
+  {
+   "slug": "evidence-questions-not-verdict-questions",
+   "title": "Evidence Questions, Not Verdict Questions",
+   "category": "Security & Safety",
+   "status": "emerging",
+   "summary": "Never ask the model for allow/ask/block. Ask it narrow, typed, observational questions and let code reduce the answers to the verdict, because the collapsed question is the low-confidence one.",
+   "updated_at": "2026-09-26",
+   "source": "https://github.com/doronp/jevc"
+  },
+  {
+   "slug": "exact-action-authorization-binding",
+   "title": "Exact-Action Authorization Binding",
+   "category": "Security & Safety",
+   "status": "proposed",
+   "summary": "Bind a short-lived approval to the complete action presented to the reviewer, then rederive and compare that identity at the acting boundary before execution.",
+   "updated_at": "2026-08-21",
+   "source": "https://datatracker.ietf.org/doc/html/draft-toraman-noa-action-digest-01"
+  },
+  {
+   "slug": "external-credential-sync",
+   "title": "External Credential Sync",
+   "category": "Security & Safety",
+   "status": "established",
+   "summary": "Reads AI credentials from other tools' keychains and config files and syncs them into the agent's store, with TTL-cached reads, refresh fences, and persisted ownership",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/openclaw/openclaw/blob/main/src/agents/auth-profiles/external-cli-sync.ts"
+  },
+  {
+   "slug": "hook-based-safety-guard-rails",
+   "title": "Hook-Based Safety Guard Rails for Autonomous Code Agents",
+   "category": "Security & Safety",
+   "status": "validated-in-production",
+   "summary": "Runs small shell scripts on PreToolUse and PostToolUse hooks to block destructive commands, lint edits, and warn on context use outside the agent's reasoning",
+   "updated_at": "2026-10-13",
+   "source": "https://code.claude.com/docs/en/hooks"
+  },
+  {
+   "slug": "isolated-vm-per-rl-rollout",
+   "title": "Isolated VM per RL Rollout",
+   "category": "Security & Safety",
+   "status": "emerging",
+   "summary": "Spin up an isolated virtual machine for each RL rollout to prevent cross-contamination between parallel agent executions, ensuring safe training with destructive tool access.",
+   "updated_at": "2026-10-13",
+   "source": "https://youtu.be/1s_7RMG4O4U"
+  },
+  {
+   "slug": "lethal-trifecta-threat-model",
+   "title": "Lethal Trifecta Threat Model",
+   "category": "Security & Safety",
+   "status": "best-practice",
+   "summary": "Classifies each tool by private-data access, untrusted-content exposure, and external communication, and blocks any execution path that has all three",
+   "updated_at": "2026-10-13",
+   "source": "https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/"
+  },
+  {
+   "slug": "local-first-credential-broker",
+   "title": "Local-First Credential Broker",
+   "category": "Security & Safety",
+   "status": "emerging",
+   "summary": "Keep raw secrets out of the agent process by injecting credentials at the network layer through a local broker, rather than handing the agent environment variables or config files.",
+   "updated_at": "2026-10-13",
+   "source": "https://cloudsecurityalliance.org/artifacts/agentic-ai-identity-and-access-management-a-new-approach"
+  },
+  {
+   "slug": "non-custodial-spending-controls",
+   "title": "Non-Custodial Spending Controls",
+   "category": "Security & Safety",
+   "status": "emerging",
+   "summary": "Puts a policy layer between the agent and the transaction signer that checks each intent against allowlists, budgets, and rate limits, and fails closed",
+   "updated_at": "2026-10-13",
+   "source": "https://eips.ethereum.org/EIPS/eip-7715"
+  },
+  {
+   "slug": "one-os-user-per-agent",
+   "title": "One OS User per Agent",
+   "category": "Security & Safety",
+   "status": "validated-in-production",
+   "summary": "Give each long-lived agent its own OS user account and a templated init-system unit, so identity, supervision and privilege come from the host instead of from a per-agent container.",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/5dive-ai/5dive/blob/main/systemd/5dive-agent%40.service"
+  },
+  {
+   "slug": "pii-tokenization",
+   "title": "PII Tokenization",
+   "category": "Security & Safety",
+   "status": "established",
+   "summary": "Replaces PII in tool results with placeholder tokens before the model sees them and restores the real values in outgoing tool calls",
+   "updated_at": "2026-10-13",
+   "source": "https://www.anthropic.com/engineering/code-execution-with-mcp"
+  },
+  {
+   "slug": "policy-gated-tool-proxy",
+   "title": "Policy-Gated Tool Proxy",
+   "category": "Security & Safety",
+   "status": "emerging",
+   "summary": "Insert a transparent proxy between agents and tool servers that evaluates every tool call against a policy engine before forwarding, producing an immutable audit trail of all decisions.",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/e2b-dev/awesome-mcp-gateways"
+  },
+  {
+   "slug": "sandboxed-tool-authorization",
+   "title": "Sandboxed Tool Authorization",
+   "category": "Security & Safety",
+   "status": "validated-in-production",
+   "summary": "Filters an agent's tools through deny-first allow and deny patterns, profile presets, and subagent policies that inherit parent restrictions",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/openclaw/openclaw/blob/main/src/agents/tool-policy.ts"
+  },
+  {
+   "slug": "soulbound-identity-verification",
+   "title": "Soulbound Identity Verification",
+   "category": "Security & Safety",
+   "status": "emerging",
+   "summary": "Binds agent identity to a non-transferable credential with a committed state hash and logs signed state changes so verifiers can check continuity",
+   "updated_at": "2026-10-13",
+   "source": "https://chitin.id"
+  },
+  {
+   "slug": "transitive-vouch-chain-trust",
+   "title": "Transitive Vouch-Chain Trust",
+   "category": "Security & Safety",
+   "status": "emerging",
+   "summary": "Builds a graph of signed vouches between agents and derives trust in an unknown agent from the chain back to a trusted one, with decay at each hop",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/The-Nexus-Guard/aip"
+  },
+  {
+   "slug": "zero-knowledge-verified-agent-egress",
+   "title": "Zero-Knowledge Verified Agent Egress",
+   "category": "Security & Safety",
+   "status": "emerging",
+   "summary": "Intercepts each outbound HTTP or MCP call, proves its claims against a private source of truth with a zero-knowledge proof, and blocks calls that fail",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/ProvablyAI/sourcerykit"
+  },
+  {
+   "slug": "zero-trust-agent-mesh",
+   "title": "Zero-Trust Agent Mesh",
+   "category": "Security & Safety",
+   "status": "emerging",
+   "summary": "Gives each agent a cryptographic identity and verifies identity, signed delegation tokens, and chain depth on every inter-agent request",
+   "updated_at": "2026-10-13",
+   "source": "https://www.nist.gov/publications/zero-trust-architecture"
+  },
+  {
+   "slug": "ai-web-search-agent-loop",
+   "title": "AI Web Search Agent Loop",
+   "category": "Tool Use & Environment",
+   "status": "emerging",
+   "summary": "Coordinator agent translates queries, spawns parallel search workers across domains and time ranges, refines iteratively, and answers with citations",
+   "updated_at": "2026-10-13",
+   "source": "https://www.amplifypartners.com/blog-posts/how-ai-web-search-works"
+  },
+  {
+   "slug": "agent-sdk-for-programmatic-control",
+   "title": "Agent SDK for Programmatic Control",
+   "category": "Tool Use & Environment",
+   "status": "established",
+   "summary": "Exposes agent functions through an SDK and CLI so code can run the agent headless with set tools, permissions, and resource limits",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/anthropics/claude-agent-sdk-python"
+  },
+  {
+   "slug": "agent-first-tool-discovery",
+   "title": "Agent-First Tool Discovery",
+   "category": "Tool Use & Environment",
+   "status": "emerging",
+   "summary": "Build search indexes designed for agent consumers, returning structured tool metadata ranked by agent-relevant signals instead of human SEO metrics.",
+   "updated_at": "2026-10-13",
+   "source": "https://modelcontextprotocol.io/registry/about"
+  },
+  {
+   "slug": "agent-first-tooling-and-logging",
+   "title": "Agent-First Tooling and Logging",
+   "category": "Tool Use & Environment",
+   "status": "established",
+   "summary": "Designs tools and logs for agent consumption with one unified log stream, structured JSON output, and agent-aware CLI flags",
+   "updated_at": "2026-10-13",
+   "source": "https://blog.cloudflare.com/code-mode/"
+  },
+  {
+   "slug": "agentic-search-over-vector-embeddings",
+   "title": "Agentic Search Over Vector Embeddings",
+   "category": "Tool Use & Environment",
+   "status": "best-practice",
+   "summary": "Replaces vector indexes with agent-driven grep, find, and file traversal that searches current file state on demand and refines iteratively",
+   "updated_at": "2026-01-05",
+   "source": "https://every.to/podcast/transcript-how-to-use-claude-code-like-the-people-who-built-it"
+  },
+  {
+   "slug": "cli-first-skill-design",
+   "title": "CLI-First Skill Design",
+   "category": "Tool Use & Environment",
+   "status": "emerging",
+   "summary": "Builds each skill as a standalone CLI with JSON output and exit codes so humans and agents use the same interface",
+   "updated_at": "2026-10-13",
+   "source": "https://code.claude.com/docs/en/skills"
+  },
+  {
+   "slug": "cli-native-agent-orchestration",
+   "title": "CLI-Native Agent Orchestration",
+   "category": "Tool Use & Environment",
+   "status": "established",
+   "summary": "Drives agents through their non-interactive CLI mode (claude -p with JSON output and exit codes) so Makefiles, Git hooks, cron jobs, and CI can script and replay agent runs",
+   "updated_at": "2026-10-13",
+   "source": "https://code.claude.com/docs/en/headless"
+  },
+  {
+   "slug": "code-first-tool-interface-pattern",
+   "title": "Code Mode MCP Tool Interface Improvement Pattern",
+   "category": "Tool Use & Environment",
+   "status": "established",
+   "summary": "LLMs generate TypeScript code to orchestrate MCP tools in ephemeral V8 isolates, eliminating token-heavy round-trips and enabling efficient multi-step workflows with large measured token savings.",
+   "updated_at": "2026-10-13",
+   "source": "https://blog.cloudflare.com/code-mode/"
+  },
+  {
+   "slug": "code-over-api-pattern",
+   "title": "Code-Over-API Pattern",
+   "category": "Tool Use & Environment",
+   "status": "established",
+   "summary": "Agent writes code that calls tools and filters data inside a sandbox, so only summaries and samples return to the context window",
+   "updated_at": "2026-10-13",
+   "source": "https://www.anthropic.com/engineering/code-execution-with-mcp"
+  },
+  {
+   "slug": "code-then-execute-pattern",
+   "title": "Code-Then-Execute Pattern",
+   "category": "Tool Use & Environment",
+   "status": "emerging",
+   "summary": "LLM writes a sandboxed program or DSL script, a static taint checker verifies data flows, and an interpreter runs it in a locked sandbox",
+   "updated_at": "2026-10-13",
+   "source": "https://arxiv.org/abs/2506.08837"
+  },
+  {
+   "slug": "cross-protocol-agent-discovery",
+   "title": "Cross-Protocol Agent Discovery",
+   "category": "Tool Use & Environment",
+   "status": "proposed",
+   "summary": "Aggregates agent metadata across fragmented registries and protocols into a unified, protocol-agnostic discovery layer (proposed; no neutral implementation verified)",
+   "updated_at": "2026-10-13",
+   "source": "https://agents-txt.com"
+  },
+  {
+   "slug": "dual-use-tool-design",
+   "title": "Dual-Use Tool Design",
+   "category": "Tool Use & Environment",
+   "status": "best-practice",
+   "summary": "Builds each tool with one interface and implementation that both humans and agents can call, with the same output, permissions, and logs",
+   "updated_at": "2026-10-13",
+   "source": "https://every.to/podcast/transcript-how-to-use-claude-code-like-the-people-who-built-it"
+  },
+  {
+   "slug": "egress-lockdown-no-exfiltration-channel",
+   "title": "Egress Lockdown (No-Exfiltration Channel)",
+   "category": "Tool Use & Environment",
+   "status": "established",
+   "summary": "Puts the agent behind a default-deny egress firewall with allowlisted destinations so stolen data has no outbound channel",
+   "updated_at": "2026-10-13",
+   "source": "https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/"
+  },
+  {
+   "slug": "filesystem-mediated-host-delegation",
+   "title": "Filesystem-Mediated Host Delegation",
+   "category": "Tool Use & Environment",
+   "status": "emerging",
+   "summary": "Lets a sandboxed agent write request files to a shared spool directory that a host daemon runs against a whitelist, with idempotent results the agent polls for",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/abhinaykrupa/cowork-to-code-bridge"
+  },
+  {
+   "slug": "intelligent-bash-tool-execution",
+   "title": "Intelligent Bash Tool Execution",
+   "category": "Tool Use & Environment",
+   "status": "validated-in-production",
+   "summary": "Runs agent shell commands through a multi-mode executor that uses a PTY when needed, falls back to direct exec, and manages approvals, background jobs, and signals",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/openclaw/openclaw/blob/main/src/agents/bash-tools.exec-run.ts"
+  },
+  {
+   "slug": "llm-friendly-api-design",
+   "title": "LLM-Friendly API Design",
+   "category": "Tool Use & Environment",
+   "status": "emerging",
+   "summary": "Designs APIs with visible versions, self-descriptive names and schemas, simple calls, actionable errors, and few indirection levels so LLMs call them correctly",
+   "updated_at": "2026-10-13",
+   "source": "https://www.youtube.com/watch?v=BGgsoIgbT_Y"
+  },
+  {
+   "slug": "mcp-pattern-injection",
+   "title": "MCP Pattern Injection",
+   "category": "Tool Use & Environment",
+   "status": "emerging",
+   "summary": "Runs an MCP server that exposes framework best-practice patterns as tools, so the coding assistant fetches current patterns on demand",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/Rajathbharadwaj/langgraph-patterns-mcp"
+  },
+  {
+   "slug": "multi-platform-communication-aggregation",
+   "title": "Multi-Platform Communication Aggregation",
+   "category": "Tool Use & Environment",
+   "status": "emerging",
+   "summary": "Queries every communication platform in parallel through adapters that share one schema, then merges, deduplicates, and ranks the results",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/anthropics/claude-code"
+  },
+  {
+   "slug": "multi-platform-webhook-triggers",
+   "title": "Multi-Platform Webhook Triggers",
+   "category": "Tool Use & Environment",
+   "status": "emerging",
+   "summary": "Starts agent workflows from Slack, Notion, and Jira webhooks, emoji reactions, and schedules, with idempotency and signature checks on each event",
+   "updated_at": "2026-10-13",
+   "source": "https://lethain.com/agents-triggers/"
+  },
+  {
+   "slug": "patch-steering-via-prompted-tool-selection",
+   "title": "Patch Steering via Prompted Tool Selection",
+   "category": "Tool Use & Environment",
+   "status": "emerging",
+   "summary": "Tells the agent in the prompt which patch tool or edit format to use, with usage examples, negative rules, and a fallback order",
+   "updated_at": "2026-10-13",
+   "source": "https://aider.chat/docs/unified-diffs.html"
+  },
+  {
+   "slug": "precomputed-code-graph-lookup",
+   "title": "Precomputed Code Graph Lookup",
+   "category": "Tool Use & Environment",
+   "status": "emerging",
+   "summary": "Answer an agent's structural code questions from a precomputed, deterministic graph queried by intent-shaped verbs, instead of a retrieval-time search-and-read loop.",
+   "updated_at": "2026-09-26",
+   "source": "https://github.com/Aider-AI/aider"
+  },
+  {
+   "slug": "progressive-tool-discovery",
+   "title": "Progressive Tool Discovery",
+   "category": "Tool Use & Environment",
+   "status": "established",
+   "summary": "Organizes tools in a browsable hierarchy and lets the agent load names, descriptions, or full schemas only for the tools it needs",
+   "updated_at": "2026-10-13",
+   "source": "https://www.anthropic.com/engineering/code-execution-with-mcp"
+  },
+  {
+   "slug": "static-service-manifest-for-agents",
+   "title": "Static Service Manifest for Agents",
+   "category": "Tool Use & Environment",
+   "status": "emerging",
+   "summary": "Serves a static llms.txt or agent.json file at a well-known URL that lists services, auth, and limits so agents can plan before they call",
+   "updated_at": "2026-10-13",
+   "source": "https://llmstxt.org"
+  },
+  {
+   "slug": "tool-use-steering-via-prompting",
+   "title": "Tool Use Steering via Prompting",
+   "category": "Tool Use & Environment",
+   "status": "best-practice",
+   "summary": "Tells the agent in the prompt which tool to use, how to learn a custom tool, and which shorthands map to tool sequences",
+   "updated_at": "2026-10-13",
+   "source": "https://every.to/podcast/transcript-how-to-use-claude-code-like-the-people-who-built-it"
+  },
+  {
+   "slug": "unified-tool-gateway",
+   "title": "Unified Tool Gateway",
+   "category": "Tool Use & Environment",
+   "status": "emerging",
+   "summary": "Route all agent tool calls through a single gateway that handles discovery, authentication, billing, and execution across many heterogeneous providers.",
+   "updated_at": "2026-10-13",
+   "source": "https://microservices.io/patterns/apigateway.html"
+  },
+  {
+   "slug": "virtual-machine-operator-agent",
+   "title": "Virtual Machine Operator Agent",
+   "category": "Tool Use & Environment",
+   "status": "established",
+   "summary": "Gives the agent a dedicated virtual machine where it can run code, install packages, use the file system, and operate CLI tools",
+   "updated_at": "2026-10-13",
+   "source": "https://www.nibzard.com/silent-revolution"
+  },
+  {
+   "slug": "visual-ai-multimodal-integration",
+   "title": "Visual AI Multimodal Integration",
+   "category": "Tool Use & Environment",
+   "status": "established",
+   "summary": "Adds multimodal models to the agent so it can analyze images, video, and screenshots and combine them with text to reason and act",
+   "updated_at": "2026-10-13",
+   "source": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/computer-use-tool"
+  },
+  {
+   "slug": "ai-accelerated-learning-and-skill-development",
+   "title": "AI-Accelerated Learning and Skill Development",
+   "category": "UX & Collaboration",
+   "status": "best-practice",
+   "summary": "Uses AI assistants as tutors that explain errors and concepts, offer alternatives, and fade support as the developer gains skill",
+   "updated_at": "2026-10-13",
+   "source": "https://www.youtube.com/watch?v=BGgsoIgbT_Y"
+  },
+  {
+   "slug": "abstracted-code-representation-for-review",
+   "title": "Abstracted Code Representation for Review",
+   "category": "UX & Collaboration",
+   "status": "proposed",
+   "summary": "Shows reviewers pseudocode, intent summaries, and logical diffs of code changes, with drill-down to the real code to confirm the mapping",
+   "updated_at": "2026-10-13",
+   "source": "https://www.youtube.com/watch?v=BGgsoIgbT_Y"
+  },
+  {
+   "slug": "agent-assisted-scaffolding",
+   "title": "Agent-Assisted Scaffolding",
+   "category": "UX & Collaboration",
+   "status": "validated-in-production",
+   "summary": "Agent generates initial files, boilerplate, and directory structure from a high-level description so developers start on core logic",
+   "updated_at": "2026-10-13",
+   "source": "https://www.youtube.com/watch?v=BGgsoIgbT_Y"
+  },
+  {
+   "slug": "agent-friendly-workflow-design",
+   "title": "Agent-Friendly Workflow Design",
+   "category": "UX & Collaboration",
+   "status": "emerging",
+   "summary": "Gives agents clear high-level goals, room for implementation choices, structured I/O, and plan review before execution",
+   "updated_at": "2026-10-13",
+   "source": "https://www.nibzard.com/silent-revolution"
+  },
+  {
+   "slug": "chain-of-thought-monitoring-interruption",
+   "title": "Chain-of-Thought Monitoring & Interruption",
+   "category": "UX & Collaboration",
+   "status": "emerging",
+   "summary": "Streams agent reasoning and tool calls in real time so a human can interrupt and redirect early when the approach is wrong",
+   "updated_at": "2026-10-13",
+   "source": "https://claude.com/blog/building-companies-with-claude-code"
+  },
+  {
+   "slug": "codebase-optimization-for-agents",
+   "title": "Codebase Optimization for Agents",
+   "category": "UX & Collaboration",
+   "status": "emerging",
+   "summary": "Optimizes tooling, CLIs, tests, and docs for agents first, with one-command verify loops and machine-readable output, even if human DX regresses",
+   "updated_at": "2026-10-13",
+   "source": "https://www.youtube.com/watch?v=2wjnV6F2arc"
+  },
+  {
+   "slug": "democratization-of-tooling-via-agents",
+   "title": "Democratization of Tooling via Agents",
+   "category": "UX & Collaboration",
+   "status": "established",
+   "summary": "Non-programmers describe a tool in natural language and iterate with an AI agent that generates and fixes the code for dashboards, scripts, or small apps",
+   "updated_at": "2026-10-13",
+   "source": "https://www.youtube.com/watch?v=BGgsoIgbT_Y"
+  },
+  {
+   "slug": "dev-tooling-assumptions-reset",
+   "title": "Dev Tooling Assumptions Reset",
+   "category": "UX & Collaboration",
+   "status": "emerging",
+   "summary": "Audits dev tools for human-effort assumptions and replaces tickets, PR ceremony, and sprints with immediate agent dispatch, variations, and automated tests",
+   "updated_at": "2026-10-13",
+   "source": "https://www.youtube.com/watch?v=2wjnV6F2arc"
+  },
+  {
+   "slug": "human-in-loop-approval-framework",
+   "title": "Human-in-the-Loop Approval Framework",
+   "category": "UX & Collaboration",
+   "status": "validated-in-production",
+   "summary": "Systematically insert human approval gates for designated high-risk functions while maintaining agent autonomy for safe operations, with multi-channel approval interfaces and comprehensive audit trails.",
+   "updated_at": "2026-10-13",
+   "source": "https://claude.com/blog/building-companies-with-claude-code"
+  },
+  {
+   "slug": "latent-demand-product-discovery",
+   "title": "Latent Demand Product Discovery",
+   "category": "UX & Collaboration",
+   "status": "best-practice",
+   "summary": "Builds hackable, extensible products, watches how power users repurpose them, and turns the most frequent workarounds into supported features",
+   "updated_at": "2026-01-05",
+   "source": "https://every.to/podcast/transcript-how-to-use-claude-code-like-the-people-who-built-it"
+  },
+  {
+   "slug": "milestone-escrow-agent-funding",
+   "title": "Milestone Escrow for Agent Resource Funding",
+   "category": "UX & Collaboration",
+   "status": "proposed",
+   "summary": "Holds agent funding in escrow and releases each payment only after independent verification of a measurable milestone",
+   "updated_at": "2026-10-13",
+   "source": "https://github.com/RioTheGreat-ai/agentfund-skill"
+  },
+  {
+   "slug": "proactive-trigger-vocabulary",
+   "title": "Proactive Trigger Vocabulary",
+   "category": "UX & Collaboration",
+   "status": "emerging",
+   "summary": "Gives each skill an explicit, documented list of trigger phrases and patterns so input routes to skills predictably, with optional proactive activation",
+   "updated_at": "2026-10-13",
+   "source": "https://agentskills.io"
+  },
+  {
+   "slug": "seamless-background-to-foreground-handoff",
+   "title": "Seamless Background-to-Foreground Handoff",
+   "category": "UX & Collaboration",
+   "status": "emerging",
+   "summary": "Lets a user take over a background agent's unfinished work in the foreground, with the agent's branch, PR, and summaries carried over as context",
+   "updated_at": "2026-10-13",
+   "source": "https://www.youtube.com/watch?v=BGgsoIgbT_Y"
+  },
+  {
+   "slug": "shell-command-contextualization",
+   "title": "Shell Command Contextualization",
+   "category": "UX & Collaboration",
+   "status": "established",
+   "summary": "Lets the user run a shell command with a prefix such as ! and injects the command and its full output into the agent's context",
+   "updated_at": "2026-10-13",
+   "source": "https://code.claude.com/docs/en/interactive-mode"
+  },
+  {
+   "slug": "spectrum-of-control-blended-initiative",
+   "title": "Spectrum of Control / Blended Initiative",
+   "category": "UX & Collaboration",
+   "status": "validated-in-production",
+   "summary": "Gives users several autonomy modes, from inline completion to background agents, and lets them switch modes per task",
+   "updated_at": "2026-10-13",
+   "source": "https://www.youtube.com/watch?v=BGgsoIgbT_Y"
+  },
+  {
+   "slug": "team-shared-agent-configuration",
+   "title": "Team-Shared Agent Configuration as Code",
+   "category": "UX & Collaboration",
+   "status": "best-practice",
+   "summary": "Check agent configuration into version control as code, enabling consistent behavior across teams, faster onboarding, and collaborative improvement through PRs and code review.",
+   "updated_at": "2026-10-13",
+   "source": "https://every.to/podcast/transcript-how-to-use-claude-code-like-the-people-who-built-it"
+  },
+  {
+   "slug": "verbose-reasoning-transparency",
+   "title": "Verbose Reasoning Transparency",
+   "category": "UX & Collaboration",
+   "status": "best-practice",
+   "summary": "Lets users open a verbose view on demand that shows the agent's interpretation, tool choices, intermediate steps, and raw tool outputs",
+   "updated_at": "2026-10-13",
+   "source": "https://www.nibzard.com/claude-code"
+  }
+ ]
+}

@@ -36,7 +36,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// The `does:` values only an agent's own loop has: they think.
 const AGENT_ONLY: &[&str] = &["think", "use-tools", "check-its-work", "run-code"];
 /// The `does:` values only a workflow has.
-const WORKFLOW_ONLY: &[&str] = &["call", "decide", "each", "repeat", "together"];
+const WORKFLOW_ONLY: &[&str] = &["call", "decide", "each", "repeat", "together", "stop"];
 /// What a workflow may not write, because it has no mind of its own (WF-1).
 const A_MIND: &[&str] = &["model", "instructions", "loop", "team", "uses"];
 /// The lines a stage reads only beside particular `does:` values (WF-3), from
@@ -59,6 +59,8 @@ const BELONGS_WITH: &[(&str, &[&str])] = &[
     ("starts-at", &["each", "repeat"]),
     ("until", &["repeat"]),
     ("remembers", &["repeat"]),
+    ("keeps-taking", &["each"]),
+    ("stops", &["stop"]),
 ];
 
 /// The lines only a workflow's runtime reads, whatever its stage does. An
@@ -90,7 +92,7 @@ fn outcomes(in_workflow: bool, does: &str) -> &'static [&'static str] {
         return LOOP_OUTCOMES;
     }
     match does {
-        "call" | "each" | "together" => &["answered"],
+        "call" | "each" | "together" | "stop" => &["answered"],
         "repeat" => &["answered", "too-many-times"],
         "ask-someone" => &["answered", "declined", "nobody-answered", "heard"],
         "decide" | "answer" => &[],
@@ -125,7 +127,14 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
         a_mind_of_its_own(name, w, diags);
         no_items_here(&format!("The workflow '{name}'"), w, diags);
         if let Some(steps) = w.get("steps").and_then(Node::as_map) {
-            stages(document, &Scope::Workflow, steps, diags);
+            stages(
+                document,
+                &Scope::Workflow {
+                    unbounded: crate::termination::workflow_is_unbounded(w),
+                },
+                steps,
+                diags,
+            );
             routes_back(steps, diags);
             answers_on_every_path(document, name, w, steps, diags);
         }
@@ -151,12 +160,16 @@ pub fn told_once(diags: &mut Diagnostics) {
 /// Whose stages these are, for the words a diagnostic uses.
 enum Scope<'a> {
     Loop(&'a str),
-    Workflow,
+    /// A workflow's stages; `unbounded` when its `limits:` say `unbounded: yes`
+    /// (law 2's owner-approved exception, `termination.rs`).
+    Workflow {
+        unbounded: bool,
+    },
 }
 
 impl Scope<'_> {
     fn in_workflow(&self) -> bool {
-        matches!(self, Scope::Workflow)
+        matches!(self, Scope::Workflow { .. })
     }
 }
 
@@ -224,7 +237,7 @@ fn stages(document: &Node, scope: &Scope, steps: &Map, diags: &mut Diagnostics) 
         };
         let does_span = entry_span(does_entry);
         match scope {
-            Scope::Workflow if AGENT_ONLY.contains(&does) => diags.push(Diagnostic::error(
+            Scope::Workflow { .. } if AGENT_ONLY.contains(&does) => diags.push(Diagnostic::error(
                 "loader/a-stage-a-workflow-cannot-have",
                 does_span.clone(),
                 format!(
@@ -263,15 +276,22 @@ fn stages(document: &Node, scope: &Scope, steps: &Map, diags: &mut Diagnostics) 
         match does {
             "call" => calls(document, stage, fields, diags),
             "each" => each(document, stage, fields, &does_span, diags),
-            "repeat" if !fields.contains_key("at-most") => diags.push(Diagnostic::error(
+            "repeat"
+                if !fields.contains_key("at-most")
+                    && !matches!(scope, Scope::Workflow { unbounded: true }) =>
+            {
+                diags.push(Diagnostic::error(
                 "loader/repeat-with-no-bottom",
                 does_span.clone(),
                 format!(
                     "'{stage}' repeats with no bottom: nothing says how many rounds it may run, \
                      so a round whose `until:` never holds runs for ever."
                 ),
-                "Add `at-most:` — `at-most: 5`. \"Forever\" is a schedule plus memory.".to_string(),
-            )),
+                "Add `at-most:` — `at-most: 5`. \"Forever\" is a schedule plus memory, or \
+                 an owner's `unbounded: yes` on the workflow's `limits:`."
+                    .to_string(),
+            ));
+            }
             _ => {}
         }
         if let Some(inner) = fields.get("steps").and_then(|e| e.node.as_map()) {
@@ -852,6 +872,18 @@ fn lines_to(stage: &Node, in_workflow: bool) -> Vec<(&str, &Node)> {
             _ => {}
         }
     }
+    // A loop stage whose `decided-by:` program picks the next stage goes
+    // wherever `may-go-to:` lists, and nowhere else (law 6, docs/98 WP-1). The
+    // list is the edges; the program's name is not a stage. Read here so every
+    // walk over a loop — what is reached, what can finish — sees them.
+    if !in_workflow
+        && let Some(listed) = stage
+            .get("then")
+            .and_then(|t| t.get("may-go-to"))
+            .and_then(Node::as_list)
+    {
+        out.extend(listed.iter().map(|n| ("may-go-to", n)));
+    }
     out
 }
 
@@ -875,11 +907,23 @@ fn calls_go_round(document: &Node, diags: &mut Diagnostics) {
     }
     for (name, entry) in agents.into_iter().flatten() {
         let uses = entry.node.get("uses").map(list).unwrap_or_default();
-        let out: Vec<(&str, Span)> = uses
+        let mut out: Vec<(&str, Span)> = uses
             .into_iter()
             .filter_map(|n| n.as_str().map(str::trim).map(|w| (w, n.span.clone())))
             .filter(|(w, _)| workflows.contains_key(*w))
             .collect();
+        // A teammate is one more hop (law 2, docs/98 WP-3): a workflow that
+        // calls an agent whose teammate uses that workflow starts itself just
+        // as surely as one whose agent uses it directly. A circle of agents
+        // alone is `teams.rs`'s, metered by `asks-itself-at-most`; this graph is
+        // only walked from workflows, so it finds only circles through one.
+        if let Some(team) = entry.node.get("team").and_then(Node::as_map) {
+            out.extend(
+                team.iter()
+                    .filter(|(member, _)| agents.is_some_and(|a| a.contains_key(member.as_str())))
+                    .map(|(member, e)| (member.as_str(), e.key_span.clone())),
+            );
+        }
         edges.insert(name.as_str(), out);
     }
     let is_agent = |name: &str| agents.is_some_and(|a| a.contains_key(name));

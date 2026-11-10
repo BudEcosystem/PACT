@@ -1,0 +1,12 @@
+description: Takes card payments.
+connect: payments-server
+actions:
+  charge:
+    description: Charge a card for an order.
+    takes:
+      card: text
+      order: text
+      amount: money
+    spends-money: yes
+    same-request-key: order
+    gets-hidden-values: yes

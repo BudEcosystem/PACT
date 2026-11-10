@@ -1,0 +1,8 @@
+description: Asked when neither the rules nor the sorter could place a message.
+says: Neither the rules nor the sorter could place this message. Which desk should take it?
+answer:
+  desk: one of billing, tech, out-of-scope
+shows:
+  - input.message
+asked-of: [support-leads]
+answer-within: 1h

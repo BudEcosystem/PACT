@@ -144,6 +144,8 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from .diagnostics import locate
+from .detectors import DECLARED, declared_in, pattern_of
+from .placeholders import VAULT, Vault
 
 #: How much of a rule to look for when finding the line it was written on.
 #: Enough to be unique in a file, short enough to survive the line breaks a
@@ -602,6 +604,9 @@ class Chain:
     #: [`Chain.use_runner`] at the start of a run — which is the only moment a
     #: host's runner exists, and the moment the chain was never handed one.
     runner: Runner = field(default_factory=Runner)
+    #: Where this run keeps what it hid, when one of its actions says
+    #: `gets-hidden-values: yes` (docs/98 WP-11). `None`: hide one-way.
+    vault: "Vault | None" = None
 
     def use_runner(self, run_program: "Callable[[str, dict[str, Any]], str] | None") -> None:
         """Hand this chain the host's program runner, at the start of a run.
@@ -670,6 +675,18 @@ class Chain:
     def run(self, address: str, payload: dict[str, Any]) -> tuple[dict[str, Any], Decision]:
         """Apply every interceptor at `address`, threading changes through.
 
+        This run's vault (if it has one) is where masking keeps what it hid, for
+        exactly as long as the rules are running and no longer.
+        """
+        held = VAULT.set(self.vault)
+        try:
+            return self._run(address, payload)
+        finally:
+            VAULT.reset(held)
+
+    def _run(self, address: str, payload: dict[str, Any]) -> tuple[dict[str, Any], Decision]:
+        """[`Chain.run`]'s body.
+
         Stops at the first `stop` or `redirect` — a run that has been halted
         must not then be quietly modified by a later rule, because the audit
         trail would show a change to something that never happened.
@@ -711,6 +728,22 @@ class Chain:
 
     @staticmethod
     def from_document(
+        doc: Mapping[str, Any],
+        agent_key: str,
+        source: "Path | None" = None,
+        run_program: "Callable[[str, dict[str, Any]], str] | None" = None,
+    ) -> "Chain":
+        """Every rule that covers one agent, in the order those rules state —
+        read with the workspace's own `detectors:` known (docs/98 WP-12), so a
+        sentence may name one. See [`Chain._from_document`]."""
+        held = DECLARED.set(declared_in(doc))
+        try:
+            return Chain._from_document(doc, agent_key, source, run_program)
+        finally:
+            DECLARED.reset(held)
+
+    @staticmethod
+    def _from_document(
         doc: Mapping[str, Any],
         agent_key: str,
         source: "Path | None" = None,
@@ -1297,12 +1330,14 @@ def _compile_rules(
             # down for `redaction.yaml` and the two counting sentences. The thing
             # is a property of this sentence alone, so it can always be asked
             # first.
-            if thing not in RECOGNISES:
+            # Built in, or declared under `detectors:` (docs/98 WP-12).
+            looks_like = pattern_of(thing)
+            if looks_like is None:
                 raise InterceptorError(
                     f"{at}: nothing here knows what {thing!r} looks like. "
                     f"The things that can be recognised are: "
-                    f"{', '.join(sorted(RECOGNISES))}. "
-                    f"Fix: use one of those."
+                    f"{', '.join(sorted({*RECOGNISES, *DECLARED.get()}))}. "
+                    f"Fix: use one of those, or declare it under `detectors:`."
                 )
             if spelled_out is not None:
                 last_replacement = spelled_out.group("text")
@@ -1350,7 +1385,7 @@ def _compile_rules(
                     f"so this rule would do nothing. Fix: change `when:` to "
                     f"{WHERE_HIDING_WORKS}."
                 )
-            patterns.append((re.compile(RECOGNISES[thing]), last_replacement))
+            patterns.append((re.compile(looks_like), last_replacement))
             continue
 
         rewrite = _REWRITE_ANSWER.match(text)
@@ -1617,6 +1652,11 @@ def _scanner(patterns: tuple[tuple[re.Pattern[str], str], ...]) -> re.Pattern[st
     return re.compile("|".join(f"(?:{rx.pattern})" for rx, _ in patterns))
 
 
+def _thing_of(pattern: str) -> str:
+    """Which recogniser a pattern is, by name (`card number`), or `""`."""
+    return next((thing for thing, p in RECOGNISES.items() if p == pattern), "")
+
+
 def _substitute(text: str, patterns: Sequence[tuple[re.Pattern[str], str]]) -> str:
     """Replace every run any sentence recognises — longest match wins.
 
@@ -1643,12 +1683,12 @@ def _substitute(text: str, patterns: Sequence[tuple[re.Pattern[str], str]]) -> s
     i = 0
     while (found := scan.search(text, i)) is not None:
         start = found.start()
-        end, replacement = start, ""
+        end, replacement, kind = start, "", ""
         for rx, repl in patterns:
             m = rx.match(text, start)
             stop = start + _hides(rx.pattern, m.group()) if m is not None else start
             if stop > end:
-                end, replacement = stop, repl
+                end, replacement, kind = stop, repl, rx.pattern
         if end <= start:
             # Nothing here is a thing to hide after all (an id that only starts
             # like an IBAN): step past this character, so the loop always
@@ -1657,7 +1697,15 @@ def _substitute(text: str, patterns: Sequence[tuple[re.Pattern[str], str]]) -> s
             i = start + 1
             continue
         out.append(text[i:start])
-        out.append(replacement)
+        # A run with somewhere to keep it (`gets-hidden-values:`, docs/98 WP-11)
+        # gets a placeholder it can put back; every other run, the one-way words.
+        vault = VAULT.get()
+        if vault is None:
+            out.append(replacement)
+        else:
+            # Named for what was recognised (`card number`), not for the words
+            # it would otherwise have been replaced with (`[removed]`).
+            out.append(vault.token(_thing_of(kind) or replacement, text[start:end]))
         i = end
     out.append(text[i:])
     return "".join(out)

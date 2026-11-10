@@ -1,0 +1,8 @@
+description: Whether a new version of the policy writer may take over.
+says: The evals passed on this version. May it take over from the current one?
+answer:
+  publish: yes or no
+  because: text
+asked-of: [policy-team]
+answer-within: 2 days
+if-nobody-answers: decline

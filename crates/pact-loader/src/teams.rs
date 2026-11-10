@@ -244,12 +244,17 @@ pub fn no_base_on_a_team(document: &Node, diags: &mut Diagnostics) {
 }
 
 /// Whether this node answers yes, in any spelling an author writes it.
-fn says_yes(n: Option<&Node>) -> bool {
-    n.is_some_and(|n| match &n.value {
+pub(crate) fn says_yes(n: Option<&Node>) -> bool {
+    n.is_some_and(said_yes_node)
+}
+
+/// [`says_yes`] on a node that is there.
+pub(crate) fn said_yes_node(n: &Node) -> bool {
+    match &n.value {
         pact_doc::Value::Bool(b) => *b,
         pact_doc::Value::Str(s) => matches!(s.trim(), "yes" | "true" | "on"),
         _ => false,
-    })
+    }
 }
 
 /// Whether this agent wrote (or inherited — derive runs first) the figure

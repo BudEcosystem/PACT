@@ -1,0 +1,3 @@
+resource-kind: mcp-server
+endpoint: host/tracker
+description: Where the team's issue tracker is reached.

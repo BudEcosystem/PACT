@@ -1,0 +1,6 @@
+applies-to: every-agent
+ask-a-person:
+  - when:
+      - { tool: payments, effect: spends }
+    because: every payment is a person's yes, whatever the action is called
+    question: may-we-charge

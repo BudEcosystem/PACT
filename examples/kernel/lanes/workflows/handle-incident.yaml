@@ -1,0 +1,22 @@
+description: Handle one incident on one service.
+accepts:
+  service: text
+  severity: text
+  details: text
+answers-with:
+  summary: text
+starts-at: work
+steps:
+  work:
+    does: call
+    call: incident-desk
+    bind:
+      service: input.service
+      severity: input.severity
+      details: input.details
+    then:
+      answered: reply
+  reply:
+    does: answer
+    bind:
+      summary: steps.work.summary

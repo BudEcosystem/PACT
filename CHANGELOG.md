@@ -3,6 +3,60 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — the seven primitives, built (10 November)
+
+`docs/97-PRIMITIVES.md` names seven building blocks (Shape, Origin, Store, Actor, Flow, Check,
+Allowance) and eight laws, and shows that every PACT keyword and all 203 patterns at
+agentic-patterns.com are made of them. Sixteen of the 76 kernel operations had no keyword and
+none of the laws was a checker rule. `docs/98-PRIMITIVES-ENGINEERING-PLAN.md` is the plan that
+closed both; its §9 says where the build differs from the plan.
+
+### What an author can now write
+
+- **`forks: yes`** on an `each`, `together`, `repeat` or loop stage: each item, branch or attempt
+  starts from a copy, so three votes are three votes (`examples/kernel/self-consistency`,
+  `tree-search`).
+- **A board a team shares**: `shared-with: the-team` on a `remembers` entry, gated by
+  `admitted-when:` and an `admitted-by:` agent that answers yes or no (`kernel/blackboard`).
+- **A claim across a team, with a lease**: `same-request-key-across: the-team | the-workspace`
+  and `claim-lasts:` on an action; the host supplies a `ClaimStore` (`kernel/work-queue`).
+- **`keeps-taking: yes`** on an `each` (a growing work list), and **`does: stop`** with
+  `stops: steps.<stage>.run` to cancel a run that was started without waiting.
+- **`detectors:`** in a workspace, used as `looks-like:` in a condition and as "anything that
+  looks like <name>" in redaction and interceptor sentences; **`gets-hidden-values: yes`** on an
+  action, so hidden values travel as placeholders and come back only there
+  (`kernel/private-by-placeholder`).
+- **`effect:`**, **`in-share:`** and **`looks-like:`** in `when-this`; a person's yes is bound to
+  the exact request they saw (`kernel/canary`).
+- **`carries:`** on a tool and **`writes:`** on an action (`kernel/no-leak`);
+  **`rests-after:`** with **`rests-for:`** on a tool (`kernel/circuit-breaker`).
+- **`stream of <shape>`** as an answer shape; **`cost-per-request-from:`** a run input, never
+  above `cost-per-request-under:`.
+- **`limits.unbounded: yes`**, only on a path `owners:` lists with `owned-by:`. Pydantic AI's own loop
+  is now handed the step ceiling too, eight when the author wrote none (law 2, option A).
+
+### What now holds that did not
+
+- **The eight laws as `pact check` rules**, among them `loader/three-things-that-make-a-leak`,
+  `loader/repeated-with-no-claim`, `loader/a-helper-allowed-more-than-its-caller`,
+  `loader/written-from-a-source-it-refuses` and `loader/unbounded-without-an-owner`. Each
+  part's effect class is computed, never declared, and `pact discover` prints it.
+- **A change a learning cycle proposes goes through `pact check`** before it is scored or
+  applied (law 8, `checking.py`).
+- **A reference workflow runtime** in Python (`workflow_runtime.py`) runs a workflow stage by
+  stage, so the new stage lines have run-time meaning outside a framework.
+- **The TypeScript port says** it neither forks a loop stage, lifts the step ceiling, nor keeps
+  a team's shared board, on `RunResult.unenforced`; the board is still offered under the same
+  name, so both ports show the model the same tools.
+- **`scripts/pattern-coverage.py --ops`** reports no kernel operation without a keyword; fifteen
+  workspaces under `examples/kernel/` are cited as the shipped form of 61 patterns.
+
+### Changed for existing trees
+
+- An agent run on Pydantic AI's own loop now stops at the default step ceiling where it used
+  to receive none; on PACT's loop nothing changes. A tree that relied on running unmetered there needs an owner's
+  `unbounded: yes`.
+
 ## 2026-10 — production on Pydantic AI (the Bud Agent Flow round)
 
 Running PACT trees in production on Pydantic AI 2.54, through

@@ -1,0 +1,10 @@
+description: Whether this charge may go ahead.
+says: May we charge this card for this order?
+answer:
+  approved: yes or no
+shows:
+  - amount
+  - order
+asked-of: [shop-leads]
+answer-within: 15m
+if-nobody-answers: stop-and-say-so

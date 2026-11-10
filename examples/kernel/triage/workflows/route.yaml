@@ -1,0 +1,50 @@
+description: Send one message to the right desk.
+accepts:
+  message: text
+  channel: text
+answers-with:
+  reply: text, optional
+starts-at: where
+steps:
+  where:
+    does: decide
+    chooses-between:
+      billing: bill
+      tech: fix
+      out-of-scope: decline
+    by:
+      # Rung 1: written rules. Free, and the checker can read them.
+      - rules:
+          - when:
+              - { value: input.channel, is: invoices-mailbox }
+            choose: billing
+            because: Everything in the invoices mailbox is billing.
+      # Rung 2: a cheap classifier. `not-sure` passes the decision on.
+      - agent: sorter
+      # Rung 3: a person. Always last, always answers.
+      - asks: which-desk
+  bill:
+    does: call
+    call: billing-desk
+    bind:
+      message: input.message
+    then:
+      answered: reply-bill
+  fix:
+    does: call
+    call: tech-desk
+    bind:
+      message: input.message
+    then:
+      answered: reply-fix
+  reply-bill:
+    does: answer
+    bind:
+      reply: steps.bill.reply
+  reply-fix:
+    does: answer
+    bind:
+      reply: steps.fix.reply
+  # Out of scope: the run answers with nothing, and says so.
+  decline:
+    does: answer

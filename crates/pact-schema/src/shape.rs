@@ -32,6 +32,10 @@ pub enum Shape {
     ListOf(Box<Shape>),
     /// A key of `workspace.shapes`, as written there.
     Named(String),
+    /// `stream of <shape>` (docs/98 WP-14): a value that arrives in parts, each
+    /// part in that shape. What it answers, once it has all arrived, is the
+    /// shape inside; the parts are how it got there.
+    StreamOf(Box<Shape>),
 }
 
 /// One whole line: its shape, and whether it may be missing.
@@ -112,6 +116,13 @@ fn shape(s: &str, vocabulary: &[(String, Vec<String>)], named: &[&str]) -> Resul
     if let Some(name) = named.iter().find(|n| normalised(n) == s) {
         return Ok(Shape::Named((*name).to_string()));
     }
+    if let Some(rest) = s.strip_prefix("stream of ") {
+        return Ok(Shape::StreamOf(Box::new(shape(
+            rest.trim(),
+            vocabulary,
+            named,
+        )?)));
+    }
     if let Some(rest) = s.strip_prefix("list of ") {
         return Ok(Shape::ListOf(Box::new(shape(
             rest.trim(),
@@ -129,6 +140,7 @@ impl Shape {
             Shape::Plain(name) | Shape::Named(name) => name.clone(),
             Shape::OneOf(choices) => format!("one of {}", choices.join(", ")),
             Shape::ListOf(inner) => format!("list of {}", inner.written()),
+            Shape::StreamOf(inner) => format!("stream of {}", inner.written()),
         }
     }
 
@@ -149,6 +161,10 @@ impl Shape {
             return true;
         }
         match (self, wanted) {
+            // A stream, once it has all arrived, is the shape inside it; a
+            // stream is wanted only where its parts are.
+            (Shape::StreamOf(have), _) => have.fits_within(wanted, parts, depth + 1),
+            (_, Shape::StreamOf(want)) => self.fits_within(want, parts, depth + 1),
             (Shape::ListOf(_) | Shape::Named(_), Shape::Plain(w)) if w == "text" => false,
             (_, Shape::Plain(w)) if w == "text" => true,
             (Shape::Plain(h), Shape::Plain(w)) => h == "whole-number" && w == "number",

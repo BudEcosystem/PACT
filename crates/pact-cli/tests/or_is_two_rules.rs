@@ -89,6 +89,11 @@ fn a_condition_looks_at_one_thing_with_one_word() {
             "is",
             "is-one-of",
             "contains-any-of",
+            // docs/98 WP-12, a deliberate change to the grammar: what a call
+            // does (law 1), a stable share of values, and a detector's match.
+            "effect",
+            "in-share",
+            "looks-like",
             "is-empty"
         ]
     );

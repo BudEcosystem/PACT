@@ -1,0 +1,22 @@
+description: The team's work queue.
+connect: queue-server
+actions:
+  do:
+    description: Do one task.
+    takes:
+      task: text
+    same-request-key: task
+    same-request-key-across: the-team
+    claim-lasts: 5m
+    writes: [the queue]
+    undone-by: queue/undo
+  undo:
+    description: Undo one task.
+    takes:
+      task: text
+    same-request-key: task
+  watch:
+    description: Watch the queue and report how it is going.
+    reads-only: yes
+    takes:
+      queue: text

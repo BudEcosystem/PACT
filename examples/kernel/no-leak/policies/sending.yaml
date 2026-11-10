@@ -1,0 +1,6 @@
+applies-to: every-agent
+ask-a-person:
+  - when:
+      - { tool: mail, effect: writes }
+    because: nothing leaves without a person reading it — this is the door out
+    question: may-we-send

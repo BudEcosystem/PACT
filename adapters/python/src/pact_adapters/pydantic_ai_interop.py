@@ -1312,12 +1312,16 @@ def usage_limits_for(spec: PactAgentSpec) -> Any:
 
     limits = spec.limits
     return UsageLimits(
-        # Only a ceiling the AUTHOR wrote. `max_steps` falls back to this port's
-        # own loop bound when `steps-at-most` is absent, and that bound is PACT's
-        # harness, not the document; and `None` is passed rather than left out,
+        # EVERY run has a step ceiling (law 2, option A — docs/98 WP-3): the
+        # author's `steps-at-most`, or `DEFAULT_STEPS` when they wrote none, on
+        # this host exactly as on PACT's own loop. This passed `None` for an
+        # unwritten ceiling, so the same agent stopped at 8 on one host and ran
+        # until its money ran out on another — the halting promise held only
+        # where PACT's loop ran. The one way to pass `None` now is an owner's
+        # `limits.unbounded: yes`; `None` rather than leaving the field out,
         # because `UsageLimits` otherwise caps at `request_limit=50`
-        # (pydantic_ai/usage.py:482) — a ceiling nobody wrote either.
-        request_limit=spec.max_steps if spec.steps_written else None,
+        # (pydantic_ai/usage.py:482), a ceiling nobody wrote.
+        request_limit=None if spec.unbounded else spec.max_steps,
         tool_calls_limit=limits.tool_calls_at_most,
         total_tokens_limit=limits.tokens_at_most,
     )

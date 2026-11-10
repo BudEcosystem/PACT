@@ -1,0 +1,7 @@
+description: Decides whether a finding may go on the board.
+instructions: |
+  You are shown one proposed finding. Say yes only if its source is named and
+  the claim is something the source could actually show. Say why either way.
+answers-with:
+  admit: yes or no
+  because: text

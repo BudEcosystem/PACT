@@ -1,0 +1,12 @@
+# CIRCUIT BREAKER — a tool that keeps failing is rested, and the agent is told.
+#
+# `rests-after: 3` and `rests-for: 5m` on the search tool: after three failures
+# in a row, a call to it is not made for five minutes, and the model reads that
+# it is resting so it can work with what it has. One success resets the count.
+# A host that hands every run the same record keeps a tool that is down for
+# everyone rested for everyone.
+#
+# What goes wrong: no breaker. A model handed a timing-out tool calls it again,
+# and again, until the step ceiling — paying for every timeout.
+name: Circuit breaker
+description: A research desk whose search tool is rested after three failures in a row.

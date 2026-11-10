@@ -1,0 +1,40 @@
+description: Research a brief, plan from the findings, then build from the plan.
+accepts:
+  brief: text
+answers-with:
+  result: text
+# The brief may name a customer; the logs never see it.
+hides:
+  input.brief: [logs]
+limits:
+  cost-per-request-under: 0.50 USD
+  when-it-runs-out: stop-and-say-so
+starts-at: research
+steps:
+  research:
+    does: call
+    call: researcher
+    bind:
+      brief: input.brief
+    then:
+      answered: plan
+  plan:
+    does: call
+    call: planner
+    bind:
+      brief: input.brief
+      findings: steps.research.findings
+    then:
+      answered: make
+  make:
+    does: call
+    call: builder
+    # Only the plan crosses. The builder never sees the brief or the findings.
+    bind:
+      plan: steps.plan.plan
+    then:
+      answered: reply
+  reply:
+    does: answer
+    bind:
+      result: steps.make.result

@@ -6,7 +6,11 @@ model:
 - say: ok
 expect:
   usage-limits:
-    request_limit: null
+    # The step ceiling IS carried, unwritten: law 2, option A (docs/98 WP-3,
+    # decided 2026-11-10). Every host gets PACT's default of 8 steps, so "this
+    # agent stops" holds on Pydantic AI's loop as on PACT's. Money and time still
+    # have no Pydantic AI home, and none is invented for them.
+    request_limit: 8
     tool_calls_limit: null
     total_tokens_limit: null
   export-not-carried:

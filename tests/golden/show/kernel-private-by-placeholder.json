@@ -1,0 +1,92 @@
+{
+  "name": "Private by placeholder",
+  "description": "A cashier that charges a card the model never sees.",
+  "detectors": {
+    "order reference": {
+      "description": "An order reference, as the shop prints them.",
+      "looks-like": [
+        "ORD-[0-9]{8}"
+      ],
+      "examples": [
+        "ORD-12345678"
+      ]
+    }
+  },
+  "agents": {
+    "cashier": {
+      "description": "Takes payment for an order.",
+      "instructions": "Charge the card the customer gave you for their order. Refer to the card and\nthe order by what you see in the message; never ask for the number again.",
+      "uses": [
+        "payments"
+      ]
+    }
+  },
+  "policies": {
+    "charges": {
+      "applies-to": "every-agent",
+      "ask-a-person": [
+        {
+          "when": [
+            {
+              "tool": "payments",
+              "effect": "spends"
+            }
+          ],
+          "because": "every payment is a person's yes, whatever the action is called",
+          "question": "may-we-charge"
+        }
+      ]
+    }
+  },
+  "questions": {
+    "may-we-charge": {
+      "description": "Whether this charge may go ahead.",
+      "says": "May we charge this card for this order?",
+      "answer": {
+        "approved": "yes or no"
+      },
+      "shows": [
+        "amount",
+        "order"
+      ],
+      "asked-of": [
+        "shop-leads"
+      ],
+      "answer-within": "15m",
+      "if-nobody-answers": "stop-and-say-so"
+    }
+  },
+  "redaction": {
+    "description": "What the model and the logs never see.",
+    "hide": [
+      "anything that looks like a card number",
+      "anything that looks like an order reference"
+    ]
+  },
+  "resources": {
+    "payments-server": {
+      "resource-kind": "mcp-server",
+      "endpoint": "host/payments",
+      "description": "Where the payment service is reached."
+    }
+  },
+  "tools": {
+    "payments": {
+      "description": "Takes card payments.",
+      "connect": "payments-server",
+      "actions": {
+        "charge": {
+          "description": "Charge a card for an order.",
+          "takes": {
+            "card": "text",
+            "order": "text",
+            "amount": "money"
+          },
+          "spends-money": "yes",
+          "same-request-key": "order",
+          "gets-hidden-values": "yes"
+        }
+      }
+    }
+  }
+}

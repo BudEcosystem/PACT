@@ -1,0 +1,11 @@
+description: Replays the last thirty days of real runs, writes stubbed, before any version is kept.
+population: past-runs
+from-the-last: 30 days
+must-pass: 90%
+rules:
+  - library: numbers-come-from-the-source
+    because: a summary that invents a figure is worse than no summary
+  - library: quotes-are-word-for-word
+    because: a rule quoted loosely is a rule changed
+  - must-not-contain: ["in my opinion"]
+    because: the writer has no opinion; the policy does

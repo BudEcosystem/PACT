@@ -1,0 +1,19 @@
+# FALLBACK — try the cheap reader twice, then hand the same inputs to the careful one.
+#
+# The pattern: a stage that fails is not the run failing. `at-most: 2` retries
+# the cheap agent once; `if-it-fails: use-a-backup` then calls the careful agent
+# with the SAME `bind:`, so nothing is re-typed and nothing is guessed. The
+# failure reason is an outcome label, not a string somebody has to parse.
+#
+# Also here: `checked-by:` on the cheap agent is the schema-validation retry.
+# An answer that misses the rule is sent back with the reason, at most twice,
+# before it counts as a failed attempt at all.
+#
+# When to reach for it: most requests are easy and a small model answers them;
+# the ones it cannot are worth a bigger model, not a worse answer.
+#
+# What goes wrong: a backup with a different `accepts:`. The backup is called
+# with the failed stage's inputs, so it has to take the same things, and
+# `pact check` refuses one that does not.
+name: Fallback
+description: Two tries on the cheap reader, then the careful one with the same inputs.

@@ -1,0 +1,29 @@
+# GOVERNED CHANGE — the agent may propose changes to itself; people decide which land.
+#
+# The pattern: `learning.yaml` says the agent may improve its own phrasing and
+# examples, and may only PROPOSE anything else. `owners:` names who has to say
+# yes to the parts that matter and locks the approval threshold so no copy of
+# this workspace can remove it. `release:` asks a person before any new version
+# takes over, and only after the evals pass. The evals replay the last thirty
+# days of real runs with every write stubbed, so a proposed change is judged on
+# what actually happened, not on cases somebody imagined.
+#
+# This is what the catalogue calls versioned constitution governance, the
+# self-rewriting meta-prompt loop, iterative prompt refinement, tier auto-apply
+# by mechanical impact, and workflow evals with mocked tools. It is also law 5
+# of docs/97-PRIMITIVES.md: a write to the definition never widens a grant.
+#
+# What goes wrong: `keep-only-if` left out. Then a proposal that scores worse is
+# as good as one that scores better, and the loop drifts.
+name: Governed change
+description: An agent that proposes its own improvements, judged on replayed runs and approved by named people.
+owner: policy-team
+allow-egress: []
+owners:
+  agents.policy-writer.instructions:
+    owned-by: policy-team
+  agents.policy-writer.limits:
+    owned-by: policy-team
+    locked: here-and-below
+release:
+  asks: may-we-publish

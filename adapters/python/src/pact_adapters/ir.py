@@ -25,6 +25,8 @@ from .programs import ProgramFuel, body_entry
 from .slo import Slo
 from .loops import STANDARD, Loop
 from .moments import FailurePlan, Moment, RegionLimits
+from .detectors import declared_in
+from .rests import rules_of as rests_of
 from .questions import Gate, Rejected, Shape, questions_for
 from .suspension import PauseRule
 from .watches import Watches
@@ -34,6 +36,12 @@ from .yes_no import said_yes
 #: unbounded loop is Eve's behaviour, and its consequence is a run that stops
 #: only once a token budget is gone.
 DEFAULT_STEPS = 8
+
+#: What `max_steps` holds when an owner wrote `limits.unbounded: yes` (law 2,
+#: option A). Not infinity, because every loop here counts in integers; large
+#: enough that no run reaches it, and `AgentSpec.unbounded` is what a host
+#: reads to pass no ceiling at all.
+UNBOUNDED_STEPS = 2**31 - 1
 
 #: Which keys of the author's `settings:` block `spec/schema.yaml` types
 #: `yes-no`. Read once, HERE, where the document becomes a spec — not per
@@ -519,6 +527,10 @@ class AgentSpec:
     #: (`pydantic_ai_interop.usage_limits_for`) carries a step ceiling only when
     #: this is true. A flag rather than a second copy of the number.
     steps_written: bool = False
+    #: Whether an owner took the step ceiling away (`limits.unbounded: yes`,
+    #: law 2 option A, docs/98 WP-3). The ONLY way a run gets no ceiling: with
+    #: it false, `max_steps` is a real ceiling on every host, written or not.
+    unbounded: bool = False
     #: Every other way this run is allowed to end, and what to do at each.
     limits: Limits = Limits()
     #: The latency promises, and what `feel:` supplies for the ones nobody wrote.
@@ -733,6 +745,16 @@ class AgentSpec:
     #: enforcing it is "a separate, runtime question"; carried here so that
     #: question has an answer without a host writing Python for it (D14).
     request_keys: RequestKeys = field(default_factory=RequestKeys)
+    #: `(tool, action)` for every action this agent uses that says
+    #: `gets-hidden-values: yes` (docs/98 WP-11): the only calls a hidden
+    #: value's placeholder is turned back into the value for.
+    gets_hidden: frozenset[tuple[str, str]] = frozenset()
+    #: The workspace's `detectors:`, each as one pattern (docs/98 WP-12), for a
+    #: `looks-like:` read inside this agent's run (a board's admission lines).
+    detectors: Mapping[str, str] = field(default_factory=dict)
+    #: `(rests-after, rests-for in seconds)` for each tool this agent uses that
+    #: says both (docs/98 WP-13): the circuit breaker's rule.
+    rests: Mapping[str, tuple[int, float]] = field(default_factory=dict)
 
     #: What this agent knows that its messages do not carry — the `remembers:`
     #: entries marked `survives-shortening:` (G9).
@@ -950,8 +972,13 @@ class AgentSpec:
                 if n in set(_as_list(a.get("uses")))
             ),
             team={k: _text(v) for k, v in sorted((a.get("team") or {}).items())},
-            max_steps=steps_at_most(written, DEFAULT_STEPS),
+            max_steps=(
+                UNBOUNDED_STEPS
+                if said_yes(written.get("unbounded"))
+                else steps_at_most(written, DEFAULT_STEPS)
+            ),
             steps_written=whole(written.get("steps-at-most")) is not None,
+            unbounded=said_yes(written.get("unbounded")),
             limits=Limits.from_mapping(written),
             slo=Slo.from_mapping(written),
             settings={
@@ -982,6 +1009,15 @@ class AgentSpec:
             teamwork=Teamwork.from_document(doc, agent_key),
             asking=questions_for(doc, agent_key, root),
             request_keys=RequestKeys.from_document(doc, agent_key),
+            detectors=declared_in(doc),
+            rests=rests_of(doc, set(_as_list(a.get("uses")))),
+            gets_hidden=frozenset(
+                (str(t), str(act))
+                for t, body in (doc.get("tools") or {}).items()
+                if t in set(_as_list(a.get("uses"))) and isinstance(body, Mapping)
+                for act, line in ((body.get("actions") or {}).items())
+                if isinstance(line, Mapping) and said_yes(line.get("gets-hidden-values"))
+            ),
             facts=Facts.from_document(doc, agent_key),
             workspace_remembers=Facts.of(doc.get("remembers")),
             template_language=_text(doc.get("template-language", "")) or "holes",
@@ -1707,6 +1743,12 @@ class StageSpec:
     #: `if-it-fails:` — what happens once every attempt has failed; `None`
     #: stops and says so (02W §2.7).
     if_it_fails: FailurePlan | None = None
+    #: `forks: yes` (docs/98 WP-10): items, branches or rounds start from a copy.
+    forks: bool = False
+    #: `keeps-taking: yes` on an `each`: items added while it runs are taken too.
+    keeps_taking: bool = False
+    #: `stops:` on a `stop` stage: the detached run to stop (`steps.<s>.run`).
+    stops: str = ""
 
     @property
     def nobody_answered(self) -> str:
@@ -1752,6 +1794,9 @@ class StageSpec:
             region_limits=RegionLimits.from_limits(written_limits),
             items_at_most=whole(written_limits.get("items-at-most")),
             if_it_fails=FailurePlan.from_written(raw.get("if-it-fails")),
+            forks=said_yes(raw.get("forks")),
+            keeps_taking=said_yes(raw.get("keeps-taking")),
+            stops=_text(raw.get("stops", "")),
         )
 
 
@@ -1816,6 +1861,9 @@ class WorkflowSpec:
     owners: tuple[Owned, ...] = ()
     #: The values a run reads by name — the calendar table, `values.<name>`.
     values: Mapping[str, ValueSpec] = field(default_factory=dict)
+    #: `limits.unbounded: yes` — an owner took the round limit away (law 2,
+    #: docs/98 WP-3), so a `repeat` with no `at-most:` may go on.
+    unbounded: bool = False
 
     def stage_named(self, name: str) -> StageSpec:
         """A top-level stage by name. (Named apart from every other reader in this module: the
@@ -1867,7 +1915,11 @@ class WorkflowSpec:
                 )
                 for path, o in owners.items()
                 if isinstance(o, Mapping)
-                and (str(path) == f"workflows/{key}" or str(path).startswith(f"workflows/{key}/"))
+                and (
+                    str(path).replace(".", "/") == f"workflows/{key}"
+                    or str(path).replace(".", "/").startswith(f"workflows/{key}/")
+                )
             ),
             values=values_of(doc),
+            unbounded=said_yes((w.get("limits") or {}).get("unbounded")),
         )

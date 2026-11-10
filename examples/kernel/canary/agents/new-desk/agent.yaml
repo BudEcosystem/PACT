@@ -1,0 +1,8 @@
+description: Answers support questions with the new instructions.
+instructions: |
+  Answer the customer's question. Lead with what they can do next, then the
+  reason.
+accepts:
+  question: text
+answers-with:
+  reply: text

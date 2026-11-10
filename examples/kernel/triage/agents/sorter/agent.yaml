@@ -1,0 +1,13 @@
+description: Says which desk a message belongs to, or that it is not sure.
+instructions: |
+  Read the message and say which desk should handle it. Billing is money,
+  invoices and refunds. Tech is anything broken. Out-of-scope is anything that is neither. If you are not sure, say
+  not-sure; a person will decide.
+accepts:
+  message: text
+answers-with:
+  desk: one of billing, tech, out-of-scope, not-sure
+needs:
+  reasoning: simple
+  prefer: cheapest
+  because: sorting is a one-word answer and most messages are obvious

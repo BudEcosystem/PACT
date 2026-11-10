@@ -103,6 +103,8 @@ pub(crate) fn of_shape(shape: &Shape) -> Option<Kind> {
         Shape::OneOf(_) => Kind::Text,
         Shape::ListOf(_) => Kind::List,
         Shape::Named(_) => Kind::Record,
+        // Compared once it has all arrived, as the shape inside it.
+        Shape::StreamOf(inner) => return of_shape(inner),
     })
 }
 

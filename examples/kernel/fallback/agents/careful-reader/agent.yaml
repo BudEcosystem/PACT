@@ -1,0 +1,14 @@
+description: Answers a customer question from the product notes, slowly and carefully.
+instructions: |
+  Read the whole of the product notes before answering. Quote the passage the
+  answer rests on. If the notes do not answer the question, say exactly what is
+  missing.
+accepts:
+  question: text
+  notes: text
+answers-with:
+  answer: text
+  confidence: one of high, low
+needs:
+  reasoning: careful
+  because: this agent only sees the questions the quick reader could not answer

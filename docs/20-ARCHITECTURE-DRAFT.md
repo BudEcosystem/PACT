@@ -8965,8 +8965,8 @@ declared on `AgentSpec` for one purpose: so the run can name it, one line at a t
 what does not happen. A run over this target carrying any of them is still a run whose trace
 matches — it is a run that *did less*, and said which less.
 
-Ten of the eleven are named on `RunResult.unenforced`: **eight** by `notDoneHere`, which reads
-the `AgentSpec`'s own top-level keys, and **two** — a loop stage's `asks:` and
+Twelve of the thirteen are named on `RunResult.unenforced`: **nine** by `notDoneHere`, which reads
+the `AgentSpec`'s own top-level keys, and **three** — a loop stage's `asks:` and `forks:`, and
 `answers-with-mode:` — by `run()` itself, for the two different reasons given at the end of
 this section. (`notDoneHere` returns a ninth line, for `team:`, but `team:` is a list A key and
 not a row here.) The eleventh — the
@@ -8996,18 +8996,21 @@ every shipped tree agreed anyway.
 | `watch/` | G4 | The observe half of the event lattice — needs `Bus` and the address vocabulary. Nothing on this runtime records what the run did. |
 | `knowledge/` (the documents themselves) | A7 | PACT retrieves nothing anywhere, and this port has nowhere to be handed a retrieval either, so every declared set is one this run never looked in. **The other row on both sides of the bound**, like `team:`: `must-cite:` is in list A — the turn is refused before a model call, in the same words as the reference port — and a corpus *without* it answers out of the model's own memory, which is named on `unretrieved` rather than `unenforced`. Held by `test_a_corpus_the_second_port_never_looked_in_is_not_silent.py`. |
 | `asks:` on a `does: ask-someone` stage | G1 / G7 | The stage stops the run on both ports, at the same stage of the same path, with `halted: "suspended"` — and only Python then puts the author's typed question, with its shape, its audience and its deadline (`x-asked-a-person`, §7.14). This port has no durable suspension to put a question into, so the line is read and nobody is asked it. **The only row in list B whose key is not a top-level one**: it is written inside a loop, and the loop is in list A. `loops.ts` parses it into `Phase.asks`; `run()` names it once `resolve` has run, for every asking stage the loop DECLARES rather than for the ones a particular run reaches — a line that appeared only on the branch that took it would tell an author their file was fine on every other run — and in the conditional (*"a run that reaches that stage"*) for the same reason. A stage that does `ask-someone` and names no question at all is reported too, as `asks: (none named)`: `spec/schema.yaml` refuses that document, but `run()` is a library entry point and does not run `pact check`, so its report may not depend on one having been run. Not to be confused with `limits.asks`, which is the question a *ceiling* puts and which this port reports under `limits.`. |
+| `shared-with: the-team` on a `remembers` entry | docs/98 WP-8 | A team's shared board is offered to the model under the name and description `boards.py` gives it, so both ports show the same tools — and this port keeps no board, so reading or writing it comes back as an error. The Python harness keeps one board per request behind its admission gate (`admitted-when:`, `admitted-by:`). Carried on the payload as `boards`. |
+| `forks:` on a loop stage | docs/98 WP-10 | Python starts each attempt of a forking stage from a copy of the conversation as the stage began; this port runs every attempt on the one conversation, so a later attempt reads the earlier ones and the samples are not independent. Like `asks:`, written inside a loop and named by `run()` once the loop is resolved, for every stage the loop declares. |
 | `answers-with-mode:` | A5 | Only `prompted` is deliverable anywhere — `native-json-schema` and `tool` constrain the answer at the provider, and no transport in either port does that. So the shape is asked for in the prompt (list A above) and the two stricter modes are named on `unenforced` rather than quietly served as prose, which would be the silent degradation T7 forbids. Both ports pick `prompted` when the line is absent, and both report the same sentence when it is not. |
 
-**What list B counts, and what a run actually prints.** The ten is a count of list B's ROWS on
+**What list B counts, and what a run actually prints.** The twelve is a count of list B's ROWS on
 `unenforced`, not of the lines a run comes back with. Two other things reach the same channel
 and are deliberately not rows here. `team:` is in list A — the names *are* offered to the model
 — and its line says only that asking one comes back as an error rather than parking, which is
 the `teamwork:` row's sentence about a key already inside the claim. And one line per `limits:`
 key this port does not read — `feel`, `first-reply-within`, `per-word-under`, `measured-at`,
-`asks` — each under its own `limits.` prefix, because list A's `limits:` row is bounded to the
+`asks` — each under its own `limits.` prefix (and `unbounded`, under the same prefix in its own
+words, because this port holds a ceiling the owner lifted rather than none), because list A's `limits:` row is bounded to the
 six ceilings it names and the rest were being dropped in silence under a `slo.*` row that can
 never fire (`pact show` nests them inside `limits:`; nothing ever arrives under `slo:`). A
-reader counting lines off a run and expecting ten is counting the wrong thing; a reader asking
+reader counting lines off a run and expecting twelve is counting the wrong thing; a reader asking
 *"which of the keys I wrote does this port not carry out"* gets exactly this list.
 
 **One ending that reports none of them.** A document declaring a corpus with `must-cite: yes`

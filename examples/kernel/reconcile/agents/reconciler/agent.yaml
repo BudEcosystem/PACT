@@ -1,0 +1,21 @@
+description: Reads the tracker, compares it with what was last done, and closes the gap.
+instructions: |
+  List the open items for the project. Compare with what you last did for this
+  project. Set the status of anything that has moved. Then write a heartbeat.
+uses:
+  - tracker
+accepts:
+  project: text
+answers-with:
+  changed: whole number
+remembers:
+  last-reconciled:
+    description: what was last done, by project, so it is not done twice
+    lasts: forever
+    kept-for: 90 days
+    never-from:
+      - tool output
+limits:
+  tool-calls-at-most: 30
+  finishes-within: 5m
+  when-it-runs-out: stop-and-say-so

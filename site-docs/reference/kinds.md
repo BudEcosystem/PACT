@@ -1,11 +1,11 @@
-# The 62 kinds
+# The 63 kinds
 
 Generated from `spec/schema.yaml`. Every kind, what it is for, and how
 many fields it has. You do not need to learn these — `pact check` names the
 right one when you need it.
 
 
-**62 kinds.** A kind is a *shape a document can take*, not a file you must
+**63 kinds.** A kind is a *shape a document can take*, not a file you must
 write: most workspaces use a dozen.
 
 
@@ -13,20 +13,20 @@ write: most workspaces use a dozen.
 
 | Kind | Fields | Core fields |
 |---|---:|---|
-| `action` | 17 | `description`, `takes`, `reads-only`, `needs-a-person`, `spends-money` |
+| `action` | 20 | `description`, `takes`, `reads-only`, `needs-a-person`, `spends-money` |
 | `agent` | 27 | `name`, `description`, `instructions`, `team`, `teamwork` |
 | `loop` | 4 | `description`, `based-on` |
 | `knowledge` | 14 | `description`, `documents`, `passages-at-most`, `must-cite`, `use-when` |
 | `skill` | 14 | `name`, `description`, `use-when`, `do-not-use-when`, `if-unsure` |
-| `stage` | 29 | `does`, `says`, `asks`, `call`, `may-call` |
-| `tool` | 13 | `description`, `connect`, `url`, `method`, `says` |
+| `stage` | 32 | `does`, `says`, `asks`, `call`, `may-call` |
+| `tool` | 16 | `description`, `connect`, `url`, `method`, `says` |
 | `program` | 7 | `description` |
 | `program-fuel` | 4 | — |
 | `value` | 4 | `description`, `rows-are`, `value` |
 | `variant` | 6 | — |
 | `turn` | 6 | — |
 | `voice` | 9 | — |
-| `workspace` | 35 | `name`, `workspace-id`, `description`, `owner`, `profile` |
+| `workspace` | 36 | `name`, `workspace-id`, `description`, `owner`, `profile` |
 
 ## Workflows
 
@@ -51,6 +51,7 @@ write: most workspaces use a dozen.
 | `question` | 20 | `description`, `says`, `answer`, `shows`, `asked-of` |
 | `question-rule` | 4 | `when`, `because`, `question`, `first-times` |
 | `redaction` | 2 | `description`, `hide` |
+| `detector` | 3 | `description` |
 
 ## Limits and models
 
@@ -60,7 +61,7 @@ write: most workspaces use a dozen.
 | `benchmark` | 5 | — |
 | `catalog` | 4 | — |
 | `figure` | 2 | — |
-| `limits` | 22 | `feel`, `finishes-within`, `starts-from`, `paused-during`, `milestones` |
+| `limits` | 24 | `feel`, `finishes-within`, `starts-from`, `paused-during`, `milestones` |
 | `model` | 11 | — |
 | `model-can` | 12 | — |
 | `model-cost` | 2 | — |
@@ -74,7 +75,7 @@ write: most workspaces use a dozen.
 | Kind | Fields | Core fields |
 |---|---:|---|
 | `context-policy` | 7 | `description`, `when-full`, `always-keep`, `if-it-still-does-not-fit`, `asks` |
-| `state` | 12 | `description`, `lasts`, `forget-after`, `kept-for`, `kept-per` |
+| `state` | 15 | `description`, `lasts`, `forget-after`, `kept-for`, `kept-per` |
 | `tidy-step` | 3 | — |
 
 ## Working together
@@ -87,7 +88,7 @@ write: most workspaces use a dozen.
 | `published` | 5 | — |
 | `published-tool` | 4 | — |
 | `teamwork` | 9 | `may-start`, `waits-for`, `enough-is`, `gives-up-after`, `starts` |
-| `when-this` | 9 | `tool`, `value`, `arg`, `more-than`, `less-than` |
+| `when-this` | 12 | `tool`, `value`, `arg`, `more-than`, `less-than` |
 | `comparand` | 3 | `value`, `now-plus`, `now-minus` |
 
 ## Measuring and learning

@@ -1,0 +1,10 @@
+description: Searches the company's documents.
+connect: search-server
+rests-after: 3
+rests-for: 5m
+actions:
+  find:
+    description: Find documents matching a query.
+    reads-only: yes
+    takes:
+      query: text

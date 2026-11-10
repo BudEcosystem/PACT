@@ -315,6 +315,9 @@ def test_every_spec_field_that_holds_authored_state_is_filled_from_the_document(
         # read is `test_a_shape_is_built_on_by_list_name_and_optional.py`.
         "shapes",
         "time_zone",
+        "unbounded",        # an owner's, and this example keeps its step limit
+        "detectors",        # authored, and this example declares none
+        "rests",            # authored, and this example rests no tool
     }
     empty: list[str] = []
     for f in dataclass_fields(spec):

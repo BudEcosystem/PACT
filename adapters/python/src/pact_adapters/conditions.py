@@ -52,6 +52,8 @@ at run time, with the same reading on every position.
 
 from __future__ import annotations
 
+import hashlib
+
 import datetime as _dt
 import json
 import math
@@ -122,7 +124,31 @@ def holds(
     """Does `value` meet this line's comparison? `None` when it cannot be told.
 
     A line with no comparison word holds: it is about the call (a policy's
-    `tool:` alone) and says nothing about a value."""
+    `tool:` alone) and says nothing about a value.
+
+    Two words read the value itself rather than comparing it (docs/98 WP-12):
+    `in-share:` holds for a stable share of the values it could be, by a
+    fingerprint of the value, and `looks-like:` holds when the value contains
+    something a detector — built in or declared — recognises."""
+    if "in-share" in line:
+        if value is ABSENT or value is None:
+            return False
+        wanted = share(line["in-share"], -1.0)
+        if wanted < 0:
+            return None
+        print_ = hashlib.sha256(_text(value).encode()).hexdigest()
+        return int(print_[:15], 16) / 16**15 < wanted
+    if "looks-like" in line:
+        if value is ABSENT or value is None:
+            return False
+        from .detectors import pattern_of
+
+        pattern = pattern_of(str(line["looks-like"]))
+        if pattern is None:
+            return None
+        # As written, not lower-cased: a pattern may care (`ORD-[0-9]{8}`).
+        seen = json.dumps(value, default=str) if isinstance(value, (Mapping, list, tuple)) else str(value)
+        return re.search(pattern, seen) is not None
     for word in WORDS:
         if word not in line:
             continue

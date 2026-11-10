@@ -77,8 +77,12 @@ pub fn resolve(
     diags: &mut Diagnostics,
     recorded: &mut Vec<crate::report::Substitution>,
 ) {
+    // Law 5 (docs/98 WP-5): what a copy restated is only visible before it is
+    // resolved, so locks and widened ceilings are held here.
+    let kinds = collections(schema);
+    crate::attenuation::before_derive(root, &kinds, diags);
     let Some(top) = root.as_map_mut() else { return };
-    for name in collections(schema) {
+    for name in kinds {
         let Some(slot) = top.get_mut(&name) else {
             continue;
         };

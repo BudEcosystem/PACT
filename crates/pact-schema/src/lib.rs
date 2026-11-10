@@ -1220,6 +1220,19 @@ impl Schema {
                     if let Some((_, allowed)) =
                         forms.recognises.iter().find(|(name, _)| name == hole)
                         && !allowed.iter().any(|a| a == written)
+                        // Or one the author declared under `detectors:`
+                        // (docs/98 WP-12), resolved like `<a tool>` is.
+                        && self
+                            .look_up(
+                                &Field::new(f.name.clone(), Ty::Text, f.help.clone())
+                                    .names("detectors".to_string())
+                                    .names,
+                                &[],
+                                written,
+                                at,
+                                &f.name,
+                            )
+                            .is_some()
                     {
                         unknown_thing
                             .entry((hole.clone(), written.clone()))

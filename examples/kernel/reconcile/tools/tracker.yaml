@@ -1,0 +1,21 @@
+description: The issue tracker, where desired state lives.
+connect: tracker-server
+actions:
+  list-open:
+    description: List the open items for one project.
+    reads-only: yes
+    takes:
+      project: text
+    answers-with:
+      items: list of text
+  set-status:
+    description: Set one item's status.
+    takes:
+      item: text
+      status: text
+    same-request-key: item
+  write-heartbeat:
+    description: Record that the reconciler ran.
+    takes:
+      ran-at: text
+    same-request-key: ran-at

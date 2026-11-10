@@ -1,0 +1,114 @@
+{
+  "name": "Governed change",
+  "description": "An agent that proposes its own improvements, judged on replayed runs and approved by named people.",
+  "owner": "policy-team",
+  "allow-egress": [],
+  "owners": {
+    "agents/policy-writer/instructions": {
+      "owned-by": "policy-team"
+    },
+    "agents/policy-writer/limits": {
+      "owned-by": "policy-team",
+      "locked": "here-and-below"
+    }
+  },
+  "release": {
+    "asks": "may-we-publish"
+  },
+  "agents": {
+    "policy-writer": {
+      "description": "Drafts plain-language policy summaries from a policy document.",
+      "instructions": "Summarise the policy you are given in plain language. Every number in the\nsummary must appear in the policy. Quote, never paraphrase, a rule.",
+      "accepts": {
+        "policy": "text"
+      },
+      "answers-with": {
+        "summary": "text"
+      },
+      "evals": "/evals/suite.yaml",
+      "limits": {
+        "cost-per-request-under": "0.10 USD",
+        "steps-at-most": 6,
+        "when-it-runs-out": "stop-and-say-so"
+      }
+    }
+  },
+  "evals": {
+    "description": "Replays the last thirty days of real runs, writes stubbed, before any version is kept.",
+    "population": "past-runs",
+    "from-the-last": "30 days",
+    "must-pass": "90%",
+    "rules": [
+      {
+        "library": "numbers-come-from-the-source",
+        "because": "a summary that invents a figure is worse than no summary"
+      },
+      {
+        "library": "quotes-are-word-for-word",
+        "because": "a rule quoted loosely is a rule changed"
+      },
+      {
+        "must-not-contain": [
+          "in my opinion"
+        ],
+        "because": "the writer has no opinion; the policy does"
+      }
+    ]
+  },
+  "learning": {
+    "enabled": "propose-only",
+    "may-improve-on-its-own": [
+      "phrasing",
+      "examples"
+    ],
+    "needs-a-person-to-approve": [
+      "tools",
+      "permissions",
+      "limits",
+      "policy-clauses"
+    ],
+    "keep-only-if": "scores-higher-on-evals",
+    "review": "weekly",
+    "cycle-limits": {
+      "per-cycle": 3,
+      "per-month": "10 USD",
+      "evals": 500
+    },
+    "drift": {
+      "at-most": "15%"
+    },
+    "models": {
+      "execution": {
+        "role": "llm"
+      },
+      "reflection": {
+        "role": "reflector"
+      }
+    }
+  },
+  "ports": {
+    "weekly-review": {
+      "description": "Show the policy team what the writer wants to change about itself.",
+      "kind": "schedule",
+      "every": "Friday at 4pm",
+      "answers": "policy-writer",
+      "says": "List what has been proposed since last week, and what each proposal scored on the replayed runs.",
+      "if-still-running": "skip"
+    }
+  },
+  "questions": {
+    "may-we-publish": {
+      "description": "Whether a new version of the policy writer may take over.",
+      "says": "The evals passed on this version. May it take over from the current one?",
+      "answer": {
+        "publish": "yes or no",
+        "because": "text"
+      },
+      "asked-of": [
+        "policy-team"
+      ],
+      "answer-within": "2 days",
+      "if-nobody-answers": "decline"
+    }
+  }
+}

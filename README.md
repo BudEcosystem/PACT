@@ -434,7 +434,7 @@ One folder, loaded by the Rust CLI, executes over **all seven targets** and
 produces *byte-identical traces, tool sequences and model-call counts*. The claim
 is bounded and the bound is written down: it covers `instructions:`, `tools:`,
 `skills:`, `knowledge:`, `team:`, `answers-with:`, the `loop:` and the `limits:`
-ceilings — and **not** the ten governance keys the Node port reports on
+ceilings — and **not** the twelve governance keys the Node port reports on
 `unenforced`, nor the documents under `knowledge/`, which nothing on that port
 can look anything up in and which it names on `unretrieved` for every set an
 answer did not come from. See
@@ -665,11 +665,11 @@ framework is an extra.
 |---|---|
 | **Design** | Thesis, 28 binding decisions, FRD (120 requirements), 60-row refusal ledger — complete |
 | **Research** | 14 source-grounded studies, ~15,750 lines, over 140 repos (~15 GB) + 57 papers |
-| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **4505 tests (1489 Rust + 3016 adapter), clippy clean, TypeScript type-checked** |
+| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **4683 tests (1556 Rust + 3127 adapter), clippy clean, TypeScript type-checked** |
 | **Adapters** | **All 7 named targets**, proven against one shared conformance suite |
 
 ```bash
-./scripts/test-all.sh          # 4505 tests, Rust + 7 adapters, fully offline
+./scripts/test-all.sh          # 4683 tests, Rust + 7 adapters, fully offline
 ```
 
 **What is still owed** is not hidden — it lives in

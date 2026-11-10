@@ -1,0 +1,6 @@
+description: Takes payment for an order.
+instructions: |
+  Charge the card the customer gave you for their order. Refer to the card and
+  the order by what you see in the message; never ask for the number again.
+uses:
+  - payments

@@ -1,0 +1,12 @@
+# SELF-CONSISTENCY — three independent attempts, then the answer they agree on.
+#
+# `pact:loop/answer-more-than-once` says of itself "the attempts share a
+# conversation, so they are not independent samples". One line changes that:
+# `forks: yes` on the attempt stage. Each attempt starts from the question as it
+# stood when the stage began, never from the last attempt's words, and the
+# settling stage is shown every attempt's answer as a quoted record.
+#
+# What goes wrong: dropping `forks:`. The second attempt then reads the first
+# and agrees with it, and three votes are one vote counted three times.
+name: Self-consistency
+description: Three independent attempts at a question, and the answer they agree on.

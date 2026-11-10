@@ -38,7 +38,7 @@ fn tree(name: &str, files: &[(&str, &str)]) -> PathBuf {
         (
             "agents/desk.yaml",
             "description: Answers questions about an order.\ninstructions: Find the order.\n\
-             loop: compute\nuses:\n  - order-status\nteam:\n  adder: Adds figures up.\n",
+             loop: compute\nuses:\n  - order-status\n  - orders\nteam:\n  adder: Adds figures up.\n",
         ),
         (
             "agents/adder.yaml",

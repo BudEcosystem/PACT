@@ -1,0 +1,11 @@
+description: Carries out the plan, step by step, and does not change it.
+instructions: Carry out the plan in order. If a step cannot be done as written, stop and say which one.
+accepts:
+  plan: list of text
+answers-with:
+  result: text
+  done: yes or no
+needs:
+  reasoning: steady
+  prefer: cheapest
+  because: the thinking was done by the planner; this is execution

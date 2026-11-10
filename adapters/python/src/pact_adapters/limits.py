@@ -308,6 +308,10 @@ class Limits:
     #: able to quote the line the author actually wrote. Empty means a bare
     #: number, which only a spec built in code can carry — see [`Ceiling.unit`].
     cost_currency: str = ""
+    #: `cost-per-request-from:` (docs/98 WP-14): the binding a run's money
+    #: ceiling is read from at the start of each run, never above the figure
+    #: above; "" when the ceiling is the written figure alone.
+    cost_from: str = ""
     tokens_at_most: int | None = None
     #: how many times one request may put this agent to work, counting the
     #: first. Not a Ceiling row — like `steps-at-most`, it bounds the shape of
@@ -568,6 +572,7 @@ class Limits:
             asks=str(m.get("asks") or ""),
             counted_per=str(m.get("counted-per") or "").strip(),
             resets_every=seconds(m.get("resets-every")),
+            cost_from=str(m.get("cost-per-request-from") or "").strip(),
         )
 
     @property

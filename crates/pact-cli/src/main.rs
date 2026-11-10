@@ -1743,6 +1743,15 @@ fn validate(
         // workspace could carry a program in one language and a locked room that
         // cannot run it, and the first call was the only way to find out.
         pact_loader::programs::check(root, &schema, &mut diags);
+        pact_loader::closed_world::check(root, &schema, &mut diags);
+        pact_loader::termination::check(root, &mut diags);
+        pact_loader::exactly_once::check(root, &mut diags);
+        pact_loader::attenuation::check(root, &mut diags);
+        pact_loader::origins::check(root, &mut diags);
+        pact_loader::boards::check(root, &schema, &mut diags);
+        pact_loader::stopping::check(root, &mut diags);
+        pact_loader::detecting::check(root, &mut diags);
+        pact_loader::leaks::check(root, &mut diags);
         // And §8.3a rule 4, which is not a check at all: where the written rules
         // in each skill begin. The floor under them is held on the executing
         // side; this is the half that lets an author SEE the boundary, so moving

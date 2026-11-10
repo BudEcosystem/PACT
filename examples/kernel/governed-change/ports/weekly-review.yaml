@@ -1,0 +1,6 @@
+description: Show the policy team what the writer wants to change about itself.
+kind: schedule
+every: Friday at 4pm
+answers: policy-writer
+says: List what has been proposed since last week, and what each proposal scored on the replayed runs.
+if-still-running: skip

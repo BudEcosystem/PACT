@@ -1,0 +1,41 @@
+description: Work every task on the queue, including the ones that arrive while it runs.
+accepts:
+  queue: text
+  tasks: text
+answers-with:
+  done: text, optional
+starts-at: watch
+steps:
+  watch:
+    does: call
+    call: queue/watch
+    waits-for-result: no
+    bind:
+      queue: input.queue
+    then:
+      answered: work
+  work:
+    does: each
+    over: input.tasks
+    keeps-taking: yes
+    identified-by: [id]
+    limits:
+      items-at-most: 200
+      at-once-at-most: 1
+      when-it-runs-out: stop-and-say-so
+    starts-at: do
+    steps:
+      do:
+        does: call
+        call: queue/do
+        bind:
+          task: item.id
+    then:
+      answered: halt-watch
+  halt-watch:
+    does: stop
+    stops: steps.watch.run
+    then:
+      answered: reply
+  reply:
+    does: answer

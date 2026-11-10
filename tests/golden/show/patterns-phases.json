@@ -1,0 +1,107 @@
+{
+  "name": "Phases",
+  "description": "Research, then plan, then build, with only shaped answers crossing between them.",
+  "agents": {
+    "builder": {
+      "description": "Carries out the plan, step by step, and does not change it.",
+      "instructions": "Carry out the plan in order. If a step cannot be done as written, stop and say which one.",
+      "accepts": {
+        "plan": "list of text"
+      },
+      "answers-with": {
+        "result": "text",
+        "done": "yes or no"
+      },
+      "needs": {
+        "reasoning": "steady",
+        "prefer": "cheapest",
+        "because": "the thinking was done by the planner; this is execution"
+      }
+    },
+    "planner": {
+      "description": "Turns findings into an ordered plan.",
+      "instructions": "Write an ordered plan from the findings. Each step is one sentence a builder can act on.",
+      "accepts": {
+        "brief": "text",
+        "findings": "list of text"
+      },
+      "answers-with": {
+        "plan": "list of text"
+      },
+      "needs": {
+        "reasoning": "careful",
+        "because": "the plan is fixed before building starts, so it has to be right"
+      }
+    },
+    "researcher": {
+      "description": "Finds out what is already true about a request before anyone plans.",
+      "instructions": "Gather the facts that bear on this request. Report findings, not opinions.",
+      "accepts": {
+        "brief": "text"
+      },
+      "answers-with": {
+        "findings": "list of text"
+      }
+    }
+  },
+  "workflows": {
+    "deliver": {
+      "description": "Research a brief, plan from the findings, then build from the plan.",
+      "accepts": {
+        "brief": "text"
+      },
+      "answers-with": {
+        "result": "text"
+      },
+      "hides": {
+        "input.brief": [
+          "logs"
+        ]
+      },
+      "limits": {
+        "cost-per-request-under": "0.50 USD",
+        "when-it-runs-out": "stop-and-say-so"
+      },
+      "starts-at": "research",
+      "steps": {
+        "research": {
+          "does": "call",
+          "call": "researcher",
+          "bind": {
+            "brief": "input.brief"
+          },
+          "then": {
+            "answered": "plan"
+          }
+        },
+        "plan": {
+          "does": "call",
+          "call": "planner",
+          "bind": {
+            "brief": "input.brief",
+            "findings": "steps.research.findings"
+          },
+          "then": {
+            "answered": "build"
+          }
+        },
+        "build": {
+          "does": "call",
+          "call": "builder",
+          "bind": {
+            "plan": "steps.plan.plan"
+          },
+          "then": {
+            "answered": "reply"
+          }
+        },
+        "reply": {
+          "does": "answer",
+          "bind": {
+            "result": "steps.build.result"
+          }
+        }
+      }
+    }
+  }
+}

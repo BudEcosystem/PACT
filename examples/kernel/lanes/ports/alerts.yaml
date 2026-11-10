@@ -1,0 +1,17 @@
+description: Alerts from the monitoring system, as signed webhooks.
+kind: inbound-call
+through: monitoring
+answers: handle-incident
+# Unsigned arrivals are refused at the door.
+signed-with:
+  by-reference: host/monitoring-webhook-secret
+# Only the severities worth a run; the rest are dropped and the drop recorded.
+only-when:
+  - { value: input.severity, is-one-of: [high, critical] }
+# One lane per service. A second alert for the same service waits its turn,
+# and the queue is taken by severity.
+same-conversation-when: [service]
+if-still-running: queue
+ordered-by: severity
+who-can-reach-it:
+  - monitoring

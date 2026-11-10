@@ -320,6 +320,17 @@ groups:
           `remembers.<name>`, written only by the stock actions `bud/remember`
           and `bud/forget`. What a model wrote or chose waits for review under
           `learning:`; what a person wrote takes effect at once.
+      detectors:
+        # docs/98 WP-12: the Check primitive's named detectors, declared by the
+        # author beside the five built in (docs/97 §5.4).
+        type: map of group:detector
+        surface: S-GOV
+        tier: expert
+        help: >
+          things your rules can recognise beside the five built in, each named
+          and written as the patterns it looks like. A rule then says `replace
+          anything that looks like an order reference with "[ref]"`, or `{
+          value: ..., looks-like: order reference }`.
       owners:
         # 02W §2.14. Loaded and checked here; a publish that changes an owned
         # part without its owner's yes is refused by the release service.
@@ -2178,6 +2189,35 @@ groups:
         help: >
           how many thinking steps before it must stop. Eve has no such limit at
           all, so a confused agent can loop until it exhausts a token budget.
+      cost-per-request-from:
+        # docs/98 WP-14, the Allowance primitive's value: a budget a run is
+        # handed, never above the fixed `cost-per-request-under:` beside it.
+        type: text
+        needs-also: [cost-per-request-under]
+        surface: S-GOV
+        tier: expert
+        help: >
+          where this run's money ceiling comes from, when the surrounding system
+          decides it per request — `run-inputs.budget` on an agent,
+          `input.budget` in a workflow. It can only lower the ceiling:
+          `cost-per-request-under:` beside it is the most it may ever be.
+      unbounded:
+        # Law 2 of docs/97-PRIMITIVES.md, option A (docs/98 WP-3). Every cycle is
+        # metered: by the author's `steps-at-most:` or `at-most:`, or by the
+        # default every host now receives. This is the one way to have none, and
+        # it is an owner's decision, not an author's: `loader/unbounded-without-
+        # an-owner` refuses it unless `owners:` names this agent or workflow, and
+        # `loader/this-tree-may-not-stop` says on every check that the halting
+        # promise is not made for it.
+        type: yes-no
+        surface: S-GOV
+        tier: expert
+        help: >
+          `yes` takes away the step limit this agent (or the round limit of this
+          workflow's repeats) would otherwise get, so it may run for as long as
+          the work takes. Only an owner may say it: name this agent or workflow
+          under `owners:` in workspace.yaml. Without a limit nothing can promise
+          the run ever stops, and `pact check` says so every time.
       tool-calls-at-most:
         type: integer
         at-least: 1
@@ -3108,6 +3148,32 @@ groups:
           destructive. Recorded and shown; never trusted to decide anything,
           because the server wrote it.
 
+  detector:
+    describe: something a detector can have
+    fields:
+      description:
+        type: text
+        required: yes
+        surface: S-GEN
+        tier: core
+        help: what this recognises, in one line
+      looks-like:
+        type: list of text
+        required: yes
+        surface: S-GOV
+        tier: expert
+        help: >
+          the patterns it matches, as regular expressions — `ORD-[0-9]{8}`. Any
+          one matching is enough.
+      examples:
+        type: list of text
+        surface: S-GEN
+        tier: expert
+        help: >
+          values it must recognise. Each is held against the patterns before
+          the first model call, so a pattern that misses its own example stops
+          the run at the start rather than letting the value through.
+
   credential-reference:
     describe: something a credential reference can have
     fields:
@@ -3256,6 +3322,42 @@ groups:
           rather than a call to a system. The tool's arguments are offered to it
           by name. A tool reaches ONE place, so write this, or `connect:`, or
           `url:` — never two of them.
+      carries:
+        # docs/98 WP-13: the Check primitive's reachability, as data the author
+        # writes once per tool. The lethal trifecta (agentic-patterns.com): an
+        # agent that reaches private data, untrusted content and a way out can be
+        # made to leak, and `loader/three-things-that-make-a-leak` refuses one
+        # unless a person stands at the way out.
+        type: list of one-of
+        choices: [private-data, untrusted-content, a-way-out]
+        surface: S-GOV
+        tier: expert
+        help: >
+          what this tool brings into a run: `private-data` (records about
+          people, accounts, secrets), `untrusted-content` (web pages, email,
+          anything a stranger wrote), `a-way-out` (it can send something
+          outside — mail, a post, a payment). An agent that can reach all three
+          is refused unless every way out needs a person's yes.
+      rests-after:
+        # docs/98 WP-13: the Allowance primitive's revoke-for-a-period — a
+        # circuit breaker.
+        type: integer
+        at-least: 1
+        needs-also: [rests-for]
+        surface: S-GOV
+        tier: expert
+        summary: how many failures in a row before it rests
+        help: >
+          how many failures in a row before this tool is rested — `3`. While it
+          rests, a call to it is not made, and the model is told so; after
+          `rests-for:` it is tried again.
+      rests-for:
+        type: duration
+        needs-also: [rests-after]
+        surface: S-GOV
+        tier: expert
+        summary: how long it rests
+        help: how long a tool rests once `rests-after:` failures in a row put it to rest — `5m`
       actions:
         type: map of group:action
         surface: S-CAP
@@ -3511,6 +3613,45 @@ groups:
           record outside this run — say so with `durability:` on the workspace —
           and a run that cannot keep the scope you wrote tells you rather than
           quietly narrowing it.
+      writes:
+        # docs/98 WP-13: the Actor's declared write set, which a Check can read.
+        type: list of text
+        surface: S-EXEC
+        tier: expert
+        help: >
+          the places this action changes, by any name you choose — `the
+          checkout`, `orders/<id>`. Two branches of a `together`, or the items
+          of an `each`, that may write the same place at once are pointed out,
+          unless a `same-request-key:` makes them one call.
+      gets-hidden-values:
+        # docs/98 WP-11, the Origin primitive's placeholder (docs/97 §5.4): PII
+        # tokenisation and the credential broker. Hiding stays the default; this
+        # is the one door a hidden value comes back through.
+        type: yes-no
+        surface: S-GOV
+        tier: expert
+        help: >
+          `yes` lets this action receive values a redaction or `hide-values`
+          rule took out — a card number the payments system must charge. While
+          an agent uses such an action, a hidden value becomes a placeholder
+          (`⟦card-number-1⟧`) instead of `[removed]`; the model, the logs and
+          anybody approving see only the placeholder, and the real value is put
+          back in this action's arguments and nowhere else.
+      claim-lasts:
+        # docs/98 WP-7. The lease `same-request-key-across:` was waiting for
+        # (B13, docs/50-NOT-COPIED.md §6): a claim that expires frees the key,
+        # so a worker that crashed holding a task does not hold it for ever.
+        # Semantics from queue infrastructure (a visibility timeout), as
+        # docs/92-SWARM.md §6.3 asked, not invented.
+        type: duration
+        needs-also: [same-request-key]
+        surface: S-EXEC
+        tier: expert
+        help: >
+          how long one call's claim on its key lasts — `5m`. Until then a second
+          call with the same key is refused; after it the key is free again, so
+          work somebody took and never finished goes back to whoever comes next.
+          Leave it out and a claim lasts as long as its scope does.
       bind:
         # TWO namespaces now, and the second closes a hole the first could not
         # reach. `run-inputs.<name>` is what the surrounding system supplied for
@@ -3763,7 +3904,7 @@ groups:
           that is not an argument, write `value:` instead.
       value:
         type: text
-        needs-one-of: [is, is-one-of, more-than, less-than, contains-any-of, is-empty]
+        needs-one-of: [is, is-one-of, more-than, less-than, contains-any-of, is-empty, in-share, looks-like]
         surface: S-EXEC
         tier: core
         help: >
@@ -3847,6 +3988,40 @@ groups:
         help: >
           on text or a list: holds when any of these appears — the eval shape
           `must-contain:`, turned round. Words, not patterns.
+      effect:
+        # docs/98 WP-12, law 1 made usable: a policy can gate on what a call
+        # DOES, computed (`effects.rs`), instead of naming each action.
+        type: one-of
+        choices: [reads, writes, spends, cannot-be-undone]
+        surface: S-GOV
+        tier: expert
+        help: >
+          in an approval rule, beside `tool:`, holds when the action called
+          does this — `writes` (changes anything), `spends` (moves money),
+          `cannot-be-undone` (a write with no `undone-by:`), or `reads`.
+          `{ tool: payments, effect: spends }` asks before every payment action
+          the tool has, whatever it is called.
+      in-share:
+        # docs/98 WP-12: the Shape primitive's `digest`, as a condition. A
+        # stable slice of runs for a canary, decided by a fingerprint of the
+        # value, so the same run always lands on the same side.
+        type: percent
+        surface: S-GOV
+        tier: expert
+        help: >
+          beside `value:`, holds for this share of the values it could be —
+          `{ value: input.request-id, in-share: 5% }` is true for one request in
+          twenty, always the same ones, decided by a fingerprint of the value.
+      looks-like:
+        # docs/98 WP-12: the Check primitive's declared detectors, as a
+        # condition: a built-in recogniser or one in `detectors:`.
+        type: text
+        surface: S-GOV
+        tier: expert
+        help: >
+          beside `value:`, holds when the value contains something that looks
+          like this — `card number`, `email address`, or the name of one of
+          your own `detectors:`.
       is-empty:
         type: yes-no
         surface: S-EXEC
@@ -5314,7 +5489,7 @@ groups:
         # four that think (`think`, `use-tools`, `check-its-work`, `run-code`)
         # in a workflow (WF-2), and the five a workflow has in an agent's loop.
         choices: [think, use-tools, check-its-work, ask-someone, answer, run-code,
-                  call, decide, each, repeat, together]
+                  call, decide, each, repeat, together, stop]
         required: yes
         needed-when:
           asks: ask-someone
@@ -5322,6 +5497,7 @@ groups:
           chooses-between: decide
           over: each
           fuel: run-code
+          stops: stop
         surface: S-CTRL
         # Was `expert`. A workflow's stage is drawn by a no-code author in the
         # Outline (02W §2.3), so what it does is a core line.
@@ -5335,9 +5511,47 @@ groups:
           per item, `repeat` runs them again until `until:` holds, `together`
           runs its own `steps:` side by side and goes on when all of them have
           ended, `ask-someone` waits for a person, an event or the clock, and
-          `answer` hands back the result. Thinking and using tools happen inside
+          `answer` hands back the result, and `stop` stops a run an earlier
+          `call` started without waiting for it. Thinking and using tools happen inside
           an agent you call, so `think`, `use-tools`, `check-its-work` and
           `run-code` are refused in a workflow.
+      forks:
+        # docs/98 WP-10, the Store primitive's `fork` (docs/97 §2.3). On an
+        # agent's loop stage it is what makes `answer-more-than-once` honest:
+        # its own description says the attempts "share a conversation, so they
+        # are not independent samples". On a workflow's `each`, `together` or
+        # `repeat` it requires of any engine what the reference one does.
+        type: yes-no
+        surface: S-EXEC
+        tier: expert
+        help: >
+          `yes` makes each attempt at this stage start from the conversation as
+          it stood when the stage began, so no attempt reads another, and the
+          stage after it sees only what each one answered. On a workflow's
+          `each`, `together` or `repeat`: each item, branch or round starts from
+          what the run knew before the stage, and sees nothing its siblings
+          wrote.
+      keeps-taking:
+        # docs/98 WP-10: a join over a set that is still growing (LLMCompiler,
+        # a work queue). The `each` still has its `items-at-most:` ceiling.
+        type: yes-no
+        surface: S-EXEC
+        tier: expert
+        help: >
+          on an `each`, `yes` takes items added to the `over:` list while it is
+          running, too, and ends once the list has stopped growing and nothing
+          it started is still running. `items-at-most:` still bounds it.
+      stops:
+        # docs/98 WP-10: cancel by reference. What `waits-for-result: no`
+        # started, and nothing could stop until now.
+        type: text
+        summary: which detached run it ends
+        surface: S-EXEC
+        tier: expert
+        help: >
+          on a `stop` stage, the run to stop — `steps.recheck.run`, from a
+          `call` with `waits-for-result: no`. What it did is undone as its own
+          `undone-by:` says.
       says:
         type: text
         surface: S-GEN
@@ -6702,6 +6916,40 @@ groups:
         surface: S-CTRL
         tier: core
         help: how each round's value joins what is already remembered; `top <n>` over a round's best (a list) ranks the items it holds, so the best few are carried round to round
+      shared-with:
+        # docs/98 WP-8: the team store. docs/remediation/F7 refused a blackboard
+        # because "there is nothing an agent can write that another agent can
+        # read". This is that, governed: the lead declares the fact, its team
+        # reads and writes it, and every write passes the admission lines
+        # below — docs/92-SWARM.md §6.3: "the accuracy lives in the admission
+        # gate, not the queue".
+        type: one-of
+        choices: [this-agent, the-team]
+        surface: S-EXEC
+        tier: expert
+        help: >
+          who may read and write this. `this-agent` is the default: only the
+          agent that remembers it. `the-team` lets every teammate read it and
+          add to it while the request is being worked — a board they share —
+          and each addition must pass `admitted-when:` and `admitted-by:` first.
+      admitted-when:
+        type: list of group:when-this
+        surface: S-GOV
+        tier: expert
+        help: >
+          what an entry has to look like to be written here, every line holding
+          — `{ value: entry.status, is-one-of: [open, solved] }`. Read a part of
+          the entry as `entry.<part>`. An entry that fails one is refused, and
+          whoever wrote it is told which line.
+      admitted-by:
+        type: text
+        names: agents
+        surface: S-GOV
+        tier: expert
+        help: >
+          an agent that reads each entry before it is written and answers yes or
+          no — the judge between the team and the board. Its `answers-with:`
+          needs a `yes or no` line. A no is a refusal its writer is told about.
       never-from:
         # CLOSED, and it was open text in an S-EXEC field — the one hole in a
         # governance column that was never held against anything, so
@@ -6826,6 +7074,8 @@ groups:
           - bundles
           - interceptors
           - watch
+          # docs/98 WP-12: the workspace's own detectors, a collection like any other.
+          - detectors
           # A shared figure — a compliance retention period, a house spend cap.
           #
           # Listed because `what_a_bundle_may_bring_is_what_a_workspace_can_hold`
