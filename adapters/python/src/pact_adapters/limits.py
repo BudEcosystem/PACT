@@ -81,6 +81,9 @@ class Ceiling:
     unit: str
     #: The short tag reported as `RunResult.halted`.
     halted: str
+    #: Nobody wrote this figure: it is PACT's own (`ir.DEFAULT_STEPS`, law 2), so
+    #: the sentence must not tell a person it is "the limit you set".
+    default: bool = False
 
 
 @dataclass(frozen=True)
@@ -114,6 +117,20 @@ class Reached:
         happened — a message saying only "limit exceeded" leaves the reader with
         nowhere to go, which is the failure D13 rules out."""
         what = self.what
+        if self.ceiling.default:
+            whose = (
+                f"PACT's default limit, {what}, which applies when no "
+                f"`{self.ceiling.field}:` is written (write one under `limits:` to set "
+                f"your own)"
+            )
+            if self.action is Action.ASK:
+                return f"Waiting for a person: this run reached {whose}."
+            if self.action is Action.ANSWER:
+                return (
+                    f"This run reached {whose}, so it answered with what it had rather "
+                    f"than finishing the work."
+                )
+            return f"Stopped before finishing: this run reached {whose}."
         if self.action is Action.ASK:
             return f"Waiting for a person: this run reached the limit you set with {what}."
         if self.action is Action.ANSWER:
@@ -582,7 +599,9 @@ class Limits:
         meter. Reported, never dropped (T7)."""
         return ("counted-per",) if self.counted_per not in ("", "run") else ()
 
-    def ceilings(self, steps_at_most: int | None = None) -> tuple[Ceiling, ...]:
+    def ceilings(
+        self, steps_at_most: int | None = None, steps_default: bool = False
+    ) -> tuple[Ceiling, ...]:
         """Every ceiling in force, in a FIXED order.
 
         The order is the report's tie-break: when a step and a cost ceiling are
@@ -592,7 +611,7 @@ class Limits:
         """
         rows: list[Ceiling] = []
         if steps_at_most is not None:
-            rows.append(step_ceiling(steps_at_most))
+            rows.append(step_ceiling(steps_at_most, default=steps_default))
         if self.tool_calls_at_most is not None:
             rows.append(
                 Ceiling(
@@ -619,10 +638,15 @@ class Limits:
         return tuple(rows)
 
     def reached(
-        self, meter: Meter, now: float, steps_at_most: int | None = None
+        self,
+        meter: Meter,
+        now: float,
+        steps_at_most: int | None = None,
+        steps_default: bool = False,
     ) -> Reached | None:
-        """The first ceiling this run has reached, or `None`."""
-        for c in self.ceilings(steps_at_most):
+        """The first ceiling this run has reached, or `None`. `steps_default` says
+        the step ceiling is PACT's default rather than the author's."""
+        for c in self.ceilings(steps_at_most, steps_default):
             at = meter.reading(c.reads, now)
             if at >= c.limit:
                 return Reached(c, at, self.when_it_runs_out)
@@ -772,7 +796,7 @@ def _nothing_can_reach(cap: float) -> bool:
     return math.isnan(cap) or cap == math.inf
 
 
-def step_ceiling(limit: int) -> Ceiling:
+def step_ceiling(limit: int, default: bool = False) -> Ceiling:
     """The step ceiling as a row of the algebra.
 
     It is enforced by the loop's own bound rather than by `reached`, but it ends
@@ -780,7 +804,7 @@ def step_ceiling(limit: int) -> Ceiling:
     and `cost-per-request-under` drift into behaving differently, which is what
     happens whenever each limit is given its own ending.
     """
-    return Ceiling("steps-at-most", "steps", float(limit), "steps", "step-limit")
+    return Ceiling("steps-at-most", "steps", float(limit), "steps", "step-limit", default)
 
 
 #: Every way `RunResult.halted` can say "a ceiling ended this". A caller that

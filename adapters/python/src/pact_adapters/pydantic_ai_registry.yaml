@@ -172,8 +172,8 @@ fields:
     outcome: loss
     rows: [96-A6]
   agent.turns:
-    construct: "nothing yet: the turns are carried on the document and not yet passed as message_history to Agent.run"
-    outcome: loss
+    construct: "message_history on Agent.run: pydantic_ai_turns.messages_of lowers them (SystemPromptPart, UserPromptPart, ModelResponse, ToolCallPart, ToolReturnPart, docs/96 §D)"
+    outcome: mapped
     rows: [96-D]
   agent.interceptors:
     construct: "an AbstractCapability whose before_model_request / before_tool_execute hooks run interceptors.Chain"

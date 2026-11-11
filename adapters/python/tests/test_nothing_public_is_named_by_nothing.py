@@ -44,6 +44,14 @@ SRC = Path(__file__).resolve().parents[1] / "src" / "pact_adapters"
 #: _gained_a_caller` deletes it again when one appears — a list of what must stay
 #: uncalled cannot notice a fix.
 HOST_API: dict[str, str] = {
+    # docs/96 §D: `turns:` lowered to Pydantic AI's own messages. The reference
+    # harness keeps a conversation in its own dialect and has no Pydantic AI
+    # history to put them in (pact_agent refuses `message_history=`); a host on
+    # Pydantic AI (budflow-core's `authored_turns`) sends them as `message_history`.
+    "pydantic_ai_turns.messages_of": (
+        "an agent's, a variant's or a case's turns as Pydantic AI messages, for a host on "
+        "Pydantic AI to send as `message_history`"
+    ),
     # 02W §2.13: a sampled frame is drawn from finished LIVE runs. The reference
     # harness keeps no runs, so nothing in `src/` samples; a runtime that keeps
     # them (budflow-core's `budflow test --population sampled-frame`) asks this

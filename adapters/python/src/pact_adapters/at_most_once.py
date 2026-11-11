@@ -79,6 +79,10 @@ from .questions import quoted
 if TYPE_CHECKING:
     from .claims import ClaimStore
 
+#: `same-request-key: the-call` (law 3, narrowed 11 November 2026): the call's
+#: own place in the run is its identity (`RequestKeys.by_the_call`).
+THE_CALL = "the-call"
+
 #: What `step.tool.cancelled` carries when a duplicate was withheld. One
 #: spelling, because the event's `reason` is read by watches and by anyone
 #: reconstructing a run, and two spellings of one outcome is how a reader comes
@@ -122,6 +126,11 @@ class RequestKeys:
     #: How long one call's claim lasts, in seconds, per action, from
     #: `claim-lasts:` (docs/98 WP-7). Absent: as long as its scope.
     leases: dict[tuple[str, str], float] = field(default_factory=dict)
+    #: The actions that say `same-request-key: the-call`: the call's own place
+    #: in the run is its identity, which a host sends to the server as the
+    #: request's idempotency key. Nothing here holds them: two calls at two
+    #: places are two calls, and a retry of one is the host's to identify.
+    by_the_call: frozenset[tuple[str, str]] = frozenset()
 
     def __bool__(self) -> bool:
         return bool(self.keys)
@@ -140,6 +149,7 @@ class RequestKeys:
         scopes: dict[tuple[str, str], str] = {}
         leases: dict[tuple[str, str], float] = {}
         actions: dict[str, tuple[str, ...]] = {}
+        by_the_call: set[tuple[str, str]] = set()
         for tool, spec in sorted((doc.get("tools") or {}).items()):
             if tool not in used or not isinstance(spec, Mapping):
                 continue
@@ -151,6 +161,9 @@ class RequestKeys:
                 if not isinstance(body, Mapping):
                     continue
                 named = str(body.get("same-request-key") or "").strip()
+                if named == THE_CALL:
+                    by_the_call.add((str(tool), str(action)))
+                    continue
                 if named:
                     keys[(str(tool), str(action))] = named
                     across = str(body.get("same-request-key-across") or "").strip()
@@ -159,7 +172,9 @@ class RequestKeys:
                     lease = seconds(body.get("claim-lasts"))
                     if lease is not None:
                         leases[(str(tool), str(action))] = lease
-        return RequestKeys(keys=keys, actions=actions, scopes=scopes, leases=leases)
+        return RequestKeys(
+            keys=keys, actions=actions, scopes=scopes, leases=leases, by_the_call=frozenset(by_the_call)
+        )
 
     def action_of(self, tool: str, args: Mapping[str, Any]) -> str | None:
         """Which action this call names, or `None` when nothing can say.
@@ -405,6 +420,14 @@ class Ledger:
         nobody wrote.
         """
         said = {**self.cannot_tell, **self.cannot_keep}
+        for tool, action in sorted(self.keys.by_the_call):
+            said.setdefault(
+                (tool, action),
+                f"same-request-key: {tool}/{action} says `the-call`, the call's own place in "
+                "the run, and this harness sends the server no request identity of its own: "
+                "a call it tries again after a lost reply may be made twice. A host that "
+                "keeps every call (`durability:`) sends one.",
+            )
         return tuple(said[k] for k in sorted(said))
 
 

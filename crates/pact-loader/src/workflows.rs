@@ -927,10 +927,21 @@ fn calls_go_round(document: &Node, diags: &mut Diagnostics) {
         edges.insert(name.as_str(), out);
     }
     let is_agent = |name: &str| agents.is_some_and(|a| a.contains_key(name));
+    // An agent on the circle that counts its own activations (`asks-itself-at-most:`)
+    // meters it, as it meters a circle of agents alone (law 2: every cycle is metered).
+    let meters = |name: &str| {
+        agents
+            .and_then(|a| a.get(name))
+            .and_then(|e| e.node.get("limits"))
+            .is_some_and(|l| l.get("asks-itself-at-most").is_some())
+    };
     let mut reported: BTreeSet<Vec<&str>> = BTreeSet::new();
     for start in workflows.keys().map(String::as_str) {
         let mut path = vec![start];
         if let Some((circle, at)) = circle_from(&edges, &mut path) {
+            if circle.iter().any(|n| meters(n)) {
+                continue;
+            }
             let mut key = circle.clone();
             key.sort();
             if !reported.insert(key) {

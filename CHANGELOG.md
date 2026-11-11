@@ -3,6 +3,30 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — law 3 as the Bud Agent Flow corpus reads it (11 November)
+
+Running the new checker over Bud Agent Flow's 168 shipped trees refused 29 of them, all with
+`loader/repeated-with-no-claim` or `loader/a-key-that-changes-every-attempt`. Read one by one,
+three of the rule's readings were wider than law 3, and each is narrowed here with a test:
+
+- **A `together` is not repetition by itself.** Its branches are different stages, each run
+  once: an email in one branch and a chat message in the other are two calls. What repeats is
+  the *same* action called from two branches side by side, and that is still refused
+  (`two_branches_calling_the_same_write_do_it_twice`). The old reading also replaced the
+  context around a `together`, so a `together` inside a `repeat` lost the repeat; it now keeps
+  it (`a_together_inside_a_repeat_still_runs_every_round`).
+- **The stock memory tools are not held by the rule.** `bud/remember` and `bud/forget` in a
+  `repeat` are how a round leaves what it learned for the next (Reflexion's buffer); the memory
+  is the workspace's own (`a_round_may_keep_what_it_learned`).
+- **A key bound from the round's own output is a warning.** The author wrote a claim, and a
+  retry of one round produces the same output and so the same key. Whether two *different*
+  rounds aim at the same thing is an intent the checker cannot see; a rolling plan whose every
+  round posts a new update is the other reading, and the corpus has nine of them. A call with
+  no claim at all inside a `repeat` or a retry is still an error.
+
+The other trees were real defects (writes retried or repeated with no claim) and were fixed in
+Bud Agent Flow by giving each action the key its business has.
+
 ## 2026-11 — the seven primitives, built (10 November)
 
 `docs/97-PRIMITIVES.md` names seven building blocks (Shape, Origin, Store, Actor, Flow, Check,

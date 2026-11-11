@@ -92,7 +92,10 @@ fn a_fact_that_refuses_some_other_source_is_not_bothered() {
 }
 
 #[test]
-fn a_value_hidden_from_the_ai_may_not_be_handed_to_an_agent() {
+fn a_value_hidden_from_the_ai_reaches_an_agent_only_as_its_placeholder() {
+    // `hides:` puts the original back only at a write that needs it, so an agent
+    // handed a hidden value works on its placeholder: right when it carries it to
+    // a write, wrong when it must read it. The checker cannot tell which, and says so.
     let t = tree("hidden");
     edit(
         &t,
@@ -101,9 +104,13 @@ fn a_value_hidden_from_the_ai_may_not_be_handed_to_an_agent() {
         "hides:\n  steps.redact.file: [the-ai]\nkept-for: 365 days",
     );
     let (ok, said) = check(&t);
-    assert!(!ok, "{said}");
+    assert!(ok, "{said}");
     assert!(
         said.contains("rule: loader/hidden-from-the-ai-but-handed-to-it"),
+        "{said}"
+    );
+    assert!(
+        said.contains("warning:") && said.contains("placeholder"),
         "{said}"
     );
 }
