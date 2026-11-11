@@ -238,6 +238,7 @@ plugin.applies-to	one-of | S-EXEC | expert | optional
 plugin.config	map of anything | S-EXEC | expert | optional
 plugin.description	text | S-GEN | core | required
 plugin.if-it-cannot-be-loaded	one-of | S-GOV | core | optional
+plugin.implements	list of text | S-CAP | expert | optional
 plugin.package	text | S-EXEC | expert | required
 plugin.version	text | S-EXEC | expert | required
 policy.applies-to	one-of | S-EXEC | core | optional

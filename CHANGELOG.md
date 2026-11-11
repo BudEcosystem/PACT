@@ -3,6 +3,25 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — plugins under the eight laws (11 November)
+
+The plugins kind (D29), rebased onto the seven primitives, now holds the laws through the
+interfaces a plugin implements (D29 consequence 7).
+
+- **`plugin.implements:`** names the interfaces (`interface: yes` tools, procedures or sets of
+  documents) whose code the plugin supplies. A name that is not an interface is refused
+  (`loader/plugin-implements-what-is-not-an-interface`); a plugin counts as an implementation,
+  so `loader/an-interface-nothing-implements` no longer fires for one, and it may be a choice of
+  `chosen-by: run-inputs.<name>`. An agent using an interface only absent plugins implement is
+  warned (`loader/an-interface-only-an-absent-plugin-implements`).
+- **Law 1:** `pact discover`'s `effect` and `moves-money` for an agent include every interface its
+  plugins implement.
+- **Law 3:** an interface action a plugin implements that cannot be undone names
+  `same-request-key:` (`loader/a-plugin-action-with-no-claim`).
+- **Law 8:** `Learner.cycle` holds a `plugins` proposal to `pact check` before holding it for a
+  person (`checking.check_agent_field`); `explode` keeps a plugin's own `config:` whole, so a
+  package's camel-case setting names no longer make the document unexplodable.
+
 ## 2026-11 — the seven primitives, built (10 November)
 
 `docs/97-PRIMITIVES.md` names seven building blocks (Shape, Origin, Store, Actor, Flow, Check,

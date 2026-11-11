@@ -286,6 +286,31 @@ other line. The code never is.
    cannot govern code it never reads, so `allow-egress:`, `redaction.yaml` and
    the interceptor chain bound the parts of a run PACT can see and say nothing
    about a plugin's own traffic.
+7. **The laws of `97-PRIMITIVES.md` §4 hold for a plugin through the interfaces
+   it implements** (amended 2026-11-11, on master after #4). What a plugin lets an
+   agent ask is written as an interface the tree declares (`interface: yes`), and
+   the plugin names it on `implements:`; the plugin supplies the code behind it
+   and nothing about the contract.
+   - *Law 4, closed world:* `implements:` names only interfaces
+     (`loader/plugin-implements-what-is-not-an-interface`). A plugin counts as one
+     of an interface's implementations, may be a choice of `chosen-by:
+     run-inputs.<name>`, and an agent using an interface that only plugins it is
+     not loaded with implement is warned
+     (`loader/an-interface-only-an-absent-plugin-implements`). A plugin that
+     implements nothing gives an agent nothing to ask.
+   - *Law 1, closure:* an agent's computed effect includes the worst action of
+     every interface its plugins implement, named on `uses:` or not, because the
+     code is in its runtime either way. Loading a plugin never leaves an agent
+     reporting a lighter effect.
+   - *Law 3, exactly once:* an action of an interface a plugin implements that
+     cannot be undone names its `same-request-key:`
+     (`loader/a-plugin-action-with-no-claim`). The code that does it is code no
+     checker sees, so the interface is the one place a runtime retrying the call
+     can read the claim.
+   - *Law 8, one checker:* a learning proposal that changes an agent's `plugins:`
+     is held to `pact check` before it is held for a person, so nobody is asked
+     to approve a tree that does not load (`checking.check_agent_field`,
+     `learning.CHECKED_BEFORE_HELD`).
 
 ---
 

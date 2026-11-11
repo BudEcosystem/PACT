@@ -323,8 +323,8 @@ never runs a line of yours.
 
 ## What you can express
 
-**64 kinds, 544 fields.** 327 are `core` — what a non-technical author writes.
-217 are `expert`, and none of them is required for any core capability.
+**64 kinds, 545 fields.** 327 are `core` — what a non-technical author writes.
+218 are `expert`, and none of them is required for any core capability.
 
 <table>
 <tr><th align="left">Capability</th><th align="left">You write</th><th align="left">What it buys</th></tr>
@@ -540,7 +540,7 @@ for things a framework would have let you do. Declaring `spends-money: yes`
 obliges you to say what makes two calls the same call. That is the point, and it
 is still friction.
 
-**There is a vocabulary to learn.** Not code, but 64 kinds and 544 fields. The
+**There is a vocabulary to learn.** Not code, but 64 kinds and 545 fields. The
 core is 327 of them and the diagnostics name the exact line to type, but "no
 code" is not "nothing to learn".
 
@@ -667,11 +667,11 @@ framework is an extra.
 |---|---|
 | **Design** | Thesis, 29 binding decisions, FRD (120 requirements), 60-row refusal ledger — complete |
 | **Research** | 14 source-grounded studies, ~15,750 lines, over 140 repos (~15 GB) + 57 papers |
-| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **4683 tests (1556 Rust + 3127 adapter), clippy clean, TypeScript type-checked** |
+| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **4727 tests (1581 Rust + 3146 adapter), clippy clean, TypeScript type-checked** |
 | **Adapters** | **All 7 named targets**, proven against one shared conformance suite |
 
 ```bash
-./scripts/test-all.sh          # 4683 tests, Rust + 7 adapters, fully offline
+./scripts/test-all.sh          # 4727 tests, Rust + 7 adapters, fully offline
 ```
 
 **What is still owed** is not hidden — it lives in

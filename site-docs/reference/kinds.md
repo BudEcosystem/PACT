@@ -83,7 +83,7 @@ write: most workspaces use a dozen.
 | Kind | Fields | Core fields |
 |---|---:|---|
 | `bundle` | 5 | `description`, `version`, `from`, `brings` |
-| `plugin` | 6 | `description`, `if-it-cannot-be-loaded` |
+| `plugin` | 7 | `description`, `if-it-cannot-be-loaded` |
 | `port` | 22 | `description`, `kind`, `every`, `says`, `if-still-running` |
 | `resource` | 14 | `resource-kind`, `endpoint`, `auth`, `asks-to-connect`, `description` |
 | `published` | 5 | — |

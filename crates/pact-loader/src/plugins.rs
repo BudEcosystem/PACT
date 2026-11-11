@@ -23,6 +23,20 @@
 //! And one note, because a plugin that cannot be loaded and must be there is a
 //! portability fact a reviewer should see before a run finds it: every agent
 //! such a plugin applies to runs only where its package can be loaded.
+//!
+//! **The laws hold for a plugin through the interfaces it implements**
+//! (`docs/97-PRIMITIVES.md` §4). A plugin is code PACT never reads, so nothing
+//! about what it does can be computed from the code. What can be held is the
+//! contract it stands behind: `implements:` names interfaces the tree
+//! declares, and those carry every law a checker can see.
+//!
+//! | Law | Rule | Fires when |
+//! |---|---|---|
+//! | 4 closed world | `loader/plugin-implements-what-is-not-an-interface` | `implements:` names a tool, procedure or set of documents that does not say `interface: yes` |
+//! | 4 closed world | `loader/an-interface-only-an-absent-plugin-implements` (warning) | an agent uses an interface that nothing in the tree implements and that only plugins the agent is not loaded with implement |
+//! | 3 exactly once | `loader/a-plugin-action-with-no-claim` | an action of an interface a plugin implements cannot be undone and names no `same-request-key:` |
+//! | 1 closure | (`effects::of_agent`) | an agent's computed effect includes the worst action of every interface its plugins implement, so loading a plugin never leaves an agent reporting a lighter effect |
+//! | 8 one checker | (`adapters/python` `checking.check_agent_field`) | a learning proposal that changes `plugins:` is held to `pact check` before it is held for a person |
 
 use pact_diag::{Diagnostic, Diagnostics, Span};
 use pact_doc::{Entry, Map, Node, Value};
@@ -59,6 +73,59 @@ pub fn needed_by<'a>(document: &'a Node, agent: &Node) -> Vec<(&'a str, &'a Node
     out
 }
 
+/// The interfaces `plugin` says its code stands behind, as written on
+/// `implements:`, in the order written.
+pub fn implements(plugin: &Node) -> Vec<&str> {
+    match plugin.get("implements").map(|p| &p.value) {
+        Some(Value::List(items)) => items
+            .iter()
+            .filter_map(Node::as_str)
+            .map(str::trim)
+            .collect(),
+        Some(Value::Str(s)) => vec![s.trim()],
+        _ => Vec::new(),
+    }
+}
+
+/// The plugins whose `implements:` names `interface`, in name order: the
+/// implementations of it that are a package rather than an entry of the tree.
+pub fn implementing<'a>(document: &'a Node, interface: &str) -> Vec<&'a str> {
+    document
+        .get("plugins")
+        .and_then(Node::as_map)
+        .into_iter()
+        .flatten()
+        .filter(|(_, entry)| implements(&entry.node).contains(&interface))
+        .map(|(name, _)| name.as_str())
+        .collect()
+}
+
+/// The interfaces the plugins `agent` needs implement, deduplicated, in name
+/// order. What `effects::of_agent` adds to the agent's effect (law 1): the
+/// code is loaded into the runtime that runs the agent, so whatever the
+/// interface can do the agent's runtime can do.
+pub fn interfaces_loaded_for<'a>(document: &'a Node, agent: &Node) -> Vec<&'a str> {
+    let mut out: Vec<&str> = needed_by(document, agent)
+        .into_iter()
+        .flat_map(|(_, plugin)| implements(plugin))
+        .collect();
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
+/// The collection an interface name is an entry of, and the entry: tools
+/// first, then procedures, then sets of documents, the order `names:` lists.
+fn entry_named<'a>(document: &'a Node, name: &str) -> Option<(&'static str, &'a Entry)> {
+    ["tools", "skills", "knowledge"].into_iter().find_map(|collection| {
+        document
+            .get(collection)
+            .and_then(Node::as_map)
+            .and_then(|m| m.get(name))
+            .map(|entry| (collection, entry))
+    })
+}
+
 /// `if-it-cannot-be-loaded:` as written, or the default when it is not.
 pub fn if_it_cannot_be_loaded(plugin: &Node) -> &str {
     plugin
@@ -86,7 +153,135 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
             version_is_a_range(name, registry, fields, diags);
             runs_only_where_loaded(document, name, entry, diags);
         }
+        implements_interfaces(document, name, &entry.node, diags);
     }
+    interfaces_only_absent_plugins_implement(document, diags);
+}
+
+/// Law 4 and law 3 for one plugin: every name on `implements:` is an
+/// interface, and every action of one that cannot be undone names its key.
+fn implements_interfaces(document: &Node, plugin: &str, node: &Node, diags: &mut Diagnostics) {
+    let Some(line) = node.as_map().and_then(|m| m.get("implements")) else {
+        return;
+    };
+    for interface in implements(node) {
+        // A name that is nowhere: `schema/no-such-name` is already saying so.
+        let Some((collection, target)) = entry_named(document, interface) else {
+            continue;
+        };
+        if !target.node.get("interface").is_some_and(crate::workflows::said_yes) {
+            diags.push(Diagnostic::error(
+                "loader/plugin-implements-what-is-not-an-interface",
+                at(line),
+                format!(
+                    "'{plugin}' says its code implements '{interface}', and '{interface}' is \
+                     an entry of `{collection}` in its own right, not an interface — so an \
+                     agent asking '{interface}' is asking the tree's own entry, and nothing \
+                     the plugin's code does is held to a contract written here."
+                ),
+                format!(
+                    "Write `interface: yes` in '{interface}' and move what does the work into \
+                     the plugin, or take '{interface}' off `implements:`."
+                ),
+            ));
+            continue;
+        }
+        if collection == "tools" {
+            actions_claim_once(plugin, interface, &target.node, diags);
+        }
+    }
+}
+
+/// Law 3: the plugin's code performs the interface's actions where no checker
+/// sees, so an action it cannot take back carries its claim on the interface,
+/// the one place a runtime retrying the call can read it.
+fn actions_claim_once(plugin: &str, interface: &str, tool: &Node, diags: &mut Diagnostics) {
+    let Some(actions) = tool.get("actions").and_then(Node::as_map) else {
+        return;
+    };
+    for (action, entry) in actions {
+        if crate::effects::of_action(&entry.node).level != crate::effects::Level::CannotBeUndone
+            || entry.node.get("same-request-key").is_some()
+        {
+            continue;
+        }
+        diags.push(Diagnostic::error(
+            "loader/a-plugin-action-with-no-claim",
+            entry.key_span.clone(),
+            format!(
+                "'{interface}/{action}' cannot be undone and names no same-request key, and \
+                 '{plugin}' implements it in code PACT never reads — so a runtime that \
+                 retries the call, or a model that asks twice, does it twice."
+            ),
+            format!(
+                "Write `same-request-key: <argument>` on '{interface}/{action}', naming the \
+                 argument that makes two calls the same call, or `undone-by:` naming the \
+                 action that takes it back."
+            ),
+        ));
+    }
+}
+
+/// Law 4 at the agent: an interface the agent uses whose every implementation
+/// is a plugin the agent is not loaded with leaves a run of it nothing to use.
+fn interfaces_only_absent_plugins_implement(document: &Node, diags: &mut Diagnostics) {
+    let Some(agents) = document.get("agents").and_then(Node::as_map) else {
+        return;
+    };
+    for (key, agent) in agents {
+        if agent.node.get("base").is_some_and(crate::workflows::said_yes) {
+            continue;
+        }
+        let loaded: Vec<&str> = needed_by(document, &agent.node)
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect();
+        let used = agent
+            .node
+            .get("uses")
+            .map(crate::workflows::list)
+            .unwrap_or_default();
+        for used in used.into_iter().filter_map(Node::as_str).map(str::trim) {
+            let by_plugins = implementing(document, used);
+            if by_plugins.is_empty()
+                || by_plugins.iter().any(|p| loaded.contains(p))
+                || implemented_in_the_tree(document, used)
+            {
+                continue;
+            }
+            diags.push(Diagnostic::warning(
+                "loader/an-interface-only-an-absent-plugin-implements",
+                agent.key_span.clone(),
+                format!(
+                    "'{key}' uses '{used}', which only {} implement{} — and '{key}' is not \
+                     loaded with {}, so a run of it has nothing behind '{used}'.",
+                    quoted(&by_plugins),
+                    if by_plugins.len() == 1 { "s" } else { "" },
+                    if by_plugins.len() == 1 { "it" } else { "any of them" },
+                ),
+                format!(
+                    "Add {} to `plugins:` in '{key}'.",
+                    by_plugins
+                        .iter()
+                        .map(|p| format!("'{p}'"))
+                        .collect::<Vec<_>>()
+                        .join(" or ")
+                ),
+            ));
+        }
+    }
+}
+
+/// Whether an entry of the tree says `implements: <interface>`.
+fn implemented_in_the_tree(document: &Node, interface: &str) -> bool {
+    ["tools", "skills", "knowledge"].into_iter().any(|collection| {
+        document
+            .get(collection)
+            .and_then(Node::as_map)
+            .into_iter()
+            .flatten()
+            .any(|(_, e)| e.node.get("implements").and_then(Node::as_str).map(str::trim) == Some(interface))
+    })
 }
 
 /// The registry `package:` names, or `None` after saying why it names none.

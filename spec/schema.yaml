@@ -7243,6 +7243,26 @@ groups:
           who it is loaded for. `the-agents-that-name-it` is the default and is
           for a plugin one job needs. `every-agent` loads it for every agent here,
           and an agent cannot opt out by leaving it off its `plugins:` line.
+      implements:
+        # Law 4 (closed world) for code PACT never reads. What a plugin lets an
+        # agent ASK is written here as an interface the tree declares, so the
+        # contract a policy, an approval and an eval are written against is the
+        # tree's, and the plugin supplies only the code behind it. The same
+        # interface then carries law 1 (its actions' effect is the effect of
+        # every agent the plugin is loaded for) and law 3 (an action it cannot
+        # undo names its same-request key, because the code that does it is
+        # code no checker sees).
+        type: list of text
+        names: [tools, skills, knowledge]
+        surface: S-CAP
+        tier: expert
+        help: >
+          the interfaces this plugin's code stands behind, by name — entries in
+          `tools`, `skills` or `knowledge` that say `interface: yes`. An agent
+          asks the interface, so what it may do, what needs a person and what
+          it does to the world are written in this tree, and the plugin is
+          one way of doing it. Leave it out for a plugin that gives an agent
+          nothing to ask.
 
   # ── TEAMWORK ────────────────────────────────────────────────────────────────
   # How an agent waits for the people it asked for help, and how what it may
