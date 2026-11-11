@@ -3,6 +3,15 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — an action that moves hardware is held like money
+
+`moves-hardware: yes` on an action says a call moves something in the physical world: a robot arm,
+a vehicle, a valve, any actuator. It is held the way `spends-money:` is: a same-request key is
+necessary (a repeated instruction never moves the machine twice), `pact discover` prints
+`moves-hardware` beside `moves-money` for every agent and workflow, `effect: moves-hardware` in a
+policy's `when-this` names every such action, and an MCP snapshot change to one always stops or
+asks. The Python adapter reads it the same way.
+
 ## 2026-11 — the seven primitives, built (10 November)
 
 `docs/97-PRIMITIVES.md` names seven building blocks (Shape, Origin, Store, Actor, Flow, Check,

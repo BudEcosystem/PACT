@@ -200,6 +200,7 @@ pub fn inventory(found: &Found) -> J {
         let effect = pact_loader::effects::of_agent(doc, a, &mut std::collections::BTreeSet::new());
         o.insert("effect".into(), J::String(effect.word().into()));
         o.insert("moves-money".into(), J::Bool(effect.moves_money));
+        o.insert("moves-hardware".into(), J::Bool(effect.moves_hardware));
         let runnable =
             a.get("instructions").is_some() || pact_loader::deciding::decides_alone(a, &decision);
         o.insert("runnable".into(), J::Bool(runnable));
