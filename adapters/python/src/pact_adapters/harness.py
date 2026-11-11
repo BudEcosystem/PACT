@@ -1418,7 +1418,7 @@ async def run(
         many = len(spec.programs) != 1
         result.unenforced = result.unenforced + (
             (
-                f"`allow-egress:` names `programs`, so {named} "
+                f"`allow-egress:` names `programs` or is not written, so {named} "
                 f"{'are' if many else 'is'} allowed to reach outside this box. What "
                 f"{'they' if many else 'it'} can actually reach is the room's, and "
                 f"PACT never opens a carried body or watches the room."
@@ -1969,7 +1969,7 @@ async def run(
                         (
                             f"stage {phase_name!r} writes code to be run, and a hiding "
                             f"rule changed it before it ran — `allow-egress:` names "
-                            f"`programs`, so the room may reach outside and is given the "
+                            f"`programs` or is not written, so the room may reach outside and is given the "
                             f"hidden form rather than what the model wrote. What it "
                             f"worked out may not be what was asked for."
                         )

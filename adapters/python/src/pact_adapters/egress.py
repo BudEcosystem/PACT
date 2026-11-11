@@ -118,12 +118,19 @@ def listed(document: dict[str, Any]) -> str:
 def admits(document: dict[str, Any], *roles: str) -> bool:
     """Does this workspace let a binding playing any of `roles` talk outside?
 
+    A workspace that writes no `allow-egress:` draws no boundary, so it lets
+    everything out; one that writes `allow-egress: []` lets nothing out.
+
     Several roles because some bindings have more than one honest answer: a
     `graded-by:` is admitted by `judge` or by `llm`, and an agent whose
     `needs: audio: yes` says only that it must "hear or speak" is admitted by
     `stt` or by `tts` — demanding both would refuse a transcription agent for a
     reply it never speaks.
     """
+    # An absent `allow-egress:` draws no boundary, as the checker reads it;
+    # `[]` is the air-gapped desk and admits nothing.
+    if "allow-egress" not in document:
+        return True
     have = granted(document)
     for role in roles:
         if role in have:

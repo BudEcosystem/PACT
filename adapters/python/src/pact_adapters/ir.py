@@ -366,7 +366,8 @@ class ProgramSpec:
     #: The tool actions that reach it, `<tool>/<action>`, so the sentence a run
     #: reports can name where the author wrote it.
     reached_by: tuple[str, ...] = ()
-    #: Whether this workspace's `allow-egress:` names `programs`.
+    #: Whether this workspace's `allow-egress:` names `programs`, or is not
+    #: written, which draws no boundary.
     #:
     #: The eighth part of the boundary, and for a round it was decoration: no
     #: check read the word, no run reported it, and this class — the only thing a
@@ -724,7 +725,8 @@ class AgentSpec:
     #: another agent's tool reaches is not something this run could have called,
     #: so reporting it here would be a sentence about somebody else's document.
     programs: tuple[ProgramSpec, ...] = ()
-    #: Whether this workspace's `allow-egress:` names `programs`, as a fact about
+    #: Whether this workspace's `allow-egress:` names `programs` or is not
+    #: written, as a fact about
     #: the WORKSPACE rather than about one carried body.
     #:
     #: The same word `ProgramSpec.may_reach_outside` carries, read once and put in
@@ -1108,13 +1110,18 @@ def _questions_this_agent_puts(doc: dict[str, Any], agent: dict[str, Any]) -> se
 
 
 def _programs_may_reach_outside(doc: dict[str, Any]) -> bool:
-    """Does this workspace's `allow-egress:` name `programs`?
+    """Does this workspace's `allow-egress:` name `programs`, or not exist?
+
+    A workspace that writes no `allow-egress:` draws no boundary, so its
+    programs may reach outside as everything else may.
 
     One reader, two carriers: `ProgramSpec.may_reach_outside` for a host holding
     one body, and `AgentSpec.programs_may_reach_outside` for a `does: run-code`
     stage, which names no body and still has to know whether the room it is about
     to use may reach outside.
     """
+    if "allow-egress" not in doc:
+        return True
     return "programs" in [str(w).strip() for w in _as_list(doc.get("allow-egress"))]
 
 

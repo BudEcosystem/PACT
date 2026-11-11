@@ -3,6 +3,16 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — an absent `allow-egress:` draws no boundary
+
+A workspace that writes no `allow-egress:` is no longer read as air-gapped: every part of it may
+talk outside, as `nothing_reaches_outside_the_box` and the meaning-search check already read it.
+`allow-egress: []` still means nothing may leave, and every list is held exactly as before. The
+binding check (`loader/leaves-the-box`), the Python adapter's `egress.admits` and `missing_for`
+(which `resolve` filters model candidates with), the judge check and a carried program's network
+follow the one reading. An author who wants the air-gapped desk of D17 writes `allow-egress: []`;
+constraining is a declaration, and leaving it out is not one.
+
 ## 2026-11 — the seven primitives, built (10 November)
 
 `docs/97-PRIMITIVES.md` names seven building blocks (Shape, Origin, Store, Actor, Flow, Check,
