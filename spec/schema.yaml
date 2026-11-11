@@ -3571,7 +3571,12 @@ groups:
         type: text
         surface: S-EXEC
         tier: core
-        help: which argument makes two calls "the same call", so it runs once
+        help: >-
+          which argument makes two calls "the same call", so it runs once. Write `the-call`
+          when the business has no key of its own, or the flow means to repeat a write with
+          the same arguments (a reminder, a second notice): the call's own place in the run is
+          then its identity, sent to the server as the request's idempotency key, the same on
+          every retry and new for every other call. Only write it for a server that honours one.
       same-request-key-across:
         # A5. A scope on the line above it, not a second setting:
         # `at-most-once-across:` would have been a THIRD name for one act,

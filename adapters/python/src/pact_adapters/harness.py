@@ -2942,7 +2942,11 @@ async def run(
     # its own ending.
     meter.steps = limit
     return await _ran_out(
-        Reached(step_ceiling(limit), float(limit), spec.limits.when_it_runs_out),
+        Reached(
+            step_ceiling(limit, default=not spec.steps_written and not spec.unbounded),
+            float(limit),
+            spec.limits.when_it_runs_out,
+        ),
         spec=spec, transport=transport, result=result, history=history,
         already=already, bus=bus, meter=meter, now=now, clock=clock, at=limit,
         phase=phase_name, visits=visits, asking=asking, once=once, chain=chain, given=given,
