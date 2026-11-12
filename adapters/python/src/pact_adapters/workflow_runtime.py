@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Mapping
@@ -428,6 +429,9 @@ class _Run:
         **The item, where there is one.** Inside a `for each`, the decision is
         about the item; the workflow's input is what every item shares.
 
+        **An item that is one value is the `message`.** A list of texts has no
+        fields; each text is what the decision is about.
+
         **Nothing it does not accept.** What an agent reads is what `pact
         check` reasons about when it looks for a leak, and an agent handed
         every other field of the workflow as text has read things its own
@@ -439,6 +443,23 @@ class _Run:
         subject = dict(scope.input) if isinstance(scope.input, Mapping) else {}
         if isinstance(scope.item, Mapping):
             subject.update(scope.item)
+        elif scope.item is not ABSENT:
+            # An item that is ONE VALUE — `for each item in input.messages`, a
+            # list of texts — has no fields to lay over anything: it is the
+            # thing to decide about, so it is the agent's `message`. Found by
+            # Bud Agent Flow, whose commonest decision is "sort each of these
+            # texts" and whose sorter was handed the `says:` and nothing else.
+            if "message" in accepted:
+                item = scope.item
+                subject["message"] = item if isinstance(item, str) else json.dumps(
+                    item, ensure_ascii=False, sort_keys=True, default=str
+                )
+            else:
+                self.result.unenforced.append(
+                    f"a stage that '{agent}' decides, for each item of a list of single "
+                    f"values — '{agent}' accepts no `message`, so the item it was to decide "
+                    f"about could not be given to it"
+                )
         given = {k: v for k, v in subject.items() if k in accepted}
         said = (says or "").strip()
         if said:

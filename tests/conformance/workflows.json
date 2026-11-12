@@ -504,6 +504,117 @@
     ],
     "unenforced": []
    }
+  },
+  {
+   "name": "inside-a-loop-over-texts-each-text-is-what-the-sorter-is-given",
+   "tree": "tests/conformance/trees/sorted-notes",
+   "workflow": "sort-texts",
+   "input": {
+    "notes": [
+     "Your invoice is attached.",
+     "Hello from the seaside."
+    ]
+   },
+   "agents": {
+    "sorter": [
+     {
+      "shelf": "bills"
+     },
+     {
+      "shelf": "other"
+     }
+    ]
+   },
+   "expect": {
+    "answer": {},
+    "called": [],
+    "given": [
+     {
+      "agent": "sorter",
+      "given": {
+       "message": "Pick the shelf for this note.\n\nYour invoice is attached."
+      }
+     },
+     {
+      "agent": "sorter",
+      "given": {
+       "message": "Pick the shelf for this note.\n\nHello from the seaside."
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "every",
+     "every/where",
+     "every/where",
+     "answer"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "inside-a-loop-over-records-the-sorter-is-given-the-fields-it-accepts-and-nothing-else",
+   "tree": "tests/conformance/trees/sorted-notes",
+   "workflow": "sort-letters",
+   "input": {
+    "message": "the workflow's own",
+    "letters": [
+     {
+      "id": "a",
+      "message": "Your invoice is attached.",
+      "secret": "never for the sorter"
+     },
+     {
+      "id": "b",
+      "message": "Hello from the seaside.",
+      "secret": "nor this"
+     }
+    ]
+   },
+   "agents": {
+    "sorter": [
+     {
+      "shelf": "bills"
+     },
+     {
+      "shelf": "other"
+     }
+    ]
+   },
+   "expect": {
+    "answer": {},
+    "called": [],
+    "given": [
+     {
+      "agent": "sorter",
+      "given": {
+       "message": "Pick the shelf for this letter.\n\nYour invoice is attached."
+      }
+     },
+     {
+      "agent": "sorter",
+      "given": {
+       "message": "Pick the shelf for this letter.\n\nHello from the seaside."
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "every",
+     "every/where",
+     "every/where",
+     "answer"
+    ],
+    "unenforced": []
+   }
   }
  ]
 }
