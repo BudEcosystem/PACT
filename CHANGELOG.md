@@ -3,6 +3,19 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — `pact about`: the binary says which commit it was built from (13 November)
+
+A runtime pins PACT by commit and then runs whatever `pact` binary it finds. The binary could not
+say what it was, so one built from an edited checkout, or left over from another commit, passed
+every check a pin makes of the source beside it. Bud Agent Flow's pin guard asked for this.
+
+- **`pact about`** prints three lines, each `<name>: <value>`: `version:`, `commit: <40 hex, or unknown>` and
+  `uncommitted: no | yes | unknown` — whether anything the binary is built from (`crates`, `spec`,
+  `models`, `Cargo.toml`, `Cargo.lock`) differed from that commit when it was built. Both are fixed
+  at compile time (`crates/pact-cli/build.rs`). Built with no repository around it, both are
+  `unknown`.
+- A pin check compares `commit:` with its pin and refuses anything but `uncommitted: no`.
+
 ## 2026-11 — a decision as the specification says it: who is asked, what a model is shown, what is recorded (13 November)
 
 Writing a shared case for a classifier found that PACT's reference runtime read neither
