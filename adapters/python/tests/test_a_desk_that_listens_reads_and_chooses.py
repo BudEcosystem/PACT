@@ -292,3 +292,12 @@ def test_a_duplex_row_is_picked_from_its_own_entry_with_no_raw_rows() -> None:
     richer = resolve.Catalogue(entries=catalogue.entries + (duplex,), default=catalogue.default)
     plan = plan_for(doc, "front-desk", richer)
     assert plan is not None and (plan.pipeline, plan.thinks_with) == ("one-speech-model", "omni-local")
+
+
+def test_a_set_of_documents_names_its_embedder_and_its_reranker() -> None:
+    """96 §A7: `embedded-by:` and `reranked-by:` reach the runtime that indexes the set."""
+    doc = shown(TREE)
+    doc["agents"]["front-desk"]["uses"] = ["acme-policies"]  # the set itself, not its interface
+    spec = AgentSpec.from_document(doc, "front-desk", TREE)
+    (policies,) = [k for k in spec.knowledge if k.name == "acme-policies"]
+    assert (policies.embedded_by, policies.reranked_by) == ("nomic-embed-text", "bge-reranker-v2-m3")
