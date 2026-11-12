@@ -584,12 +584,32 @@ class _Asking:
         if schema is None:
             return said
         import json as _json
+        import re as _re
+        import typing as _typing
 
-        body = said[said.find("{") : said.rfind("}") + 1] or "{}"
+        body = said[said.find("{") : said.rfind("}") + 1]
         try:
             return schema(**_json.loads(body))
-        except Exception:  # noqa: BLE001 — an unreadable reply is an empty one
-            return schema()
+        except Exception:  # noqa: BLE001 — not the JSON the schema asked for
+            pass
+        # A schema of one field is answered by the reply itself: DeepEval's
+        # benchmarks ask for a bare letter (`MultipleChoiceSchema(answer=...)`)
+        # and a model that obeys the prompt sends `B`, not `{"answer": "B"}`.
+        fields = dict(getattr(schema, "model_fields", None) or {})
+        if len(fields) == 1 and said.strip():
+            (name, field), = fields.items()
+            # A field that takes one of a few words (`Literal["A", "B", "C", "D"]`)
+            # is answered by the first of them the reply says on its own:
+            # `The answer is B.` answers `B`.
+            choices = _typing.get_args(field.annotation) if _typing.get_origin(field.annotation) is _typing.Literal else ()
+            words = _re.findall(r"[A-Za-z0-9_]+", said)
+            picked = next((w for w in words if w in choices), None) if choices else said.strip()
+            if picked is not None:
+                try:
+                    return schema(**{name: picked})
+                except Exception:  # noqa: BLE001 — the reply does not fit the one field either
+                    pass
+        return schema()  # an unreadable reply is an empty one
 
     async def a_generate(self, prompt: str, schema: Any = None, **k: Any) -> Any:
         return self.generate(prompt, schema, **k)

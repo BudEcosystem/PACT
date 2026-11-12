@@ -43,8 +43,16 @@ class OllamaTransport:
         timeout: float = 180.0,
         workspace: str = "",
         _script: Script | None = None,   # accepted for interface symmetry; unused
+        api_key: str = "",
     ) -> None:
         self.model = model
+        #: What the server wants as a key, when it wants one. A model served on
+        #: this machine wants none and none is sent. A hosted server that speaks
+        #: the same `/chat/completions` does, and without this the one transport
+        #: here that reaches a real model could reach only a local one — which
+        #: is why nothing in this package had ever been run against a model its
+        #: authors do not host.
+        self._headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         #: The workspace root, so a row this machine added to its own
         #: `models/catalog.yaml` is priced and sized. This is the transport that
         #: case is FOR: a locally-served model the distribution has never heard
@@ -133,6 +141,7 @@ class OllamaTransport:
         """
         resp = httpx.post(
             self._url,
+            headers=self._headers,
             json={
                 "model": model,
                 "messages": [
@@ -257,7 +266,19 @@ class OllamaTransport:
                     "function": {
                         "name": t["name"],
                         "description": t.get("description", ""),
-                        "parameters": {"type": "object", "properties": {}},
+                        # The arguments the author wrote under `takes:`, each
+                        # with its shape as the description. This used to send
+                        # `"properties": {}` — a tool with no arguments — so a
+                        # model had to guess that `billing` wants `order` and
+                        # `amount`. A scripted model never guesses; the first
+                        # live run did, and guessed wrong.
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                str(a): _argument(str(s))
+                                for a, s in (t.get("parameters") or {}).items()
+                            },
+                        },
                     },
                 }
                 for t in tools
@@ -274,7 +295,7 @@ class OllamaTransport:
 
         started = time.perf_counter()
         async with httpx.AsyncClient(timeout=self._timeout) as client:
-            resp = await client.post(self._url, json=payload)
+            resp = await client.post(self._url, json=payload, headers=self._headers)
             resp.raise_for_status()
             data = resp.json()
         self.last_latency_s = time.perf_counter() - started
@@ -300,6 +321,25 @@ class OllamaTransport:
             for c in (message.get("tool_calls") or [])
         ]
         return text, calls
+
+
+def _argument(shape: str) -> dict[str, Any]:
+    """One argument, from the shape its author wrote under `takes:`.
+
+    The shape in the author's own words is the description, as it is on every
+    transport here. `one of a, b, c` is ALSO sent as the closed list it is: a
+    model shown `one of legal` as prose answered `Contracts`, and one shown
+    `action: one of issue-refund, look-up-invoice` has to get the word exactly
+    right for the call to mean anything."""
+    said = shape.strip()
+    choices = said.removesuffix(", optional").removeprefix("one of ")
+    if said.startswith("one of ") and choices:
+        return {
+            "type": "string",
+            "enum": [c.strip() for c in choices.split(",") if c.strip()],
+            "description": said,
+        }
+    return {"type": "string", "description": said}
 
 
 def _billed(model: str, used: Any, workspace: str = "") -> "tuple[int, float] | None":

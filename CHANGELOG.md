@@ -3,6 +3,202 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — the language writes programs: figures, patterns, and workflows in the order they run (12 November)
+
+`docs/99-THE-PACT-LANGUAGE.md` §4.3a. Nothing here is new to the specification: a `.pact` file
+can now SAY, the way a program is written, what a folder of YAML already could.
+
+### What an author can now write
+
+- **A workflow's steps as statements, in the order they run.** In a `workflow` block:
+  `plan = call planner with brief: input.brief`, `for each item in input.documents`,
+  `repeat at most 4 times`, `together`, `decide` with an `if <label>` for each way it can go,
+  `answer with result: make.result`, `stop watch.run`, `ask <question>`. The order of the lines
+  is the wiring — `starts-at:` and each stage's `then: { answered: … }` are written for you —
+  and the statements beneath an `if` come back together at whatever follows the `decide`.
+- **A step's name is a variable.** `plan.findings` is `steps.plan.findings`. A path that starts
+  with `input`, `item`, `remembers`, `values` or another word a binding starts with is left as
+  written.
+- **`takes` and `gives`** on a workflow (`accepts:`, `answers-with:`) and on a carried program
+  (`takes:`, `answers-with:`).
+- **How an agent thinks, the same way.** A `loop` block takes `think`, `use tools`,
+  `check its work`, `run code` and `answer` as statements.
+- **`let refund-limit = 200 USD`** — one entry of `values:`. `{use: refund-limit}` now stands
+  for a figure inside a sentence too: `before billing/issue-refund, when amount is more than
+  {use: refund-limit}: ask …`.
+- **`based on desk with domain: billing, cap: 0.10 USD`** — `based-on:` and `with:` on one
+  line, in any block.
+
+### What now holds
+
+- **`pact write` prints every workflow and loop this repository ships as statements**, and each
+  is read back and compared before it is used, as every block is. Wiring no order of lines can
+  say — a stage a statement cannot name — is written as the settings it is.
+- **A name no step has is told where it was read.** The checker's own
+  `loader/a-binding-to-nothing` points at `nobody.reply` on the statement's line.
+- **`examples/language/help-centre`** is one workspace in four `.pact` files: figures, a
+  pattern and two desks made from it, tools and an approval, two workflows with one calling
+  the other, a reaction, an agent that listens, and `learning:`. Both workflows are RUN by
+  `test_a_workflow_written_as_statements_runs.py`, through the reference workflow runtime.
+
+### What was wrong, and is fixed
+
+- **A learning cycle on a workspace written in the language checked the wrong tree.** A
+  proposal is held to `pact check` by copying the tree and writing the new instructions where
+  they live. In a `.pact` file they lived nowhere that code looked, so on a workspace that
+  also carries files (a set of documents) nothing was written, the author's own tree was
+  checked, and a change that breaks a rule passed. The copy is now rewritten as the folder it
+  stands for first (`pact write`, then `pact build`), and a tree in which the instructions
+  still cannot be found is refused as uncheckable instead of checked as it stands.
+
+### What a real model found
+
+The `.pact` examples were run against a live model for the first time
+(`test_the_language_runs_on_a_live_model.py`, opt-in; `gpt-4o-mini`): the refund on
+`finance-first`, a judge reading who is upset, a topic only the agent can notice, and both
+`help-centre` workflows with real agents. Nine cases pass. Four things it found are fixed,
+each with a test that needs no model:
+
+- **A tool's arguments were never sent to a served model.** `OllamaTransport` sent
+  `"properties": {}` for every tool. It sends the author's `takes:` now, `one of a, b` as a
+  closed list, and takes an `api_key` for a server that wants one.
+- **`working-on`'s arguments were a JSON schema**, which no transport reads; a provider was
+  sent three arguments called `type`, `properties` and `required`.
+- **`working-on` is not offered once every topic has been said**, on both ports. Told
+  `noted: legal`, a model said it again until its steps ran out.
+- **An agent or a person that decides is shown what it decides about.** The reference
+  workflow runtime handed both `{}`: the agent now gets the workflow's input, as much as it
+  `accepts:`, and the person the question's own `shows:`.
+
+The older opt-in live test (`test_the_phase_1_fields_reach_a_live_model.py`, the Pydantic AI
+path) was run too and passes; its one stale line expected no step ceiling, which law 2 gave
+every run on 10 November.
+
+One is written down and not fixed: an agent that `gives reply: text` ends its reply with the
+line `- reply: text`, word for word (`docs/99` §7).
+
+### What is not there
+
+Expressions. A path is a path: no arithmetic, no reassignment, and the loop variable is always
+`item`. Those are the document's rules (02W §2.0) and they are why a stage that reads
+something that may not have run is refused before anything runs.
+
+## 2026-11 — a set of documents names its embedder and its reranker to the runtime (12 November)
+
+`knowledge.embedded-by:` and `reranked-by:` were checked (`pact check` holds each to a catalogue
+row of kind `embedding` and `reranking`) and read by nothing: `KnowledgeSpec` dropped them, so a
+runtime indexed every set with its own embedder whatever the set said. `KnowledgeSpec` now carries
+`embedded_by` and `reranked_by`, `""` when not written. One test; README count 4766.
+
+Not changed here: an agent that `uses:` a knowledge interface (`interface: yes`, 96 §B1) is still
+given the interface's entry, not the set that `implements:` it.
+
+## 2026-11 — the PACT language, and reactions (12 November)
+
+Two things, specified in `docs/99-THE-PACT-LANGUAGE.md`. Neither changes anything a folder of
+YAML already says.
+
+### A workspace can be one file
+
+A `.pact` file is a second way of writing a workspace: blocks at the left margin (`agent desk`,
+`tool payments`, `workspace "Its name"`), and under each one settings (`key: value`, exactly as
+in YAML), sentences (`uses zendesk, payments`, `asks finance-desk: …`, `at most 8 steps`) and
+text blocks. `pact check team.pact` reads it directly, and every existing rule points at the
+line of the `.pact` file.
+
+- **`pact write [PATH]`** prints any workspace as one `.pact` file. **`pact build <file> --to
+  <folder>`** writes the folder a file stands for, and reads it back before it says it is done.
+- **A `.pact` file can sit at the top of a folder**, beside the things that are files by nature
+  (a knowledge set's documents, a skill's scripts). Several are read as one; anything written in
+  two places is refused.
+- **The two ways of writing cannot drift.** For every workspace under `examples/`, reading what
+  `pact write` printed gives back the document the folder gave
+  (`every_shipped_workspace_reads_back_from_what_pact_write_prints`). The printer reads each
+  block back as it writes it and falls back from a sentence to a setting where the sentence
+  would not come back the same, so a field added to the schema later round-trips with no change
+  here.
+- `examples/language/` has three: the smallest workspace there is, `finance-first` (the same
+  workspace as `examples/kernel/finance-first`), and `staff-desk` (a `.pact` file beside a
+  knowledge set's documents).
+
+### "When this happens, do that"
+
+- **`topics:`** in a workspace, and **`topics: [finance]`** on a tool, an action or a set of
+  documents. A topic's `noticed-by:` says how the runtime finds out the work has turned to it:
+  `tags` (exact), `the-agent` (it is given a `working-on` tool and says so) or `a-judge`.
+- **`events:`** — a named moment: `at:` one of six places in the loop, narrowed with `when-this:`
+  and `more-than:`; or a `topic:`; or `judged: yes`.
+- **`reactions:`** — `event:` (or the same fields inline) and `then:` a list of `remind:`,
+  `consult:`, `tell:` and `stop:`. An agent lists the ones that cover it under `reactions:`, or
+  the reaction says `applies-to: every-agent`. In the language: `when the work touches finance`
+  with what to do indented under it.
+- **`listens-for:`** on an agent — `{ topic: finance, how: asked-first }` or `{ event: …, how:
+  told-after }`. Every other agent's work is what it hears; no other file changes.
+- A `consult` before a tool call **holds the call**: the consulted agent's answer comes back in
+  the call's place, and the model can make the call again. A held call is not put to a person
+  for approval in the same step.
+
+### What holds
+
+- **A guess does not stop a run** (`loader/a-guess-cannot-stop`). `stop:` on a judgement, or on
+  a topic the agent or a judge notices, is refused; a guess may `remind:` or `consult:`.
+- **A reaction waits for one thing** (`loader/a-signal-says-one-thing`), names a call that is
+  there (`loader/a-signal-names-no-such-call`), and narrows only a moment that is about a call
+  (`loader/a-narrowing-with-nothing-to-narrow`). Five more rules are in `reactions.rs`.
+- **A reaction does not wake itself.** While one is carried out it does not fire again beneath
+  itself, so however agents consult each other, the consulting ends.
+- **A consulted agent is paid from the run that woke it**, against the same `limits:`.
+- What a run has already reacted to **survives a park** (`Suspension.reactions`).
+- The TypeScript port offers the `working-on` tool and names every reaction it does not carry
+  out on `unenforced`.
+- **What an agent woken said is written down with the run.** Each entry of
+  `RunResult.reactions` carries `heard:` — which agent, `asked-first` or `told-after`, and its
+  words. `tell:`'s own help promised this and the record held only "told auditor".
+
+### Where to read about it
+
+- `README.md` has a section for each: the tutorial again as one file, and events and reactions.
+- `site-docs/guide/first-agent-in-one-file.md` is the tutorial, step by step, with real output.
+- `site-docs/reference/language.md` is every block, sentence, signal and `lang/` rule.
+- `site-docs/reference/reactions.md` is every field of the five kinds, the six moments, what a
+  held call does, and what a run reports.
+- `crates/pact-lang/README.md` is for somebody changing the reader or the printer.
+- `examples/language/README.md` and `examples/kernel/finance-first/README.md` walk the examples.
+
+### What an existing workspace will notice
+
+Nothing, unless it has a setting called `topics`, `events`, `reactions` or `listens-for` under
+an `x-` prefix it meant to keep. Three counts moved: 68 kinds (was 63), 569 keywords (was 536),
+342 closed-choice words (was 333).
+
+## 2026-11 — a catalogue row carries its voices, languages, sessions and dimensions (12 November)
+
+`model-can.voices`, `languages`, `sessions` and `dimensions` were checked by `pact check` for a
+`voice:` that names its models, and read by nothing else: `ModelEntry` dropped them, so a host
+that binds a model the tree does not name had no row to hold it to, and `voice.plan_for` read
+`sessions` from the raw rows beside the entry. Now:
+
+- **`ModelEntry` carries the four lines** (`voices`, `languages`, `sessions`, `dimensions`), read
+  where `regions` and `first_words_ms` are; a line the row leaves out is not said, never a guess.
+- **`ModelEntry.fits_voice(plan, role)`** holds the model a host binds for a voice plan as the
+  loader holds a named one (`crates/pact-loader/src/voice.rs`): the speaker must have the voice
+  `speaks-as:` names, every model listening or speaking must handle each of `languages:` (`en`
+  covers `en-GB`), and the one model of a plan that talks both at once must hold a duplex session.
+- **`voice.plan_for` reads `sessions` off the entry**; `rows=` is still read beside it for a caller
+  that builds entries by hand.
+- **A benchmark's `with:` reaches DeepEval as DeepEval takes it.** `run_deepeval` passed `with:` as
+  written, and a word where the benchmark's constructor takes a member of its enum
+  (`MMLU(tasks=[MMLUTask.…])`) crashed inside DeepEval; each such word is now read into that
+  member (`tasks: [high_school_computer_science]`), and one the enum lacks is refused naming some
+  it has.
+- **A DeepEval benchmark is answered by a model that obeys its prompt.** `AskModel.generate` read
+  only JSON when a schema was asked for, and DeepEval's MMLU asks for a bare letter: every question
+  raised `answer Field required`. A one-field schema now takes the reply itself, and a field of
+  a few words (`Literal["A", "B", "C", "D"]`) the first of them the reply says. A package a
+  benchmark imports only when it runs (`pandas`) is refused naming it, not raised. Measured
+  through Bud Agent Flow's `budflow benchmark run`: gpt-4o-mini, 90 on twenty MMLU
+  high-school computer science questions.
+
 ## 2026-11 — law 3 as the Bud Agent Flow corpus reads it (11 November)
 
 Running the new checker over Bud Agent Flow's 168 shipped trees refused 29 of them, all with

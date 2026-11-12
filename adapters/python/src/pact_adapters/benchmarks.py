@@ -22,6 +22,8 @@ says so when it cannot.
 from __future__ import annotations
 
 import datetime as _dt
+import enum
+import typing
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -176,6 +178,60 @@ def run_deepeval(
     cls = getattr(shipped, class_name, None)
     if cls is None:
         raise Unrecordable(f"DeepEval has no benchmark called {class_name!r}")
-    result = cls(**dict(benchmark.with_ or {})).evaluate(model=AskModel(model, ask))
+    try:
+        result = cls(**_settings_for(cls, benchmark.with_ or {})).evaluate(model=AskModel(model, ask))
+    except ImportError as missing:  # DeepEval imports what a benchmark needs only when it runs
+        raise Unrecordable(
+            f"DeepEval's {class_name} needs {missing.name or missing}, which is not installed here: "
+            f"`pip install {missing.name or 'it'}`"
+        ) from missing
     accuracy = float(getattr(result, "overall_accuracy", result))
     return accuracy * 100.0 if benchmark.scale == "percent" else accuracy
+
+
+def _settings_for(cls: Any, written: Mapping[str, Any]) -> dict[str, Any]:
+    """A benchmark's `with:` as its own constructor takes it.
+
+    YAML has no enums, and DeepEval's benchmarks take their subsets as members
+    of one (`MMLU(tasks=[MMLUTask.HIGH_SCHOOL_COMPUTER_SCIENCE])`), so a word
+    written where the constructor's annotation names an enum becomes the member
+    whose value or name it is (`tasks: [high_school_computer_science]`). Any
+    other setting (`n_shots: 5`, `n_problems_per_task: 20`) is passed as written.
+    A word the enum does not have is refused, naming some that it does.
+    """
+    try:
+        hints = typing.get_type_hints(cls.__init__)
+    except Exception:  # an annotation this Python cannot resolve: nothing to read words into
+        hints = {}
+    out: dict[str, Any] = {}
+    for key, value in written.items():
+        kind = _enum_in(hints.get(str(key)))
+        if kind is None:
+            out[str(key)] = value
+        elif isinstance(value, list | tuple):
+            out[str(key)] = [_member(kind, v, str(key)) for v in value]
+        else:
+            out[str(key)] = _member(kind, value, str(key))
+    return out
+
+
+def _enum_in(hint: Any) -> "type[enum.Enum] | None":
+    """The enum an annotation names, through `Optional[List[...]]` and the like, or None."""
+    if isinstance(hint, type) and issubclass(hint, enum.Enum):
+        return hint
+    for arg in typing.get_args(hint):
+        found = _enum_in(arg)
+        if found is not None:
+            return found
+    return None
+
+
+def _member(kind: "type[enum.Enum]", value: Any, key: str) -> enum.Enum:
+    if isinstance(value, kind):
+        return value
+    word = str(value).strip().lower()
+    for member in kind:
+        if word in (str(member.value).lower(), member.name.lower()):
+            return member
+    some = ", ".join(str(m.value) for m in list(kind)[:5])
+    raise Unrecordable(f"`with: {key}:` names {value!r}, which {kind.__name__} does not have (it has {some}, …)")

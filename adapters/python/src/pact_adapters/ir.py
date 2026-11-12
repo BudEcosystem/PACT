@@ -27,6 +27,7 @@ from .loops import STANDARD, Loop
 from .moments import FailurePlan, Moment, RegionLimits
 from .detectors import declared_in
 from .rests import rules_of as rests_of
+from .reactions import Reactions
 from .questions import Gate, Rejected, Shape, questions_for
 from .suspension import PauseRule
 from .watches import Watches
@@ -336,6 +337,12 @@ class KnowledgeSpec:
     #: The file names the payload walker found, for a runtime that needs to know
     #: what it is indexing without re-walking the tree.
     documents: tuple[str, ...] = ()
+    #: `embedded-by:` and `reranked-by:` (96 §A7): the catalogue ids of the model
+    #: that turns these documents and every question about them into numbers,
+    #: and of the one that orders what was found. `""` when not written: the
+    #: runtime's own embedder, and the order the passages were found in.
+    embedded_by: str = ""
+    reranked_by: str = ""
 
 
 @dataclass(frozen=True)
@@ -628,6 +635,11 @@ class AgentSpec:
     #: watch changes nothing, so making somebody name it twice would buy nothing
     #: and would let an agent quietly stop being watched by deleting one line.
     watches: Watches = field(default_factory=Watches)
+    #: Every reaction that covers this agent (docs/99): the workspace's that say
+    #: `every-agent`, the ones this agent names, and every OTHER agent's
+    #: `listens-for:` line — a subscription is a reaction written from the
+    #: other side. Resolved here for the reason `chain` is.
+    reactions: Reactions = field(default_factory=Reactions)
     #: How this agent waits for its team and how it shares out what it may spend
     #: on them, read from the author's `teamwork.yaml`. Resolved here for the
     #: same reason `loop`, `context_policy` and `chain` are, and it was the last
@@ -948,6 +960,8 @@ class AgentSpec:
                 do_not_use_when=_text(k.get("do-not-use-when", "")),
                 if_unsure=_text(k.get("if-unsure", "")),
                 documents=_document_names(k.get("documents")),
+                embedded_by=_text(k.get("embedded-by", "")),
+                reranked_by=_text(k.get("reranked-by", "")),
             )
             for n, k in sorted((doc.get("knowledge") or {}).items())
             if n in set(_as_list(a.get("uses"))) and isinstance(k, Mapping)
@@ -1001,6 +1015,7 @@ class AgentSpec:
             ),
             chain=Chain.from_document(doc, agent_key, root),
             watches=Watches.from_document(doc, root),
+            reactions=Reactions.from_document(doc, agent_key),
             # A bad `teamwork.yaml` now raises `BadTeamwork` here, at spec-build
             # time — the same shape `Loop.resolve` already has one line up, and
             # the reason `check()` was written to run at load rather than

@@ -1,0 +1,3 @@
+resource-kind: mcp-server
+endpoint: host/back-office
+description: Where the billing and order systems are reached.
