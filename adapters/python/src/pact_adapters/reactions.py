@@ -487,6 +487,9 @@ class Reactor:
         woken is told has happened."""
         out = Outcome()
         did: list[str] = []
+        #: What each agent woken said, so "its answer is written down with the
+        #: run" is true of the run's own record and not only of the model's view.
+        heard: list[dict[str, str]] = []
         for step in r.then:
             if step.verb == "remind":
                 if step.value not in self.reminders:
@@ -523,6 +526,11 @@ class Reactor:
                     )
                 else:
                     did.append(f"{'asked' if asked_first else 'told'} {step.value}")
+                    heard.append({
+                        "agent": step.value,
+                        "how": "asked-first" if asked_first else "told-after",
+                        "said": said,
+                    })
                     if not asked_first:
                         continue
                     advice = f"{step.value} was asked first about this, and said: {said}"
@@ -530,7 +538,9 @@ class Reactor:
                     out.held = (out.held + "\n\n" if out.held else "") + advice
                 elif advice not in self.reminders:
                     self.reminders.append(advice)
-        entry = {"reaction": r.name, "at": at, "did": did, "certainty": certainty}
+        entry: dict[str, Any] = {"reaction": r.name, "at": at, "did": did, "certainty": certainty}
+        if heard:
+            entry["heard"] = heard
         self.log.append(entry)
         self.bus.emit("step.reaction.completed", at=(at,), name=r.name, did=list(did))
         return out

@@ -61,6 +61,19 @@ line of the `.pact` file.
 - What a run has already reacted to **survives a park** (`Suspension.reactions`).
 - The TypeScript port offers the `working-on` tool and names every reaction it does not carry
   out on `unenforced`.
+- **What an agent woken said is written down with the run.** Each entry of
+  `RunResult.reactions` carries `heard:` — which agent, `asked-first` or `told-after`, and its
+  words. `tell:`'s own help promised this and the record held only "told auditor".
+
+### Where to read about it
+
+- `README.md` has a section for each: the tutorial again as one file, and events and reactions.
+- `site-docs/guide/first-agent-in-one-file.md` is the tutorial, step by step, with real output.
+- `site-docs/reference/language.md` is every block, sentence, signal and `lang/` rule.
+- `site-docs/reference/reactions.md` is every field of the five kinds, the six moments, what a
+  held call does, and what a run reports.
+- `crates/pact-lang/README.md` is for somebody changing the reader or the printer.
+- `examples/language/README.md` and `examples/kernel/finance-first/README.md` walk the examples.
 
 ### What an existing workspace will notice
 

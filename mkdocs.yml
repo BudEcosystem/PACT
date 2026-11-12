@@ -48,8 +48,11 @@ nav:
       - Tool schemas from the server: guide/mcp-schemas.md
       - When something happens: guide/events-and-reactions.md
       - One file instead of a folder: guide/the-pact-language.md
+      - Your first agent, in one file: guide/first-agent-in-one-file.md
   - Reference:
       - The 68 kinds: reference/kinds.md
+      - The PACT language: reference/language.md
+      - Topics, events and reactions: reference/reactions.md
       - Command line: reference/cli.md
       - Adapters and the lattice: reference/adapters.md
   - Status:

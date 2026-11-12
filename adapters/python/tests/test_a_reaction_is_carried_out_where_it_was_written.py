@@ -173,6 +173,15 @@ def test_the_finance_desk_is_asked_before_the_refund_and_the_auditor_told_after(
         ("finance-desk listens for finance", ["asked finance-desk"]),
         ("auditor listens for refund-issued", ["told auditor"]),
     ]
+    # `tell:`'s help says what the agent told answers "is written down with the
+    # run". The model never sees it, so the run's own record is the only place
+    # it can be — and it survives the park, with the finance desk's answer.
+    assert [r["heard"] for r in after.reactions] == [
+        [{"agent": "finance-desk", "how": "asked-first",
+          "said": "A refund needs the order number and the reason."}],
+        [{"agent": "auditor", "how": "told-after",
+          "said": "A refund needs the order number and the reason."}],
+    ]
     assert after.unenforced == ()
 
 

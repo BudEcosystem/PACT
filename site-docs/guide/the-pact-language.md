@@ -137,3 +137,10 @@ them; move the ones worth keeping by hand.
     A fix that tells you to add a file — *"Add a file `tools/zendesk.yaml`"* —
     still names the folder form when the mistake is in a `.pact` file. The
     block to write is `tool zendesk`.
+
+## More
+
+- [Your first agent, in one file](first-agent-in-one-file.md): the tutorial,
+  step by step.
+- [The PACT language](../reference/language.md): every block, sentence,
+  signal and rule, and where each lives in the code.

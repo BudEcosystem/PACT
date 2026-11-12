@@ -146,3 +146,9 @@ offers the `working-on` tool so both show the model the same tools, and names
 every reaction it did not carry out on `RunResult.unenforced`. With nothing to
 run another agent, or no model to judge with, the Python harness says the same
 way what it could not do.
+
+## More
+
+[Topics, events, reactions and subscriptions](../reference/reactions.md) is
+the full reference: every field, the six moments, what a held call does step
+by step, and what a run reports.
