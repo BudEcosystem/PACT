@@ -92,6 +92,41 @@ pub fn word_for(collection: &str) -> Option<&'static str> {
         .map(|(w, _)| *w)
 }
 
+/// Where a binding starts (`crates/pact-loader/src/bindings.rs`). A path that
+/// starts with none of these, in a statement, is a step's answer.
+pub(crate) const BINDING_ROOTS: &[&str] = &[
+    "input",
+    "steps",
+    "item",
+    "latest-update",
+    "remembers",
+    "run-inputs",
+    "values",
+    "used",
+];
+
+/// A binding as a statement says it, as the document holds it: `review.verdict`
+/// is `steps.review.verdict`, and a path that starts with one of the words a
+/// binding starts with is left as written.
+pub(crate) fn bound(said: &str) -> String {
+    let root = said.split('.').next().unwrap_or(said);
+    if said.is_empty() || said.starts_with('"') || BINDING_ROOTS.contains(&root) {
+        said.to_string()
+    } else {
+        format!("steps.{said}")
+    }
+}
+
+/// The other way: `steps.review.verdict` is said `review.verdict` — unless the
+/// step is named like one of the words a binding starts with, where taking
+/// `steps.` off would change what the path means.
+pub(crate) fn unbound(held: &str) -> &str {
+    match held.strip_prefix("steps.") {
+        Some(rest) if !rest.is_empty() && bound(rest) == held => rest,
+        _ => held,
+    }
+}
+
 /// A name made from a sentence: lower-case words joined by `-`.
 ///
 /// `when the work touches finance` is the reaction
@@ -111,6 +146,25 @@ pub fn slug(sentence: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_step_is_read_by_its_name_and_everything_else_as_written() {
+        for (said, held) in [
+            ("review.verdict", "steps.review.verdict"),
+            ("input.documents", "input.documents"),
+            ("item.id", "item.id"),
+            ("remembers.frontier", "remembers.frontier"),
+            ("values.limit", "values.limit"),
+            ("steps.input.x", "steps.input.x"),
+        ] {
+            assert_eq!(bound(said), held);
+            assert_eq!(bound(unbound(held)), held, "{held} does not come back");
+        }
+        assert_eq!(unbound("steps.review.verdict"), "review.verdict");
+        // A step called `input` keeps its `steps.`: without it the path would
+        // read the workflow's input.
+        assert_eq!(unbound("steps.input.x"), "steps.input.x");
+    }
 
     #[test]
     fn a_slug_is_the_words_of_the_sentence() {

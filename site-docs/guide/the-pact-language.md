@@ -49,6 +49,9 @@ The sentences are for the lines people write most.
 | tool, knowledge | `about finance, tax` | `topics:` |
 | policy | `before payments/issue-refund, when amount is more than 200 USD: ask is-this-ok, because a large refund is a management decision` | one `ask-a-person:` rule |
 | anywhere | `when the work touches finance`, with what to do indented under it | a [reaction](events-and-reactions.md) |
+| any block | `based on desk with domain: billing, cap: 0.10 USD` | `based-on:` and `with:` |
+| workflow | `plan = call planner with brief: input.brief` · `for each item in …` · `decide` · `answer with …` | the workflow's steps, [in the order they run](programs-in-the-language.md) |
+| top of the file | `let refund-limit = 200 USD` | one entry of `values:` |
 
 A line that is none of the three is refused, on that line, with the nearest
 sentence:
@@ -140,6 +143,9 @@ them; move the ones worth keeping by hand.
 
 ## More
 
+- [Variables, functions and loops](programs-in-the-language.md): workflows
+  written as programs, constants, templates with parameters, and one
+  workspace in several files.
 - [Your first agent, in one file](first-agent-in-one-file.md): the tutorial,
   step by step.
 - [The PACT language](../reference/language.md): every block, sentence,

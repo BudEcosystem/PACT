@@ -3,6 +3,60 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — the language writes programs: figures, patterns, and workflows in the order they run (12 November)
+
+`docs/99-THE-PACT-LANGUAGE.md` §4.3a. Nothing here is new to the specification: a `.pact` file
+can now SAY, the way a program is written, what a folder of YAML already could.
+
+### What an author can now write
+
+- **A workflow's steps as statements, in the order they run.** In a `workflow` block:
+  `plan = call planner with brief: input.brief`, `for each item in input.documents`,
+  `repeat at most 4 times`, `together`, `decide` with an `if <label>` for each way it can go,
+  `answer with result: make.result`, `stop watch.run`, `ask <question>`. The order of the lines
+  is the wiring — `starts-at:` and each stage's `then: { answered: … }` are written for you —
+  and the statements beneath an `if` come back together at whatever follows the `decide`.
+- **A step's name is a variable.** `plan.findings` is `steps.plan.findings`. A path that starts
+  with `input`, `item`, `remembers`, `values` or another word a binding starts with is left as
+  written.
+- **`takes` and `gives`** on a workflow (`accepts:`, `answers-with:`) and on a carried program
+  (`takes:`, `answers-with:`).
+- **How an agent thinks, the same way.** A `loop` block takes `think`, `use tools`,
+  `check its work`, `run code` and `answer` as statements.
+- **`let refund-limit = 200 USD`** — one entry of `values:`. `{use: refund-limit}` now stands
+  for a figure inside a sentence too: `before billing/issue-refund, when amount is more than
+  {use: refund-limit}: ask …`.
+- **`based on desk with domain: billing, cap: 0.10 USD`** — `based-on:` and `with:` on one
+  line, in any block.
+
+### What now holds
+
+- **`pact write` prints every workflow and loop this repository ships as statements**, and each
+  is read back and compared before it is used, as every block is. Wiring no order of lines can
+  say — a stage a statement cannot name — is written as the settings it is.
+- **A name no step has is told where it was read.** The checker's own
+  `loader/a-binding-to-nothing` points at `nobody.reply` on the statement's line.
+- **`examples/language/help-centre`** is one workspace in four `.pact` files: figures, a
+  pattern and two desks made from it, tools and an approval, two workflows with one calling
+  the other, a reaction, an agent that listens, and `learning:`. Both workflows are RUN by
+  `test_a_workflow_written_as_statements_runs.py`, through the reference workflow runtime.
+
+### What was wrong, and is fixed
+
+- **A learning cycle on a workspace written in the language checked the wrong tree.** A
+  proposal is held to `pact check` by copying the tree and writing the new instructions where
+  they live. In a `.pact` file they lived nowhere that code looked, so on a workspace that
+  also carries files (a set of documents) nothing was written, the author's own tree was
+  checked, and a change that breaks a rule passed. The copy is now rewritten as the folder it
+  stands for first (`pact write`, then `pact build`), and a tree in which the instructions
+  still cannot be found is refused as uncheckable instead of checked as it stands.
+
+### What is not there
+
+Expressions. A path is a path: no arithmetic, no reassignment, and the loop variable is always
+`item`. Those are the document's rules (02W §2.0) and they are why a stage that reads
+something that may not have run is refused before anything runs.
+
 ## 2026-11 — a set of documents names its embedder and its reranker to the runtime (12 November)
 
 `knowledge.embedded-by:` and `reranked-by:` were checked (`pact check` holds each to a catalogue

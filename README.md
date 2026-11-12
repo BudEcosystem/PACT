@@ -403,6 +403,80 @@ error: This line is not a setting, and not a sentence this kind of block knows.
   rule: lang/not-a-line
 ```
 
+### Variables, functions and loops
+
+A **workflow** is a flow of work that belongs to no single agent. In a `.pact`
+file it is written like a function: what it takes, what it gives, and its
+steps in the order they run.
+
+```text
+let large-refund = 200 USD                  # a constant
+
+workflow route                              # a function
+  description: Send one message to the right desk.
+  takes message: text, channel: text
+  gives reply: text, optional
+
+  where = decide                            # a branch
+    by:
+      - { agent: sorter }
+    if billing
+      bill = call billing-desk with message: input.message
+      reply-bill = answer with reply: bill.reply       # `bill` is a variable
+    if tech
+      fix = call tech-desk with message: input.message
+      reply-fix = answer with reply: fix.reply
+
+workflow clear-inbox
+  description: Route every message in an inbox.
+  takes messages: list of message
+  gives replies: text, optional
+
+  every = for each item in input.messages   # a loop
+    identified-by: [id]
+    limits:
+      items-at-most: 50
+      when-it-runs-out: stop-and-say-so
+    one = call route with message: item.text, channel: item.channel   # one function calls another
+  answer with replies: every.reply
+```
+
+| You want | You write |
+|---|---|
+| a constant | `let refund-limit = 200 USD`, used as `{use: refund-limit}` |
+| a variable | `plan = call planner …`, then `plan.findings` |
+| a function, and a call | `workflow <name>` with `takes` and `gives`; `call <name> with …` |
+| a loop | `for each item in <list>` · `repeat at most 4 times`, with `until:` beneath |
+| a branch | `decide`, with an `if <label>` for each way it can go |
+| things at once | `together` |
+| a template with parameters | `agent desk` with `base: yes` and `expects:`; then `based on desk with domain: billing, cap: 0.10 USD` |
+
+None of this is new machinery: the checked document already had each of
+these, and the checker already had rules for them. So a name no step has is
+caught before anything runs, at the place it was written:
+
+```
+error: 'answer' reads 'steps.nobody.reply', and this workflow has no stage called 'nobody' there.
+  --> hello.pact:14:22
+   |
+14 |   answer with reply: nobody.reply
+   |                      ^^^^^^^^^^^^
+  fix: Use one of the names offered: `steps.greet`, `steps.answer`.
+  rule: loader/a-binding-to-nothing
+```
+
+Two things are left out on purpose: there is no arithmetic and no
+reassignment. What a step is given is a path to a value, which is what lets
+the checker prove what has run before what.
+
+A workspace can be **several `.pact` files** in one folder, split by subject.
+[`examples/language/help-centre`](examples/language/help-centre) is four
+files: figures, a pattern and two desks made from it, tools and an approval,
+the two workflows above, a reaction, an agent that listens, and a `learning`
+block that says the system may propose improvements and a person decides.
+
+Guide: [`site-docs/guide/programs-in-the-language.md`](site-docs/guide/programs-in-the-language.md).
+
 ### Going between the file and the folder
 
 ```bash
@@ -858,6 +932,7 @@ as text nobody here reviewed (`a2a_bridge`).
 | [`examples/patterns/`](examples/patterns) | Eight orchestration patterns: debate, quorum, race, swarm, pipeline, weighted, escalation, first-answer |
 | [`examples/kernel/finance-first`](examples/kernel/finance-first) | Topics, events and reactions: the finance desk is asked before money moves, the auditor is told after |
 | [`examples/language/`](examples/language) | The same workspaces as one `.pact` file each: the smallest one there is, `finance-first`, and one beside a folder of documents |
+| [`examples/language/help-centre`](examples/language/help-centre) | Everything together in four `.pact` files: named figures, a pattern and two desks made from it, two workflows written as programs with one calling the other, a reaction, an agent that listens, learning |
 | [`tests/trees/`](tests/trees) | Twenty fixtures, each the smallest tree that shows one thing |
 | [`tests/parity/`](tests/parity) | The Pydantic AI parity suite: one fixture per row Phase 1 compiles, and what each must show |
 
@@ -886,6 +961,7 @@ the spec. Every one is checked by `pact check` and held by the harness. The deta
 | Added | What you write | What it does |
 |---|---|---|
 | **One file instead of a folder** | `agent desk` / `uses zendesk, payments` / `at most 8 steps` in a `.pact` file | the same workspace, read by the same checker; `pact write` prints any folder as one file and `pact build` writes the folder back, and a test holds that every shipped workspace reads the same both ways ([guide](site-docs/guide/the-pact-language.md)) |
+| **Variables, functions and loops** | `let limit = 200 USD` · `plan = call planner with brief: input.brief` · `for each item in …` · `decide` / `if billing` · `based on desk with domain: billing` | a workflow written as a program in a `.pact` file: the order of the lines is the wiring and a step's name is a variable; the same stages, checked by the same rules |
 | **When this happens, do that** | `reactions:` with `remind:`, `consult:`, `tell:`, `stop:`; `topics:` on a tool; `listens-for:` on an agent | a reminder, another agent asked first or told after, at a moment of the run or when the work turns to a topic; a call is held while the agent that asked to hear about it is consulted; a guess may advise and may not stop ([guide](site-docs/guide/events-and-reactions.md)) |
 | **Values known only at run time** | `{{run-inputs.brand}}`, `{{remembers.tone}}` in `instructions:` | the system fills them before the model reads the words; a hole that names nothing the agent declares is refused; `\{{...}}` keeps braces for the model |
 | **Fallback models** | `model: [qwen2.5-14b-instruct, qwen2.5-7b-instruct]` | the next model is tried only when a call fails at the provider; each one is held to `allow-egress:` and `needs:` |
@@ -922,11 +998,11 @@ framework is an extra.
 |---|---|
 | **Design** | Thesis, 28 binding decisions, FRD (120 requirements), 60-row refusal ledger — complete |
 | **Research** | 14 source-grounded studies, ~15,750 lines, over 140 repos (~15 GB) + 57 papers |
-| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **4766 tests (1602 Rust + 3164 adapter), clippy clean, TypeScript type-checked** |
+| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **4800 tests (1623 Rust + 3177 adapter), clippy clean, TypeScript type-checked** |
 | **Adapters** | **All 7 named targets**, proven against one shared conformance suite |
 
 ```bash
-./scripts/test-all.sh          # 4766 tests, Rust + 7 adapters, fully offline
+./scripts/test-all.sh          # 4800 tests, Rust + 7 adapters, fully offline
 ```
 
 **What is still owed** is not hidden — it lives in

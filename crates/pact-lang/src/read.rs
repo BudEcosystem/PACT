@@ -28,6 +28,10 @@
 //! | reaction, event | `when <signal>` | the signal's fields |
 //! | reaction | `remind it: <text>` · `consult <agent>` · `tell <agent>` · `stop and say: <text>` | one step of `then:` |
 //! | reaction | `called <name>` · `every time` | its name · `fires: every-time` |
+//! | workflow, program | `takes …` · `gives …` | `accepts:` (a program's `takes:`) · `answers-with:` |
+//! | workflow, loop | a statement: `call`, `for each`, `repeat`, `together`, `decide`, `answer`, … | one stage of `steps:`, in the order written (`read/flow.rs`) |
+//! | any block | `based on <name> [with <name>: <value>, …]` | `based-on:`, and `with:` for what the base `expects:` |
+//! | top | `let <name> = <figure>` | one entry of `values:` |
 //!
 //! Signals, after `when`: `the agent is about to call <tool>`, `the agent has
 //! called <tool> more than <n> times`, `<tool> has answered`, `the agent has
@@ -52,6 +56,8 @@ use pact_diag::{Diagnostic, Span};
 use pact_doc::{Entry, Map, Node, Offset, Value, parse_yaml_at};
 
 use crate::{COLLECTIONS, SINGLES, collection_of, slug};
+
+mod flow;
 
 /// What reading a file produced: always a document, and whatever was wrong.
 pub struct Parsed {
@@ -106,6 +112,14 @@ enum Kind {
     Reaction,
     /// A named signal: it can say `when …`, and nothing a reaction does.
     Event,
+    /// A workflow or a loop: its statements are its steps (`read/flow.rs`).
+    Flow,
+    /// The inside of a `for each`, a `repeat` or a `together`: statements, and
+    /// the settings of the stage they are inside.
+    Stage,
+    /// Beneath a `decide`: its settings, and an `if` for each label.
+    Decision,
+    Program,
     Plain,
 }
 
@@ -117,6 +131,8 @@ impl Kind {
             "policy" => Kind::Policy,
             "reaction" => Kind::Reaction,
             "event" => Kind::Event,
+            "workflow" | "loop" => Kind::Flow,
+            "program" => Kind::Program,
             _ => Kind::Plain,
         }
     }
@@ -134,6 +150,13 @@ impl Kind {
                 "when", "remind it:", "consult", "tell", "stop and say:", "called", "every time",
             ],
             Kind::Event => &["when"],
+            Kind::Flow => &[
+                "takes", "gives", "call", "for each", "repeat", "together", "decide", "answer",
+                "stop", "ask", "think", "use tools", "check its work", "run code",
+            ],
+            Kind::Stage => flow::OPENINGS,
+            Kind::Decision => &["if"],
+            Kind::Program => &["takes", "gives"],
             Kind::Plain => &[],
         }
     }
@@ -360,6 +383,10 @@ impl<'a> Reader<'a> {
             }
             return;
         }
+        if word == "let" {
+            self.let_line(&l, rest_at, body);
+            return;
+        }
         if word == "when" {
             if let Some((id, span, node)) = self.when(i, rest_at, body, true) {
                 self.add_root("reactions", id, span, node);
@@ -429,6 +456,55 @@ impl<'a> Reader<'a> {
         self.add_root(collection, id, id_span, Node::map(settings, block));
     }
 
+    /// `let refund-limit = 200 USD` — a figure with a name: one entry of
+    /// `values:`, used wherever it belongs as `{use: refund-limit}` in a
+    /// setting or `values.refund-limit` in a binding.
+    fn let_line(&mut self, l: &Line, at: usize, body: Range<usize>) {
+        let said = &l.text[at.min(l.text.len())..];
+        let whole = self.whole(l);
+        let split = said
+            .split_once(" = ")
+            .map(|(n, f)| (n.trim(), f.trim()))
+            .filter(|(n, f)| bare_word(n) && !f.is_empty());
+        let Some((name, figure)) = split else {
+            self.error(
+                "lang/not-a-line",
+                whole,
+                "A `let` line gives a figure a name.".to_string(),
+                "Write `let <name> = <figure>` — `let refund-limit = 200 USD`.".to_string(),
+            );
+            return;
+        };
+        if self.significant(&body) {
+            let under = self.whole(&self.lines[body.start]);
+            self.error(
+                "lang/nothing-goes-under-this",
+                under,
+                "Nothing goes under a `let` line.".to_string(),
+                format!(
+                    "To say more about a figure — what it is, what kind — write a `value {name}` \
+                     block, with `value:` and `description:` beneath it."
+                ),
+            );
+        }
+        let ns = self.at(l, at + said.find(name).unwrap_or(0), name.len());
+        let fs = self.at(l, l.text.len() - figure.len(), figure.len());
+        let parsed = parse_yaml_at(&format!("v: {figure}"), &self.file, Offset::default())
+            .ok()
+            .and_then(|n| n.get("v").map(|v| v.value.clone()));
+        if matches!(parsed, Some(Value::Map(_) | Value::List(_))) {
+            self.error(
+                "lang/not-a-line",
+                fs,
+                "A `let` line holds one figure, and this is a list or a set of settings.".to_string(),
+                format!("Write a `value {name}` block, with `value:` beneath it."),
+            );
+            return;
+        }
+        let node = self.scalar(figure, &fs);
+        self.add_root("values", name.to_string(), ns, map_of(vec![("value", node)], &whole));
+    }
+
     fn unknown_header(&mut self, l: &Line, word: &str) {
         let span = self.at(l, 0, word.len());
         if setting_key(l.text).is_some() {
@@ -446,7 +522,7 @@ impl<'a> Reader<'a> {
         }
         let mut words: Vec<&str> = COLLECTIONS.iter().map(|(w, _)| *w).collect();
         words.extend(SINGLES);
-        words.extend(["workspace", "when"]);
+        words.extend(["workspace", "when", "let"]);
         let fix = match pact_schema::suggest::closest(word, &words) {
             Some(near) => format!("Did you mean `{near}`?"),
             None => format!("A block starts with one of: {}.", words.join(", ")),
@@ -601,6 +677,9 @@ impl<'a> Reader<'a> {
     // ── a block's body ─────────────────────────────────────────────────────
 
     fn body(&mut self, range: Range<usize>, kind: Kind) -> Map {
+        if kind == Kind::Flow {
+            return self.flow_body(range, kind, true);
+        }
         let mut map = Map::new();
         for (first, rest) in self.items(range) {
             self.item(first, rest, kind, &mut map);
@@ -670,6 +749,38 @@ impl<'a> Reader<'a> {
         // off here, the way YAML takes one off a setting.
         self.lines[first].text = uncommented(l.text);
         let l = self.lines[first];
+        // `based on <name>` — what this starts from, restating only what
+        // differs. The one sentence every kind of block knows, because
+        // `based-on:` is resolved before anything knows what kind it is.
+        if let Some(at) = after(l.text, "based on ") {
+            let said = &l.text[at..];
+            // `with <name>: <value>, …` fills what the base left open
+            // (`expects:`), as `with:` does.
+            let (name, with) = match said.find(" with ") {
+                Some(n) => (said[..n].trim(), Some(at + n + " with ".len())),
+                None => (said.trim(), None),
+            };
+            if !name.is_empty() {
+                let span = self.at(&l, at, name.len());
+                if self.significant(&rest) {
+                    let under = self.whole(&self.lines[rest.start]);
+                    self.error(
+                        "lang/nothing-goes-under-this",
+                        under,
+                        "Nothing goes under a line that says what this is based on.".to_string(),
+                        "Move this line out to sit beside the one above it.".to_string(),
+                    );
+                }
+                let name = self.unquoted(name, &span);
+                self.put(map, "based-on".to_string(), self.whole(&l), s(name, &span));
+                if let Some(with) = with
+                    && let Some(node) = self.given(&l, with)
+                {
+                    self.put(map, "with".to_string(), self.whole(&l), node);
+                }
+                return;
+            }
+        }
         if self.sentence(first, rest.clone(), kind, map) {
             return;
         }
@@ -919,7 +1030,26 @@ impl<'a> Reader<'a> {
                 }
                 true
             }
-            Kind::Plain => false,
+            Kind::Flow | Kind::Program => {
+                // A workflow is started with what it `accepts:`; a program is
+                // handed what it `takes:`. Both hand back `answers-with:`.
+                let taken = if kind == Kind::Flow { "accepts" } else { "takes" };
+                if let Some(at) = after(t, "takes ") {
+                    lone(self, "what this takes");
+                    if let Some(node) = self.shapes(&l, at) {
+                        self.put(map, taken.into(), span, node);
+                    }
+                } else if let Some(at) = after(t, "gives ") {
+                    lone(self, "what this gives");
+                    if let Some(node) = self.shapes(&l, at) {
+                        self.put(map, "answers-with".into(), span, node);
+                    }
+                } else {
+                    return false;
+                }
+                true
+            }
+            Kind::Stage | Kind::Decision | Kind::Plain => false,
         }
     }
 
@@ -976,6 +1106,65 @@ impl<'a> Reader<'a> {
                 return None;
             }
             let node = s(v, &vs);
+            self.put(&mut m, k, ks, node);
+        }
+        Some(Node::map(m, self.whole(l)))
+    }
+
+    /// `domain: refunds, daily-cap: 0.05 USD` — names with a figure each, read
+    /// as the figures they are. A comma ends one only where a new `name:`
+    /// follows it.
+    fn given(&mut self, l: &Line, at: usize) -> Option<Node> {
+        let rest = &l.text[at..];
+        let mut pairs: Vec<(String, Span, String, usize)> = Vec::new();
+        let mut from = 0;
+        for piece in rest.split(", ") {
+            let here = at + from;
+            from += piece.len() + 2;
+            let named = piece.find(':').filter(|n| {
+                bare_word(piece[..*n].trim()) && (piece[*n + 1..].starts_with(' ') || piece.len() == *n + 1)
+            });
+            match (named, pairs.last_mut()) {
+                (Some(n), _) => {
+                    let lead = piece.len() - piece.trim_start().len();
+                    pairs.push((
+                        piece[..n].trim().to_string(),
+                        self.at(l, here + lead, n - lead),
+                        piece[n + 1..].trim().to_string(),
+                        here + n + 1,
+                    ));
+                }
+                (None, Some(last)) => {
+                    last.2.push_str(", ");
+                    last.2.push_str(piece.trim_end());
+                }
+                (None, None) => {
+                    let span = self.at(l, here, piece.len().max(1));
+                    self.error(
+                        "lang/not-a-line",
+                        span,
+                        "Each thing given here needs its name.".to_string(),
+                        "Write `<name>: <value>`, with commas between them — `domain: refunds, \
+                         daily-cap: 0.05 USD`."
+                            .to_string(),
+                    );
+                    return None;
+                }
+            }
+        }
+        let mut m = Map::new();
+        for (k, ks, v, v_at) in pairs {
+            if v.is_empty() {
+                self.error(
+                    "lang/not-a-line",
+                    ks,
+                    format!("'{k}' is given nothing."),
+                    format!("Write `{k}: <value>`."),
+                );
+                return None;
+            }
+            let vs = self.at(l, v_at, v.len());
+            let node = self.scalar(&v, &vs);
             self.put(&mut m, k, ks, node);
         }
         Some(Node::map(m, self.whole(l)))
@@ -1138,10 +1327,20 @@ impl<'a> Reader<'a> {
 
     /// A figure written in a sentence, read the way a setting's value is — so
     /// `80` is a number and `200 USD` is text, in both ways of writing.
+    /// A figure in a sentence: read as YAML reads a value, so `8` is a number
+    /// and `0.50 USD` is text. `{use: <name>}` is a figure too — the one
+    /// `values:` holds under that name, put there by the loader.
     fn scalar(&self, text: &str, span: &Span) -> Node {
         let value = parse_yaml_at(&format!("v: {text}"), &self.file, Offset::default())
             .ok()
-            .and_then(|n| n.get("v").map(|v| v.value.clone()))
+            .and_then(|n| n.get("v").map(|v| v.value.clone()));
+        if let Some(Value::Map(m)) = &value
+            && m.len() == 1
+            && let Some(name) = m.get("use").and_then(|e| e.node.as_str())
+        {
+            return map_of(vec![("use", s(name, span))], span);
+        }
+        let value = value
             .filter(|v| !matches!(v, Value::Map(_) | Value::List(_)))
             .unwrap_or_else(|| Value::Str(text.to_string()));
         Node::new(value, span.clone())
