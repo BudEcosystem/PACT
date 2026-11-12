@@ -3,6 +3,34 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — a catalogue row carries its voices, languages, sessions and dimensions (12 November)
+
+`model-can.voices`, `languages`, `sessions` and `dimensions` were checked by `pact check` for a
+`voice:` that names its models, and read by nothing else: `ModelEntry` dropped them, so a host
+that binds a model the tree does not name had no row to hold it to, and `voice.plan_for` read
+`sessions` from the raw rows beside the entry. Now:
+
+- **`ModelEntry` carries the four lines** (`voices`, `languages`, `sessions`, `dimensions`), read
+  where `regions` and `first_words_ms` are; a line the row leaves out is not said, never a guess.
+- **`ModelEntry.fits_voice(plan, role)`** holds the model a host binds for a voice plan as the
+  loader holds a named one (`crates/pact-loader/src/voice.rs`): the speaker must have the voice
+  `speaks-as:` names, every model listening or speaking must handle each of `languages:` (`en`
+  covers `en-GB`), and the one model of a plan that talks both at once must hold a duplex session.
+- **`voice.plan_for` reads `sessions` off the entry**; `rows=` is still read beside it for a caller
+  that builds entries by hand.
+- **A benchmark's `with:` reaches DeepEval as DeepEval takes it.** `run_deepeval` passed `with:` as
+  written, and a word where the benchmark's constructor takes a member of its enum
+  (`MMLU(tasks=[MMLUTask.…])`) crashed inside DeepEval; each such word is now read into that
+  member (`tasks: [high_school_computer_science]`), and one the enum lacks is refused naming some
+  it has.
+- **A DeepEval benchmark is answered by a model that obeys its prompt.** `AskModel.generate` read
+  only JSON when a schema was asked for, and DeepEval's MMLU asks for a bare letter: every question
+  raised `answer Field required`. A one-field schema now takes the reply itself, and a field of
+  a few words (`Literal["A", "B", "C", "D"]`) the first of them the reply says. A package a
+  benchmark imports only when it runs (`pandas`) is refused naming it, not raised. Measured
+  through Bud Agent Flow's `budflow benchmark run`: gpt-4o-mini, 90 on twenty MMLU
+  high-school computer science questions.
+
 ## 2026-11 — law 3 as the Bud Agent Flow corpus reads it (11 November)
 
 Running the new checker over Bud Agent Flow's 168 shipped trees refused 29 of them, all with
