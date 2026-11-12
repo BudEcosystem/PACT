@@ -43,7 +43,9 @@ file, so an error found later by any rule points at the line the author wrote.
 |---|---|
 | `src/lib.rs` | The table of header words (`agent` → `agents:`), the five single documents, and `slug`, which makes a name from a sentence |
 | `src/read.rs` | The reader: `read(text, file) -> Parsed { node, diagnostics }` |
+| `src/read/flow.rs` | Statements: a workflow's steps written in the order they run, read into `steps:`, `starts-at:` and each step's `then:` |
 | `src/write.rs` | The printer: `write(root)` for one `.pact` file, `tree(root)` for a folder, `one_file(root)` for a single `workspace.yaml` |
+| `src/write/flow.rs` | Statements, printed: only for the wirings an order of lines can say, and settings for the rest |
 | `src/emit.rs` | How one value becomes text: when a string needs quotes, when a list fits on one line, when text can be a block |
 
 ## How the reader works
@@ -70,8 +72,31 @@ file, so an error found later by any rule points at the line the author wrote.
    `listens-for`, `reactions`, `ask-a-person`).
 
 `Kind` says which sentences a block knows: `Agent`, `Tagged` (tool and
-knowledge), `Policy`, `Reaction`, `Event`, `Plain` (settings and text blocks
-only).
+knowledge), `Policy`, `Reaction`, `Event`, `Flow` (workflow and loop),
+`Program`, `Plain` (settings and text blocks only). Two more are used only
+inside a workflow: `Stage`, for the inside of a loop, and `Decision`, for
+what sits beneath a `decide`.
+
+### Statements
+
+A workflow in the document is a set of named stages, each saying where to go
+next. `read/flow.rs` reads a list of statements into that:
+
+1. Each statement becomes a `Step`: its name, its fields, and how it ends
+   (`Goes` on to the next, `Answers`, or `Decides`).
+2. `place` gives each `Goes` step a `then: { answered: <next> }`, unless a
+   `then:` written beneath it already says `answered:`.
+3. The statements beneath an `if` are placed beside the `decide`, and the last
+   of each goes on to whatever follows the `decide`.
+4. A path such as `plan.findings` becomes `steps.plan.findings` (`bound` in
+   `lib.rs`); `unbound` is its inverse for the printer, and a unit test holds
+   that the two undo each other.
+
+`write/flow.rs` is the less certain half, because stages can be wired in ways
+no order of lines can say. It writes statements for the wirings it knows and
+returns `None` for the rest. It does not need to be right about which is
+which: the block is read back and compared, as every block is, and a workflow
+that does not come back the same is written as settings.
 
 ## How the printer works
 
@@ -115,6 +140,7 @@ gains a collection and this table does not.
 
 | Test | Holds |
 |---|---|
+| `tests/a_workflow_is_written_in_the_order_it_runs.rs` | each statement against the stages it stands for; `let`; `based on … with …`; what is refused and on which line |
 | `tests/every_sentence_means_one_thing.rs` | each sentence against the settings it stands for; each mistake against its rule and its line |
 | `crates/pact-cli/tests/the_language_and_the_folder_are_one_workspace.rs` | every workspace under `examples/` printed and read back to the same document; `pact build`; several files in one folder; the header-word table |
 | `crates/pact-cli/tests/discovery.rs` | a workspace written both ways has one digest |
@@ -127,7 +153,8 @@ cargo test -p pact-cli --test the_language_and_the_folder_are_one_workspace
 ## What it does not do
 
 - It does not carry comments from one form to the other.
-- It has sentences for agents, tools, sets of documents, policies, reactions
-  and events. Everything else is settings.
+- It has sentences for agents, tools, sets of documents, policies, reactions,
+  events, workflows, loops and programs. Everything else is settings.
+- It has no expressions. A path in a statement is a path in the document.
 - It does not know what any field means. If you find yourself wanting it to,
   the thing you want belongs in `pact-schema` or `pact-loader`.

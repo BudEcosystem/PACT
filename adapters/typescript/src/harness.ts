@@ -638,6 +638,9 @@ export async function run(
   // whatever a stage offers, wherever the stage offers anything at all.
   const workingOn = spec.reactions?.workingOn ?? null;
   const saysSo = workingOn !== null && !toolDefs.some((d) => d.name === WORKING_ON);
+  // The topics the agent has said so far, which is what decides whether the
+  // tool is still offered.
+  const saidTopics = new Set<string>();
   if (saysSo && workingOn) {
     toolDefs.push({
       name: WORKING_ON,
@@ -913,7 +916,15 @@ export async function run(
     const offered = new Set(
       toolsOffered(phase, [...reachable, ...boardNames, ...(saysSo ? [WORKING_ON] : [])]),
     );
-    if (saysSo && offered.size > 0) offered.add(WORKING_ON);
+    // Only while there is something left to say (`Reactor.more_to_say`): once
+    // every topic has been said the tool is not offered, on either port.
+    if (saysSo && workingOn) {
+      if (offered.size > 0 && workingOn.topics.some((t) => !saidTopics.has(t))) {
+        offered.add(WORKING_ON);
+      } else {
+        offered.delete(WORKING_ON);
+      }
+    }
     const stepTools = toolDefs.filter((d) => offered.has(d.name));
     const readable = new Set(skillsOffered(phase, skills.map((s) => s.name)));
     const stepSkills = skills.filter((s) => readable.has(s.name));
@@ -994,6 +1005,7 @@ export async function run(
       // and is not counted as one. Nobody is asked on this port.
       if (saysSo && workingOn && c.name === WORKING_ON) {
         const topic = String((c.args as Record<string, unknown>)?.topic ?? "").trim();
+        if (workingOn.topics.includes(topic)) saidTopics.add(topic);
         results.push(
           workingOn.topics.includes(topic)
             ? `noted: ${topic}`

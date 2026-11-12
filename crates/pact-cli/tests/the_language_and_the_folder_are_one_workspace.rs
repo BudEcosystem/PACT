@@ -129,11 +129,136 @@ fn the_same_workspace_written_two_ways() {
 
 #[test]
 fn every_language_example_loads_with_no_warnings() {
-    for example in ["hello", "finance-first", "staff-desk"] {
+    for example in ["hello", "finance-first", "staff-desk", "help-centre"] {
         let dir = repo().join("examples/language").join(example);
         let (code, out, err) = pact(&["check", dir.to_str().unwrap(), "--deny-warnings"]);
         assert_eq!(code, 0, "{example}:\n{out}{err}");
     }
+}
+
+/// The blocks of `text` that start with `word`, each with its name.
+fn blocks<'a>(text: &'a str, word: &str) -> Vec<(&'a str, Vec<&'a str>)> {
+    let mut out: Vec<(&str, Vec<&str>)> = Vec::new();
+    let mut inside = false;
+    for line in text.lines() {
+        if !line.starts_with(' ') && !line.is_empty() {
+            inside = line.split(' ').next() == Some(word);
+            if inside {
+                out.push((line.split(' ').nth(1).unwrap_or_default(), Vec::new()));
+            }
+        } else if inside && let Some(block) = out.last_mut() {
+            block.1.push(line);
+        }
+    }
+    out
+}
+
+#[test]
+fn every_shipped_workflow_and_loop_is_written_in_the_order_it_runs() {
+    // `docs/99` §4.6: a workflow's stages are written as statements, one after
+    // another, where an order of lines can say how they are wired. Every one
+    // this repository ships can be — so `steps:` and `starts-at:` appear in
+    // none of them, and the round trip above holds that what is written
+    // instead reads back as the same stages.
+    let mut all = Vec::new();
+    folders(&repo().join("examples"), &mut all);
+    let mut seen = 0;
+    for workspace in all {
+        let (code, text, err) = pact(&["write", workspace.to_str().unwrap()]);
+        assert_eq!(code, 0, "{err}");
+        for word in ["workflow", "loop"] {
+            for (name, lines) in blocks(&text, word) {
+                // A loop that only says which ready-made shape it starts from
+                // has no stages of its own to write.
+                if !lines.iter().any(|l| l.contains(" = ") || l.trim_start().starts_with("answer")) {
+                    assert!(
+                        !lines.iter().any(|l| l.trim_start().starts_with("steps:")),
+                        "the {word} '{name}' in {} is written as settings:\n{text}",
+                        workspace.display()
+                    );
+                    continue;
+                }
+                seen += 1;
+                for line in lines {
+                    assert!(
+                        !matches!(line.trim_start(), l if l.starts_with("steps:") || l.starts_with("starts-at:")),
+                        "the {word} '{name}' in {} is written as settings:\n{text}",
+                        workspace.display()
+                    );
+                }
+            }
+        }
+    }
+    assert!(seen >= 11, "found only {seen} workflows and loops written as statements");
+}
+
+#[test]
+fn a_workspace_in_several_files_is_the_one_file_pact_write_prints() {
+    // `examples/language/help-centre` is four `.pact` files: figures with
+    // names, a pattern and two desks made from it, two workflows with one
+    // calling the other, a reaction, and how it learns.
+    let folder = repo().join("examples/language/help-centre");
+    let files: Vec<_> = std::fs::read_dir(&folder)
+        .unwrap()
+        .flatten()
+        .filter(|e| e.path().extension().is_some_and(|x| x == "pact"))
+        .collect();
+    assert_eq!(files.len(), 4);
+    let want = shown(&folder);
+    for (collection, at_least) in [("agents", 4), ("workflows", 2), ("tools", 1), ("reactions", 1)] {
+        let have = want[collection].as_object().map_or(0, serde_json::Map::len);
+        assert!(have >= at_least, "{collection}: {have}");
+    }
+    assert_eq!(want["learning"]["enabled"], "propose-only");
+
+    let (code, text, err) = pact(&["write", folder.to_str().unwrap()]);
+    assert_eq!(code, 0, "{err}");
+    // What the four files said in sentences, the one file says in sentences.
+    for line in [
+        "let large-refund = 200 USD",
+        "  based on desk with domain: billing, cap: 0.10 USD",
+        "  where = decide",
+        "    if billing",
+        "  every = for each item in input.messages",
+        "    one = call route with message: item.text, channel: item.channel",
+        "  done-all = answer with replies: every.reply",
+    ] {
+        assert!(text.lines().any(|l| l == line), "no `{line}` in:\n{text}");
+    }
+    let one = scratch("one-file").join("help-centre.pact");
+    std::fs::write(&one, &text).unwrap();
+    assert_eq!(shown(&one), want, "{text}");
+
+    // And the folder of YAML it stands for is the same workspace again.
+    let built = scratch("one-file-built").join("help-centre");
+    let (code, out, err) = pact(&["build", one.to_str().unwrap(), "--to", built.to_str().unwrap()]);
+    assert_eq!(code, 0, "{out}{err}");
+    assert_eq!(shown(&built), want);
+}
+
+#[test]
+fn a_name_no_step_has_is_told_where_it_was_read() {
+    let dir = scratch("no-such-step");
+    let file = dir.join("hello.pact");
+    std::fs::write(
+        &file,
+        "workspace \"Hello\"\n\n\
+         agent greeter\n  description: Says hello.\n  takes message: text\n  gives reply: text\n  \
+         instructions: Greet whoever writes to you.\n\n\
+         workflow hello\n  description: Ask one agent and hand back what it said.\n  \
+         takes message: text\n  gives reply: text\n  \
+         greet = call greeter with message: input.message\n  \
+         answer with reply: nobody.reply\n",
+    )
+    .unwrap();
+    let (code, out, err) = pact(&["check", file.to_str().unwrap()]);
+    let said = format!("{out}{err}");
+    assert_eq!(code, 1, "{said}");
+    // The rule is the one a folder of YAML gets, and it points at the name as
+    // it was written — `nobody.reply`, on the line of the statement.
+    assert!(said.contains("rule: loader/a-binding-to-nothing"), "{said}");
+    assert!(said.contains("hello.pact:14:22"), "{said}");
+    assert!(said.contains("no stage called 'nobody'"), "{said}");
 }
 
 #[test]

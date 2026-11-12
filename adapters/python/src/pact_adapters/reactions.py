@@ -315,20 +315,24 @@ class Reactions:
         mine = self.said_by_the_agent()
         if not mine:
             return None
-        listed = "; ".join(f"`{t.name}` — {t.description}" for t in mine)
+        # The NAME first and the description in brackets after it. Written
+        # `legal — Contracts, liability, …`, a live model answered `Contracts`:
+        # the first word that reads like a subject. And "once", because a
+        # model told to say so "as soon as it does" said so every step.
+        listed = "; ".join(f"`{t.name}` ({t.description})" for t in mine)
         return {
             "name": WORKING_ON,
             "description": (
-                "say what this request has turned to, as soon as it does and before "
-                f"you act on it. The subjects that matter here: {listed}"
+                "say, once, which of these subjects this request has turned to — as soon "
+                "as it does, and before you act on it. Set `topic` to the name exactly as "
+                f"it is written here: {listed}"
             ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "topic": {"type": "string", "enum": [t.name for t in mine]},
-                },
-                "required": ["topic"],
-            },
+            # Written the way every other tool's arguments are: a name and its
+            # shape in words (`ir._takes`). It was a JSON schema, which no
+            # transport here reads — each builds its own from `{name: shape}` —
+            # so a provider was sent three arguments called `type`,
+            # `properties` and `required`.
+            "parameters": {"topic": "one of " + ", ".join(t.name for t in mine)},
         }
 
     def topics_of(self, tool: str, action: str) -> frozenset[str]:
@@ -398,6 +402,11 @@ class Reactor:
         self.begun: int = int(state.get("begun") if state.get("begun") is not None else -1)
         self.reminders: list[str] = list(state.get("reminders") or ())
         self.noticed: set[str] = set(state.get("noticed") or ())
+        #: The topics the agent has SAID, through `working-on`. Kept apart from
+        #: `noticed`, which a tag or a judge adds to as well: this is what
+        #: decides whether the tool is still offered, and the second port —
+        #: which reads no tags and asks no judge — has to reach the same answer.
+        self.said: set[str] = set(state.get("said") or ())
         #: What could not be carried out, in sentences, for `RunResult.unenforced`.
         self.notes: list[str] = []
         #: How many questions were put to a judge. Each is a model call the
@@ -418,6 +427,7 @@ class Reactor:
             "begun": self.begun,
             "reminders": list(self.reminders),
             "noticed": sorted(self.noticed),
+            "said": sorted(self.said),
             "log": list(self.log),
         }
 
@@ -731,6 +741,13 @@ class Reactor:
                 due.append((r, EXACT, key))
         return due
 
+    def more_to_say(self) -> bool:
+        """Is there a topic the agent has not said yet? Once it has said every
+        one, `working-on` is no longer offered: a tool with nothing left to
+        say can only be called again, and a live model did exactly that —
+        `noted: legal`, four times, until its steps ran out."""
+        return any(t.name not in self.said for t in self.r.said_by_the_agent())
+
     def concerns(self, slot: str, name: str, args: Mapping[str, Any]) -> bool:
         """Is any reaction about this call at all — before it or after it?
         Asked where the harness would otherwise run a call early, on its way to
@@ -808,6 +825,7 @@ class Reactor:
             listed = ", ".join(sorted(mine)) or "none"
             return Outcome(held=f"error: {topic!r} is not one of the subjects to say: {listed}")
         self.noticed.add(topic)
+        self.said.add(topic)
         due = [(r, GUESS, "") for r in self._topic_reactions({topic})]
         got = await self._all(
             due, at=at, holds_a_call=True,

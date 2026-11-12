@@ -237,6 +237,10 @@ headers with no name. `when <signal>` is a reaction (§4.3).
 | reaction | `stop and say: <text>` | `then: [{stop: …}]` |
 | reaction | `called <name>` | the reaction's name, when the one made from its sentence will not do |
 | reaction | `every time` | `fires: every-time` |
+| workflow, program | `takes …` · `gives …` | `accepts:` (a program's `takes:`) · `answers-with:` |
+| workflow, loop | a statement (§4.3a) | one stage of `steps:` |
+| any block | `based on <name> [with <name>: <value>, …]` | `based-on:`, and `with:` |
+| top | `let <name> = <figure>` | one entry of `values:` |
 
 Signals, after `when`:
 
@@ -252,6 +256,78 @@ Signals, after `when`:
 | `the work touches <topic>` | `topic: <topic>` |
 | `it looks like <description>` | `judged: yes`, and `description:` the sentence, capitalised — it is the question the judge answers. Where the judge reads is a setting beneath it: `at: turn.run.started` for what the customer wrote |
 | `<event> happens` | `event: <event>` |
+
+### 4.3a Figures, patterns and programs
+
+The document already had the parts of a programming language, under other
+names. The language writes them the way a program is written, and adds nothing
+to what they mean.
+
+| What a programmer calls it | What the document has | Written |
+|---|---|---|
+| a constant | `values:` — one figure, used as `{use: <name>}` in a setting and `values.<name>` in a binding | `let refund-limit = 200 USD` |
+| a variable | a stage's answer, read by the stage's name — `steps.plan.findings` | `plan = call planner …`, then `plan.findings` |
+| a function | a workflow: `accepts:`, `answers-with:`, `steps:` — and an agent or a carried program, called the same way | `workflow <name>` with `takes …`, `gives …` and statements; `call <name> with …` |
+| a template with parameters | a base with `expects:`, filled by `based-on:` and `with:` | `based on desk with domain: billing, cap: 0.10 USD` |
+| a loop over a list | a stage that `does: each` | `for each item in input.documents` |
+| a loop until something holds | a stage that `does: repeat`, with `until:` | `repeat at most 4 times`, `until:` beneath |
+| a branch | a stage that `does: decide` | `decide`, with an `if <label>` for each way it can go |
+| at once | a stage that `does: together` | `together` |
+| return | a stage that `does: answer` | `answer with result: make.result` |
+
+```
+workflow deliver
+  description: Research a brief, plan from the findings, then build from the plan.
+  takes brief: text
+  gives result: text
+
+  research = call researcher with brief: input.brief
+  plan = call planner with brief: input.brief, findings: research.findings
+  make = call builder with plan: plan.plan
+  answer with result: make.result
+```
+
+**Statements**, in a `workflow` or a `loop` block, and inside a `for each`, a
+`repeat` or a `together`:
+
+| Statement | Becomes |
+|---|---|
+| `<name> = <statement>` | the stage `<name>`. Without it the stage is named after what it does: `call planner` is the stage `planner` |
+| `call <target> [with <input>: <binding>, …]` | `does: call`, `call:`, `bind:` |
+| `for each item in <binding>` + body | `does: each`, `over:`, and the body as its `steps:` |
+| `repeat [at most <n> times]` + body | `does: repeat`, `at-most:`, and the body as its `steps:` |
+| `together` + body | `does: together`; the statements in the body all start at once |
+| `decide` + an `if <label>` for each label | `does: decide`, `chooses-between:` |
+| `answer [with <field>: <binding>, …]` | `does: answer`, `bind:` |
+| `stop <binding>` | `does: stop`, `stops:` |
+| `ask <question>` | `does: ask-someone`, `asks:` |
+| `think` · `use tools` · `check its work` · `run code` | `does:` that — the stages of a `loop` |
+
+**Order is the wiring.** A statement goes on to the one written after it
+(`then: { answered: <next> }`) and the first is where the body starts
+(`starts-at:`). An `answer` goes nowhere. The statements beneath an `if` are
+stages beside the decision, and the last of them goes on to whatever is
+written after the `decide` — which is how branches come back together.
+`if <label>: <stage>` points at a stage written elsewhere, or at `done`.
+
+**Settings go beneath a statement**, as beneath anything: `at-most:`,
+`if-it-fails:`, `until:`, `limits:`. A `then:` written there is kept, and where
+it says `answered:` the order does not — so a stage that goes back, or to
+`done`, says so itself.
+
+**A binding is still a path, never an expression** (02W §2.0). `plan.findings`
+is `steps.plan.findings`; a path that starts with one of the words a binding
+starts with (`input`, `item`, `remembers`, `values`, `steps`, `latest-update`,
+`run-inputs`, `used`) is left as written. There is no arithmetic and no
+assignment after the fact: a name is given once, by the stage that answers.
+That is the document's rule, and it is what lets `pact check` say before
+anything runs that a stage reads something that may not have happened
+(`loader/a-binding-to-a-stage-that-may-not-have-run`).
+
+**The printer writes statements only where an order of lines can say the
+wiring**, and settings otherwise — found out, as everything here is, by reading
+its own text back. Every workflow and loop under `examples/` is written as
+statements.
 
 ### 4.4 Where a `.pact` file may sit
 
@@ -315,7 +391,7 @@ the TypeScript port reports every reaction that way.
 
 ## 7. Status: what is built, and where it differs from this plan
 
-All seven packages are built (12 November 2026).
+All seven packages are built (12 November 2026), and an eighth that was not in the plan: L8, asked for once the first seven could be used.
 
 | | What exists | Held by |
 |---|---|---|
@@ -326,6 +402,7 @@ All seven packages are built (12 November 2026).
 | L5 | `crates/pact-lang`: `read`, `write`, and `tree` for a folder | `crates/pact-lang/tests/every_sentence_means_one_thing.rs` |
 | L6 | The loader reads `.pact`, alone or at the top of a folder; `pact write`, `pact build`; `pact discover` finds a folder with a `.pact` file | `crates/pact-cli/tests/the_language_and_the_folder_are_one_workspace.rs` |
 | L7 | `examples/kernel/finance-first`, `examples/language/{hello,finance-first,staff-desk}`; two guide pages | the round trip over every workspace under `examples/` |
+| L8 | §4.3a: `let`, `based on … with …`, `takes`/`gives` on a workflow and a program, and statements for a workflow's and a loop's stages (`crates/pact-lang/src/read/flow.rs`, `write/flow.rs`). `examples/language/help-centre`: four files, a pattern and two desks, two workflows with one calling the other, figures, a reaction, learning | `crates/pact-lang/tests/a_workflow_is_written_in_the_order_it_runs.rs`; `every_shipped_workflow_and_loop_is_written_in_the_order_it_runs`; `adapters/python/tests/test_a_workflow_written_as_statements_runs.py`, which runs both workflows |
 
 ### Where the build differs
 
@@ -356,6 +433,51 @@ All seven packages are built (12 November 2026).
   files in it is not rebuilt; the files it would have to copy are the
   author's to move.
 
+- **A proposed change is checked against the folder a `.pact` tree stands
+  for.** `checking.check_instructions` copies the author's tree to try a
+  learning cycle's proposal on it. A copy written in the language is rewritten
+  as a folder first — `pact write`, then `pact build`, with the files it
+  carries left in place — because that module changes one field of a file and
+  must not edit a `.pact` file's text by position. Before this, such a tree was
+  checked unchanged and the proposal passed whatever it said.
+
+### What a live model showed (12 November 2026)
+
+`adapters/python/tests/test_the_language_runs_on_a_live_model.py` runs the
+`.pact` examples against a real model: the agent, every agent it wakes, and the
+judge. It is opt-in (`PACT_LIVE_BASE_URL`, `PACT_LIVE_MODEL`,
+`PACT_LIVE_API_KEY`) and was run on `gpt-4o-mini`. Nine cases; every one
+passes after the four fixes below, and each fix has a test that needs no model.
+
+| What was run | What happened |
+|---|---|
+| `hello.pact` | answered |
+| `finance-first.pact`, a refund | the call was held and the finance desk asked first; the model made the call again; a person was asked; the refund ran once; the auditor was told, and its words are on the run |
+| the same, a furious customer and a polite one | the judge fired for the first and not the second; the reminded agent apologised |
+| a topic `noticed-by: [the-agent]` | the model called `working-on` with the right name on its first step, and answered as the reminder says |
+| `help-centre`, `route`, three messages | the rule sent the invoices mailbox to billing; the sorter — a real model — sent a crash to tech and said `not-sure` about the weather, which went to a person |
+| `help-centre`, `clear-inbox` | `route` ran once for each message, each reaching its own desk |
+
+What it found, none of which a scripted model could:
+
+- **A tool's arguments were not sent.** The one transport here that reaches a
+  server sent every tool with `"properties": {}`, so a model had to guess that
+  `billing` takes `order` and `amount`. They are sent now, and `one of a, b`
+  as the closed list it is. The same transport takes an `api_key`.
+- **`working-on` was written as no other tool is.** Its arguments were a JSON
+  schema; every transport builds its own from `{argument: shape}`, so a
+  provider was sent three arguments called `type`, `properties` and `required`.
+- **A model told `noted: legal` said it again** — four times, until its steps
+  ran out. Once every topic the agent can say has been said, the tool is no
+  longer offered, on both ports. Its description now puts the name first; shown
+  `legal — Contracts, liability, …` the model had answered `Contracts`.
+- **Whoever decides was shown nothing.** A `decide` stage has no `bind:`, and
+  the reference workflow runtime handed the deciding agent `{}` and the
+  deciding person `{}`. A real sorter, asked to sort a message it was not
+  shown, said `not-sure` every time. The agent is now given the workflow's
+  input, as much of it as it `accepts:`; the person is shown the question's
+  own `shows:`.
+
 ### What is not done
 
 - **Comments are not carried between the two ways of writing.** A comment is
@@ -366,13 +488,25 @@ All seven packages are built (12 November 2026).
   `.pact` file says *"Add a file `tools/zendesk.yaml`"* where the block to
   write is `tool zendesk`. The message is the schema's and is the same for both
   ways of writing.
-- **Sentences cover the lines people write most, not every field.** Workflows,
-  loops, questions, evals and ports are written as settings. Nothing is out of
-  reach — a setting can say any of it — and none of it reads better than YAML
-  yet.
-- **No run against a live model.** Every test here drives a scripted one, which
-  is how the rest of this repository tests a loop. Whether a model calls
-  `working-on` when it should is not something a script can show.
+- **Sentences cover the lines people write most, not every field.** Questions,
+  evals, ports, a decision's `by:` rungs and a repeat's `until:` are written
+  as settings. Nothing is out of reach — a setting can say any of it.
+- **No expressions.** A statement's bindings are paths, as the document's are.
+  `more than`, `is` and the rest live in `when-this:` lines, where they are
+  checked; there is no `a + b`, and adding one would be a change to the
+  specification, not to the language.
+- **The loop variable is always `item`.** `for each item in …`, and
+  `item.<part>` inside. The document has one word for it, so the language does.
+- **One model, one provider.** The live run below was `gpt-4o-mini`. What a
+  smaller model served on this machine does with `working-on`, or with a call
+  that comes back held, has not been measured.
+- **An answer that is one line of text is asked for badly.** Found live and not
+  fixed: an agent that `gives reply: text` is told to *"end your reply with …
+  `- reply: text`"*, and `gpt-4o-mini` ends its reply with that line, word for
+  word. A closed list (`desk: one of billing, tech, …`) it fills in correctly.
+  The instruction is `harness._answer_shape_in_words`, the same in both ports
+  and for every agent that gives anything; a clearer wording was tried and did
+  not hold, so it is left as it was and written down here.
 - **No study with people.** Whether the language is easier than YAML for
   somebody who has seen neither is the question it exists to answer, and it has
   not been asked of anybody.

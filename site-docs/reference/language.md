@@ -10,6 +10,29 @@ every rule `pact check` has applies to it unchanged and every adapter runs
 what comes out. The language adds no meaning of its own: anything it can say,
 the folder can say, and the other way round.
 
+## What a `.pact` file can describe
+
+Everything a folder can, because it is read into the same document. This is
+where each thing is written, and whether it has sentences of its own or is
+written as plain settings.
+
+| You are describing | Block | Written with |
+|---|---|---|
+| an agent | `agent` | sentences: `takes`, `gives`, `uses`, limits, `remembers` |
+| agents that work together | `agent` | `asks <agent>: <what for>`; `teamwork:` as settings |
+| agents that react to each other's work | `agent`, `when`, `topic`, `event` | sentences: `when …`, `consult`, `tell`, `listens for` |
+| a tool, and what it is about | `tool`, `resource` | settings, and `about <topic>` |
+| when a person must say yes | `policy`, `question` | `before <tool>/<action>: ask …, because …` |
+| a workflow across agents and tools | `workflow` | [statements](#statements): `call`, `for each`, `repeat`, `decide`, `together`, `answer` |
+| how an agent thinks | `loop` | statements: `think`, `use tools`, `check its work`, `answer` |
+| a figure used in several places | `let`, `value` | `let <name> = <figure>` |
+| one thing made from another | any block | `based on <name> with <name>: <value>` |
+| documents an agent answers from | `knowledge` | settings, `about <topic>`; the documents stay files |
+| what the system may improve about itself | `learning` | settings: `enabled: propose-only`, `review: weekly`. A proposed change is held to `pact check` before it is scored, whichever form the workspace is written in |
+| how it is tested | `evals` | settings |
+| which models it may use | `models`, and `needs:` on an agent | settings |
+| a system too large for one file | several `.pact` files | [one folder, many files](#where-a-file-may-sit) |
+
 ## The shape of a file
 
 ```text
@@ -43,6 +66,7 @@ the folder can say, and the other way round.
 | `agent <name> "<display name>"` | an agent | the short name, then optionally the name people read |
 | `redaction`, `evals`, `learning`, `release`, `models` | the five things a workspace has only one of | none |
 | `when <signal>` | a reaction that covers every agent | made from the sentence, or given by a `called` line |
+| `let <name> = <figure>` | one named figure, an entry of `values:` | the name before the `=` |
 
 The kind words, each with the collection it adds to:
 
@@ -149,6 +173,22 @@ A shape is written as in the folder form: `text`, `money`, `list of images`,
 `one of approved, declined`. Because `one of a, b` has a comma in it, the
 reader splits a `takes` or `gives` line only where a new `<field>:` begins.
 
+### In any block
+
+| Sentence | The same as |
+|---|---|
+| `based on <name>` | `based-on: <name>` |
+| `based on <name> with <name>: <value>, …` | `based-on:`, and `with:` holding what the base's `expects:` left open |
+
+### In a workflow or a program
+
+| Sentence | The same as |
+|---|---|
+| `takes <field>: <shape>, …` | a workflow's `accepts:`; a program's `takes:` |
+| `gives <field>: <shape>, …` | `answers-with:` |
+
+A workflow's and a loop's steps are written as [statements](#statements).
+
 ### In a tool or a set of documents
 
 | Sentence | The same as |
@@ -197,6 +237,98 @@ A `when` line that matches none of these is refused with `lang/not-a-signal`.
 What each signal means at run time is in the
 [reactions reference](reactions.md).
 
+## Statements
+
+In a `workflow` block and a `loop` block, a line can be a **statement**: one
+step. The guide is [Variables, functions and loops](../guide/programs-in-the-language.md).
+
+```text
+workflow deliver
+  takes brief: text
+  gives result: text
+
+  research = call researcher with brief: input.brief
+  plan = call planner with brief: input.brief, findings: research.findings
+  answer with result: plan.plan
+```
+
+| Statement | The same as |
+|---|---|
+| `<name> = <statement>` | the step is called `<name>` |
+| `call <target>` | `does: call`, `call: <target>` |
+| `call <target> with <input>: <path>, …` | the same, with `bind:` |
+| `for each item in <path>`, with statements beneath | `does: each`, `over: <path>`, and the statements as its `steps:` |
+| `repeat`, or `repeat at most <n> times`, with statements beneath | `does: repeat`, `at-most: <n>`, and the statements as its `steps:` |
+| `together`, with statements beneath | `does: together`; they all start at once |
+| `decide`, with `if` lines beneath | `does: decide`, `chooses-between:` |
+| `if <label>`, with statements beneath | the label leads to the first of them |
+| `if <label>: <step>` | the label leads to a step written elsewhere, or to `done` |
+| `answer` · `answer with <field>: <path>, …` | `does: answer`, `bind:` |
+| `stop <path>` | `does: stop`, `stops: <path>` |
+| `ask <question>` | `does: ask-someone`, `asks: <question>` |
+| `think` · `use tools` · `check its work` · `run code` | `does: think` · `use-tools` · `check-its-work` · `run-code` |
+
+### Order
+
+- A statement goes on to the one written after it. That is
+  `then: { answered: <next> }`, written for you.
+- The first statement of a body is where it starts: `starts-at:`.
+- `answer` goes nowhere.
+- Under `together` nothing follows anything.
+- The statements beneath an `if` are steps *beside* the decision. The last of
+  them goes on to whatever is written after the whole `decide`.
+
+### Names
+
+A step with no `<name> =` is named after what it does:
+
+| Statement | Its name |
+|---|---|
+| `call planner` | `planner` |
+| `call queue/watch` | `queue-watch` |
+| `for each …` · `repeat …` · `together` · `decide` · `answer` · `stop …` | `each` · `repeat` · `together` · `decide` · `answer` · `stop` |
+| `ask is-it-done` | `ask-is-it-done` |
+
+Two steps in one body with the same name are refused (`lang/said-twice`);
+name one of them.
+
+### Paths
+
+What a step is given, and what an `answer` hands back, is a path to a value.
+
+| Written | Read as | Is |
+|---|---|---|
+| `plan.findings` | `steps.plan.findings` | what the step `plan` answered |
+| `input.brief` | as written | what the workflow was started with |
+| `item.id` | as written | the current item, inside `for each` |
+| `remembers.frontier` | as written | what a `repeat` carries between rounds |
+| `values.refund-limit` | as written | a `let` figure |
+
+A path that starts with `input`, `steps`, `item`, `remembers`, `values`,
+`latest-update`, `run-inputs` or `used` is left as written. Anything else is a
+step's name. A step that happens to be called `input` is read as
+`steps.input.…`, written in full.
+
+### Settings beneath a statement
+
+Anything else a step has is a setting indented beneath its statement:
+`at-most:`, `if-it-fails:`, `until:`, `limits:`, `waits-for-result:`. Inside a
+`for each`, a `repeat` or a `together`, the settings of the loop and the
+statements inside it sit side by side.
+
+A `then:` written beneath a statement is kept. Where it says `answered:`, the
+order of the lines does not. That is how a step goes *back* to an earlier one,
+or to `done`:
+
+```text
+  gather = use tools
+    then:
+      used-a-tool: gather
+```
+
+Steps written the long way, under a `steps:` setting, and statements are one
+set of steps; a workflow may use both.
+
 ### The name a `when` block gets
 
 A reaction needs a name, because agents list the reactions that cover them. A
@@ -241,6 +373,9 @@ be split by subject: `agents.pact`, `tools.pact`. Two files may each add
 entries to the same collection. The same setting written in two files is
 refused, with both places named (`loader/ambiguous-field`); neither is quietly
 chosen.
+
+`examples/language/help-centre` in the repository is one workspace in four
+files.
 
 A `.pact` file anywhere below the top of a folder is refused
 (`loader/a-pact-file-below-the-top`): it would be unclear which workspace it
@@ -333,8 +468,11 @@ error: 'agnt' does not start any kind of block.
 
 ## What is not there
 
-- **Sentences for everything.** Workflows, loops, questions, evals and ports
-  are written as settings.
+- **Sentences for everything.** Questions, evals, ports, a decision's `by:`
+  and a repeat's `until:` are written as settings.
+- **Expressions.** A path is a path. There is no arithmetic and no
+  reassignment, because the document has none.
+- **A loop variable of your choosing.** It is always `item`.
 - **Fixes that speak the language.** A fix that tells you to add a file, such
   as *"Add a file `tools/zendesk.yaml`"*, names the folder form even when the
   mistake is in a `.pact` file. The block to write is `tool zendesk`.
@@ -348,7 +486,9 @@ error: 'agnt' does not start any kind of block.
 |---|---|
 | Header words and the collections they add to | `crates/pact-lang/src/lib.rs` |
 | The reader | `crates/pact-lang/src/read.rs` |
+| Statements, read | `crates/pact-lang/src/read/flow.rs` |
 | The printer, and the folder writer | `crates/pact-lang/src/write.rs` |
+| Statements, printed | `crates/pact-lang/src/write/flow.rs` |
 | How one value is written as text | `crates/pact-lang/src/emit.rs` |
 | Where the loader reads a `.pact` file | `crates/pact-loader/src/lib.rs` |
 | `pact write` and `pact build` | `crates/pact-cli/src/main.rs` |

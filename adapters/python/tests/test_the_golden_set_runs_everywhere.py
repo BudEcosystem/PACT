@@ -240,7 +240,7 @@ def _there(spec: AgentSpec) -> dict[str, Any] | None:
             "workingOn": (
                 {
                     "description": said_so["description"],
-                    "topics": said_so["parameters"]["properties"]["topic"]["enum"],
+                    "topics": [t.name for t in spec.reactions.said_by_the_agent()],
                 }
                 if (said_so := spec.reactions.tool()) is not None
                 else None

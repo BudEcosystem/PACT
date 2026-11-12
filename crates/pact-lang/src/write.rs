@@ -32,6 +32,8 @@ use crate::emit::{self, StaysAFile};
 use crate::read::{default_description, read};
 use crate::{SINGLES, slug, word_for};
 
+mod flow;
+
 /// A document as PACT-language text.
 pub struct Written {
     pub text: String,
@@ -463,6 +465,15 @@ impl<'a> Printer<'a> {
         {
             return text;
         }
+        // One figure and nothing said about it: `let refund-limit = 200 USD`.
+        if word == "value"
+            && style == Style::Rich
+            && settings.len() == 1
+            && a_name(id)
+            && let Some(figure) = settings.get("value").and_then(|e| emit::word(&e.node))
+        {
+            return format!("let {id} = {figure}\n");
+        }
         let mut out = format!("{word} {}", named(id));
         let mut rest = settings.clone();
         if kind == Kind::Agent
@@ -576,8 +587,33 @@ impl<'a> Printer<'a> {
         inside: &[&str],
     ) -> Result<(), StaysAFile> {
         let pad = " ".repeat(indent);
+        // A workflow's stages, in the order they run — where they can be said
+        // that way. `steps:` and `starts-at:` are then the statements' to say.
+        let statements = (style == Style::Rich && kind == Kind::Flow)
+            .then(|| self.statements(settings, true, indent))
+            .flatten();
+        // `based on <name> with <name>: <value>, …` — the base, and what it
+        // left open, on one line.
+        let based_on = (style == Style::Rich)
+            .then(|| settings.get("based-on").and_then(|e| one_line(&e.node)))
+            .flatten()
+            .filter(|n| !n.contains(" with "));
+        let with = based_on.and_then(|_| settings.get("with")).and_then(|e| given(&e.node));
         for (key, entry) in settings {
             let node = &entry.node;
+            if statements.is_some() && matches!(key.as_str(), "steps" | "starts-at") {
+                continue;
+            }
+            if let Some(name) = based_on {
+                if key == "based-on" {
+                    let with = with.as_deref().map(|w| format!(" with {w}")).unwrap_or_default();
+                    out.push_str(&format!("{pad}based on {}{with}\n", named(name)));
+                    continue;
+                }
+                if key == "with" && with.is_some() {
+                    continue;
+                }
+            }
             if style == Style::Rich
                 && let Some(lines) = self.sentence(kind, key, node, indent, inside)
             {
@@ -605,6 +641,9 @@ impl<'a> Printer<'a> {
             }
             self.one(out, key, node, indent, style)?;
         }
+        if let Some(statements) = statements {
+            out.push_str(&statements);
+        }
         Ok(())
     }
 
@@ -620,8 +659,12 @@ impl<'a> Printer<'a> {
     ) -> Option<String> {
         let pad = " ".repeat(indent);
         match (kind, key) {
-            (Kind::Agent, "accepts") => Some(format!("{pad}takes {}\n", shapes(node)?)),
-            (Kind::Agent, "answers-with") => Some(format!("{pad}gives {}\n", shapes(node)?)),
+            (Kind::Agent | Kind::Flow, "accepts") | (Kind::Program, "takes") => {
+                Some(format!("{pad}takes {}\n", shapes(node)?))
+            }
+            (Kind::Agent | Kind::Flow | Kind::Program, "answers-with") => {
+                Some(format!("{pad}gives {}\n", shapes(node)?))
+            }
             (Kind::Agent, "uses") => Some(format!("{pad}uses {}\n", names(node)?)),
             (Kind::Tagged, "topics") => Some(format!("{pad}about {}\n", names(node)?)),
             (Kind::Agent, "team") => {
@@ -694,6 +737,9 @@ enum Kind {
     Policy,
     Reaction,
     Event,
+    /// A workflow or a loop: its `steps:` are written as statements.
+    Flow,
+    Program,
     Plain,
 }
 
@@ -705,6 +751,8 @@ impl Kind {
             "policy" => Kind::Policy,
             "reaction" => Kind::Reaction,
             "event" => Kind::Event,
+            "workflow" | "loop" => Kind::Flow,
+            "program" => Kind::Program,
             _ => Kind::Plain,
         }
     }
@@ -724,6 +772,20 @@ fn shapes(node: &Node) -> Option<String> {
 }
 
 /// `zendesk, payments`
+/// `domain: refunds, daily-cap: 0.05 USD` — or `None` when a comma or a colon
+/// in one of the figures would make the line read as something else.
+fn given(node: &Node) -> Option<String> {
+    let fields = node.as_map().filter(|m| !m.is_empty())?;
+    let mut parts = Vec::new();
+    for (name, figure) in fields {
+        let figure = emit::word(&figure.node).filter(|f| !f.contains(',') && !f.is_empty())?;
+        (name.chars().all(|c| c.is_alphanumeric() || matches!(c, '_' | '-')) && !name.is_empty())
+            .then_some(())?;
+        parts.push(format!("{name}: {figure}"));
+    }
+    Some(parts.join(", "))
+}
+
 fn names(node: &Node) -> Option<String> {
     let items = node.as_list().filter(|l| !l.is_empty())?;
     let mut parts = Vec::new();
