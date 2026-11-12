@@ -51,6 +51,32 @@ can now SAY, the way a program is written, what a folder of YAML already could.
   stands for first (`pact write`, then `pact build`), and a tree in which the instructions
   still cannot be found is refused as uncheckable instead of checked as it stands.
 
+### What a real model found
+
+The `.pact` examples were run against a live model for the first time
+(`test_the_language_runs_on_a_live_model.py`, opt-in; `gpt-4o-mini`): the refund on
+`finance-first`, a judge reading who is upset, a topic only the agent can notice, and both
+`help-centre` workflows with real agents. Nine cases pass. Four things it found are fixed,
+each with a test that needs no model:
+
+- **A tool's arguments were never sent to a served model.** `OllamaTransport` sent
+  `"properties": {}` for every tool. It sends the author's `takes:` now, `one of a, b` as a
+  closed list, and takes an `api_key` for a server that wants one.
+- **`working-on`'s arguments were a JSON schema**, which no transport reads; a provider was
+  sent three arguments called `type`, `properties` and `required`.
+- **`working-on` is not offered once every topic has been said**, on both ports. Told
+  `noted: legal`, a model said it again until its steps ran out.
+- **An agent or a person that decides is shown what it decides about.** The reference
+  workflow runtime handed both `{}`: the agent now gets the workflow's input, as much as it
+  `accepts:`, and the person the question's own `shows:`.
+
+The older opt-in live test (`test_the_phase_1_fields_reach_a_live_model.py`, the Pydantic AI
+path) was run too and passes; its one stale line expected no step ceiling, which law 2 gave
+every run on 10 November.
+
+One is written down and not fixed: an agent that `gives reply: text` ends its reply with the
+line `- reply: text`, word for word (`docs/99` §7).
+
 ### What is not there
 
 Expressions. A path is a path: no arithmetic, no reassignment, and the loop variable is always

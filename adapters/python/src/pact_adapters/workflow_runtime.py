@@ -396,17 +396,49 @@ class _Run:
                     return chosen.label, {"label": chosen.label, "because": chosen.because}
                 continue
             if rung.agent:
-                answer = _as_answer(await self.invoke(rung.agent, {}))
+                answer = _as_answer(await self.invoke(rung.agent, self.given_to(rung.agent, scope)))
                 label = _one_of(answer, labels)
                 if label:
                     return label, {"label": label, "by": rung.agent}
                 continue
             if rung.asks:
-                answer = await self.person(rung.asks, {}, stage.name)
+                answer = await self.person(rung.asks, self.shown_for(rung.asks, scope), stage.name)
                 label = _one_of(answer, labels)
                 if label:
                     return label, {"label": label, "by": "a person"}
         raise Stopped(f"{stage.name!r} ran out of ways to decide between {', '.join(labels)}")
+
+    def given_to(self, agent: str, scope: _Scope) -> dict[str, Any]:
+        """What an agent that decides is handed: the workflow's own input, as
+        much of it as the agent `accepts:`.
+
+        A `decide` stage has no `bind:` — `pact check` refuses one
+        (`loader/a-line-this-stage-never-reads`) — so there is no line that
+        says what the agent is given, and for a round it was given `{}`. Every
+        scripted agent answered regardless. The first real one was asked to
+        sort a message it had not been shown, and said `not-sure` to all of
+        them. What it decides ABOUT is what the workflow was started with, and
+        its own `accepts:` says which parts of that it reads."""
+        accepts = ((self.document.get("agents") or {}).get(agent) or {}).get("accepts") or {}
+        given = dict(scope.input) if isinstance(scope.input, Mapping) else {}
+        if accepts:
+            given = {k: v for k, v in given.items() if k in accepts}
+        return given
+
+    def shown_for(self, question: str, scope: _Scope) -> dict[str, Any]:
+        """What a person who decides is shown: the question's own `shows:`
+        lines, read — `shows: [input.message]`. It was `{}`, so the person was
+        asked which desk should take a message nobody showed them."""
+        mine = (self.document.get("workflows") or {}).get(self.spec.name) or {}
+        asked = (mine.get("questions") or {}).get(question) or (
+            (self.document.get("questions") or {}).get(question) or {}
+        )
+        shown: dict[str, Any] = {}
+        for binding in asked.get("shows") or ():
+            value = scope.read(str(binding))
+            if value is not ABSENT:
+                shown[str(binding)] = value
+        return shown
 
     async def person(self, question: str, shown: dict[str, Any], at: str) -> dict[str, Any]:
         if self.callers.person is None:

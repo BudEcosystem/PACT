@@ -1902,8 +1902,13 @@ async def run(
         offered = set(phase.tools_offered(tuple(d["name"] for d in tool_defs)))
         # Saying what the work has turned to is not a capability a stage
         # narrows: wherever the agent may act at all, it may say so.
-        if offered and any(d["name"] == WORKING_ON for d in tool_defs):
-            offered.add(WORKING_ON)
+        # And only while there is something left to say: once every topic that
+        # is the agent's to notice has been said, the tool is not offered.
+        if any(d["name"] == WORKING_ON for d in tool_defs):
+            if offered and reactor.more_to_say():
+                offered.add(WORKING_ON)
+            else:
+                offered.discard(WORKING_ON)
         step_tools = [d for d in tool_defs if d["name"] in offered]
         readable = set(phase.skills_offered(spec.skill_names))
         step_skills = tuple(s for s in spec.skills if s.name in readable)

@@ -441,6 +441,43 @@ All seven packages are built (12 November 2026), and an eighth that was not in t
   must not edit a `.pact` file's text by position. Before this, such a tree was
   checked unchanged and the proposal passed whatever it said.
 
+### What a live model showed (12 November 2026)
+
+`adapters/python/tests/test_the_language_runs_on_a_live_model.py` runs the
+`.pact` examples against a real model: the agent, every agent it wakes, and the
+judge. It is opt-in (`PACT_LIVE_BASE_URL`, `PACT_LIVE_MODEL`,
+`PACT_LIVE_API_KEY`) and was run on `gpt-4o-mini`. Nine cases; every one
+passes after the four fixes below, and each fix has a test that needs no model.
+
+| What was run | What happened |
+|---|---|
+| `hello.pact` | answered |
+| `finance-first.pact`, a refund | the call was held and the finance desk asked first; the model made the call again; a person was asked; the refund ran once; the auditor was told, and its words are on the run |
+| the same, a furious customer and a polite one | the judge fired for the first and not the second; the reminded agent apologised |
+| a topic `noticed-by: [the-agent]` | the model called `working-on` with the right name on its first step, and answered as the reminder says |
+| `help-centre`, `route`, three messages | the rule sent the invoices mailbox to billing; the sorter — a real model — sent a crash to tech and said `not-sure` about the weather, which went to a person |
+| `help-centre`, `clear-inbox` | `route` ran once for each message, each reaching its own desk |
+
+What it found, none of which a scripted model could:
+
+- **A tool's arguments were not sent.** The one transport here that reaches a
+  server sent every tool with `"properties": {}`, so a model had to guess that
+  `billing` takes `order` and `amount`. They are sent now, and `one of a, b`
+  as the closed list it is. The same transport takes an `api_key`.
+- **`working-on` was written as no other tool is.** Its arguments were a JSON
+  schema; every transport builds its own from `{argument: shape}`, so a
+  provider was sent three arguments called `type`, `properties` and `required`.
+- **A model told `noted: legal` said it again** — four times, until its steps
+  ran out. Once every topic the agent can say has been said, the tool is no
+  longer offered, on both ports. Its description now puts the name first; shown
+  `legal — Contracts, liability, …` the model had answered `Contracts`.
+- **Whoever decides was shown nothing.** A `decide` stage has no `bind:`, and
+  the reference workflow runtime handed the deciding agent `{}` and the
+  deciding person `{}`. A real sorter, asked to sort a message it was not
+  shown, said `not-sure` every time. The agent is now given the workflow's
+  input, as much of it as it `accepts:`; the person is shown the question's
+  own `shows:`.
+
 ### What is not done
 
 - **Comments are not carried between the two ways of writing.** A comment is
@@ -460,9 +497,16 @@ All seven packages are built (12 November 2026), and an eighth that was not in t
   specification, not to the language.
 - **The loop variable is always `item`.** `for each item in …`, and
   `item.<part>` inside. The document has one word for it, so the language does.
-- **No run against a live model.** Every test here drives a scripted one, which
-  is how the rest of this repository tests a loop. Whether a model calls
-  `working-on` when it should is not something a script can show.
+- **One model, one provider.** The live run below was `gpt-4o-mini`. What a
+  smaller model served on this machine does with `working-on`, or with a call
+  that comes back held, has not been measured.
+- **An answer that is one line of text is asked for badly.** Found live and not
+  fixed: an agent that `gives reply: text` is told to *"end your reply with …
+  `- reply: text`"*, and `gpt-4o-mini` ends its reply with that line, word for
+  word. A closed list (`desk: one of billing, tech, …`) it fills in correctly.
+  The instruction is `harness._answer_shape_in_words`, the same in both ports
+  and for every agent that gives anything; a clearer wording was tried and did
+  not hold, so it is left as it was and written down here.
 - **No study with people.** Whether the language is easier than YAML for
   somebody who has seen neither is the question it exists to answer, and it has
   not been asked of anybody.

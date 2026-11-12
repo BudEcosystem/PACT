@@ -79,6 +79,37 @@ def test_the_decision_falls_to_the_next_one_who_can_make_it() -> None:
     assert out.answer == {"reply": "tech-desk: The app crashes."}
 
 
+def test_whoever_decides_is_shown_what_they_are_deciding_about() -> None:
+    """Found by the first live run (`test_the_language_runs_on_a_live_model`):
+    a `decide` stage has no `bind:`, and the runtime handed the deciding agent
+    `{}` and the deciding person `{}`. A scripted sorter answers whatever it
+    is given; a real one, asked to sort a message it was not shown, said
+    `not-sure` to every message."""
+    desks = Desks(sorter_says="not-sure")
+    shown_to_a_person: list[tuple[str, dict[str, Any]]] = []
+
+    def person(question: str, shown: dict[str, Any]) -> dict[str, Any]:
+        shown_to_a_person.append((question, dict(shown)))
+        return {"desk": "tech"}
+
+    doc = shown(REPO / TREE)
+    spec = WorkflowSpec.from_workflow(doc, "route")
+    out = asyncio.run(
+        run_workflow(
+            spec, {"message": "The app crashes.", "channel": "chat"},
+            Callers(agent=desks, person=person), document=doc,
+        )
+    )
+    assert out.halted == "final", out.said
+    # The sorter `takes message: text`, so it is given the message — and not
+    # the channel, which it never said it reads.
+    assert desks.asked[0] == ("sorter", {"message": "The app crashes."})
+    # The sorter was not sure, so a person decides — shown what the question's
+    # own `shows: [input.message]` says to show.
+    assert shown_to_a_person == [("which-desk", {"input.message": "The app crashes."})]
+    assert stages(out) == ["where", "fix", "reply-fix"], out.trace
+
+
 def test_a_label_with_one_step_beneath_it_ends_there() -> None:
     desks = Desks(sorter_says="out-of-scope")
     out, _ = go("route", {"message": "What is the weather?", "channel": "chat"}, desks)

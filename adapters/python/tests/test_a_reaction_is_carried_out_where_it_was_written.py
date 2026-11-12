@@ -68,6 +68,8 @@ class Listening(ReferenceTransport):
     async def model_call(self, system, history, tools):  # type: ignore[override]
         self.told.append(system)
         self.offered = [t["name"] for t in tools]
+        #: What was offered at each call, in order.
+        self.offers = [*getattr(self, "offers", []), self.offered]
         return await super().model_call(system, history, tools)
 
 
@@ -198,7 +200,8 @@ def test_the_agent_says_its_own_topic_and_gets_the_answer_back() -> None:
         run(spec, listening, "Is the VAT on shipping refunded?", tools([]),
             ask_member=delegate_by_running(doc, members), checking_transport=NO())
     )
-    assert WORKING_ON in listening.offered
+    # Offered until it has been used for the one topic there is, and not after.
+    assert WORKING_ON in listening.offers[0] and WORKING_ON not in listening.offers[1]
     assert out.halted == "final", (out.halted, out.output)
     said = out.steps[0].tool_results[0]
     assert said.startswith("noted: finance"), said
@@ -212,6 +215,52 @@ def test_the_agent_says_its_own_topic_and_gets_the_answer_back() -> None:
             checking_transport=NO())
     )
     assert wrong.steps[0].tool_results[0].startswith("error: 'the weather' is not one of")
+
+
+def test_the_tool_an_agent_says_its_topic_with_is_written_as_every_tool_is() -> None:
+    """Found by the first live run. The definition was a JSON schema; every
+    transport builds its own from `{argument: shape in words}`, so a provider
+    was sent a tool with three arguments called `type`, `properties` and
+    `required`."""
+    from pact_adapters.transports.anthropic_transport import AnthropicTransport
+    from pact_adapters.transports.ollama_transport import OllamaTransport
+
+    spec = AgentSpec.from_document(shipped(), "support")
+    said_so = spec.reactions.tool()
+    assert said_so["parameters"] == {"topic": "one of finance"}
+    assert all(isinstance(shape, str) for shape in said_so["parameters"].values())
+    # The name comes first and the description after it in brackets.
+    assert "`finance` (Money moving" in said_so["description"]
+    # And what a provider is sent: one argument, `topic`, a closed list.
+    sent = OllamaTransport("m").payload_for("", [], [said_so])["tools"][0]["function"]
+    assert sent["parameters"]["properties"] == {
+        "topic": {"type": "string", "enum": ["finance"], "description": "one of finance"}
+    }
+    sent = AnthropicTransport(Script([])).request_for("", [], [said_so])["tools"][0]
+    assert set(sent["input_schema"]["properties"]) == {"topic"}
+
+
+def test_once_every_topic_has_been_said_the_tool_is_no_longer_offered() -> None:
+    """Found by the first live run: told `noted: legal`, a model said it again
+    — four times, until its steps ran out. A tool with nothing left to say can
+    only be called again, so it is not offered."""
+    spec = AgentSpec.from_document(shipped(), "support")
+    says_it = ToolCall(WORKING_ON, {"topic": "finance"})
+    lead = Script([Turn("", (says_it,)), Turn("", (says_it,)), Turn("Done.")])
+    seen: list[list[str]] = []
+
+    class Watching(ReferenceTransport):
+        async def model_call(self, system, history, tools):  # type: ignore[override]
+            seen.append([t["name"] for t in tools])
+            return await super().model_call(system, history, tools)
+
+    out = asyncio.run(run(spec, Watching(lead), "A question about a refund.", tools([]), checking_transport=NO()))
+    assert WORKING_ON in seen[0], seen
+    assert all(WORKING_ON not in offered for offered in seen[1:]), seen
+    # Saying it a second time, with the tool gone, is a call to nothing — and
+    # is told so, as any call to a tool that is not offered is.
+    assert out.steps[0].tool_results[0].startswith("noted: finance"), out.steps[0].tool_results
+    assert out.reactor.state()["said"] == ["finance"]
 
 
 def test_a_judge_that_says_yes_adds_the_reminder_and_one_that_says_no_adds_nothing() -> None:
@@ -424,18 +473,21 @@ def test_the_second_port_names_every_reaction_it_does_not_carry_out() -> None:
     spec = AgentSpec.from_document(shipped(), "support")
     said_so = spec.reactions.tool()
     payload = {
-        "name": "support", "instructions": "Help.", "tools": [], "maxSteps": 3,
+        "name": "support", "instructions": "Help.", "tools": [], "maxSteps": 4,
         "reactions": {
             "names": [r.name for r in spec.reactions.reactions],
             "workingOn": {
                 "description": said_so["description"],
-                "topics": said_so["parameters"]["properties"]["topic"]["enum"],
+                "topics": [t.name for t in spec.reactions.said_by_the_agent()],
             },
         },
     }
     out = _node(payload, [
-        {"text": "", "toolCalls": [{"name": WORKING_ON, "args": {"topic": "finance"}}]},
+        # A subject that is not one of them first: once the one topic there
+        # is has been said, the tool is no longer offered on either port.
         {"text": "", "toolCalls": [{"name": WORKING_ON, "args": {"topic": "the weather"}}]},
+        {"text": "", "toolCalls": [{"name": WORKING_ON, "args": {"topic": "finance"}}]},
+        {"text": "", "toolCalls": [{"name": WORKING_ON, "args": {"topic": "finance"}}]},
         {"text": "done"},
     ])
     lines = [s for s in out["unenforced"] if s.startswith("reactions: ")]
@@ -444,10 +496,13 @@ def test_the_second_port_names_every_reaction_it_does_not_carry_out() -> None:
         assert any(s.startswith(f"reactions: {reaction.name} — read and not carried out") for s in lines)
     # The tool is offered and answered in the words Python uses, so a model
     # sees the same thing on both; nobody is asked on this port.
-    assert out["trace"][0]["results"] == ["noted: finance"], out["trace"]
-    assert out["trace"][1]["results"] == [
+    assert out["trace"][0]["results"] == [
         "error: 'the weather' is not one of the subjects to say: finance"
     ], out["trace"]
+    assert out["trace"][1]["results"] == ["noted: finance"], out["trace"]
+    # Said, so it is gone: saying it again is a call to a tool not offered.
+    assert "working-on" in out["trace"][2]["results"][0], out["trace"]
+    assert not out["trace"][2]["results"][0].startswith("noted"), out["trace"]
     # An agent no reaction covers is told nothing about them.
     quiet = _node({"name": "x", "instructions": "y", "tools": [], "maxSteps": 2}, [{"text": "done"}])
     assert not [s for s in quiet["unenforced"] if s.startswith("reactions")]
