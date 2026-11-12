@@ -69,6 +69,10 @@ workflow clear-inbox
     identified-by: [id]
     limits:
       items-at-most: 50
+      # One at a time, in order. Left out, how many run at once is the
+      # runtime's to choose, and the order agents are asked in with it — which
+      # a case could then not expect.
+      at-once-at-most: 1
       when-it-runs-out: stop-and-say-so
     one = call route with message: item.text, channel: item.channel
   done-all = answer with replies: every.reply

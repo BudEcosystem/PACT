@@ -1,5 +1,5 @@
 {
- "about": "Workflows: stages in the order they run, what each called agent and each person was given, and the answer. Replayed as conformance_kit.replay_workflow does: `agents` is what each agent answers when called (a list is one answer for each time it is asked, the last repeating); `tools` is what each `<tool>/<action>` hands back; `people` is what a person answers to each question by name (absent: nobody is there to ask, and the run parks). In `expect`: `trace` is the stages that ran, nested ones as `outer/inner`; `given` is each agent called and its inputs, in order; `shown` is each question put to a person and what they were shown; `called` is each tool call. An agent a stage calls is an agent's run, under its own limits, approvals and reactions; here each is answered by the case, so what is compared is the workflow.",
+ "about": "Workflows: stages in the order they run, what each called agent and each person was given, and the answer. Replayed as conformance_kit.replay_workflow does: `agents` is what each agent answers when called (a list is one answer for each time it is asked, the last repeating); `tools` is what each `<tool>/<action>` hands back; `people` is what a person answers to each question by name (absent: nobody is there to ask, and the run parks). In `expect`: `trace` is the stages that ran, nested ones as `outer/inner`; `given` is each agent called and its inputs, in order; `shown` is each question put to a person and what they were shown; `called` is each tool call. An agent a stage calls is an agent's run, under its own limits, approvals and reactions; here each is answered by the case, so what is compared is the workflow. A case expects only what the specification fixes: where the order things happen in is the runtime's to choose (an `each` with no `at-once-at-most:`), the tree a case runs on says `at-once-at-most: 1`. In `answer`, a field the run did not set is absent, not null; a run that stopped hands back an empty record, and why is in `said`.",
  "cases": [
   {
    "name": "a-written-rule-decides-and-nobody-is-asked",
@@ -644,14 +644,7 @@
     ]
    },
    "expect": {
-    "answer": {
-     "ideas": [
-      {
-       "idea": "Lumen",
-       "score": 0.95
-      }
-     ]
-    },
+    "answer": {},
     "called": [],
     "given": [
      {
