@@ -259,6 +259,65 @@ workflow route
 }
 
 #[test]
+fn a_decision_says_what_its_agents_are_given_with_the_word_a_call_uses() {
+    let text = "\
+workflow fix-item
+  description: Classify a defect and pick the team that takes it.
+  takes report: text
+  triage = call triager with report: input.report
+  assign = decide with kind: triage.kind, summary: triage.summary, urgency: input.urgency
+    by:
+      - { agent: assigner }
+    if powerplant: done
+    if interiors: done
+";
+    let doc = read(text);
+    let assign = &doc["workflows"]["fix-item"]["steps"]["assign"];
+    assert_eq!(assign["does"], json!("decide"));
+    // A step's name is read as `steps.<name>`, as after a `call … with`.
+    assert_eq!(
+        assign["bind"],
+        json!({
+            "kind": "steps.triage.kind",
+            "summary": "steps.triage.summary",
+            "urgency": "input.urgency",
+        })
+    );
+    assert_eq!(
+        assign["chooses-between"],
+        json!({"powerplant": "done", "interiors": "done"})
+    );
+    comes_back_as_written(text);
+    // With no name of its own, and an item given under the name the agent uses.
+    comes_back_as_written(
+        "\
+workflow shelve
+  description: Put every note on a shelf.
+  takes notes: list of text
+  for each item in input.notes
+    decide with note: item
+      by:
+        - { agent: shelver }
+      if bills: done
+      if other: done
+",
+    );
+    // `with` and nothing after it is not a line.
+    let rules: Vec<&str> = refused(
+        "\
+workflow shelve
+  description: Put every note on a shelf.
+  decide with note
+    if bills: done
+",
+    )
+    .into_iter()
+    .map(|(rule, _)| rule)
+    .collect();
+    assert!(rules.contains(&"lang/not-a-line"), "{rules:?}");
+}
+
+#[test]
 fn starting_something_and_stopping_it_and_asking_a_person() {
     let text = "\
 workflow work

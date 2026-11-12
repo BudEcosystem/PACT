@@ -87,7 +87,9 @@ next. `read/flow.rs` reads a list of statements into that:
 2. `place` gives each `Goes` step a `then: { answered: <next> }`, unless a
    `then:` written beneath it already says `answered:`.
 3. The statements beneath an `if` are placed beside the `decide`, and the last
-   of each goes on to whatever follows the `decide`.
+   of each goes on to whatever follows the `decide`. `decide with <input>:
+   <path>, …` is read by the same `binds` a `call … with` is, into the
+   stage's `bind:`.
 4. A path such as `plan.findings` becomes `steps.plan.findings` (`bound` in
    `lib.rs`); `unbound` is its inverse for the printer, and a unit test holds
    that the two undo each other.

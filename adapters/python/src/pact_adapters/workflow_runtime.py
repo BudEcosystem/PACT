@@ -409,7 +409,7 @@ class _Run:
                     return chosen.label, {"label": chosen.label, "because": chosen.because}
                 continue
             if rung.agent:
-                given = self.given_to(rung.agent, scope, stage.says)
+                given = self.given_to(rung.agent, scope, stage.says, stage.bind)
                 answer = _as_answer(await self.invoke(rung.agent, given))
                 label = _one_of(answer, labels)
                 if label:
@@ -422,11 +422,29 @@ class _Run:
                     return label, {"label": label, "by": "a person"}
         raise Stopped(f"{stage.name!r} ran out of ways to decide between {', '.join(labels)}")
 
-    def given_to(self, agent: str, scope: _Scope, says: str = "") -> dict[str, Any]:
+    def given_to(
+        self,
+        agent: str,
+        scope: _Scope,
+        says: str = "",
+        bind: Mapping[str, str] | None = None,
+    ) -> dict[str, Any]:
         """What an agent that decides is handed (`rung.agent`, in the schema's
-        own words): the current item's fields over the workflow's input, as
-        many as it `accepts:` and nothing it does not, and the stage's `says:`
-        at the start of its `message`.
+        own words): the stage's `bind:` over the current item's fields over
+        the workflow's input, as many as it `accepts:` and nothing it does
+        not, and the stage's `says:` at the start of its `message`.
+
+        **The stage's `bind:`, over both.** The input and the item are all a
+        deciding agent could be given, so one that had to judge what an
+        EARLIER STAGE found — which team takes a defect a triage stage has
+        just classified — was handed nothing, in this runtime and in Bud
+        Agent Flow's, and a scripted agent answered regardless. A `decide`
+        may now write `bind:` as a `call` does: `kind: steps.triage.kind`. A
+        bound name is the binding's to fill and nothing else's: it wins over
+        the same name in the item or the input, and where the binding reads
+        nothing the agent is given nothing under that name. Written rules
+        read their own bindings and a person is shown the question's
+        `shows:`, so `bind:` is the agents' alone.
 
         A `decide` stage has no `bind:` — `pact check` refuses one
         (`loader/a-line-this-stage-never-reads`) — so there was no line that
@@ -450,6 +468,10 @@ class _Run:
         declared = ((self.document.get("agents") or {}).get(agent) or {}).get("accepts") or {}
         accepted = set(declared) or {"message"}
         subject = dict(scope.input) if isinstance(scope.input, Mapping) else {}
+        bound = {str(k).strip(): scope.read(v) for k, v in (bind or {}).items()}
+        # `bind: {note: item}` says where a one-value item goes, so there is
+        # nothing left to report about it.
+        placed = any(str(v).strip() == "item" for v in (bind or {}).values())
         if isinstance(scope.item, Mapping):
             subject.update(scope.item)
         elif scope.item is not ABSENT:
@@ -463,12 +485,19 @@ class _Run:
                 subject["message"] = item if isinstance(item, str) else json.dumps(
                     item, ensure_ascii=False, sort_keys=True, default=str
                 )
-            else:
+            elif not placed:
                 self.result.unenforced.append(
                     f"a stage that '{agent}' decides, for each item of a list of single "
                     f"values — '{agent}' accepts no `message`, so the item it was to decide "
                     f"about could not be given to it"
                 )
+        # A name the stage binds is the binding's to fill, and nothing else's:
+        # where the binding reads nothing the agent is given nothing under
+        # that name, rather than whatever the input happens to call the same.
+        for name, value in bound.items():
+            subject.pop(name, None)
+            if value is not ABSENT:
+                subject[name] = value
         given = {k: v for k, v in subject.items() if k in accepted}
         said = (says or "").strip()
         if said:

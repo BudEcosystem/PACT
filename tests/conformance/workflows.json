@@ -675,6 +675,164 @@
     ],
     "unenforced": []
    }
+  },
+  {
+   "name": "a-deciding-agent-is-given-what-an-earlier-stage-found-and-the-bound-name-wins",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "fix-item",
+   "input": {
+    "report": "Oil on the cowling after landing.",
+    "kind": "cabin",
+    "urgency": "high",
+    "secret": "tail number N123"
+   },
+   "agents": {
+    "triager": {
+     "kind": "engine",
+     "summary": "Oil leak at the cowling."
+    },
+    "assigner": {
+     "team": "powerplant"
+    }
+   },
+   "people": null,
+   "expect": {
+    "answer": {
+     "by": "assigner",
+     "label": "powerplant"
+    },
+    "called": [],
+    "given": [
+     {
+      "agent": "triager",
+      "given": {
+       "report": "Oil on the cowling after landing."
+      }
+     },
+     {
+      "agent": "assigner",
+      "given": {
+       "kind": "engine",
+       "summary": "Oil leak at the cowling.",
+       "urgency": "high"
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "triage",
+     "assign"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "a-binding-that-reads-nothing-gives-nothing-under-that-name",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "fix-item",
+   "input": {
+    "report": "Seat 14C will not recline.",
+    "kind": "cabin",
+    "urgency": "low",
+    "secret": "tail number N123"
+   },
+   "agents": {
+    "triager": {
+     "summary": "Seat 14C is stuck upright."
+    },
+    "assigner": {
+     "team": "interiors"
+    }
+   },
+   "people": null,
+   "expect": {
+    "answer": {
+     "by": "assigner",
+     "label": "interiors"
+    },
+    "called": [],
+    "given": [
+     {
+      "agent": "triager",
+      "given": {
+       "report": "Seat 14C will not recline."
+      }
+     },
+     {
+      "agent": "assigner",
+      "given": {
+       "summary": "Seat 14C is stuck upright.",
+       "urgency": "low"
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "triage",
+     "assign"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "a-one-value-item-goes-where-the-stage-binds-it",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "shelve",
+   "input": {
+    "notes": [
+     "Invoice 14 is overdue.",
+     "Lunch on Friday?"
+    ]
+   },
+   "agents": {
+    "shelver": [
+     {
+      "shelf": "bills"
+     },
+     {
+      "shelf": "other"
+     }
+    ]
+   },
+   "people": null,
+   "expect": {
+    "answer": {},
+    "called": [],
+    "given": [
+     {
+      "agent": "shelver",
+      "given": {
+       "note": "Invoice 14 is overdue."
+      }
+     },
+     {
+      "agent": "shelver",
+      "given": {
+       "note": "Lunch on Friday?"
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "every",
+     "every/where",
+     "every/where",
+     "answer"
+    ],
+    "unenforced": []
+   }
   }
  ]
 }

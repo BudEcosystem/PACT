@@ -261,6 +261,7 @@ workflow deliver
 | `repeat`, or `repeat at most <n> times`, with statements beneath | `does: repeat`, `at-most: <n>`, and the statements as its `steps:` |
 | `together`, with statements beneath | `does: together`; they all start at once |
 | `decide`, with `if` lines beneath | `does: decide`, `chooses-between:` |
+| `decide with <input>: <path>, …` | the same, with `bind:` — what the agents that decide are given besides the workflow's input and the item |
 | `if <label>`, with statements beneath | the label leads to the first of them |
 | `if <label>: <step>` | the label leads to a step written elsewhere, or to `done` |
 | `answer` · `answer with <field>: <path>, …` | `does: answer`, `bind:` |

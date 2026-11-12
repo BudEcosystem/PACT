@@ -157,6 +157,34 @@ for it beneath. Steps written *after* the whole `decide` block run once the
 chosen branch has finished, which is how branches come back together.
 `if <label>: done` ends the run for that label.
 
+### What the deciding agent is shown
+
+An agent that decides is given three things, by name: the workflow's input,
+the fields of the item it is inside a `for each` of, and whatever the
+`decide` hands it with the word a `call` uses. Of those it gets only what it
+`takes`.
+
+```text
+  triage = call triager with report: input.report
+  assign = decide with kind: triage.kind, summary: triage.summary
+    by:
+      - { agent: assigner }
+    if powerplant: done
+    if interiors: done
+```
+
+`with` is the only way a deciding agent sees what an earlier step found. A
+name written there is filled from that place and no other: if `triage` gave
+no `kind`, the assigner is given no `kind`, even when the workflow's input
+has a field of the same name.
+
+In a loop over plain texts each text is the agent's `message`. An agent that
+calls it something else says so: `decide with note: item`.
+
+`pact check` refuses a decision whose agent would be given nothing it takes,
+or would be left without something it requires
+(`loader/a-deciding-agent-given-nothing`), and tells you what is on offer.
+
 ## Things at once
 
 ```text

@@ -54,6 +54,8 @@ const PICKED: &str = "    by:
 
 const AN_AGENT: &str = "description: Picks how many approvals an invoice needs.
 instructions: Say which approvals this invoice needs.
+accepts:
+  invoice: invoice-data
 answers-with:
   tier: one of auto, owner, owner-then-controller
 ";

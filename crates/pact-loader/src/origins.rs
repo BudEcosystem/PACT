@@ -4,7 +4,7 @@
 //! | Rule | Severity | Fires when |
 //! |---|---|---|
 //! | `loader/written-from-a-source-it-refuses` | error | a workflow's remembered fact `comes-from:` a value whose origin its own `never-from:` lists — the run's input (`the customer`), a tool's answer (`tool output`), an agent's answer (`a teammate`) |
-//! | `loader/hidden-from-the-ai-but-handed-to-it` | warning | a workflow `hides:` a value from `the-ai` and a stage binds that value into a call to an agent: the agent is handed the placeholder, never the value, which is right for an agent that only carries it to a write (`hides:` puts the original back there) and wrong for one asked to judge it |
+//! | `loader/hidden-from-the-ai-but-handed-to-it` | warning | a workflow `hides:` a value from `the-ai` and a stage binds that value into a call to an agent, or a `decide` binds it for the agent on its rung: the agent is handed the placeholder, never the value, which is right for an agent that only carries it to a write (`hides:` puts the original back there) and wrong for one asked to judge it |
 //! | `loader/a-model-outside-the-region` | error | a workflow says `data-stays-in: <region>` and calls an agent pinned to a model the workspace's catalogue records as served somewhere else |
 //!
 //! # What the run adds
@@ -183,7 +183,18 @@ fn hidden_from_the_ai(
         return;
     }
     for (stage, fields) in stages {
-        let Some(target) = fields.get("call").and_then(Node::as_str).map(str::trim) else {
+        // An agent a stage calls, or the first agent on a `decide`'s rungs
+        // that the stage's `bind:` hands the value to: either way a model is
+        // given the placeholder.
+        let called = fields.get("call").and_then(Node::as_str).map(str::trim);
+        let deciding = fields
+            .get("by")
+            .map(list)
+            .unwrap_or_default()
+            .into_iter()
+            .find_map(|rung| rung.get("agent").and_then(Node::as_str))
+            .map(str::trim);
+        let Some(target) = called.or(deciding) else {
             continue;
         };
         if entry_in(root, "agents", target).is_none() {

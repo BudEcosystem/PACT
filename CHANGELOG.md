@@ -3,6 +3,74 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — an agent that decides is given what it decides about (13 November)
+
+Bud Agent Flow's full gate, run under the rule that a deciding agent is given only what it
+`accepts:`, found six of its own workspaces where the agent on a `decide`'s rung was handed
+nothing and a scripted agent answered regardless. Two of the six could not be fixed in PACT as
+it stood: the agent had to judge what an earlier stage found, and a `decide` could not say so.
+
+### What an author can now write
+
+- **`bind:` on a stage that does `decide`**, and in the language `decide with kind:
+  triage.kind, summary: triage.summary` — the word a `call` uses. It is what the agents on the
+  stage's rungs are given besides the workflow's input and the current item, and the only way
+  one of them is shown what an earlier stage found. No field is new: `bind:` was refused on a
+  `decide` (`loader/a-line-this-stage-never-reads`) and is now read there.
+- **`bind: {note: item}`** says where a one-value item goes, for an agent that does not call it
+  `message`.
+
+### What a runtime must match
+
+- **What a deciding agent is given**, in this order, a later one winning: the workflow's input;
+  the fields of the item it is inside a `for each` of (an item that is one value is its
+  `message`); the stage's `bind:`. Of that, only what the agent `accepts:` — no `accepts:` is a
+  `message` and nothing else. The stage's `says:` goes at the start of the `message`, a bound
+  one included (`workflow_runtime.given_to`).
+- **A name the stage binds is the binding's alone.** Where the binding reads nothing — an
+  optional field the earlier stage left out — the agent is given nothing under that name. The
+  workflow's input is not read for it instead, so a `kind` that the stage says comes from
+  triage is never quietly the `kind` the request came in with.
+- **Every agent rung of one `decide` is given the same subject**, each as much of it as it
+  accepts. Written rules read their own bindings and a person is shown the question's
+  `shows:`; neither reads `bind:`.
+- **A one-value item an agent cannot take as `message` is reported** on `unenforced` only when
+  the stage does not bind `item` to a name.
+- Three shared cases hold these: `tests/conformance/workflows.json`, on the new tree
+  `tests/conformance/trees/triaged-defects`.
+
+### What `pact check` now refuses
+
+- **`loader/a-deciding-agent-given-nothing`** — an agent on a `decide`'s rung requires an input
+  nothing can ever give it, or accepts nothing that anything can. What can give it one: a field
+  of the workflow's `accepts:`, a part of the item's shape, `message` for a one-value item or a
+  stage that writes `says:`, and a `bind:` key. The message lists what is on offer. It says
+  nothing where the list's shape cannot be known.
+- **`loader/a-call-that-does-not-fit`** on a `decide`'s `bind:` — a name none of its agents
+  accepts, or a value in a shape one of them does not take. Each value is read as any binding
+  is (`loader/a-binding-to-nothing`, `-from-later`, `-to-a-stage-that-may-not-have-run`,
+  `loader/an-item-outside-for-each`).
+- **`loader/a-line-this-stage-never-reads`** — `bind:` on a `decide` with no agent rung.
+- **`loader/hidden-from-the-ai-but-handed-to-it`** (a warning) now also covers a value a
+  `decide` binds for its agent.
+
+A workspace that loaded clean can now be refused: one whose deciding agent was never going to
+be shown anything.
+
+### What was wrong in what PACT ships
+
+- **`tests/trees/workflows-48-invoices`**, the invoice inbox the workflow specification prints,
+  was a seventh silent case. Its attachment sorter wrote no `accepts:`, so it took a `message`;
+  an attachment has a `name` and a `file` and no `message`; it was asked to sort a file it was
+  never given. It now accepts `name` and `file`.
+
+### Still owed
+
+- A value the workflow `hides:` from `the-ai` that reaches a deciding agent BY NAME (the input
+  has a field the agent accepts) is not warned about; only one bound for it is.
+- The reference runtime passes a `bind:` key written with a dot (`fills.first-name`) as that
+  literal name, on a `call` and on a `decide` alike.
+
 ## 2026-11 — a case expects only what the specification fixes (12 November)
 
 Bud Agent Flow's second replay: 21 of 24 agreed, and the three that did not were each a question
