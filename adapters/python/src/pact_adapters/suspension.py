@@ -653,6 +653,12 @@ class Suspension:
     #: A fingerprint of the calls this run is waiting to make, taken when it
     #: parked (docs/98 WP-12, the exact-action binding). Empty: nothing to bind.
     request_digest: str = ""
+    #: Which reactions this run has already carried out, what they added to
+    #: what the model is told, and which calls they are holding back (docs/99
+    #: §5). Beside `spent_keys` for the reason that field gives: a run does not
+    #: get a fresh record by being interrupted, so a reaction that fires once a
+    #: run does not fire a second time because a person was asked in between.
+    reactions: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         check_reason(self.reason)
@@ -731,6 +737,7 @@ class Suspension:
             # `same-request-key:` exists to make and the exact moment it is
             # worth most: money moving while a person decides.
             spent_keys=tuple(self.spent_keys),
+            reactions=dict(self.reactions),
         )
 
     # -- crossing a process boundary ---------------------------------------
@@ -779,6 +786,7 @@ class Suspension:
                 # process boundary is the same one it had on the other.
                 "spent-keys": [list(k) for k in self.spent_keys],
                 "request-digest": self.request_digest,
+                "reactions": self.reactions,
             },
             sort_keys=True,
         )
@@ -827,6 +835,7 @@ class Suspension:
                 (str(t), str(a), str(v)) for t, a, v in (d.get("spent-keys") or ())
             ),
             request_digest=str(d.get("request-digest") or ""),
+            reactions=dict(d.get("reactions") or {}),
         )
 
 

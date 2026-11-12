@@ -434,7 +434,7 @@ One folder, loaded by the Rust CLI, executes over **all seven targets** and
 produces *byte-identical traces, tool sequences and model-call counts*. The claim
 is bounded and the bound is written down: it covers `instructions:`, `tools:`,
 `skills:`, `knowledge:`, `team:`, `answers-with:`, the `loop:` and the `limits:`
-ceilings — and **not** the twelve governance keys the Node port reports on
+ceilings — and **not** the thirteen governance keys the Node port reports on
 `unenforced`, nor the documents under `knowledge/`, which nothing on that port
 can look anything up in and which it names on `unretrieved` for every set an
 answer did not come from. See
@@ -603,6 +603,8 @@ as text nobody here reviewed (`a2a_bridge`).
 | [`examples/answers-from-documents`](examples/answers-from-documents) | Retrieval with citation rules |
 | [`examples/mcp-desk`](examples/mcp-desk) | A tool that reaches a real MCP server, with consent |
 | [`examples/patterns/`](examples/patterns) | Eight orchestration patterns: debate, quorum, race, swarm, pipeline, weighted, escalation, first-answer |
+| [`examples/kernel/finance-first`](examples/kernel/finance-first) | Topics, events and reactions: the finance desk is asked before money moves, the auditor is told after |
+| [`examples/language/`](examples/language) | The same workspaces as one `.pact` file each: the smallest one there is, `finance-first`, and one beside a folder of documents |
 | [`tests/trees/`](tests/trees) | Twenty fixtures, each the smallest tree that shows one thing |
 | [`tests/parity/`](tests/parity) | The Pydantic AI parity suite: one fixture per row Phase 1 compiles, and what each must show |
 
@@ -630,6 +632,8 @@ the spec. Every one is checked by `pact check` and held by the harness. The deta
 
 | Added | What you write | What it does |
 |---|---|---|
+| **One file instead of a folder** | `agent desk` / `uses zendesk, payments` / `at most 8 steps` in a `.pact` file | the same workspace, read by the same checker; `pact write` prints any folder as one file and `pact build` writes the folder back, and a test holds that every shipped workspace reads the same both ways ([guide](site-docs/guide/the-pact-language.md)) |
+| **When this happens, do that** | `reactions:` with `remind:`, `consult:`, `tell:`, `stop:`; `topics:` on a tool; `listens-for:` on an agent | a reminder, another agent asked first or told after, at a moment of the run or when the work turns to a topic; a call is held while the agent that asked to hear about it is consulted; a guess may advise and may not stop ([guide](site-docs/guide/events-and-reactions.md)) |
 | **Values known only at run time** | `{{run-inputs.brand}}`, `{{remembers.tone}}` in `instructions:` | the system fills them before the model reads the words; a hole that names nothing the agent declares is refused; `\{{...}}` keeps braces for the model |
 | **Fallback models** | `model: [qwen2.5-14b-instruct, qwen2.5-7b-instruct]` | the next model is tried only when a call fails at the provider; each one is held to `allow-egress:` and `needs:` |
 | **Answers checked before they count** | `checked-by:` with `must-contain:`, `must-say-one-of:`, ...; `checks-at-most:` | a failed check asks again with the reason; still failing, the run stops and names the rule |
@@ -665,11 +669,11 @@ framework is an extra.
 |---|---|
 | **Design** | Thesis, 28 binding decisions, FRD (120 requirements), 60-row refusal ledger — complete |
 | **Research** | 14 source-grounded studies, ~15,750 lines, over 140 repos (~15 GB) + 57 papers |
-| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **4700 tests (1561 Rust + 3139 adapter), clippy clean, TypeScript type-checked** |
+| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **4760 tests (1602 Rust + 3158 adapter), clippy clean, TypeScript type-checked** |
 | **Adapters** | **All 7 named targets**, proven against one shared conformance suite |
 
 ```bash
-./scripts/test-all.sh          # 4700 tests, Rust + 7 adapters, fully offline
+./scripts/test-all.sh          # 4760 tests, Rust + 7 adapters, fully offline
 ```
 
 **What is still owed** is not hidden — it lives in
@@ -702,9 +706,10 @@ SLOs **report**; they do not stop a run. That is deliberate and
 crates/              Rust core
   pact-diag/         diagnostics — a fix is mandatory by construction
   pact-doc/          span-preserving YAML / JSON / Markdown
+  pact-lang/         the PACT language: one `.pact` file, read and printed
   pact-loader/       the Expansion Rule, and every check a schema cannot make
   pact-schema/       validation; the schema is data, not code
-  pact-cli/          check · show · waits · discover · card — never runs your code
+  pact-cli/          check · show · waits · discover · card · write · build — never runs your code
 pyproject.toml       the `pact-loader` wheel: `pact-cli`'s binary, built by maturin
 adapters/python/     reference harness, six transports, resolver, evals, learning
 adapters/typescript/ the second port — Node, smaller on purpose, and says so
