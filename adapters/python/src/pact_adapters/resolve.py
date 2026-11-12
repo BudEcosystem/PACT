@@ -208,6 +208,43 @@ class ModelEntry:
     #: binds another. A row that says nothing about regions is served in none,
     #: never in every one.
     regions: frozenset[tuple[str, str]] = frozenset()
+    #: `model-can.voices`, `languages`, `sessions` and `dimensions` (96 §A2,
+    #: §A6): the voices a speech model speaks in, the language tags a model
+    #: handles, how a conversation with it can go (`turns`, `duplex`), and how
+    #: many numbers an embedding model turns a passage into. `pact check` holds
+    #: the first three against a `voice:` that NAMES its models; a host binds
+    #: the model it was given, which the tree may not name, so the row it binds
+    #: carries them too and `fits_voice` holds them the same way. Empty (or
+    #: `None`) means the catalogue does not say, which is never checked.
+    voices: tuple[str, ...] = ()
+    languages: tuple[str, ...] = ()
+    sessions: frozenset[str] = frozenset()
+    dimensions: "int | None" = None
+
+    def fits_voice(self, plan: Any, role: str) -> tuple[bool, str]:
+        """Whether this model can play `role` in voice plan `plan` (`voice.VoicePlan`), and why not.
+
+        `role` is `hears` (the transcriber), `speaks` (the speaker) or `both`
+        (the one model of `one-speech-model`). The rules are the loader's own
+        (`crates/pact-loader/src/voice.rs`), for the model a host binds: the
+        speaker must have the voice `speaks-as:` names, every model listening or
+        speaking must handle each of `languages:` (`en` covers `en-GB`), and a
+        plan that talks both at once needs a model that holds a duplex session.
+        A line the row leaves out is not checked.
+        """
+        if role in ("speaks", "both") and plan.speaks_as and self.voices and plan.speaks_as not in self.voices:
+            return False, (
+                f"has no voice named {plan.speaks_as!r} (its voices: {', '.join(self.voices)})"
+            )
+        if self.languages:
+            for tag in plan.languages:
+                if not any(_covers(listed, tag) for listed in self.languages):
+                    return False, (
+                        f"does not handle {tag!r} (it handles: {', '.join(self.languages)})"
+                    )
+        if role == "both" and plan.duplex and "duplex" not in self.sessions:
+            return False, "cannot listen while it speaks (its row has no `sessions: [duplex]`)"
+        return True, ""
 
     def satisfies(self, needs: dict[str, Any]) -> tuple[bool, str]:
         """Cheap pre-filter. Never a substitute for an eval verdict (FR-2.1.2).
@@ -623,6 +660,10 @@ def _load(path: Path, changed: int = 0) -> Catalogue:
             first_words_ms=_milliseconds((row.get("speed") or {}).get("first-words-within"))
             if isinstance(row.get("speed"), dict)
             else None,
+            voices=_words(caps.get("voices")),
+            languages=_words(caps.get("languages")),
+            sessions=frozenset(_words(caps.get("sessions"))),
+            dimensions=_dimensions(caps.get("dimensions")),
         )
         entries.append(entry)
         for key in (name, *entry.aliases):
@@ -636,6 +677,27 @@ def _load(path: Path, changed: int = 0) -> Catalogue:
                      f"use one of: {', '.join(sorted(e.name for e in entries)) or '(none)'}")
         )
     return Catalogue(tuple(entries), default, tuple(problems), by_id)
+
+
+def _words(written: Any) -> tuple[str, ...]:
+    """A `list of text` line of a row, each word trimmed; anything else is not said."""
+    if not isinstance(written, list):
+        return ()
+    return tuple(str(w).strip() for w in written if isinstance(w, str | int) and str(w).strip())
+
+
+def _dimensions(written: Any) -> "int | None":
+    """`model-can.dimensions`, a whole number of at least 1 (the schema's), else not said."""
+    if isinstance(written, bool) or not isinstance(written, int) or written < 1:
+        return None
+    return written
+
+
+def _covers(listed: str, asked: str) -> bool:
+    """Whether a row's language tag covers one asked for: `en` covers `en` and `en-GB`
+    (`crates/pact-loader/src/voice.rs`, `covers`)."""
+    listed, asked = listed.lower(), asked.strip().lower()
+    return asked == listed or asked.startswith(f"{listed}-")
 
 
 def _window(
