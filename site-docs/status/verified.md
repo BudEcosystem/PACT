@@ -13,8 +13,8 @@ from an earlier document.
 | Claim | Value | How to check |
 |---|---|---|
 | Rust tests | **1602** | `cargo test --workspace` |
-| Adapter tests | **3158** | `cd adapters/python && uv run pytest tests/ -q` |
-| Total | **4,760** | both of the above |
+| Adapter tests | **3163** | `cd adapters/python && uv run pytest tests/ -q` |
+| Total | **4,765** | both of the above |
 | TypeScript type-checks | clean | `cd adapters/typescript && npx tsc --noEmit` |
 | Lints | clean | `cargo clippy --all-targets` |
 | Worked example loads | 498 settings | `cargo run -p pact-cli -- check examples/refund-desk` |
