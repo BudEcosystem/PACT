@@ -11,6 +11,7 @@ The tree is `tests/trees/a-desk-that-listens-reads-and-chooses/`.
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import re
 import shutil
@@ -237,3 +238,66 @@ def test_pact_picks_one_model_that_listens_while_it_speaks_or_says_why_not() -> 
     assert plan is not None
     assert (plan.pipeline, plan.thinks_with, plan.duplex) == ("one-speech-model", "omni-local", True)
     assert "PACT picked it" in plan.why
+
+
+# ──────────────────────────────── 96 §A2, §A6: the lines a host binds against
+
+
+def test_each_row_carries_its_voices_languages_sessions_and_dimensions() -> None:
+    by_name = {e.name: e for e in resolve.load_catalogue(workspace=TREE).entries}
+    assert by_name["whisper-large-v3"].languages == ("en", "hi")
+    assert by_name["kokoro-82m"].voices == ("af_heart", "bm_george")
+    assert by_name["kokoro-82m"].languages == ("en",)
+    assert by_name["nomic-embed-text"].dimensions == 768
+    assert by_name["qwen2.5-vl-7b-instruct"].sessions == frozenset({"turns"})
+    # A line the row leaves out is not said, never a guess.
+    assert by_name["bge-reranker-v2-m3"].voices == () and by_name["bge-reranker-v2-m3"].dimensions is None
+
+
+def test_a_bound_model_is_held_to_the_voice_plan_as_the_loader_holds_a_named_one() -> None:
+    from pact_adapters.voice import plan_for
+
+    by_name = {e.name: e for e in resolve.load_catalogue(workspace=TREE).entries}
+    plan = plan_for(shown(TREE), "front-desk", resolve.load_catalogue(workspace=TREE))
+    assert plan is not None and plan.languages == ("en-GB",)
+    # The desk's own models fit: `en` covers `en-GB`, and kokoro has `af_heart`.
+    assert by_name["whisper-large-v3"].fits_voice(plan, "hears") == (True, "")
+    assert by_name["kokoro-82m"].fits_voice(plan, "speaks") == (True, "")
+    # A speaker without the voice, a hearer without the language, a one-model plan without duplex.
+    hoarse = dataclasses.replace(by_name["kokoro-82m"], voices=("bm_george",))
+    assert hoarse.fits_voice(plan, "speaks") == (False, "has no voice named 'af_heart' (its voices: bm_george)")
+    assert hoarse.fits_voice(plan, "hears") == (True, ""), "a voice is the speaker's alone"
+    hindi = dataclasses.replace(plan, languages=("hi",))
+    assert by_name["kokoro-82m"].fits_voice(hindi, "speaks") == (False, "does not handle 'hi' (it handles: en)")
+    assert by_name["whisper-large-v3"].fits_voice(hindi, "hears") == (True, "")
+    both = dataclasses.replace(plan, duplex=True, speaks_as="")
+    turns = by_name["qwen2.5-vl-7b-instruct"]
+    assert turns.fits_voice(both, "both") == (False, "cannot listen while it speaks (its row has no `sessions: [duplex]`)")
+    assert dataclasses.replace(turns, sessions=frozenset({"duplex"})).fits_voice(both, "both") == (True, "")
+
+
+def test_a_duplex_row_is_picked_from_its_own_entry_with_no_raw_rows() -> None:
+    from pact_adapters.voice import plan_for
+
+    doc = shown(TREE)
+    voice = doc["agents"]["front-desk"]["voice"]
+    for line in ("pipeline", "hears-with", "speaks-with", "speaks-as"):
+        voice.pop(line)
+    voice["talking"] = "both-at-once"
+    catalogue = resolve.load_catalogue(workspace=TREE)
+    duplex = resolve.ModelEntry(
+        name="omni-local", tier="mid", cost=0.0, capabilities=frozenset({"audio_in", "audio_out"}),
+        served_locally=True, sessions=frozenset({"duplex"}),
+    )
+    richer = resolve.Catalogue(entries=catalogue.entries + (duplex,), default=catalogue.default)
+    plan = plan_for(doc, "front-desk", richer)
+    assert plan is not None and (plan.pipeline, plan.thinks_with) == ("one-speech-model", "omni-local")
+
+
+def test_a_set_of_documents_names_its_embedder_and_its_reranker() -> None:
+    """96 §A7: `embedded-by:` and `reranked-by:` reach the runtime that indexes the set."""
+    doc = shown(TREE)
+    doc["agents"]["front-desk"]["uses"] = ["acme-policies"]  # the set itself, not its interface
+    spec = AgentSpec.from_document(doc, "front-desk", TREE)
+    (policies,) = [k for k in spec.knowledge if k.name == "acme-policies"]
+    assert (policies.embedded_by, policies.reranked_by) == ("nomic-embed-text", "bge-reranker-v2-m3")

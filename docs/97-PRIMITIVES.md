@@ -7,7 +7,7 @@ today to become buildable.
 
 **What the revision added.** The seven were tested against three complete
 inventories, each by a script that fails if anything is left unassigned:
-the 536 keywords of the schema, the 333 closed-choice words those keywords
+the 569 keywords of the schema, the 342 closed-choice words those keywords
 accept (`scripts/primitive-coverage.py`), and the 203 patterns published at
 agentic-patterns.com (`scripts/pattern-coverage.py`, §5.4, Appendix B). Each
 pattern's construction is typed against a closed kernel of **76 operations**
@@ -21,11 +21,11 @@ and reports that test, §12 answers whether the set is Turing complete (yes,
 with law 2 revised so an owner may opt a cycle out of the halting guarantee),
 and §13 records why this is the final list rather than a fresh start.
 
-**The question.** PACT has 536 keywords in 63 groups (counted by loading
+**The question.** PACT has 569 keywords in 68 groups (counted by loading
 `spec/schema.yaml`, not by reading it). Is there a small set of fundamental
 pieces, five to ten of them, that meets two conditions?
 
-1. Every one of those 536 keywords is a particular arrangement of the pieces.
+1. Every one of those 569 keywords is a particular arrangement of the pieces.
 2. Every agentic design pattern, multi-agent topology, tool, workflow, loop,
    condition, hook and capability that has been published can be built from them.
 
@@ -1023,7 +1023,7 @@ revised, and the script is where that revision goes.
 
 ## §6 Every keyword, accounted for
 
-`scripts/primitive-coverage.py` assigns every one of the 536 keywords in
+`scripts/primitive-coverage.py` assigns every one of the 569 keywords in
 `spec/schema.yaml` the primitives it is built from (Appendix A has the table).
 The script fails if a group in the schema has no entry, or if an entry names a
 group that is not in the schema. A keyword added to the schema without a
@@ -1032,14 +1032,14 @@ uncounted.
 
 | Primitive | Keywords where it is the **main** ingredient | Keywords it takes **any** part in |
 |---|---|---|
-| Actor | 120 | 158 |
+| Actor | 120 | 165 |
+| Flow (including handlers and triggers) | 111 | 140 |
 | Store | 110 | 138 |
-| Flow (including handlers and triggers) | 99 | 128 |
-| Allowance | 73 | 97 |
-| Check | 63 | 99 |
+| Check | 75 | 114 |
+| Allowance | 74 | 99 |
 | Shape | 31 | 40 |
-| Origin | 9 | 18 |
-| none: words for people only (`description`, `because`, `name`) | 31 | 32 |
+| Origin | 14 | 26 |
+| none: words for people only (`description`, `because`, `name`) | 34 | 35 |
 
 Three readings of this table:
 
@@ -1047,34 +1047,35 @@ Three readings of this table:
   primitive that only two or three keywords used would be a feature, not a
   primitive.
 - **Origin is the exception, and §2.2 says why.** It is admitted on the
-  checkability test, not by count. The 9 keywords it is the main ingredient of
+  checkability test, not by count. The 14 keywords it is the main ingredient of
   are PACT's security promises (`never-from`, `hides`, `redaction`, `shows`,
   fenced server prose, `turn.from`, `data-stays-in`, and since 10 November
-  `carries` and `gets-hidden-values`). Law 7's checker rules read them as one
-  stamp.
-- **31 keywords have no behaviour at all.** They are `description:`, `because:`
+  `carries` and `gets-hidden-values`) and, since 12 November, the `topics:`
+  tags of `docs/99` — a stamp on where something comes from that says what it
+  is about. Law 7's checker rules read the first group as one stamp.
+- **34 keywords have no behaviour at all.** They are `description:`, `because:`
   and names: text written for whoever reads a diagnostic. That is a property of
   the format, not a gap.
 
-**The 333 closed-choice words are mapped too** (revision of 2026-11-10). 78 of
-the 536 keywords accept only a fixed list of words: the twelve things a stage
+**The 342 closed-choice words are mapped too** (revision of 2026-11-10). 82 of
+the 569 keywords accept only a fixed list of words: the twelve things a stage
 can `do`, the eight things a limit may do `when-it-runs-out`, the five things
 an interceptor `may` do, the five ways a team `waits-for` its members, and so
 on. Each word is a feature in its own right, so each is assigned. A word
-inherits its keyword's primitives unless the script says otherwise, and 26
+inherits its keyword's primitives unless the script says otherwise, and 28
 keywords needed per-word entries: `does: decide` is a Flow `choose` over a
 Check, while `does: run-code` is a program Actor under a fuel Allowance.
-`python3 scripts/primitive-coverage.py --choices` prints all 333.
+`python3 scripts/primitive-coverage.py --choices` prints all 342.
 
 | Primitive | Closed-choice words where it is the **main** ingredient |
 |---|---:|
-| Flow (handlers and triggers included) | 76 |
-| Actor | 73 |
-| Allowance | 70 |
+| Flow (handlers and triggers included) | 80 |
+| Actor | 74 |
+| Allowance | 72 |
 | Store | 41 |
+| Check | 33 |
 | Shape | 28 |
-| Check | 32 |
-| Origin | 13 |
+| Origin | 14 |
 
 The coverage reviews went through the schema's help text and comments keyword
 by keyword. Between them they found:
@@ -1348,7 +1349,7 @@ The eight laws are checker rules; `docs/98` §3 names each rule.
 
 ## §10 Limits of this analysis
 
-- **Coverage is a mapping, not a proof.** Each of the 536 assignments is a
+- **Coverage is a mapping, not a proof.** Each of the 569 assignments is a
   judgement about a keyword's help text, checked by reviewers who read the
   schema independently. A formal proof would need a semantics for every
   keyword, which PACT does not have in one place. Today, the adapters are that
@@ -1487,7 +1488,7 @@ with an in-tray (Actor), the procedure manual (Flow), the filing cabinets
 (Allowance), the mailroom's stamp (Origin). `docs/97-PRIMITIVES.html` is built
 around these pictures.
 
-**What a reader should *not* have to learn.** The 536 keywords, the 333
+**What a reader should *not* have to learn.** The 569 keywords, the 342
 words, the 62 kinds. Those are the surface, and `pact check` names the right
 one when it is needed (`site-docs/reference/kinds.md`). The seven are what a
 reader needs in order to predict what a keyword they have never seen will do.
@@ -1553,7 +1554,7 @@ The question put to this revision was whether the 2026-11-04 proposal was
 sound enough to extend or should be replaced. The evidence says extend, for
 four reasons.
 
-1. **Three complete inventories, no leftovers.** 536 keywords, 333 words and
+1. **Three complete inventories, no leftovers.** 569 keywords, 342 words and
    203 patterns were each assigned mechanically, and the scripts fail on the
    first unassigned item. A rival set would have to clear the same three bars
    and show a guarantee or a pattern the seven cannot reach. None was found.
@@ -1642,6 +1643,9 @@ words for a person, with no behaviour.
 | `workspace.bundles` | Store + Allowance |
 | `workspace.interceptors` | Flow + Allowance |
 | `workspace.watch` | Flow + Store |
+| `workspace.topics` | Origin |
+| `workspace.events` | Check |
+| `workspace.reactions` | Flow + Actor |
 | `workspace.models` | Store + Actor |
 | `agent.name` | - |
 | `agent.description` | - |
@@ -1668,6 +1672,8 @@ words for a person, with no behaviour.
 | `agent.context-policy` | Flow + Store |
 | `agent.remembers` | Store |
 | `agent.interceptors` | Flow |
+| `agent.reactions` | Flow |
+| `agent.listens-for` | Flow + Actor |
 | `agent.voice` | Flow + Actor |
 | `agent.turns` | Store |
 | `variant.when` | - |
@@ -1815,6 +1821,7 @@ words for a person, with no behaviour.
 | `resource.asks-when-it-changes` | Actor |
 | `resource.description` | - |
 | `knowledge.description` | - |
+| `knowledge.topics` | Origin |
 | `knowledge.documents` | Store |
 | `knowledge.looked-up-by` | Store |
 | `knowledge.split-by` | Store |
@@ -1862,6 +1869,7 @@ words for a person, with no behaviour.
 | `tool.method` | Actor |
 | `tool.says` | Actor |
 | `tool.carries` | Origin + Check |
+| `tool.topics` | Origin |
 | `tool.rests-after` | Allowance + Check |
 | `tool.rests-for` | Allowance |
 | `tool.actions` | Actor + Allowance |
@@ -1872,6 +1880,7 @@ words for a person, with no behaviour.
 | `tool.schemas-from` | Shape + Store |
 | `tool.unlisted-actions` | Allowance + Flow |
 | `action.description` | Actor |
+| `action.topics` | Origin |
 | `action.takes` | Shape |
 | `action.answers-with` | Shape |
 | `action.program` | Actor |
@@ -2114,6 +2123,31 @@ words for a person, with no behaviour.
 | `watch.description` | - |
 | `watch.when` | Flow |
 | `watch.writes-to` | Store + Origin |
+| `topic.description` | - |
+| `topic.noticed-by` | Origin + Check |
+| `event.description` | - |
+| `event.at` | Flow + Check |
+| `event.when-this` | Check |
+| `event.more-than` | Check |
+| `event.topic` | Check + Origin |
+| `event.judged` | Check + Actor |
+| `reaction.description` | - |
+| `reaction.event` | Check |
+| `reaction.at` | Flow + Check |
+| `reaction.when-this` | Check |
+| `reaction.more-than` | Check |
+| `reaction.topic` | Check + Origin |
+| `reaction.judged` | Check + Actor |
+| `reaction.applies-to` | Allowance |
+| `reaction.fires` | Flow + Allowance |
+| `reaction.then` | Flow |
+| `reaction-step.remind` | Flow |
+| `reaction-step.consult` | Flow + Actor |
+| `reaction-step.tell` | Flow + Actor |
+| `reaction-step.stop` | Flow |
+| `subscription.topic` | Check + Origin |
+| `subscription.event` | Check |
+| `subscription.how` | Flow + Actor |
 | `state.description` | - |
 | `state.lasts` | Store |
 | `state.shaped-like` | Shape |

@@ -202,6 +202,7 @@ EMITTED: tuple[str, ...] = (
     "step.message.completed",
     "step.model.completed",
     "step.model.requested",
+    "step.reaction.completed",
     "step.run.started",
     "step.stage.completed",
     "step.stage.started",

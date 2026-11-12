@@ -183,7 +183,20 @@ fields:
       no field for rules that hide, stop or redirect. Pydantic AI's nearest shape is a
       capability, which is a Python object and not a sentence
 
+  agent.reactions:
+    construct: "nothing: Pydantic AI has no moment-and-handler shape; the PACT harness stops at six moments of its own loop and carries each reaction out there (reactions.Reactor)"
+    outcome: loss
+    rows: [99-3]
+  agent.listens-for:
+    construct: "nothing: a subscription is a reaction read from the other agent's side, carried out by the same reactor"
+    outcome: loss
+    rows: [99-3]
+
   # ── tool ───────────────────────────────────────────────────────────────────
+  tool.topics:
+    construct: "nothing: a tag the harness reads before a call, so a reaction on that topic happens exactly (reactions.Reactions.topics_of)"
+    outcome: loss
+    rows: [99-3]
   tool.carries:
     construct: "nothing: what a tool brings into a run, read by `pact check`'s leak rule"
     outcome: loss
@@ -253,6 +266,10 @@ fields:
     rows: [96-E]
 
   # ── action ─────────────────────────────────────────────────────────────────
+  action.topics:
+    construct: "nothing: the same tag as `tool.topics`, on one action of a tool"
+    outcome: loss
+    rows: [99-3]
   action.description:
     construct: "ToolDefinition.description"
     outcome: carried

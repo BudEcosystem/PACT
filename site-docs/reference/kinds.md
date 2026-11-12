@@ -1,11 +1,11 @@
-# The 63 kinds
+# The 68 kinds
 
 Generated from `spec/schema.yaml`. Every kind, what it is for, and how
 many fields it has. You do not need to learn these — `pact check` names the
 right one when you need it.
 
 
-**63 kinds.** A kind is a *shape a document can take*, not a file you must
+**68 kinds.** A kind is a *shape a document can take*, not a file you must
 write: most workspaces use a dozen.
 
 
@@ -13,20 +13,30 @@ write: most workspaces use a dozen.
 
 | Kind | Fields | Core fields |
 |---|---:|---|
-| `action` | 20 | `description`, `takes`, `reads-only`, `needs-a-person`, `spends-money` |
-| `agent` | 27 | `name`, `description`, `instructions`, `team`, `teamwork` |
+| `action` | 21 | `description`, `topics`, `takes`, `reads-only`, `needs-a-person` |
+| `agent` | 29 | `name`, `description`, `instructions`, `team`, `teamwork` |
 | `loop` | 4 | `description`, `based-on` |
-| `knowledge` | 14 | `description`, `documents`, `passages-at-most`, `must-cite`, `use-when` |
+| `knowledge` | 15 | `description`, `topics`, `documents`, `passages-at-most`, `must-cite` |
 | `skill` | 14 | `name`, `description`, `use-when`, `do-not-use-when`, `if-unsure` |
 | `stage` | 32 | `does`, `says`, `asks`, `call`, `may-call` |
-| `tool` | 16 | `description`, `connect`, `url`, `method`, `says` |
+| `tool` | 17 | `description`, `connect`, `url`, `method`, `says` |
 | `program` | 7 | `description` |
 | `program-fuel` | 4 | — |
 | `value` | 4 | `description`, `rows-are`, `value` |
 | `variant` | 6 | — |
 | `turn` | 6 | — |
 | `voice` | 9 | — |
-| `workspace` | 36 | `name`, `workspace-id`, `description`, `owner`, `profile` |
+| `workspace` | 39 | `name`, `workspace-id`, `description`, `owner`, `profile` |
+
+## Topics, events and reactions
+
+| Kind | Fields | Core fields |
+|---|---:|---|
+| `topic` | 2 | `description`, `noticed-by` |
+| `event` | 6 | `description`, `at`, `when-this`, `more-than`, `topic` |
+| `reaction` | 10 | `description`, `event`, `at`, `when-this`, `more-than` |
+| `reaction-step` | 4 | `remind`, `consult`, `tell`, `stop` |
+| `subscription` | 3 | `topic`, `event`, `how` |
 
 ## Workflows
 

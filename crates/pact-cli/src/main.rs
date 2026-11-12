@@ -31,6 +31,11 @@ USAGE:
                           inventory a runtime can index (no build step)
     pact card <agent> [PATH]
                           Print one agent's A2A Agent Card
+    pact write    [PATH]  Print the workspace as one PACT-language file — the
+                          same document, in sentences where a sentence says it
+    pact build <FILE> --to <FOLDER>
+                          Write the folder of YAML and Markdown that a
+                          PACT-language file stands for
     pact help             Show this message (also written -h or --help)
 
 PATH defaults to the current directory.
@@ -40,6 +45,8 @@ OPTIONS:
     --deny-warnings       Fail the run on a warning as well as on a problem. For
                           a pipeline, where a run with warnings and a run
                           without them are the same green tick.
+    --to <folder>         For `pact build`: the folder to write, which must not
+                          exist yet or must be empty.
     --base-url <url>      For `pact card`: where your agents actually answer.
                           Without it the card carries the path and no host — a
                           tree is not deployed anywhere, and an address PACT
@@ -57,7 +64,16 @@ OPTIONS:
 /// `every_option_the_usage_advertises_is_one_the_parser_accepts` reads both back
 /// out of the real binary and compares them, which is what keeps [`USAGE`]
 /// honest about this list rather than merely adjacent to it.
-const OPTIONS: &[&str] = &["--quiet", "--unsafe-spec", "--deny-warnings", "--base-url"];
+const OPTIONS: &[&str] = &[
+    "--quiet",
+    "--unsafe-spec",
+    "--deny-warnings",
+    "--base-url",
+    "--to",
+];
+
+/// The options that are followed by a value, which is theirs and not a path.
+const TAKES_A_VALUE: &[&str] = &["--base-url", "--to"];
 
 /// What a diagnostic points at when the mistake is in the command rather than in
 /// a file.
@@ -321,7 +337,7 @@ fn run() -> Result<i32> {
             skip_next = false;
             continue;
         }
-        if a == "--base-url" {
+        if TAKES_A_VALUE.contains(&a.as_str()) {
             skip_next = true;
             continue;
         }
@@ -350,6 +366,15 @@ fn run() -> Result<i32> {
         "show" => show(&path, unsafe_spec),
         "waits" => waits_cmd(&path, unsafe_spec),
         "discover" => discover_cmd(&path, unsafe_spec),
+        "write" => write_cmd(&path),
+        "build" => {
+            let to = args
+                .iter()
+                .position(|a| a == "--to")
+                .and_then(|i| args.get(i + 1))
+                .map(|s| Utf8PathBuf::from(s.as_str()));
+            build_cmd(&path, positional.len() > 1, to)
+        }
         "card" => {
             let agent = positional.get(1).map(|s| s.as_str()).unwrap_or("");
             let root = positional
@@ -364,7 +389,9 @@ fn run() -> Result<i32> {
             // invariant at the top of `pact-diag` says is unconstructable. The
             // typo suggestion is the same `suggest::closest` the option refusal
             // two functions up already uses.
-            let verbs = ["check", "show", "waits", "discover", "card", "help"];
+            let verbs = [
+                "check", "show", "waits", "discover", "card", "write", "build", "help",
+            ];
             let fix = match pact_schema::suggest::closest(other, &verbs) {
                 Some(near) => format!("Did you mean `pact {near}`?"),
                 None => format!("The commands are: {}.", verbs.join(", ")),
@@ -1752,6 +1779,7 @@ fn validate(
         pact_loader::stopping::check(root, &mut diags);
         pact_loader::detecting::check(root, &mut diags);
         pact_loader::leaks::check(root, &mut diags);
+        pact_loader::reactions::check(root, &mut diags);
         // And §8.3a rule 4, which is not a check at all: where the written rules
         // in each skill begin. The floor under them is held on the executing
         // side; this is the half that lets an author SEE the boundary, so moving
@@ -2028,6 +2056,21 @@ fn holds_self_file(dir: &Utf8Path, names: &[&str]) -> bool {
 /// to put it in. Walking UP is a different question: it decides whether some
 /// ancestor is a tree a runtime could load, and about that the runtime's own
 /// answer is the only one worth having.
+/// Is `path` a PACT-language file, or does the folder it names hold one?
+fn holds_a_pact_file(path: &Utf8Path, folder: &Utf8Path) -> bool {
+    let is_one = |p: &Utf8Path| {
+        p.is_file() && p.extension().is_some_and(|e| e.eq_ignore_ascii_case(pact_lang::EXTENSION))
+    };
+    if is_one(path) {
+        return true;
+    }
+    path.is_dir()
+        && folder
+            .read_dir_utf8()
+            .map(|entries| entries.flatten().any(|e| is_one(e.path())))
+            .unwrap_or(false)
+}
+
 fn looks_like_a_workspace_root(dir: &Utf8Path) -> bool {
     holds_self_file(dir, &WORKSPACE_SELF_FILES)
 }
@@ -2073,6 +2116,11 @@ fn looks_like_a_workspace_root(dir: &Utf8Path) -> bool {
 /// believing.
 fn is_a_workspace(path: &Utf8PathBuf, root: &pact_doc::Node, schema: &pact_schema::Schema) -> bool {
     let folder = holding_folder(path);
+    // A PACT-language file is a workspace's worth of blocks by definition
+    // (`docs/99` §4.4) — and so is a folder with one at the top of it.
+    if holds_a_pact_file(path, &folder) {
+        return true;
+    }
     if holds_self_file(&folder, &WORKSPACE_SELF_FILES) {
         return true;
     }
@@ -2778,6 +2826,127 @@ fn card_cmd(agent: &str, root: &Utf8PathBuf, unsafe_spec: bool, base_url: &str) 
             Ok(2)
         }
     }
+}
+
+/// `pact write` — the workspace at `path`, as one PACT-language file.
+///
+/// Read-only, like `show`: the text goes to stdout and nothing is written
+/// anywhere. What is printed is the document as the author WROTE it — before
+/// `based-on:` is resolved — because this is a way of writing a workspace and
+/// not a report on one. A tree with problems is still printed when it could be
+/// read at all: turning a folder into a file is how somebody would go about
+/// fixing it.
+fn write_cmd(path: &Utf8PathBuf) -> Result<i32> {
+    let (node, diags) = load(path)?;
+    if diags.has_errors() {
+        eprint!("{}", diags.render());
+        return Ok(1);
+    }
+    let Some(root) = node else {
+        bail!("nothing loadable found at '{path}'");
+    };
+    match pact_lang::write(&root) {
+        Ok(written) => {
+            out_raw!("{}", written.text);
+            if !written.left_as_files.is_empty() {
+                eprintln!(
+                    "note: {} setting(s) are files and stay files — {}. Save this text as a \
+                     `.pact` file at the top of a folder that still holds them, and \
+                     `pact check` on that folder reads both.",
+                    written.left_as_files.len(),
+                    written.left_as_files.join(", ")
+                );
+            }
+            Ok(0)
+        }
+        Err(why) => bail!("{why}"),
+    }
+}
+
+/// `pact build <file.pact> --to <folder>` — the folder a PACT-language file
+/// stands for.
+///
+/// The one command here that writes, so it writes only into a folder that is
+/// not there yet or is empty, and it reads back what it wrote: the folder is
+/// loaded and compared with the file, and a folder that does not say the same
+/// thing is replaced by the one form that always does — a single
+/// `workspace.yaml`.
+fn build_cmd(path: &Utf8PathBuf, named: bool, to: Option<Utf8PathBuf>) -> Result<i32> {
+    let is_pact = path.extension().is_some_and(|e| e.eq_ignore_ascii_case(pact_lang::EXTENSION));
+    if !named || !path.is_file() || !is_pact {
+        eprint!(
+            "{}",
+            refuse(
+                "cli/build-needs-a-pact-file",
+                "`pact build` turns one PACT-language file into a folder, and it was not given \
+                 one."
+                    .to_string(),
+                "Type `pact build <file>.pact --to <folder>`.".to_string(),
+            )
+            .render()
+        );
+        return Ok(2);
+    }
+    let Some(to) = to else {
+        eprint!(
+            "{}",
+            refuse(
+                "cli/build-needs-a-folder",
+                "`pact build` was not told where to write.".to_string(),
+                format!("Type `pact build {path} --to <folder>`, naming a folder that does not exist yet."),
+            )
+            .render()
+        );
+        return Ok(2);
+    };
+    if to.exists() && (!to.is_dir() || to.read_dir_utf8()?.next().is_some()) {
+        eprint!(
+            "{}",
+            refuse(
+                "cli/build-into-something-there",
+                format!("'{to}' is already there and has something in it, and `pact build` does not write over anything."),
+                "Name a folder that does not exist yet, or empty this one.".to_string(),
+            )
+            .render()
+        );
+        return Ok(2);
+    }
+    let (node, diags) = load(path)?;
+    if diags.has_errors() {
+        eprint!("{}", diags.render());
+        return Ok(1);
+    }
+    let Some(root) = node else {
+        bail!("nothing loadable found at '{path}'");
+    };
+    let said = pact_doc::canonical_string(&root);
+    let put = |files: &[(String, String)]| -> Result<bool> {
+        for (name, text) in files {
+            let file = to.join(name);
+            if let Some(parent) = file.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::write(&file, text)?;
+        }
+        let (back, problems) = load(&to)?;
+        Ok(!problems.has_errors() && back.is_some_and(|b| pact_doc::canonical_string(&b) == said))
+    };
+    let files = pact_lang::write::tree(&root).map_err(anyhow::Error::msg)?;
+    let mut written = files.len();
+    if !put(&files)? {
+        std::fs::remove_dir_all(&to)?;
+        let whole = pact_lang::write::one_file(&root).map_err(anyhow::Error::msg)?;
+        written = 1;
+        if !put(&[("workspace.yaml".to_string(), whole)])? {
+            std::fs::remove_dir_all(&to)?;
+            bail!(
+                "the folder written from '{path}' did not read back as the same workspace, so \
+                 it was removed. This is a defect in `pact build`."
+            );
+        }
+    }
+    out!("Wrote {written} file(s) to {to}. `pact check {to}` reads the same workspace as `pact check {path}`.");
+    Ok(0)
 }
 
 fn show(path: &Utf8PathBuf, unsafe_spec: bool) -> Result<i32> {

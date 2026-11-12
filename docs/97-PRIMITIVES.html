@@ -255,7 +255,7 @@ footer { padding: 32px 0 56px; color: var(--muted); font-size: 0.9rem; }
     <div class="eyebrow">PACT · docs/97-PRIMITIVES.md, explained</div>
     <h1>PACT's seven building blocks</h1>
     <div class="prose">
-      <p class="lede">PACT is a way to write an agent once, as a folder of YAML and Markdown files, and run it on seven different agent frameworks. It has 536 keywords, and those keywords accept 333 fixed choice words. This page shows that all of them are made from just seven building blocks, plus eight rules for putting them together. The same seven build every one of the 203 agent patterns catalogued at agentic-patterns.com: loops, teams, tools, hooks, approvals, memory, payments, security and self-improvement. Each of those three claims is checked by a script that fails if anything is left over.</p>
+      <p class="lede">PACT is a way to write an agent once, as a folder of YAML and Markdown files, and run it on seven different agent frameworks. It has 569 keywords, and those keywords accept 342 fixed choice words. This page shows that all of them are made from just seven building blocks, plus eight rules for putting them together. The same seven build every one of the 203 agent patterns catalogued at agentic-patterns.com: loops, teams, tools, hooks, approvals, memory, payments, security and self-improvement. Each of those three claims is checked by a script that fails if anything is left over.</p>
       <p>Each block is shown with a picture from ordinary office life, real YAML from the refund-desk example in this repo, and the reason it can't be folded into the others. At the end, one complete agent is walked through step by step with every step tagged by the blocks it uses.</p>
     </div>
     <p class="sentence">An <b class="t actor">Actor</b> is asked, in a <b class="t flow">Flow</b>, with data of some <b class="t shape">Shape</b> and <b class="t label">Origin</b>, read from and written to <b class="t store">Stores</b>, on the strength of <b class="t check">Checks</b>, within an <b class="t allowance">Allowance</b>.</p>
@@ -985,7 +985,7 @@ shares:
   <div class="wrap prose">
     <span class="sec-num">Honest status</span>
     <h2>What exists today, and what is still open</h2>
-    <p>Every one of PACT's 536 keywords and 333 choice words has been mapped onto these seven blocks, and so has every one of the 203 patterns at agentic-patterns.com. Two scripts, <code>scripts/primitive-coverage.py</code> and <code>scripts/pattern-coverage.py</code>, check that nothing is left over. The refund desk above uses files that exist in the repo and pass <code>pact check</code> today. This is the final list of blocks, with one name changed by the reader test. On 10 November the design was built: the eight rules are checker rules, and every operation has a keyword. What is still open:</p>
+    <p>Every one of PACT's 569 keywords and 342 choice words has been mapped onto these seven blocks, and so has every one of the 203 patterns at agentic-patterns.com. Two scripts, <code>scripts/primitive-coverage.py</code> and <code>scripts/pattern-coverage.py</code>, check that nothing is left over. The refund desk above uses files that exist in the repo and pass <code>pact check</code> today. This is the final list of blocks, with one name changed by the reader test. On 10 November the design was built: the eight rules are checker rules, and every operation has a keyword. What is still open:</p>
     <ul class="pending">
       <li><b>Built: the eight rules, in the checker.</b> <code>pact check</code> refuses a tree that can leak, repeats a payment with no claim, gives a helper more than its caller, or lifts a loop's ceiling without an owner. A change a learning cycle proposes goes through the same checker before it can take effect.</li>
       <li><b>Built: fork, team claims, a shared board.</b> <code>forks: yes</code>, <code>same-request-key-across: the-team</code> with <code>claim-lasts:</code>, and <code>shared-with: the-team</code> behind an admission gate. The patterns PACT used to refuse by name now have checked workspaces under <code>examples/kernel/</code>.</li>
@@ -999,7 +999,7 @@ shares:
 </main>
 
 <footer>
-  <div class="wrap">The full analysis is in <code>docs/97-PRIMITIVES.md</code>: every block's operations, the eight rules, the 203 patterns built one by one (Appendix B), the table of all 536 keywords (Appendix A), the order to learn the seven, and whether the set is Turing complete.</div>
+  <div class="wrap">The full analysis is in <code>docs/97-PRIMITIVES.md</code>: every block's operations, the eight rules, the 203 patterns built one by one (Appendix B), the table of all 569 keywords (Appendix A), the order to learn the seven, and whether the set is Turing complete.</div>
 </footer>
 
 <script>
