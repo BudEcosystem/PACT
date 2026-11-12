@@ -546,7 +546,7 @@ SUPPLIED_BY_THE_HOST: frozenset[str] = frozenset({
     # (docs/98 WP-7). WHICH actions claim, how far and for how long is authored
     # (`same-request-key-across:`, `claim-lasts:`); the record every run of a
     # team shares is a store, and the store is the host's.
-    "claims", "claims_team",
+    "claims", "claims_team", "claims_workspace",
     # The team's shared memory, and who judges what may go in it (docs/98
     # WP-8). Which facts are shared, their shapes and their admission rules are
     # authored (`shared-with:`, `admitted-when:`, `admitted-by:`); the entries
@@ -684,6 +684,9 @@ async def run(
     #: The team a `the-team` claim belongs to: the agent at the root of the
     #: request. `None` means this agent is the root.
     claims_team: str | None = None,
+    #: The workspace a `the-workspace` claim belongs to, when the host shares
+    #: one store between workspaces. `None`: the store is this workspace's.
+    claims_workspace: str | None = None,
     #: The team's shared memory for this request (docs/98 WP-8). The root run
     #: makes one when its agent shares a fact; every member it starts gets the
     #: same object, riding the grant as `at_work` does.
@@ -791,9 +794,12 @@ async def run(
     once.store = claims
     rested = rests if rests is not None else Rests()
     once.team = claims_team or spec.name
+    once.workspace = claims_workspace or ""
     # Who holds a claim this run takes: the run, by name and a fresh id, so a
     # renewed lease (the same holder taking again) is this run and nobody else.
-    once.holder = f"{spec.name}:{uuid.uuid4().hex}"
+    # A parked run comes back as the same holder, or the claims it took before
+    # the park would refuse it.
+    once.holder = (resume.claim_holder if resume is not None else "") or f"{spec.name}:{uuid.uuid4().hex}"
     supplied: dict[str, Any] = dict(run_inputs or {})
     # A money ceiling handed in for this run (`cost-per-request-from:`, docs/98
     # WP-14), through the same door a teammate's share comes through: the
@@ -2999,6 +3005,7 @@ def _park_state(
     parked.used = meter.as_dict(clock())
     parked.granted = dict(given)
     parked.spent_keys = once.used()
+    parked.claim_holder = once.holder
     if text:
         parked.text = text
     if awaiting:
@@ -3798,6 +3805,7 @@ def delegate_by_running(
     claims: "ClaimStore | None" = None,
     team: str | None = None,
     admit: "Admit | None" = None,
+    claims_workspace: str | None = None,
 ) -> Asker:
     """Ask a team member by *running* it — this same harness, one level down.
 
@@ -3922,6 +3930,7 @@ def delegate_by_running(
             # WP-7): a member's `the-team` claim is the team's, not its own.
             claims=claims,
             claims_team=team,
+            claims_workspace=claims_workspace,
             board=getattr(grant, "board", None),
             board_facts=tuple(getattr(grant, "board_facts", ()) or ()),
             admit=admit,

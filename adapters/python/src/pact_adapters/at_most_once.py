@@ -321,8 +321,17 @@ class Ledger:
     #: The team a `the-team` claim is namespaced by: the agent at the root of
     #: the request, handed down to every member.
     team: str = ""
-    #: Who holds what this run claims, in the store: this run, by name.
+    #: The workspace a `the-workspace` claim is namespaced by, when the host
+    #: names one; empty, one namespace for everything the store holds.
+    workspace: str = ""
+    #: Who holds what this run claims, in the store: this run, by name. A parked
+    #: run comes back with the same holder (`Suspension.claim_holder`), so the
+    #: claims it took before the park are still its own.
     holder: str = ""
+    #: The fencing token of each claim this run took in the store, by
+    #: `(tool, action, value)`: what a host hands the system a call writes to,
+    #: so a writer whose lease ended while it ran can be told it is stale.
+    fences: dict[tuple[str, str, str], int] = field(default_factory=dict)
     #: One sentence per `<tool>/<action>` whose wider scope had no store.
     cannot_keep: dict[tuple[str, str], str] = field(default_factory=dict)
 
@@ -374,12 +383,13 @@ class Ledger:
                 self.cannot_keep.setdefault((tool, claim.action), claim.kept_here_only())
             else:
                 taken = self.store.take(
-                    scoped(claim.across, self.team, tool, claim.action, claim.value),
+                    scoped(claim.across, self.team, tool, claim.action, claim.value, self.workspace),
                     self.holder,
                     self.keys.leases.get((tool, claim.action)),
                 )
                 if not taken.ok:
                     return claim.refusal()
+                self.fences[claim.key] = taken.fence
         self.spent[claim.key] = None
         return ""
 
@@ -405,7 +415,7 @@ class Ledger:
             return claim.refusal()
         if claim.across != "this-run" and self.store is not None:
             held = self.store.holder(
-                scoped(claim.across, self.team, tool, claim.action, claim.value)
+                scoped(claim.across, self.team, tool, claim.action, claim.value, self.workspace)
             )
             if held is not None and held != self.holder:
                 return claim.refusal()
