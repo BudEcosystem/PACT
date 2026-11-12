@@ -297,7 +297,7 @@ workflow deliver
 | `for each item in <binding>` + body | `does: each`, `over:`, and the body as its `steps:` |
 | `repeat [at most <n> times]` + body | `does: repeat`, `at-most:`, and the body as its `steps:` |
 | `together` + body | `does: together`; the statements in the body all start at once |
-| `decide` + an `if <label>` for each label | `does: decide`, `chooses-between:` |
+| `decide [with <input>: <binding>, …]` + an `if <label>` for each label | `does: decide`, `bind:`, `chooses-between:` |
 | `answer [with <field>: <binding>, …]` | `does: answer`, `bind:` |
 | `stop <binding>` | `does: stop`, `stops:` |
 | `ask <question>` | `does: ask-someone`, `asks:` |
@@ -483,6 +483,15 @@ What it found, none of which a scripted model could:
   shown, said `not-sure` every time. The agent is now given the workflow's
   input, as much of it as it `accepts:`; the person is shown the question's
   own `shows:`.
+- **And could not be shown what an earlier stage found.** The input and the
+  item were all there was to hand a deciding agent, so one asked which team
+  takes a defect that triage had just classified was given no classification
+  — in this runtime and in Bud Agent Flow's, which found it. A `decide` now
+  writes `bind:` (`decide with kind: triage.kind`), and `pact check` refuses
+  an agent rung that would be given nothing it accepts
+  (`loader/a-deciding-agent-given-nothing`). That rule found a seventh silent
+  case in PACT's own `tests/trees/workflows-48-invoices`: a file sorter that
+  accepted nothing and so was never given the file.
 
 ### What is not done
 

@@ -5815,7 +5815,10 @@ groups:
           and figures come from `values.<name>`. A part of an input is written
           with a dot: `fills.first-name`. The model never sees these lines and
           cannot change them. On an `answer`, what it hands back, field by
-          field — `contact-id: steps.upsert.id`.
+          field — `contact-id: steps.upsert.id`. On a `decide`, what the
+          agents on its rungs are given besides the workflow's input and the
+          current item — `kind: steps.triage.kind` — which is the only way
+          one of them is shown what an earlier stage found.
       waits-for-result:
         type: yes-no
         surface: S-CTRL
@@ -5996,12 +5999,17 @@ groups:
           an agent that picks a label. Its `answers-with:` has one `one of`
           line naming these labels, and may add `not-sure`, which passes the
           decision on. A decision model is an agent whose model has
-          `kind: decision`. It is given the current item's fields over the
-          workflow's input — as many as it `accepts:` and nothing it does not
-          — and this stage's `says:`, where there is one, at the start of its
-          `message`. An item that is one value and not a set of fields (a list
-          of texts) is its `message`. An agent that writes no `accepts:` takes
-          a `message` and nothing else.
+          `kind: decision`. It is given this stage's `bind:` over the current
+          item's fields over the workflow's input — as many as it `accepts:`
+          and nothing it does not — and this stage's `says:`, where there is
+          one, at the start of its `message`. A name the stage binds is the
+          binding's alone: where the binding reads nothing, the agent is
+          given nothing under that name. An item that is one value and not a
+          set of fields (a list of texts) is its `message`, or goes where the
+          stage binds it — `bind: {note: item}`. An agent that writes no
+          `accepts:` takes a `message` and nothing else. An agent that would
+          be given nothing it accepts, or not something it requires, is
+          refused.
       if-unsure-below:
         type: percent
         needs-also: [agent]

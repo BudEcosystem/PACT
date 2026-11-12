@@ -113,5 +113,23 @@ def test_the_cases_say_the_things_they_are_there_to_say() -> None:
     asked = by_name["the-agent-is-not-sure-so-a-person-decides-and-is-shown-the-message"]
     assert asked["shown"] == [{"question": "which-desk", "shown": {"input.message": "The app crashes."}}]
 
+    found = by_name["a-deciding-agent-is-given-what-an-earlier-stage-found-and-the-bound-name-wins"]
+    # `kind` is triage's `engine`, not the `cabin` the report came in with; the
+    # `secret` the assigner does not accept is not given to it.
+    assert found["given"][1] == {
+        "agent": "assigner",
+        "given": {"kind": "engine", "summary": "Oil leak at the cowling.", "urgency": "high"},
+    }
+
+    nothing = by_name["a-binding-that-reads-nothing-gives-nothing-under-that-name"]
+    assert "kind" not in nothing["given"][1]["given"] and nothing["unenforced"] == []
+
+    bound = by_name["a-one-value-item-goes-where-the-stage-binds-it"]
+    assert [g["given"] for g in bound["given"]] == [
+        {"note": "Invoice 14 is overdue."},
+        {"note": "Lunch on Friday?"},
+    ]
+    assert bound["unenforced"] == []
+
     parked = by_name["nobody-is-there-to-ask-so-the-run-parks-at-the-decision"]
     assert parked["halted"] == "parked" and parked["parked-at"] == "where" and parked["question"] == "which-desk"

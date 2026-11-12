@@ -447,7 +447,7 @@ workflow clear-inbox
 | a variable | `plan = call planner …`, then `plan.findings` |
 | a function, and a call | `workflow <name>` with `takes` and `gives`; `call <name> with …` |
 | a loop | `for each item in <list>` · `repeat at most 4 times`, with `until:` beneath |
-| a branch | `decide`, with an `if <label>` for each way it can go |
+| a branch | `decide`, with an `if <label>` for each way it can go; `decide with kind: triage.kind` hands the deciding agent what an earlier step found |
 | things at once | `together` |
 | a template with parameters | `agent desk` with `base: yes` and `expects:`; then `based on desk with domain: billing, cap: 0.10 USD` |
 
@@ -998,11 +998,11 @@ framework is an extra.
 |---|---|
 | **Design** | Thesis, 28 binding decisions, FRD (120 requirements), 60-row refusal ledger — complete |
 | **Research** | 14 source-grounded studies, ~15,750 lines, over 140 repos (~15 GB) + 57 papers |
-| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **4872 tests (1623 Rust + 3249 adapter), clippy clean, TypeScript type-checked** |
+| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **4892 tests (1636 Rust + 3256 adapter), clippy clean, TypeScript type-checked** |
 | **Adapters** | **All 7 named targets**, proven against one shared conformance suite |
 
 ```bash
-./scripts/test-all.sh          # 4872 tests, Rust + 7 adapters, fully offline
+./scripts/test-all.sh          # 4892 tests, Rust + 7 adapters, fully offline
 ```
 
 **What is still owed** is not hidden — it lives in
