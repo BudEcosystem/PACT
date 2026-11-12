@@ -18,6 +18,11 @@ that binds a model the tree does not name had no row to hold it to, and `voice.p
   covers `en-GB`), and the one model of a plan that talks both at once must hold a duplex session.
 - **`voice.plan_for` reads `sessions` off the entry**; `rows=` is still read beside it for a caller
   that builds entries by hand.
+- **A benchmark's `with:` reaches DeepEval as DeepEval takes it.** `run_deepeval` passed `with:` as
+  written, and a word where the benchmark's constructor takes a member of its enum
+  (`MMLU(tasks=[MMLUTask.…])`) crashed inside DeepEval; each such word is now read into that
+  member (`tasks: [high_school_computer_science]`), and one the enum lacks is refused naming some
+  it has.
 
 ## 2026-11 — law 3 as the Bud Agent Flow corpus reads it (11 November)
 
