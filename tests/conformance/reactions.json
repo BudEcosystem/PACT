@@ -1,0 +1,1963 @@
+{
+ "about": "Reactions (docs/99 §3, §5): what a run does when a moment, a topic or a judgement holds. Each case is everything the run depends on; `expect` is everything another runtime can observe. How a case is replayed is written at the top of adapters/python/tests/conformance_kit.py: `model` turn N is what the lead agent's model writes at its Nth step (counted across a park); `tools` is what each call hands back; `members` is what every other agent says when it is run (null: nothing here can run another agent); `judge` is what the checking model answers; `people` answers each park in order. In `expect`: `steps` is each step's calls and the result text the model was shown for each; `offered` is the tools offered at each model call; `executed` is the calls that really ran, in order; `woken` is every other agent that was run and the message it was given; `parks` is each time a person was asked, how many steps had finished and how many calls had run by then; `reactions` is the run's own record.",
+ "cases": [
+  {
+   "name": "asked-first-then-a-person-then-once-then-told-after",
+   "tree": "examples/kernel/finance-first",
+   "agent": "support",
+   "says": "Please refund order A1.",
+   "model": [
+    {
+     "calls": [
+      {
+       "name": "billing",
+       "args": {
+        "action": "issue-refund",
+        "order": "A1",
+        "amount": "40 USD"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "billing",
+       "args": {
+        "action": "issue-refund",
+        "order": "A1",
+        "amount": "40 USD"
+       }
+      }
+     ]
+    },
+    {
+     "text": "Refunded."
+    }
+   ],
+   "tools": {
+    "billing": {
+     "issue-refund": "refunded 40 USD",
+     "*": "invoice INV-7: 40 USD, paid"
+    },
+    "orders": "order A1: one lamp, 40 USD, delivered"
+   },
+   "members": {
+    "*": "A refund needs the order number and the reason."
+   },
+   "judge": "no",
+   "people": [
+    "yes"
+   ],
+   "expect": {
+    "executed": [
+     [
+      "billing",
+      {
+       "action": "issue-refund",
+       "amount": "40 USD",
+       "order": "A1"
+      }
+     ]
+    ],
+    "halted": "final",
+    "offered": [
+     [
+      "billing",
+      "orders",
+      "working-on"
+     ],
+     [
+      "billing",
+      "orders",
+      "working-on"
+     ],
+     [
+      "billing",
+      "orders",
+      "working-on"
+     ]
+    ],
+    "output": "Refunded.",
+    "parks": [
+     {
+      "asks": [
+       "billing",
+       "billing.because"
+      ],
+      "executed-so-far": 0,
+      "reason": "needs-approval",
+      "steps-finished": 1
+     }
+    ],
+    "reactions": [
+     {
+      "at": 0,
+      "certainty": "exact",
+      "did": [
+       "asked finance-desk"
+      ],
+      "heard": [
+       {
+        "agent": "finance-desk",
+        "how": "asked-first",
+        "said": "A refund needs the order number and the reason."
+       }
+      ],
+      "reaction": "finance-desk listens for finance"
+     },
+     {
+      "at": 1,
+      "certainty": "exact",
+      "did": [
+       "told auditor"
+      ],
+      "heard": [
+       {
+        "agent": "auditor",
+        "how": "told-after",
+        "said": "A refund needs the order number and the reason."
+       }
+      ],
+      "reaction": "auditor listens for refund-issued"
+     }
+    ],
+    "reminders": [],
+    "steps": [
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "issue-refund",
+         "amount": "40 USD",
+         "order": "A1"
+        },
+        "name": "billing"
+       }
+      ],
+      "results": [
+       "not done yet — finance-desk was asked first about this, and said: A refund needs the order number and the reason.\n\nCall `billing` again if it should still happen."
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "issue-refund",
+         "amount": "40 USD",
+         "order": "A1"
+        },
+        "name": "billing"
+       }
+      ],
+      "results": [
+       "refunded 40 USD"
+      ]
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": [
+     {
+      "agent": "finance-desk",
+      "told": "You are being asked first, by a rule of this workspace: 'finance-desk' is asked first about the topic 'finance'.\n\n'support' is about to call `billing` (issue-refund) with: {\"action\": \"issue-refund\", \"amount\": \"40 USD\", \"order\": \"A1\"}\n\nWhat it was asked:\n\nPlease refund order A1.\n\nSay what it should know or do before it carries on."
+     },
+     {
+      "agent": "auditor",
+      "told": "You are being told, by a rule of this workspace: 'auditor' is told about the event 'refund-issued' (A refund has gone out.).\n\n'support' called `billing` (issue-refund) with: {\"action\": \"issue-refund\", \"amount\": \"40 USD\", \"order\": \"A1\"}\n\nIt answered:\n\nrefunded 40 USD\n\nNote what you need to. Nothing is waiting for your answer."
+     }
+    ]
+   }
+  },
+  {
+   "name": "the-same-workspace-written-as-one-pact-file",
+   "tree": "examples/language/finance-first/finance-first.pact",
+   "agent": "support",
+   "says": "Please refund order A1.",
+   "model": [
+    {
+     "calls": [
+      {
+       "name": "billing",
+       "args": {
+        "action": "issue-refund",
+        "order": "A1",
+        "amount": "40 USD"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "billing",
+       "args": {
+        "action": "issue-refund",
+        "order": "A1",
+        "amount": "40 USD"
+       }
+      }
+     ]
+    },
+    {
+     "text": "Refunded."
+    }
+   ],
+   "tools": {
+    "billing": {
+     "issue-refund": "refunded 40 USD",
+     "*": "invoice INV-7: 40 USD, paid"
+    },
+    "orders": "order A1: one lamp, 40 USD, delivered"
+   },
+   "members": {
+    "*": "A refund needs the order number and the reason."
+   },
+   "judge": "no",
+   "people": [
+    "yes"
+   ],
+   "expect": {
+    "executed": [
+     [
+      "billing",
+      {
+       "action": "issue-refund",
+       "amount": "40 USD",
+       "order": "A1"
+      }
+     ]
+    ],
+    "halted": "final",
+    "offered": [
+     [
+      "billing",
+      "orders",
+      "working-on"
+     ],
+     [
+      "billing",
+      "orders",
+      "working-on"
+     ],
+     [
+      "billing",
+      "orders",
+      "working-on"
+     ]
+    ],
+    "output": "Refunded.",
+    "parks": [
+     {
+      "asks": [
+       "billing",
+       "billing.because"
+      ],
+      "executed-so-far": 0,
+      "reason": "needs-approval",
+      "steps-finished": 1
+     }
+    ],
+    "reactions": [
+     {
+      "at": 0,
+      "certainty": "exact",
+      "did": [
+       "asked finance-desk"
+      ],
+      "heard": [
+       {
+        "agent": "finance-desk",
+        "how": "asked-first",
+        "said": "A refund needs the order number and the reason."
+       }
+      ],
+      "reaction": "finance-desk listens for finance"
+     },
+     {
+      "at": 1,
+      "certainty": "exact",
+      "did": [
+       "told auditor"
+      ],
+      "heard": [
+       {
+        "agent": "auditor",
+        "how": "told-after",
+        "said": "A refund needs the order number and the reason."
+       }
+      ],
+      "reaction": "auditor listens for refund-issued"
+     }
+    ],
+    "reminders": [],
+    "steps": [
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "issue-refund",
+         "amount": "40 USD",
+         "order": "A1"
+        },
+        "name": "billing"
+       }
+      ],
+      "results": [
+       "not done yet — finance-desk was asked first about this, and said: A refund needs the order number and the reason.\n\nCall `billing` again if it should still happen."
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "issue-refund",
+         "amount": "40 USD",
+         "order": "A1"
+        },
+        "name": "billing"
+       }
+      ],
+      "results": [
+       "refunded 40 USD"
+      ]
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": [
+     {
+      "agent": "finance-desk",
+      "told": "You are being asked first, by a rule of this workspace: 'finance-desk' is asked first about the topic 'finance'.\n\n'support' is about to call `billing` (issue-refund) with: {\"action\": \"issue-refund\", \"amount\": \"40 USD\", \"order\": \"A1\"}\n\nWhat it was asked:\n\nPlease refund order A1.\n\nSay what it should know or do before it carries on."
+     },
+     {
+      "agent": "auditor",
+      "told": "You are being told, by a rule of this workspace: 'auditor' is told about the event 'refund-issued' (A refund has gone out.).\n\n'support' called `billing` (issue-refund) with: {\"action\": \"issue-refund\", \"amount\": \"40 USD\", \"order\": \"A1\"}\n\nIt answered:\n\nrefunded 40 USD\n\nNote what you need to. Nothing is waiting for your answer."
+     }
+    ]
+   }
+  },
+  {
+   "name": "a-person-says-no-and-no-money-moves",
+   "tree": "examples/kernel/finance-first",
+   "agent": "support",
+   "says": "Please refund order A1.",
+   "model": [
+    {
+     "calls": [
+      {
+       "name": "billing",
+       "args": {
+        "action": "issue-refund",
+        "order": "A1",
+        "amount": "40 USD"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "billing",
+       "args": {
+        "action": "issue-refund",
+        "order": "A1",
+        "amount": "40 USD"
+       }
+      }
+     ]
+    },
+    {
+     "text": "I could not refund it."
+    }
+   ],
+   "tools": {
+    "billing": {
+     "issue-refund": "refunded 40 USD",
+     "*": "invoice INV-7: 40 USD, paid"
+    },
+    "orders": "order A1: one lamp, 40 USD, delivered"
+   },
+   "members": {
+    "*": "A refund needs the order number and the reason."
+   },
+   "judge": "no",
+   "people": [
+    "no"
+   ],
+   "expect": {
+    "executed": [],
+    "halted": "final",
+    "offered": [
+     [
+      "billing",
+      "orders",
+      "working-on"
+     ],
+     [
+      "billing",
+      "orders",
+      "working-on"
+     ],
+     [
+      "billing",
+      "orders",
+      "working-on"
+     ]
+    ],
+    "output": "I could not refund it.",
+    "parks": [
+     {
+      "asks": [
+       "billing",
+       "billing.because"
+      ],
+      "executed-so-far": 0,
+      "reason": "needs-approval",
+      "steps-finished": 1
+     }
+    ],
+    "reactions": [
+     {
+      "at": 0,
+      "certainty": "exact",
+      "did": [
+       "asked finance-desk"
+      ],
+      "heard": [
+       {
+        "agent": "finance-desk",
+        "how": "asked-first",
+        "said": "A refund needs the order number and the reason."
+       }
+      ],
+      "reaction": "finance-desk listens for finance"
+     }
+    ],
+    "reminders": [],
+    "steps": [
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "issue-refund",
+         "amount": "40 USD",
+         "order": "A1"
+        },
+        "name": "billing"
+       }
+      ],
+      "results": [
+       "not done yet — finance-desk was asked first about this, and said: A refund needs the order number and the reason.\n\nCall `billing` again if it should still happen."
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "issue-refund",
+         "amount": "40 USD",
+         "order": "A1"
+        },
+        "name": "billing"
+       }
+      ],
+      "results": [
+       "refused: the person answering for whoever-is-running-this said no — \"no\""
+      ]
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": [
+     {
+      "agent": "finance-desk",
+      "told": "You are being asked first, by a rule of this workspace: 'finance-desk' is asked first about the topic 'finance'.\n\n'support' is about to call `billing` (issue-refund) with: {\"action\": \"issue-refund\", \"amount\": \"40 USD\", \"order\": \"A1\"}\n\nWhat it was asked:\n\nPlease refund order A1.\n\nSay what it should know or do before it carries on."
+     }
+    ]
+   }
+  },
+  {
+   "name": "saying-the-topic-first-does-not-spend-the-guard-on-the-call",
+   "tree": "examples/kernel/finance-first",
+   "agent": "support",
+   "says": "Please refund order A1.",
+   "model": [
+    {
+     "calls": [
+      {
+       "name": "working-on",
+       "args": {
+        "topic": "finance"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "billing",
+       "args": {
+        "action": "issue-refund",
+        "order": "A1",
+        "amount": "40 USD"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "billing",
+       "args": {
+        "action": "issue-refund",
+        "order": "A1",
+        "amount": "40 USD"
+       }
+      }
+     ]
+    },
+    {
+     "text": "Refunded."
+    }
+   ],
+   "tools": {
+    "billing": {
+     "issue-refund": "refunded 40 USD",
+     "*": "invoice INV-7: 40 USD, paid"
+    },
+    "orders": "order A1: one lamp, 40 USD, delivered"
+   },
+   "members": {
+    "*": "A refund needs the order number and the reason."
+   },
+   "judge": "no",
+   "people": [
+    "yes"
+   ],
+   "expect": {
+    "executed": [
+     [
+      "billing",
+      {
+       "action": "issue-refund",
+       "amount": "40 USD",
+       "order": "A1"
+      }
+     ]
+    ],
+    "halted": "final",
+    "offered": [
+     [
+      "billing",
+      "orders",
+      "working-on"
+     ],
+     [
+      "billing",
+      "orders"
+     ],
+     [
+      "billing",
+      "orders"
+     ],
+     [
+      "billing",
+      "orders"
+     ]
+    ],
+    "output": "Refunded.",
+    "parks": [
+     {
+      "asks": [
+       "billing",
+       "billing.because"
+      ],
+      "executed-so-far": 0,
+      "reason": "needs-approval",
+      "steps-finished": 2
+     }
+    ],
+    "reactions": [
+     {
+      "at": 0,
+      "certainty": "guess",
+      "did": [
+       "asked finance-desk"
+      ],
+      "heard": [
+       {
+        "agent": "finance-desk",
+        "how": "asked-first",
+        "said": "A refund needs the order number and the reason."
+       }
+      ],
+      "reaction": "finance-desk listens for finance"
+     },
+     {
+      "at": 1,
+      "certainty": "exact",
+      "did": [
+       "asked finance-desk"
+      ],
+      "heard": [
+       {
+        "agent": "finance-desk",
+        "how": "asked-first",
+        "said": "A refund needs the order number and the reason."
+       }
+      ],
+      "reaction": "finance-desk listens for finance"
+     },
+     {
+      "at": 2,
+      "certainty": "exact",
+      "did": [
+       "told auditor"
+      ],
+      "heard": [
+       {
+        "agent": "auditor",
+        "how": "told-after",
+        "said": "A refund needs the order number and the reason."
+       }
+      ],
+      "reaction": "auditor listens for refund-issued"
+     }
+    ],
+    "reminders": [],
+    "steps": [
+     {
+      "calls": [
+       {
+        "args": {
+         "topic": "finance"
+        },
+        "name": "working-on"
+       }
+      ],
+      "results": [
+       "noted: finance\n\nfinance-desk was asked first about this, and said: A refund needs the order number and the reason."
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "issue-refund",
+         "amount": "40 USD",
+         "order": "A1"
+        },
+        "name": "billing"
+       }
+      ],
+      "results": [
+       "not done yet — finance-desk was asked first about this, and said: A refund needs the order number and the reason.\n\nCall `billing` again if it should still happen."
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "issue-refund",
+         "amount": "40 USD",
+         "order": "A1"
+        },
+        "name": "billing"
+       }
+      ],
+      "results": [
+       "refunded 40 USD"
+      ]
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": [
+     {
+      "agent": "finance-desk",
+      "told": "You are being asked first, by a rule of this workspace: 'finance-desk' is asked first about the topic 'finance'.\n\n'support' says its work has turned to 'finance'. What it was asked:\n\nPlease refund order A1.\n\nSay what it should know or do before it carries on."
+     },
+     {
+      "agent": "finance-desk",
+      "told": "You are being asked first, by a rule of this workspace: 'finance-desk' is asked first about the topic 'finance'.\n\n'support' is about to call `billing` (issue-refund) with: {\"action\": \"issue-refund\", \"amount\": \"40 USD\", \"order\": \"A1\"}\n\nWhat it was asked:\n\nPlease refund order A1.\n\nSay what it should know or do before it carries on."
+     },
+     {
+      "agent": "auditor",
+      "told": "You are being told, by a rule of this workspace: 'auditor' is told about the event 'refund-issued' (A refund has gone out.).\n\n'support' called `billing` (issue-refund) with: {\"action\": \"issue-refund\", \"amount\": \"40 USD\", \"order\": \"A1\"}\n\nIt answered:\n\nrefunded 40 USD\n\nNote what you need to. Nothing is waiting for your answer."
+     }
+    ]
+   }
+  },
+  {
+   "name": "a-wrong-topic-then-the-right-one-and-then-the-tool-is-withdrawn",
+   "tree": "examples/kernel/finance-first",
+   "agent": "support",
+   "says": "Is the VAT on shipping refunded?",
+   "model": [
+    {
+     "calls": [
+      {
+       "name": "working-on",
+       "args": {
+        "topic": "the weather"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "working-on",
+       "args": {
+        "topic": "finance"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "working-on",
+       "args": {
+        "topic": "finance"
+       }
+      }
+     ]
+    },
+    {
+     "text": "VAT on shipping is not refunded."
+    }
+   ],
+   "tools": {
+    "billing": {
+     "issue-refund": "refunded 40 USD",
+     "*": "invoice INV-7: 40 USD, paid"
+    },
+    "orders": "order A1: one lamp, 40 USD, delivered"
+   },
+   "members": {
+    "*": "VAT on shipping is not refundable."
+   },
+   "judge": "no",
+   "expect": {
+    "executed": [],
+    "halted": "final",
+    "offered": [
+     [
+      "billing",
+      "orders",
+      "working-on"
+     ],
+     [
+      "billing",
+      "orders",
+      "working-on"
+     ],
+     [
+      "billing",
+      "orders"
+     ],
+     [
+      "billing",
+      "orders"
+     ]
+    ],
+    "output": "VAT on shipping is not refunded.",
+    "parks": [],
+    "reactions": [
+     {
+      "at": 1,
+      "certainty": "guess",
+      "did": [
+       "asked finance-desk"
+      ],
+      "heard": [
+       {
+        "agent": "finance-desk",
+        "how": "asked-first",
+        "said": "VAT on shipping is not refundable."
+       }
+      ],
+      "reaction": "finance-desk listens for finance"
+     }
+    ],
+    "reminders": [],
+    "steps": [
+     {
+      "calls": [
+       {
+        "args": {
+         "topic": "the weather"
+        },
+        "name": "working-on"
+       }
+      ],
+      "results": [
+       "error: 'the weather' is not one of the subjects to say: finance"
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "topic": "finance"
+        },
+        "name": "working-on"
+       }
+      ],
+      "results": [
+       "noted: finance\n\nfinance-desk was asked first about this, and said: VAT on shipping is not refundable."
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "topic": "finance"
+        },
+        "name": "working-on"
+       }
+      ],
+      "results": [
+       "error: 'working-on' is not available in the 'work' stage"
+      ]
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": [
+     {
+      "agent": "finance-desk",
+      "told": "You are being asked first, by a rule of this workspace: 'finance-desk' is asked first about the topic 'finance'.\n\n'support' says its work has turned to 'finance'. What it was asked:\n\nIs the VAT on shipping refunded?\n\nSay what it should know or do before it carries on."
+     }
+    ]
+   }
+  },
+  {
+   "name": "a-judge-says-yes-and-the-agent-is-reminded",
+   "tree": "examples/kernel/finance-first",
+   "agent": "support",
+   "says": "This is the third time I am writing. I am furious.",
+   "model": [
+    {
+     "text": "I am sorry. Your order is on its way."
+    }
+   ],
+   "tools": {
+    "billing": {
+     "issue-refund": "refunded 40 USD",
+     "*": "invoice INV-7: 40 USD, paid"
+    },
+    "orders": "order A1: one lamp, 40 USD, delivered"
+   },
+   "members": {
+    "*": "A refund needs the order number and the reason."
+   },
+   "judge": "yes",
+   "expect": {
+    "executed": [],
+    "halted": "final",
+    "offered": [
+     [
+      "billing",
+      "orders",
+      "working-on"
+     ]
+    ],
+    "output": "I am sorry. Your order is on its way.",
+    "parks": [],
+    "reactions": [
+     {
+      "at": 0,
+      "certainty": "guess",
+      "did": [
+       "reminded"
+      ],
+      "reaction": "upset-customer"
+     }
+    ],
+    "reminders": [
+     "The customer is upset. Apologise once, plainly, before anything else."
+    ],
+    "steps": [
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "a-judge-says-no-and-nothing-is-added",
+   "tree": "examples/kernel/finance-first",
+   "agent": "support",
+   "says": "Has order A1 been delivered?",
+   "model": [
+    {
+     "text": "Yes, it was delivered."
+    }
+   ],
+   "tools": {
+    "billing": {
+     "issue-refund": "refunded 40 USD",
+     "*": "invoice INV-7: 40 USD, paid"
+    },
+    "orders": "order A1: one lamp, 40 USD, delivered"
+   },
+   "members": {
+    "*": "A refund needs the order number and the reason."
+   },
+   "judge": "no",
+   "expect": {
+    "executed": [],
+    "halted": "final",
+    "offered": [
+     [
+      "billing",
+      "orders",
+      "working-on"
+     ]
+    ],
+    "output": "Yes, it was delivered.",
+    "parks": [],
+    "reactions": [],
+    "reminders": [],
+    "steps": [
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "a-count-of-steps-holds-from-the-one-after-the-figure",
+   "tree": "examples/kernel/finance-first",
+   "agent": "support",
+   "says": "Where is order A1?",
+   "model": [
+    {
+     "calls": [
+      {
+       "name": "orders",
+       "args": {
+        "action": "look-up",
+        "order": "A1"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "orders",
+       "args": {
+        "action": "look-up",
+        "order": "A1"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "orders",
+       "args": {
+        "action": "look-up",
+        "order": "A1"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "orders",
+       "args": {
+        "action": "look-up",
+        "order": "A1"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "orders",
+       "args": {
+        "action": "look-up",
+        "order": "A1"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "orders",
+       "args": {
+        "action": "look-up",
+        "order": "A1"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "orders",
+       "args": {
+        "action": "look-up",
+        "order": "A1"
+       }
+      }
+     ]
+    },
+    {
+     "text": "It was delivered."
+    }
+   ],
+   "tools": {
+    "billing": {
+     "issue-refund": "refunded 40 USD",
+     "*": "invoice INV-7: 40 USD, paid"
+    },
+    "orders": "order A1: one lamp, 40 USD, delivered"
+   },
+   "members": {
+    "*": "A refund needs the order number and the reason."
+   },
+   "judge": "no",
+   "expect": {
+    "executed": [
+     [
+      "orders",
+      {
+       "action": "look-up",
+       "order": "A1"
+      }
+     ],
+     [
+      "orders",
+      {
+       "action": "look-up",
+       "order": "A1"
+      }
+     ],
+     [
+      "orders",
+      {
+       "action": "look-up",
+       "order": "A1"
+      }
+     ],
+     [
+      "orders",
+      {
+       "action": "look-up",
+       "order": "A1"
+      }
+     ],
+     [
+      "orders",
+      {
+       "action": "look-up",
+       "order": "A1"
+      }
+     ],
+     [
+      "orders",
+      {
+       "action": "look-up",
+       "order": "A1"
+      }
+     ],
+     [
+      "orders",
+      {
+       "action": "look-up",
+       "order": "A1"
+      }
+     ]
+    ],
+    "halted": "final",
+    "offered": [
+     [
+      "billing",
+      "orders",
+      "working-on"
+     ],
+     [
+      "billing",
+      "orders",
+      "working-on"
+     ],
+     [
+      "billing",
+      "orders",
+      "working-on"
+     ],
+     [
+      "billing",
+      "orders",
+      "working-on"
+     ],
+     [
+      "billing",
+      "orders",
+      "working-on"
+     ],
+     [
+      "billing",
+      "orders",
+      "working-on"
+     ],
+     [
+      "billing",
+      "orders",
+      "working-on"
+     ],
+     [
+      "billing",
+      "orders",
+      "working-on"
+     ]
+    ],
+    "output": "It was delivered.",
+    "parks": [],
+    "reactions": [
+     {
+      "at": 6,
+      "certainty": "exact",
+      "did": [
+       "reminded"
+      ],
+      "reaction": "wrap-up"
+     }
+    ],
+    "reminders": [
+     "You have taken more than six steps on this request. Answer with what you have, and say plainly what you could not find out."
+    ],
+    "steps": [
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look-up",
+         "order": "A1"
+        },
+        "name": "orders"
+       }
+      ],
+      "results": [
+       "order A1: one lamp, 40 USD, delivered"
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look-up",
+         "order": "A1"
+        },
+        "name": "orders"
+       }
+      ],
+      "results": [
+       "order A1: one lamp, 40 USD, delivered"
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look-up",
+         "order": "A1"
+        },
+        "name": "orders"
+       }
+      ],
+      "results": [
+       "order A1: one lamp, 40 USD, delivered"
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look-up",
+         "order": "A1"
+        },
+        "name": "orders"
+       }
+      ],
+      "results": [
+       "order A1: one lamp, 40 USD, delivered"
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look-up",
+         "order": "A1"
+        },
+        "name": "orders"
+       }
+      ],
+      "results": [
+       "order A1: one lamp, 40 USD, delivered"
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look-up",
+         "order": "A1"
+        },
+        "name": "orders"
+       }
+      ],
+      "results": [
+       "order A1: one lamp, 40 USD, delivered"
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look-up",
+         "order": "A1"
+        },
+        "name": "orders"
+       }
+      ],
+      "results": [
+       "order A1: one lamp, 40 USD, delivered"
+      ]
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "a-stop-on-an-exact-signal-ends-the-run-before-the-call",
+   "tree": "tests/conformance/trees/guarded-desk",
+   "agent": "desk",
+   "says": "Pay acme 900 USD.",
+   "model": [
+    {
+     "calls": [
+      {
+       "name": "bank",
+       "args": {
+        "action": "pay",
+        "to": "acme",
+        "amount": "900 USD"
+       }
+      }
+     ]
+    },
+    {
+     "text": "Paid."
+    }
+   ],
+   "tools": {
+    "mail": "sent",
+    "bank": {
+     "pay": "recorded",
+     "balance": "1200 USD"
+    }
+   },
+   "members": {
+    "*": "Noted."
+   },
+   "expect": {
+    "executed": [],
+    "halted": "stopped-by-rule",
+    "offered": [
+     [
+      "bank",
+      "mail"
+     ]
+    ],
+    "output": "A payment over 500 USD is not this desk's to make.",
+    "parks": [],
+    "reactions": [
+     {
+      "at": 0,
+      "certainty": "exact",
+      "did": [
+       "stopped"
+      ],
+      "reaction": "stop-large-payments"
+     }
+    ],
+    "reminders": [],
+    "steps": [],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "a-call-under-the-figure-is-not-stopped-and-the-ledger-is-told-each-time",
+   "tree": "tests/conformance/trees/guarded-desk",
+   "agent": "desk",
+   "says": "Pay acme 100 USD and then 200 USD.",
+   "model": [
+    {
+     "calls": [
+      {
+       "name": "bank",
+       "args": {
+        "action": "pay",
+        "to": "acme",
+        "amount": "100 USD"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "bank",
+       "args": {
+        "action": "pay",
+        "to": "acme",
+        "amount": "200 USD"
+       }
+      }
+     ]
+    },
+    {
+     "text": "Both paid."
+    }
+   ],
+   "tools": {
+    "mail": "sent",
+    "bank": {
+     "pay": "recorded",
+     "balance": "1200 USD"
+    }
+   },
+   "members": {
+    "ledger": "One line written.",
+    "*": "Noted."
+   },
+   "expect": {
+    "executed": [
+     [
+      "bank",
+      {
+       "action": "pay",
+       "amount": "100 USD",
+       "to": "acme"
+      }
+     ],
+     [
+      "bank",
+      {
+       "action": "pay",
+       "amount": "200 USD",
+       "to": "acme"
+      }
+     ]
+    ],
+    "halted": "final",
+    "offered": [
+     [
+      "bank",
+      "mail"
+     ],
+     [
+      "bank",
+      "mail"
+     ],
+     [
+      "bank",
+      "mail"
+     ]
+    ],
+    "output": "Both paid.",
+    "parks": [],
+    "reactions": [
+     {
+      "at": 0,
+      "certainty": "exact",
+      "did": [
+       "told ledger"
+      ],
+      "heard": [
+       {
+        "agent": "ledger",
+        "how": "told-after",
+        "said": "One line written."
+       }
+      ],
+      "reaction": "note-each-payment"
+     },
+     {
+      "at": 1,
+      "certainty": "exact",
+      "did": [
+       "told ledger"
+      ],
+      "heard": [
+       {
+        "agent": "ledger",
+        "how": "told-after",
+        "said": "One line written."
+       }
+      ],
+      "reaction": "note-each-payment"
+     }
+    ],
+    "reminders": [],
+    "steps": [
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "pay",
+         "amount": "100 USD",
+         "to": "acme"
+        },
+        "name": "bank"
+       }
+      ],
+      "results": [
+       "recorded"
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "pay",
+         "amount": "200 USD",
+         "to": "acme"
+        },
+        "name": "bank"
+       }
+      ],
+      "results": [
+       "recorded"
+      ]
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": [
+     {
+      "agent": "ledger",
+      "told": "You are being told, by a rule of this workspace: When bank/pay has answered.\n\n'desk' called `bank` (pay) with: {\"action\": \"pay\", \"amount\": \"100 USD\", \"to\": \"acme\"}\n\nIt answered:\n\nrecorded\n\nNote what you need to. Nothing is waiting for your answer."
+     },
+     {
+      "agent": "ledger",
+      "told": "You are being told, by a rule of this workspace: When bank/pay has answered.\n\n'desk' called `bank` (pay) with: {\"action\": \"pay\", \"amount\": \"200 USD\", \"to\": \"acme\"}\n\nIt answered:\n\nrecorded\n\nNote what you need to. Nothing is waiting for your answer."
+     }
+    ]
+   }
+  },
+  {
+   "name": "each-different-call-is-held-once-and-the-same-call-goes-through",
+   "tree": "tests/conformance/trees/guarded-desk",
+   "agent": "desk",
+   "says": "Tell ann and bob their orders shipped.",
+   "model": [
+    {
+     "calls": [
+      {
+       "name": "mail",
+       "args": {
+        "action": "send",
+        "to": "ann",
+        "body": "Your order has shipped."
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "mail",
+       "args": {
+        "action": "send",
+        "to": "ann",
+        "body": "Your order has shipped."
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "mail",
+       "args": {
+        "action": "send",
+        "to": "bob",
+        "body": "Your order has shipped."
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "mail",
+       "args": {
+        "action": "send",
+        "to": "bob",
+        "body": "Your order has shipped."
+       }
+      }
+     ]
+    },
+    {
+     "text": "Both told."
+    }
+   ],
+   "tools": {
+    "mail": "sent",
+    "bank": {
+     "pay": "recorded",
+     "balance": "1200 USD"
+    }
+   },
+   "members": {
+    "reviewer": "It reads fine. Send it.",
+    "*": "Noted."
+   },
+   "expect": {
+    "executed": [
+     [
+      "mail",
+      {
+       "action": "send",
+       "body": "Your order has shipped.",
+       "to": "ann"
+      }
+     ],
+     [
+      "mail",
+      {
+       "action": "send",
+       "body": "Your order has shipped.",
+       "to": "bob"
+      }
+     ]
+    ],
+    "halted": "final",
+    "offered": [
+     [
+      "bank",
+      "mail"
+     ],
+     [
+      "bank",
+      "mail"
+     ],
+     [
+      "bank",
+      "mail"
+     ],
+     [
+      "bank",
+      "mail"
+     ],
+     [
+      "bank",
+      "mail"
+     ]
+    ],
+    "output": "Both told.",
+    "parks": [],
+    "reactions": [
+     {
+      "at": 0,
+      "certainty": "exact",
+      "did": [
+       "asked reviewer"
+      ],
+      "heard": [
+       {
+        "agent": "reviewer",
+        "how": "asked-first",
+        "said": "It reads fine. Send it."
+       }
+      ],
+      "reaction": "check-each-mail"
+     },
+     {
+      "at": 2,
+      "certainty": "exact",
+      "did": [
+       "asked reviewer"
+      ],
+      "heard": [
+       {
+        "agent": "reviewer",
+        "how": "asked-first",
+        "said": "It reads fine. Send it."
+       }
+      ],
+      "reaction": "check-each-mail"
+     }
+    ],
+    "reminders": [],
+    "steps": [
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "send",
+         "body": "Your order has shipped.",
+         "to": "ann"
+        },
+        "name": "mail"
+       }
+      ],
+      "results": [
+       "not done yet — reviewer was asked first about this, and said: It reads fine. Send it.\n\nCall `mail` again if it should still happen."
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "send",
+         "body": "Your order has shipped.",
+         "to": "ann"
+        },
+        "name": "mail"
+       }
+      ],
+      "results": [
+       "sent"
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "send",
+         "body": "Your order has shipped.",
+         "to": "bob"
+        },
+        "name": "mail"
+       }
+      ],
+      "results": [
+       "not done yet — reviewer was asked first about this, and said: It reads fine. Send it.\n\nCall `mail` again if it should still happen."
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "send",
+         "body": "Your order has shipped.",
+         "to": "bob"
+        },
+        "name": "mail"
+       }
+      ],
+      "results": [
+       "sent"
+      ]
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": [
+     {
+      "agent": "reviewer",
+      "told": "You are being asked first, by a rule of this workspace: When the agent is about to call mail/send.\n\n'desk' is about to call `mail` (send) with: {\"action\": \"send\", \"body\": \"Your order has shipped.\", \"to\": \"ann\"}\n\nWhat it was asked:\n\nTell ann and bob their orders shipped.\n\nSay what it should know or do before it carries on."
+     },
+     {
+      "agent": "reviewer",
+      "told": "You are being asked first, by a rule of this workspace: When the agent is about to call mail/send.\n\n'desk' is about to call `mail` (send) with: {\"action\": \"send\", \"body\": \"Your order has shipped.\", \"to\": \"bob\"}\n\nWhat it was asked:\n\nTell ann and bob their orders shipped.\n\nSay what it should know or do before it carries on."
+     }
+    ]
+   }
+  },
+  {
+   "name": "a-count-of-calls-holds-from-the-one-after-the-figure",
+   "tree": "tests/conformance/trees/guarded-desk",
+   "agent": "desk",
+   "says": "What is the balance?",
+   "model": [
+    {
+     "calls": [
+      {
+       "name": "bank",
+       "args": {
+        "action": "balance"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "bank",
+       "args": {
+        "action": "balance"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "bank",
+       "args": {
+        "action": "balance"
+       }
+      }
+     ]
+    },
+    {
+     "text": "1200 USD."
+    }
+   ],
+   "tools": {
+    "mail": "sent",
+    "bank": {
+     "pay": "recorded",
+     "balance": "1200 USD"
+    }
+   },
+   "members": {
+    "*": "Noted."
+   },
+   "expect": {
+    "executed": [
+     [
+      "bank",
+      {
+       "action": "balance"
+      }
+     ],
+     [
+      "bank",
+      {
+       "action": "balance"
+      }
+     ],
+     [
+      "bank",
+      {
+       "action": "balance"
+      }
+     ]
+    ],
+    "halted": "final",
+    "offered": [
+     [
+      "bank",
+      "mail"
+     ],
+     [
+      "bank",
+      "mail"
+     ],
+     [
+      "bank",
+      "mail"
+     ],
+     [
+      "bank",
+      "mail"
+     ]
+    ],
+    "output": "1200 USD.",
+    "parks": [],
+    "reactions": [
+     {
+      "at": 2,
+      "certainty": "exact",
+      "did": [
+       "reminded"
+      ],
+      "reaction": "enough-looking"
+     }
+    ],
+    "reminders": [
+     "You have looked at the balance three times. Use what you have."
+    ],
+    "steps": [
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "balance"
+        },
+        "name": "bank"
+       }
+      ],
+      "results": [
+       "1200 USD"
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "balance"
+        },
+        "name": "bank"
+       }
+      ],
+      "results": [
+       "1200 USD"
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "balance"
+        },
+        "name": "bank"
+       }
+      ],
+      "results": [
+       "1200 USD"
+      ]
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "with-nobody-to-run-another-agent-the-call-goes-through-and-the-run-says-so",
+   "tree": "tests/conformance/trees/guarded-desk",
+   "agent": "desk",
+   "says": "Tell ann her order shipped.",
+   "model": [
+    {
+     "calls": [
+      {
+       "name": "mail",
+       "args": {
+        "action": "send",
+        "to": "ann",
+        "body": "Your order has shipped."
+       }
+      }
+     ]
+    },
+    {
+     "text": "Told."
+    }
+   ],
+   "tools": {
+    "mail": "sent",
+    "bank": {
+     "pay": "recorded",
+     "balance": "1200 USD"
+    }
+   },
+   "members": null,
+   "expect": {
+    "executed": [
+     [
+      "mail",
+      {
+       "action": "send",
+       "body": "Your order has shipped.",
+       "to": "ann"
+      }
+     ]
+    ],
+    "halted": "final",
+    "offered": [
+     [
+      "bank",
+      "mail"
+     ],
+     [
+      "bank",
+      "mail"
+     ]
+    ],
+    "output": "Told.",
+    "parks": [],
+    "reactions": [
+     {
+      "at": 0,
+      "certainty": "exact",
+      "did": [
+       "could not ask reviewer"
+      ],
+      "reaction": "check-each-mail"
+     }
+    ],
+    "reminders": [],
+    "steps": [
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "send",
+         "body": "Your order has shipped.",
+         "to": "ann"
+        },
+        "name": "mail"
+       }
+      ],
+      "results": [
+       "sent"
+      ]
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [
+     "the reaction 'check-each-mail' consults 'reviewer', and this run has nobody to run another agent — 'reviewer' was not asked"
+    ],
+    "woken": []
+   }
+  }
+ ]
+}

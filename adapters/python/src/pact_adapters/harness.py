@@ -212,7 +212,19 @@ class RunResult:
     #: the second. *"Cannot promise"* is exactly what is true of it. Argued at
     #: `limits._nothing_can_reach`, pinned by
     #: `tests/test_a_spend_cap_nothing_can_reach_holds_nothing_and_says_so.py`.
-    unmetered: tuple[str, ...] = ()
+    _unmetered: tuple[str, ...] = ()
+    #: What the agents THIS run put to work could not count, and could not carry
+    #: out — each line `<member> (put to work by this agent): <its own line>`.
+    #: Live lists, read by `unmetered` and `unenforced` below.
+    #:
+    #: A member's run handed back its words and nothing else
+    #: (`delegate_by_running.ask` returns `out.output`), so "said, never silent"
+    #: held for the agent a host ran and for nobody it asked: a teammate whose
+    #: spend cap could not be metered, or whose reaction could not be carried
+    #: out, was a clean run as far as anybody reading the result could tell.
+    #: Bud Agent Flow had the same hole and closed it first; the wording is its.
+    members_unmetered: list[str] = field(default_factory=list)
+    members_unenforced: list[str] = field(default_factory=list)
     #: Rules the author wrote that this run could not decide, each a sentence
     #: naming the file, the line, what was not applied and a line to type. A
     #: different fact from `unmetered` and so a different field: `unmetered` is
@@ -303,10 +315,28 @@ class RunResult:
         rule that could not fire on three of them is one thing to fix.
         """
         out = list(self._unenforced)
-        for said in (*self.chain_notes, *self.reaction_notes):
+        for said in (*self.chain_notes, *self.reaction_notes, *self.members_unenforced):
             if said not in out:
                 out.append(said)
         return tuple(out)
+
+    @property
+    def unmetered(self) -> tuple[str, ...]:
+        """Ceilings nobody could measure: this run's own, by the name of the
+        setting, and then each one a member it put to work could not."""
+        out = list(self._unmetered)
+        for said in self.members_unmetered:
+            if said not in out:
+                out.append(said)
+        return tuple(out)
+
+    @unmetered.setter
+    def unmetered(self, value: "Sequence[str]") -> None:
+        # Stored without the members' lines, which are read off their own list:
+        # `result.unmetered = result.unmetered + (…,)` would otherwise write them
+        # into this run's own.
+        mine = set(self.members_unmetered)
+        self._unmetered = tuple(v for v in value if v not in mine)
 
     @unenforced.setter
     def unenforced(self, value: "Sequence[str]") -> None:
@@ -911,6 +941,13 @@ async def run(
     # and is asked again is a new activation at the same depth.
     at_work = {} if at_work is None else at_work
     at_work[spec.name] = at_work.get(spec.name, 0) + 1
+    #: What the agents this run puts to work could not carry out, and could not
+    #: count: the two lists `RunResult` reads. Kept across a park, because a run
+    #: that asked a teammate and then waited for a person is still that run.
+    from_members: tuple[list[str], list[str]] = (
+        list((resume.from_members.get("unenforced") or ()) if resume is not None else ()),
+        list((resume.from_members.get("unmetered") or ()) if resume is not None else ()),
+    )
     if ask_member is not None:
         # `Asker` takes one argument, and the spend check belongs where the
         # member's own `limits:` is read — inside `delegate_by_running.ask`,
@@ -939,7 +976,16 @@ async def run(
             # which, and is left alone.
             if not hasattr(grant, "reacting"):
                 grant.reacting = reacting
-            return await inner_ask(grant)
+            try:
+                return await inner_ask(grant)
+            finally:
+                # What it could not do rides back on the grant
+                # (`delegate_by_running.ask`), whether it answered or failed.
+                for kind, kept in (("unenforced", from_members[0]), ("unmetered", from_members[1])):
+                    for line in getattr(grant, kind, ()) or ():
+                        told = f"{grant.member} (put to work by this agent): {line}"
+                        if told not in kept:
+                            kept.append(told)
 
         ask_member = sharing_the_meter
     # The author's own rules, unless a caller supplied its own set. Read from
@@ -1209,7 +1255,14 @@ async def run(
     # The tool an agent says its own topic with (docs/99 §5), when a topic
     # that matters to it is `noticed-by: the-agent`. It has no body: the call
     # is answered where a reaction would hold one, with what was said to it.
-    if (said_so := spec.reactions.tool()) is not None and not any(
+    #
+    # Not offered to a run a reaction woke. That agent was run to be asked or
+    # told about one thing; what the work has turned to is the waking run's to
+    # say. Found live: the auditor, told a refund had gone out, said `finance`
+    # — which is true — and the finance desk was then to be consulted by an
+    # agent that has nobody it can ask, about a refund already made. What its
+    # own tagged CALLS raise is exact, and still holds.
+    if (said_so := spec.reactions.tool()) is not None and not reacting and not any(
         d["name"] == WORKING_ON for d in tool_defs
     ):
         tool_defs.append(said_so)
@@ -1219,6 +1272,7 @@ async def run(
     )
 
     result = RunResult(output="")
+    result.members_unenforced, result.members_unmetered = from_members
     # The chain's own live list, so what a rule could not do is reported by the
     # RUN and not only by an object the host never sees.
     result.chain_notes = chain.unenforced
@@ -3167,6 +3221,10 @@ def _park_state(
     parked.claim_holder = once.holder
     if result.reactor is not None:
         parked.reactions = result.reactor.state()
+    parked.from_members = {
+        "unenforced": list(result.members_unenforced),
+        "unmetered": list(result.members_unmetered),
+    }
     if text:
         parked.text = text
     if awaiting:
@@ -4097,6 +4155,11 @@ def delegate_by_running(
             admit=admit,
             reacting=frozenset(getattr(grant, "reacting", ()) or ()),
         )
+        # What it could not carry out and could not count goes back with it, on
+        # the grant: this function returns words, and a caller that read only
+        # those was told a teammate's run was clean whatever it had said.
+        grant.unenforced = tuple(out.unenforced)
+        grant.unmetered = tuple(out.unmetered)
         # What it cost comes off its share. `OverBudget` is raised as this
         # member's failure rather than allowed out of the join, so the author's
         # `if-someone-fails:` decides what happens next — which is the whole

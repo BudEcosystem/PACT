@@ -7,7 +7,7 @@ nowhere that code looked: nothing was written, the author's OWN tree was
 checked, and the answer was reported as the proposal's — so on a workspace
 written in the language and carrying files, a change that breaks a rule passed.
 
-MUTATION: take `_as_a_folder(binary, root)` out of
+MUTATION: take `as_a_folder(root)` out of
 `checking._write_instructions`. `test_a_change_that_breaks_a_rule…` then gets
 `Uncheckable` in place of the checker's own words; take the final `raise` out
 as well and it gets `[]` — the broken proposal passes, which is the bug.
@@ -70,11 +70,11 @@ def test_the_copy_that_is_changed_says_what_the_authors_tree_says(tmp_path) -> N
     import shutil
 
     from pact_adapters import checking
-    from pact_adapters.loader import pact_binary
 
     copy = tmp_path / "staff-desk"
     shutil.copytree(STAFF, copy)
-    checking._as_a_folder(pact_binary(), copy)
+    assert checking.as_a_folder(copy) is True
+    assert checking.as_a_folder(copy) is False, "a folder already"
     assert not list(copy.glob("*.pact")), "it is a folder of YAML now"
     assert (copy / "agents" / "helpdesk" / "instructions.md").exists()
     assert (copy / "knowledge" / "staff-handbook" / "documents" / "leave.md").exists()

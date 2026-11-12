@@ -391,6 +391,9 @@ class Reactor:
         self.asked = asked
         state = state or {}
         self.fired: set[str] = set(state.get("fired") or ())
+        #: The ones that have fired on something EXACT. A state kept before this
+        #: was told apart has no such list, and is read as "all of them were".
+        self.sure: set[str] = set(state["sure"] if "sure" in state else (state.get("fired") or ()))
         self.counts: dict[str, int] = {
             str(k): int(v) for k, v in (state.get("counts") or {}).items()
         }
@@ -420,6 +423,7 @@ class Reactor:
     def state(self) -> dict[str, Any]:
         return {
             "fired": sorted(self.fired),
+            "sure": sorted(self.sure),
             "counts": dict(self.counts),
             "calls": sorted(self.calls),
             "held": dict(self.held),
@@ -469,16 +473,29 @@ class Reactor:
             return self.counts[r.name] > s.more_than
         return True
 
-    def _due(self, r: Reaction, key: str = "") -> bool:
+    def _due(self, r: Reaction, key: str = "", certainty: str = EXACT) -> bool:
         """May it fire now, by its own `fires:`? `key` tells one call from
         another, so `every-time` holds each DIFFERENT call once and lets the
-        same call through the second time."""
+        same call through the second time.
+
+        **A guess does not spend what is exact.** A topic `noticed-by: [tags,
+        the-agent]` can be raised either way. Raised by the agent saying so, the
+        reaction fires as advice — and it used to be spent by that, so the
+        tagged call that came later was not held at all: an agent that
+        announced `finance` on its first step had the finance desk asked about
+        nothing in particular, and then moved money unasked. Once-a-run is once
+        on a guess and once on something exact; a guess after either is not due.
+        """
         if r.every_time:
             return not key or f"{r.name}\n{key}" not in self.calls
+        if certainty == EXACT:
+            return r.name not in self.sure
         return r.name not in self.fired
 
-    def _spend(self, r: Reaction, key: str = "") -> None:
+    def _spend(self, r: Reaction, key: str = "", certainty: str = EXACT) -> None:
         self.fired.add(r.name)
+        if certainty == EXACT:
+            self.sure.add(r.name)
         if key:
             self.calls.add(f"{r.name}\n{key}")
 
@@ -590,7 +607,7 @@ class Reactor:
         writing — stopping at the first that ends the run."""
         total = Outcome()
         for r, certainty, _ in due:
-            self._spend(r, key)
+            self._spend(r, key, certainty)
             got = await self._carry_out(
                 r, at=at, happening=happening, holds_a_call=holds_a_call, certainty=certainty
             )
@@ -601,10 +618,12 @@ class Reactor:
                 break
         return total
 
-    def _topic_reactions(self, topics: "frozenset[str] | set[str]", key: str = "") -> list[Reaction]:
+    def _topic_reactions(
+        self, topics: "frozenset[str] | set[str]", key: str = "", certainty: str = EXACT
+    ) -> list[Reaction]:
         return [
             r for r in self.live
-            if r.signal.kind == "topic" and r.signal.topic in topics and self._due(r, key)
+            if r.signal.kind == "topic" and r.signal.topic in topics and self._due(r, key, certainty)
         ]
 
     async def _judged(self, address: str, words: str, at: int, who: str) -> Outcome:
@@ -615,11 +634,11 @@ class Reactor:
             return total
         wanted = [
             r for r in self.live
-            if r.signal.kind == "judged" and r.signal.at == address and self._due(r)
+            if r.signal.kind == "judged" and r.signal.at == address and self._due(r, "", GUESS)
         ]
         topics = [
             t for t in self.r.read_by_a_judge()
-            if t.name not in self.noticed and self._topic_reactions({t.name})
+            if t.name not in self.noticed and self._topic_reactions({t.name}, "", GUESS)
         ]
         if not wanted and not topics:
             return total
@@ -646,7 +665,7 @@ class Reactor:
             self.judged += 1
             if await self.judge(f"This is about: {t.description or t.name}", words) is True:
                 self.noticed.add(t.name)
-                due = [(r, GUESS, "") for r in self._topic_reactions({t.name})]
+                due = [(r, GUESS, "") for r in self._topic_reactions({t.name}, "", GUESS)]
                 await self._all(
                     due, at=at,
                     happening=f"The work has turned to '{t.name}'. {happening}",
@@ -826,7 +845,7 @@ class Reactor:
             return Outcome(held=f"error: {topic!r} is not one of the subjects to say: {listed}")
         self.noticed.add(topic)
         self.said.add(topic)
-        due = [(r, GUESS, "") for r in self._topic_reactions({topic})]
+        due = [(r, GUESS, "") for r in self._topic_reactions({topic}, "", GUESS)]
         got = await self._all(
             due, at=at, holds_a_call=True,
             happening=(

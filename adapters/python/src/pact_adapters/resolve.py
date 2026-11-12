@@ -37,6 +37,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import subprocess
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from pathlib import Path
@@ -64,7 +65,7 @@ from .evals import (
 from .harness import delegate_by_running, run
 from .holes import holes_in
 from .ir import AgentSpec
-from .loader import REPO, shipped
+from .loader import REPO, pact_binary, shipped
 from .yes_no import said_yes
 
 #: Where the distribution keeps its catalogue: `<repo>/models/catalog.yaml` in a
@@ -427,7 +428,9 @@ class Catalogue:
 
 
 def load_catalogue(
-    path: "str | Path | None" = None, workspace: "str | Path | None" = None
+    path: "str | Path | None" = None,
+    workspace: "str | Path | None" = None,
+    document: "Mapping[str, Any] | None" = None,
 ) -> Catalogue:
     """Read the catalogue. Offline, always — D17 forbids a network path here.
 
@@ -445,14 +448,92 @@ def load_catalogue(
     workspace states one.
     """
     builtin = _read(Path(path) if path is not None else BUILTIN_CATALOGUE)
+    if document is not None:
+        # A caller that has already loaded the workspace hands over what
+        # `pact show` printed, and nothing is run or opened a second time. The
+        # rows are layered over the distribution's exactly as a file's are.
+        over = _of_a_document(document, "the workspace's `models`")
+        return _layer(builtin, over) if (over.entries or over.default or over.problems) else builtin
     if workspace is None:
         return builtin
     local = Path(workspace)
+    # A workspace written in the PACT language (docs/99 §4.4) has its rows in a
+    # `.pact` file, as a `models` block — there is no `models/catalog.yaml` to
+    # open, and `pact check` already reads them from the document. This read
+    # the disk only, so such a workspace's own models were held by the checker
+    # and unknown to everything that binds, prices or sizes one. Handed the
+    # `.pact` file itself it was worse: it parsed the workspace as a catalogue.
+    stamp = _written_in_the_language(local)
+    if stamp:
+        over = _from_the_document(local, stamp)
+        if over is not None:
+            return _layer(builtin, over) if (over.entries or over.default or over.problems) else builtin
+        if local.is_file():
+            return builtin  # nothing could read it, and it is not a catalogue file
     if local.is_dir():
         local = local / "models" / "catalog.yaml"
     if not local.exists():
         return builtin
     return _layer(builtin, _read(local))
+
+
+def _written_in_the_language(root: Path) -> "tuple[tuple[str, int], ...]":
+    """The `.pact` FILES this workspace is written in, each with when it last
+    changed — empty when it is a folder of YAML and nothing else. A directory
+    called `.pact` is a workspace's own runtime area and is not one of them."""
+    try:
+        if root.is_file():
+            files = [root] if root.suffix == ".pact" else []
+        elif root.is_dir():
+            files = sorted(p for p in root.glob("*.pact") if p.is_file())
+        else:
+            return ()
+        if not files:
+            return ()
+        # The folder's own catalogue file too, where it has one: `pact show`
+        # reads both, so a change to either is a change to what comes out.
+        beside = root / "models" / "catalog.yaml" if root.is_dir() else None
+        if beside is not None and beside.is_file():
+            files.append(beside)
+        return tuple((str(p), p.stat().st_mtime_ns) for p in files)
+    except OSError:
+        return ()
+
+
+@lru_cache(maxsize=8)
+def _from_the_document(root: Path, stamp: "tuple[tuple[str, int], ...]") -> "Catalogue | None":
+    """The workspace's `models`, as `pact show` prints them — or `None` when
+    there is no loader here to ask, or the workspace does not load. Cached on
+    the files it is written in and when each last changed."""
+    binary = pact_binary()
+    if binary is None:
+        return None
+    shown = subprocess.run([str(binary), "show", str(root)], capture_output=True, text=True)
+    if shown.returncode != 0:
+        return None
+    try:
+        document = json.loads(shown.stdout)
+    except json.JSONDecodeError:
+        return None
+    return _of_a_document(document, f"{_shown(root)} (its `models`, as `pact show` prints them)")
+
+
+def _of_a_document(document: Any, shown: str) -> Catalogue:
+    """The rows a loaded workspace brings: its `models`, read as the file is."""
+    written = document.get("models") if isinstance(document, Mapping) else None
+    if not isinstance(written, Mapping) or not written:
+        return Catalogue()
+    text = yaml.safe_dump(_plain(written), sort_keys=False, allow_unicode=True)
+    return _parse(text, shown)
+
+
+def _plain(value: Any) -> Any:
+    """`value` as plain dicts and lists, so any mapping a caller holds dumps."""
+    if isinstance(value, Mapping):
+        return {str(k): _plain(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain(v) for v in value]
+    return value
 
 
 def _layer(under: Catalogue, over: Catalogue) -> Catalogue:
@@ -579,7 +660,12 @@ def _load(path: Path, changed: int = 0) -> Catalogue:
                 ),
             )
         )
+    return _parse(text, shown)
 
+
+def _parse(text: str, shown: str) -> Catalogue:
+    """A catalogue from its text. `shown` is where the text came from, for a
+    problem to name: a file, or a workspace's own `models`."""
     lines = text.splitlines()
     try:
         raw = yaml.safe_load(text)

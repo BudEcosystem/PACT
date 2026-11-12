@@ -126,6 +126,9 @@ class WorkflowResult:
     written: list[Written] = field(default_factory=list)
     #: Detached runs still going.
     detached: dict[str, RunRef] = field(default_factory=dict)
+    #: What was written and could not be carried out, in sentences — never
+    #: left out and never guessed at.
+    unenforced: list[str] = field(default_factory=list)
 
 
 async def _maybe(value: Any) -> Any:
@@ -396,7 +399,8 @@ class _Run:
                     return chosen.label, {"label": chosen.label, "because": chosen.because}
                 continue
             if rung.agent:
-                answer = _as_answer(await self.invoke(rung.agent, self.given_to(rung.agent, scope)))
+                given = self.given_to(rung.agent, scope, stage.says)
+                answer = _as_answer(await self.invoke(rung.agent, given))
                 label = _one_of(answer, labels)
                 if label:
                     return label, {"label": label, "by": rung.agent}
@@ -408,21 +412,44 @@ class _Run:
                     return label, {"label": label, "by": "a person"}
         raise Stopped(f"{stage.name!r} ran out of ways to decide between {', '.join(labels)}")
 
-    def given_to(self, agent: str, scope: _Scope) -> dict[str, Any]:
-        """What an agent that decides is handed: the workflow's own input, as
-        much of it as the agent `accepts:`.
+    def given_to(self, agent: str, scope: _Scope, says: str = "") -> dict[str, Any]:
+        """What an agent that decides is handed (`rung.agent`, in the schema's
+        own words): the current item's fields over the workflow's input, as
+        many as it `accepts:` and nothing it does not, and the stage's `says:`
+        at the start of its `message`.
 
         A `decide` stage has no `bind:` — `pact check` refuses one
-        (`loader/a-line-this-stage-never-reads`) — so there is no line that
-        says what the agent is given, and for a round it was given `{}`. Every
+        (`loader/a-line-this-stage-never-reads`) — so there was no line that
+        said what the agent is given, and for a round it was given `{}`. Every
         scripted agent answered regardless. The first real one was asked to
         sort a message it had not been shown, and said `not-sure` to all of
-        them. What it decides ABOUT is what the workflow was started with, and
-        its own `accepts:` says which parts of that it reads."""
-        accepts = ((self.document.get("agents") or {}).get(agent) or {}).get("accepts") or {}
-        given = dict(scope.input) if isinstance(scope.input, Mapping) else {}
-        if accepts:
-            given = {k: v for k, v in given.items() if k in accepts}
+        them.
+
+        **The item, where there is one.** Inside a `for each`, the decision is
+        about the item; the workflow's input is what every item shares.
+
+        **Nothing it does not accept.** What an agent reads is what `pact
+        check` reasons about when it looks for a leak, and an agent handed
+        every other field of the workflow as text has read things its own
+        file never said it reads. An agent that writes no `accepts:` takes a
+        `message` and nothing else.
+        """
+        declared = ((self.document.get("agents") or {}).get(agent) or {}).get("accepts") or {}
+        accepted = set(declared) or {"message"}
+        subject = dict(scope.input) if isinstance(scope.input, Mapping) else {}
+        if isinstance(scope.item, Mapping):
+            subject.update(scope.item)
+        given = {k: v for k, v in subject.items() if k in accepted}
+        said = (says or "").strip()
+        if said:
+            if "message" in accepted:
+                rest = str(given.get("message") or "").strip()
+                given["message"] = f"{said}\n\n{rest}" if rest else said
+            else:
+                self.result.unenforced.append(
+                    f"says: on a stage that '{agent}' decides — '{agent}' accepts no "
+                    f"`message`, so the stage's own instruction could not be given to it"
+                )
         return given
 
     def shown_for(self, question: str, scope: _Scope) -> dict[str, Any]:

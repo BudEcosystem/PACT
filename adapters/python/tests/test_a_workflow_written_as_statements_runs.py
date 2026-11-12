@@ -110,6 +110,75 @@ def test_whoever_decides_is_shown_what_they_are_deciding_about() -> None:
     assert stages(out) == ["where", "fix", "reply-fix"], out.trace
 
 
+def test_inside_a_loop_the_decision_is_about_the_item() -> None:
+    """`rung.agent`, as the schema says it: the current item's fields over the
+    workflow's input, as many as the agent `accepts:` and nothing else, and
+    the stage's `says:` at the start of its `message`."""
+    from trees import write
+
+    import tempfile
+
+    files = {
+        "w.pact": """\
+workspace "Sorting"
+  description: Every message in an inbox is put on a shelf.
+
+shape letter
+  id: text
+  message: text
+  secret: text
+
+agent sorter
+  description: Says which shelf a message belongs on.
+  takes message: text
+  gives shelf: one of bills, other
+  instructions: Say which shelf.
+
+workflow sort-all
+  description: Sort every letter.
+  takes letters: list of letter, message: text
+  every = for each item in input.letters
+    identified-by: [id]
+    limits:
+      items-at-most: 5
+      when-it-runs-out: stop-and-say-so
+    where = decide
+      says: Pick the shelf for this letter.
+      by:
+        - { agent: sorter }
+      if bills: done
+      if other: done
+  answer
+"""
+    }
+    seen: list[tuple[str, dict[str, Any]]] = []
+
+    def agent(name: str, inputs: dict[str, Any]) -> dict[str, Any]:
+        seen.append((name, dict(inputs)))
+        return {"shelf": "bills"}
+
+    with tempfile.TemporaryDirectory() as tmp:
+        doc = shown(write(Path(tmp) / "sorting", files))
+    spec = WorkflowSpec.from_workflow(doc, "sort-all")
+    letters = [
+        {"id": "a", "message": "Your invoice is attached.", "secret": "never for the sorter"},
+        {"id": "b", "message": "Hello from the seaside.", "secret": "nor this"},
+    ]
+    out = asyncio.run(
+        run_workflow(spec, {"letters": letters, "message": "the workflow's own"}, Callers(agent=agent), document=doc)
+    )
+    assert out.halted == "final", out.said
+    # Each letter's own `message` — the item's, over the workflow's — after the
+    # stage's `says:`; and neither `secret` nor `id` nor `letters`, which the
+    # sorter never said it reads.
+    assert sorted(given["message"] for _, given in seen) == [
+        "Pick the shelf for this letter.\n\nHello from the seaside.",
+        "Pick the shelf for this letter.\n\nYour invoice is attached.",
+    ]
+    assert all(set(given) == {"message"} for _, given in seen), seen
+    assert out.unenforced == []
+
+
 def test_a_label_with_one_step_beneath_it_ends_there() -> None:
     desks = Desks(sorter_says="out-of-scope")
     out, _ = go("route", {"message": "What is the weather?", "channel": "chat"}, desks)
