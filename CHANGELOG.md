@@ -3,6 +3,40 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — the shared cases, replayed by a second runtime: three things PACT had wrong (12 November)
+
+Bud Agent Flow replayed `tests/conformance/` and sent the cases that differed before recording
+any as its own. Three were PACT's.
+
+### What a runtime must match
+
+- **A workflow's answer is held to what it says it gives.** `run_workflow` handed back whatever
+  the `answer` stage bound; it now reads each field of `answers-with:` by its shape and stops
+  with *the answer does not fit `answers-with:` — …* when one does not (`halted: stopped`). A
+  field left out is refused unless its shape says `, optional`.
+- **Before anything has been remembered**, a `repeat`'s `remembers:` entry with no `starts-as:`
+  is what its `combines-by:` makes of nothing: an empty list for a rule that keeps several
+  (`keep-all`, `top 3 …`), and absent — so a `bind:` reading it is left out — for one that keeps
+  one thing. It was `null` for every rule.
+- **A workflow that hands back nothing answers with an empty record**, `{}`: `answers-with:` is
+  a set of fields, and no fields is still a set.
+- **An agent a workflow's stage calls is an agent's run**, under its own limits, approvals and
+  the reactions that cover it (`docs/99` §5). The reference workflow runtime does not run agents
+  — `Callers.agent` is the host's — and now says so.
+
+### What was wrong in what PACT ships
+
+- `examples/language/help-centre`'s `clear-inbox` said `gives replies: text, optional` and handed
+  back a list. It says `list of text, optional`. `pact check` passed it: nothing holds an
+  `answer` stage's `bind:` to the workflow's `answers-with:` at check time. Owed.
+- The shared case on `examples/kernel/tree-search` scripted a scorer whose ideas had no `text`,
+  which the workspace's own `idea` shape requires. Corrected, and the wrong data kept as a case
+  of its own: *an-answer-that-does-not-fit-what-the-workflow-gives-stops-the-run*.
+- The six routing cases ran on `help-centre`, whose desks are covered by a reaction, so a runtime
+  that refuses an uncarried guard refused the whole workflow. They run on
+  `tests/conformance/trees/routed-desk`: the same two workflows, agents no reaction covers.
+  Their `expect` is unchanged to the letter.
+
 ## 2026-11 — how a call's key and a claim's number reach the server (12 November)
 
 The schema's help for `same-request-key:` and `claim-lasts:` now says what was left to each host

@@ -78,7 +78,7 @@ run; what changes during a run is what steps answer.
 workflow clear-inbox
   description: Route every message in an inbox.
   takes messages: list of message
-  gives replies: text, optional
+  gives replies: list of text, optional
 
   every = for each item in input.messages
     identified-by: [id]
