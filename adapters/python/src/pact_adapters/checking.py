@@ -100,9 +100,15 @@ def check_instructions(
         return _checked(binary, root)
 
 
-def _as_a_folder(binary: Path, root: Path) -> None:
-    """Rewrite a copied tree that is written in the PACT language as the folder
-    of YAML it stands for, leaving the files it carries where they are.
+def as_a_folder(root: Path, binary: "Path | None" = None) -> bool:
+    """Rewrite a COPY of a tree that is written in the PACT language as the
+    folder of YAML it stands for, leaving the files it carries where they are.
+    `True` when it was rewritten, `False` when it was a folder already.
+
+    Public, because every runtime that tries a change on a scratch copy has the
+    same need (Bud Agent Flow's learning cycle searches `.yaml` and `.md` files
+    for the text it replaces, and a `.pact` file is neither). Never call it on
+    an author's own tree: it deletes the `.pact` files it rewrites.
 
     `_write_instructions` knows where an agent's instructions live in a folder.
     In a `.pact` file they are lines of somebody's text, and editing text by
@@ -117,7 +123,13 @@ def _as_a_folder(binary: Path, root: Path) -> None:
     # learning cycle was taken for one written in the language.
     written = sorted(p for p in root.glob("*.pact") if p.is_file())
     if not written:
-        return
+        return False
+    binary = binary or pact_binary()
+    if binary is None:
+        raise Uncheckable(
+            "the tree is written in the PACT language and there is no `pact` binary here "
+            "to write it out as a folder"
+        )
     printed = subprocess.run([str(binary), "write", str(root)], capture_output=True, text=True)
     if printed.returncode != 0:
         raise Uncheckable(
@@ -149,6 +161,7 @@ def _as_a_folder(binary: Path, root: Path) -> None:
                 to = beside / to.name
             to.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(file, to)
+    return True
 
 
 def _write_instructions(root: Path, agent: str, text: str) -> None:
@@ -157,9 +170,8 @@ def _write_instructions(root: Path, agent: str, text: str) -> None:
     A tree in which they live nowhere this knows is NOT checked as it stands:
     that would hold the author's own tree to the checker and report the answer
     as the proposal's, which is how a change that breaks a rule passes."""
-    binary = pact_binary()
-    if binary is not None:
-        _as_a_folder(binary, root)
+    if pact_binary() is not None:
+        as_a_folder(root)
     folder = root / "agents" / agent
     as_file = folder / "instructions.md"
     if as_file.exists() or folder.is_dir():

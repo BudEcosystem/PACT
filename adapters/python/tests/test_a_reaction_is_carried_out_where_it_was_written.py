@@ -263,6 +263,74 @@ def test_once_every_topic_has_been_said_the_tool_is_no_longer_offered() -> None:
     assert out.reactor.state()["said"] == ["finance"]
 
 
+def test_saying_the_topic_first_does_not_spend_the_guard_on_the_call() -> None:
+    """A guess does not spend what is exact. `finance` is `noticed-by: [tags,
+    the-agent]`: the agent may say it, and the billing tool is tagged with it.
+    An agent that said it on its first step had the finance desk asked about
+    nothing in particular — and the tagged call that came later was then not
+    held at all, because once-a-run had been spent on the guess."""
+    doc = shipped()
+    spec = AgentSpec.from_document(doc, "support")
+    lead = Script([
+        Turn("", (ToolCall(WORKING_ON, {"topic": "finance"}),)),
+        Turn("", (REFUND,)),
+        Turn("", (REFUND,)),
+        Turn("Refunded."),
+    ])
+    members = says("A refund needs the order number and the reason.")
+    ran: list[dict[str, Any]] = []
+    first = asyncio.run(
+        run(spec, ReferenceTransport(lead), "Please refund order A1.", tools(ran),
+            ask_member=delegate_by_running(doc, members), checking_transport=NO())
+    )
+    # Step 0: said, and the finance desk asked — a guess. Step 1: the refund
+    # call is STILL held and the desk asked again, about this call. Step 2: the
+    # same call, and only now is a person asked.
+    assert first.halted == "suspended", (first.halted, first.output)
+    assert ran == [], "money moved without the call itself being held"
+    assert first.steps[0].tool_results[0].startswith("noted: finance")
+    assert first.steps[1].tool_results[0].startswith("not done yet — finance-desk was asked first")
+    assert [who for who, _ in members.woken] == ["finance-desk", "finance-desk"]
+    assert "about to call `billing` (issue-refund)" in members.woken[1][1]
+    assert [r["certainty"] for r in first.reactor.log] == ["guess", "exact"]
+    # And a second guess after either is not due: said once, asked once for it.
+    state = first.reactor.state()
+    assert state["fired"] == state["sure"] == ["finance-desk listens for finance"]
+
+
+def test_an_agent_a_reaction_woke_is_not_asked_what_the_work_has_turned_to() -> None:
+    """Found by a live run, once a woken agent's own lines reached the run that
+    woke it: the auditor, told a refund had gone out, said `finance`, and the
+    finance desk was to be consulted by an agent with nobody it can ask."""
+    doc = shipped()
+    spec = AgentSpec.from_document(doc, "support")
+    lead = Script([Turn("", (REFUND,)), Turn("", (REFUND,)), Turn("Refunded.")])
+    offered: dict[str, list[str]] = {}
+
+    def member(inner: AgentSpec) -> ReferenceTransport:
+        class Member(ReferenceTransport):
+            async def model_call(self, system, history, tools):  # type: ignore[override]
+                offered[inner.name] = [t["name"] for t in tools]
+                return await super().model_call(system, history, tools)
+
+        return Member(Script([Turn("Noted.")]))
+
+    ran: list[dict[str, Any]] = []
+    kw: dict[str, Any] = dict(ask_member=delegate_by_running(doc, member), checking_transport=NO())
+    first = asyncio.run(run(spec, ReferenceTransport(lead), "Please refund order A1.", tools(ran), **kw))
+    parked = first.suspension
+    yes = parked.answer(**{a.name: "yes" for a in parked.asks})
+    after = asyncio.run(
+        run(spec, ReferenceTransport(lead), "Please refund order A1.", tools(ran), resume=parked, answer=yes, now=1.0, **kw)
+    )
+    assert set(offered) == {"finance-desk", "auditor"}
+    # The auditor is covered by the finance desk's `listens-for` like any other
+    # agent, and on its own run it WOULD be offered the tool; woken, it is not.
+    assert AgentSpec.from_document(doc, "auditor").reactions.tool() is not None
+    assert all(WORKING_ON not in names for names in offered.values()), offered
+    assert after.unenforced == ()
+
+
 def test_a_judge_that_says_yes_adds_the_reminder_and_one_that_says_no_adds_nothing() -> None:
     doc = shipped()
     spec = AgentSpec.from_document(doc, "support")

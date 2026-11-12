@@ -665,6 +665,11 @@ class Suspension:
     #: get a fresh record by being interrupted, so a reaction that fires once a
     #: run does not fire a second time because a person was asked in between.
     reactions: dict[str, Any] = field(default_factory=dict)
+    #: What the agents this run had put to work could not carry out and could
+    #: not count, as `RunResult` words them: `{"unenforced": […], "unmetered":
+    #: […]}`. A teammate asked before the park is not asked again after it, so
+    #: without this a resumed run reports that teammate's run as clean.
+    from_members: dict[str, list[str]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         check_reason(self.reason)
@@ -745,6 +750,7 @@ class Suspension:
             spent_keys=tuple(self.spent_keys),
             claim_holder=self.claim_holder,
             reactions=dict(self.reactions),
+            from_members={k: list(v) for k, v in self.from_members.items()},
         )
 
     # -- crossing a process boundary ---------------------------------------
@@ -795,6 +801,7 @@ class Suspension:
                 "claim-holder": self.claim_holder,
                 "request-digest": self.request_digest,
                 "reactions": self.reactions,
+                "from-members": self.from_members,
             },
             sort_keys=True,
         )
@@ -845,6 +852,7 @@ class Suspension:
             claim_holder=str(d.get("claim-holder") or ""),
             request_digest=str(d.get("request-digest") or ""),
             reactions=dict(d.get("reactions") or {}),
+            from_members={str(k): list(v) for k, v in (d.get("from-members") or {}).items()},
         )
 
 

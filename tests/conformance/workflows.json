@@ -1,0 +1,509 @@
+{
+ "about": "Workflows: stages in the order they run, what each called agent and each person was given, and the answer. Replayed as conformance_kit.replay_workflow does: `agents` is what each agent answers when called (a list is one answer for each time it is asked, the last repeating); `tools` is what each `<tool>/<action>` hands back; `people` is what a person answers to each question by name (absent: nobody is there to ask, and the run parks). In `expect`: `trace` is the stages that ran, nested ones as `outer/inner`; `given` is each agent called and its inputs, in order; `shown` is each question put to a person and what they were shown; `called` is each tool call.",
+ "cases": [
+  {
+   "name": "a-written-rule-decides-and-nobody-is-asked",
+   "tree": "examples/language/help-centre",
+   "workflow": "route",
+   "input": {
+    "message": "My invoice is wrong.",
+    "channel": "invoices-mailbox"
+   },
+   "agents": {
+    "billing-desk": {
+     "reply": "billing-desk answered"
+    },
+    "tech-desk": {
+     "reply": "tech-desk answered"
+    },
+    "sorter": {
+     "desk": "tech"
+    }
+   },
+   "people": {
+    "which-desk": {
+     "desk": "out-of-scope"
+    }
+   },
+   "expect": {
+    "answer": {
+     "reply": "billing-desk answered"
+    },
+    "called": [],
+    "given": [
+     {
+      "agent": "billing-desk",
+      "given": {
+       "message": "My invoice is wrong."
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "where",
+     "bill",
+     "reply-bill"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "no-rule-holds-so-the-agent-decides-and-is-given-what-it-accepts",
+   "tree": "examples/language/help-centre",
+   "workflow": "route",
+   "input": {
+    "message": "The app crashes.",
+    "channel": "chat"
+   },
+   "agents": {
+    "billing-desk": {
+     "reply": "billing-desk answered"
+    },
+    "tech-desk": {
+     "reply": "tech-desk answered"
+    },
+    "sorter": {
+     "desk": "tech"
+    }
+   },
+   "people": {
+    "which-desk": {
+     "desk": "out-of-scope"
+    }
+   },
+   "expect": {
+    "answer": {
+     "reply": "tech-desk answered"
+    },
+    "called": [],
+    "given": [
+     {
+      "agent": "sorter",
+      "given": {
+       "message": "The app crashes."
+      }
+     },
+     {
+      "agent": "tech-desk",
+      "given": {
+       "message": "The app crashes."
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "where",
+     "fix",
+     "reply-fix"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "the-agent-is-not-sure-so-a-person-decides-and-is-shown-the-message",
+   "tree": "examples/language/help-centre",
+   "workflow": "route",
+   "input": {
+    "message": "The app crashes.",
+    "channel": "chat"
+   },
+   "agents": {
+    "billing-desk": {
+     "reply": "billing-desk answered"
+    },
+    "tech-desk": {
+     "reply": "tech-desk answered"
+    },
+    "sorter": {
+     "desk": "not-sure"
+    }
+   },
+   "people": {
+    "which-desk": {
+     "desk": "tech"
+    }
+   },
+   "expect": {
+    "answer": {
+     "reply": "tech-desk answered"
+    },
+    "called": [],
+    "given": [
+     {
+      "agent": "sorter",
+      "given": {
+       "message": "The app crashes."
+      }
+     },
+     {
+      "agent": "tech-desk",
+      "given": {
+       "message": "The app crashes."
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [
+     {
+      "question": "which-desk",
+      "shown": {
+       "input.message": "The app crashes."
+      }
+     }
+    ],
+    "trace": [
+     "where",
+     "fix",
+     "reply-fix"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "a-label-with-one-step-beneath-it-ends-there",
+   "tree": "examples/language/help-centre",
+   "workflow": "route",
+   "input": {
+    "message": "What is the weather?",
+    "channel": "chat"
+   },
+   "agents": {
+    "billing-desk": {
+     "reply": "billing-desk answered"
+    },
+    "tech-desk": {
+     "reply": "tech-desk answered"
+    },
+    "sorter": {
+     "desk": "out-of-scope"
+    }
+   },
+   "people": {
+    "which-desk": {
+     "desk": "out-of-scope"
+    }
+   },
+   "expect": {
+    "answer": {},
+    "called": [],
+    "given": [
+     {
+      "agent": "sorter",
+      "given": {
+       "message": "What is the weather?"
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "where",
+     "decline"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "nobody-is-there-to-ask-so-the-run-parks-at-the-decision",
+   "tree": "examples/language/help-centre",
+   "workflow": "route",
+   "input": {
+    "message": "The app crashes.",
+    "channel": "chat"
+   },
+   "agents": {
+    "billing-desk": {
+     "reply": "billing-desk answered"
+    },
+    "tech-desk": {
+     "reply": "tech-desk answered"
+    },
+    "sorter": {
+     "desk": "not-sure"
+    }
+   },
+   "expect": {
+    "answer": {},
+    "called": [],
+    "given": [
+     {
+      "agent": "sorter",
+      "given": {
+       "message": "The app crashes."
+      }
+     }
+    ],
+    "halted": "parked",
+    "parked-at": "where",
+    "question": "which-desk",
+    "said": "waiting on 'which-desk' at 'where'",
+    "shown": [],
+    "trace": [
+     "where"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "one-workflow-calls-another-once-for-each-item-and-the-same-item-once",
+   "tree": "examples/language/help-centre",
+   "workflow": "clear-inbox",
+   "input": {
+    "messages": [
+     {
+      "id": "m1",
+      "text": "My invoice is wrong.",
+      "channel": "invoices-mailbox"
+     },
+     {
+      "id": "m2",
+      "text": "The app crashes.",
+      "channel": "chat"
+     },
+     {
+      "id": "m1",
+      "text": "My invoice is wrong.",
+      "channel": "invoices-mailbox"
+     }
+    ]
+   },
+   "agents": {
+    "billing-desk": {
+     "reply": "billing-desk answered"
+    },
+    "tech-desk": {
+     "reply": "tech-desk answered"
+    },
+    "sorter": {
+     "desk": "tech"
+    }
+   },
+   "people": {
+    "which-desk": {
+     "desk": "out-of-scope"
+    }
+   },
+   "expect": {
+    "answer": {
+     "replies": [
+      "billing-desk answered",
+      "tech-desk answered"
+     ]
+    },
+    "called": [],
+    "given": [
+     {
+      "agent": "billing-desk",
+      "given": {
+       "message": "My invoice is wrong."
+      }
+     },
+     {
+      "agent": "sorter",
+      "given": {
+       "message": "The app crashes."
+      }
+     },
+     {
+      "agent": "tech-desk",
+      "given": {
+       "message": "The app crashes."
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "every",
+     "every/one",
+     "every/one",
+     "done-all"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "three-stages-one-after-another-each-reading-the-one-before",
+   "tree": "examples/kernel/phases",
+   "workflow": "deliver",
+   "input": {
+    "brief": "A landing page for the spring sale."
+   },
+   "agents": {
+    "researcher": {
+     "findings": "Shoppers want free returns."
+    },
+    "planner": {
+     "plan": "Lead with free returns."
+    },
+    "builder": {
+     "result": "The page is built."
+    }
+   },
+   "expect": {
+    "answer": {
+     "result": "The page is built."
+    },
+    "called": [],
+    "given": [
+     {
+      "agent": "researcher",
+      "given": {
+       "brief": "A landing page for the spring sale."
+      }
+     },
+     {
+      "agent": "planner",
+      "given": {
+       "brief": "A landing page for the spring sale.",
+       "findings": "Shoppers want free returns."
+      }
+     },
+     {
+      "agent": "builder",
+      "given": {
+       "plan": "Lead with free returns."
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "research",
+     "plan",
+     "make",
+     "reply"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "a-loop-that-goes-round-until-something-holds",
+   "tree": "examples/kernel/tree-search",
+   "workflow": "search",
+   "input": {
+    "problem": "Name the product."
+   },
+   "agents": {
+    "proposer": [
+     {
+      "ideas": [
+       "Lumen"
+      ]
+     },
+     {
+      "ideas": [
+       "Lumen",
+       "Glow"
+      ]
+     }
+    ],
+    "scorer": [
+     {
+      "best": 0.5,
+      "scored": [
+       {
+        "idea": "Lumen",
+        "score": 0.5
+       }
+      ]
+     },
+     {
+      "best": 0.95,
+      "scored": [
+       {
+        "idea": "Glow",
+        "score": 0.95
+       }
+      ]
+     }
+    ]
+   },
+   "expect": {
+    "answer": {
+     "ideas": [
+      {
+       "idea": "Glow",
+       "score": 0.95
+      },
+      {
+       "idea": "Lumen",
+       "score": 0.5
+      }
+     ]
+    },
+    "called": [],
+    "given": [
+     {
+      "agent": "proposer",
+      "given": {
+       "frontier": null
+      }
+     },
+     {
+      "agent": "scorer",
+      "given": {
+       "ideas": [
+        "Lumen"
+       ]
+      }
+     },
+     {
+      "agent": "proposer",
+      "given": {
+       "frontier": [
+        {
+         "idea": "Lumen",
+         "score": 0.5
+        }
+       ]
+      }
+     },
+     {
+      "agent": "scorer",
+      "given": {
+       "ideas": [
+        "Lumen",
+        "Glow"
+       ]
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "rounds",
+     "rounds/propose",
+     "rounds/score",
+     "rounds/propose",
+     "rounds/score",
+     "reply"
+    ],
+    "unenforced": []
+   }
+  }
+ ]
+}

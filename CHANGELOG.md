@@ -3,6 +3,74 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — held to a second runtime: what reviewing Bud Agent Flow against PACT found in PACT (12 November)
+
+Bud Agent Flow was reviewed for conformance to `docs/99`, and asked its own questions back. Seven
+of them had no answer in PACT, or the wrong one. Nothing here changes a field of the schema; one
+help text now says what was unwritten.
+
+### What a runtime must match
+
+Behaviour another runtime can observe, with where PACT does it. This section is in every entry
+from now on, because a runtime that pins PACT could not tell a change of behaviour from a
+refactor without reading the diff.
+
+- **A guess does not spend what is exact.** A reaction that is once-a-run fires once on a guess
+  and once on something exact. A topic `noticed-by: [tags, the-agent]` raised by the agent
+  saying so is advice; the tagged call that comes later is still held
+  (`reactions.py` `_due`/`_spend`; saved state gains `sure`).
+- **What a deciding agent is given** (`rung.agent`, now in the schema's help): the current
+  item's fields over the workflow's input, as many as it `accepts:` and nothing it does not;
+  the stage's `says:` at the start of its `message`; an agent with no `accepts:` takes a
+  `message` only (`workflow_runtime.py` `given_to`). A `says:` that cannot be delivered is said
+  on `WorkflowResult.unenforced`, which is new.
+- **Which implementation does an interface's work** is the runtime's to decide by `chosen-by:`,
+  and there is now one reading of it: `pact_adapters.interfaces.chosen(document, agent,
+  run_inputs, picked_by_the_host)`. Nothing was read before; an agent that looked things up in
+  an interface looked them up in nothing.
+- **What a teammate could not do reaches the run that asked it.** Each line of a member's
+  `unenforced` and `unmetered` is on the caller's own, worded `<member> (put to work by this
+  agent): <its line>`, for a teammate, an agent consulted or told by a reaction, and across a
+  park (`Suspension.from_members`). `delegate_by_running.ask` returned the member's words and
+  nothing else. Bud Agent Flow was told its engine dropped these where PACT's did not; PACT's
+  dropped them too, and the wording is Bud Agent Flow's.
+- **An agent a reaction woke is not offered `working-on`.** It was run to be asked or told
+  about one thing; what the work has turned to is the waking run's to say. What its own tagged
+  calls raise is exact and still holds. Found live, once a woken agent's lines reached the run
+  that woke it: the auditor, told of a refund, said `finance`.
+- **A workspace's own `.pact/` area** is `<folder>/.pact/` for a folder and
+  `<folder>/.pact/<name>/` for a workspace that is one file `<name>.pact`
+  (`watches.area`). A lone `.pact` file used to lose its learning ledger without a word.
+
+### What an author or a host can now do
+
+- **A workspace written in the language brings its own model rows.**
+  `resolve.load_catalogue(workspace=…)` reads a `.pact` workspace's `models` from the document,
+  and `load_catalogue(document=…)` takes one a host has already loaded. It opened
+  `models/catalog.yaml` from the disk only, so such a workspace's transcriber and speaker passed
+  `pact check` and were unknown to everything that binds or prices a model.
+- **`pact_adapters.checking.as_a_folder(root)`** is public: a COPY of a tree written in the
+  language, rewritten as the folder it stands for, for a runtime that tries a change on a
+  scratch copy.
+- **`benchmarks.record`** on a workspace written in the language hands back the lines to add to
+  its `models` block, where it used to write a file nothing reads.
+
+### The shared cases
+
+`tests/conformance/reactions.json` (13) and `workflows.json` (8): a scripted run written down —
+the tree, who runs, what the model writes at each step, what each tool, agent, judge and person
+answers — and everything another runtime can observe of it. PACT's own runtime is held to them
+(`test_the_shared_cases_are_what_this_runtime_does.py`); another runtime replays the same cases.
+`tests/conformance/trees/guarded-desk` is a workspace whose calls are stopped, held, counted and
+reported by reactions on exact signals.
+
+### Owed, and written down so it is not lost
+
+A shipped loop the default step ceiling cannot finish (`pact:loop/reflexion` at 8 steps); a URL
+as a run input (a host fetches it under `allow-egress:` and hands over a file — unwritten until
+now); the words an answer shape is asked for in (`docs/99` §7); a warning for a shape named one
+letter from a built-in kind; an edit that changes one field of a `.pact` file in place.
+
 ## 2026-11 — the language writes programs: figures, patterns, and workflows in the order they run (12 November)
 
 `docs/99-THE-PACT-LANGUAGE.md` §4.3a. Nothing here is new to the specification: a `.pact` file
@@ -50,6 +118,16 @@ can now SAY, the way a program is written, what a folder of YAML already could.
   checked, and a change that breaks a rule passed. The copy is now rewritten as the folder it
   stands for first (`pact write`, then `pact build`), and a tree in which the instructions
   still cannot be found is refused as uncheckable instead of checked as it stands.
+
+### What a runtime must match
+
+- `working-on` is offered with `{"topic": "one of a, b"}` as its arguments, like every tool, and is
+  no longer offered once every topic the agent can say has been said (`harness.py`,
+  `Reactor.more_to_say`; `harness.ts` `saidTopics`). Saved reaction state gains `said`.
+- A `decide` stage's agent and person are handed something (see the entry above for what);
+  both were handed `{}`.
+- A workflow's `starts-at:` and each `then: { answered: … }` are unchanged in the document: the
+  statements are a way of writing them and nothing a runtime sees.
 
 ### What a real model found
 
@@ -164,6 +242,21 @@ line of the `.pact` file.
   held call does, and what a run reports.
 - `crates/pact-lang/README.md` is for somebody changing the reader or the printer.
 - `examples/language/README.md` and `examples/kernel/finance-first/README.md` walk the examples.
+
+### What a runtime must match
+
+- The six moments, and the order at a tool call: the workspace's own rules rewrite the arguments;
+  a call a reaction will hold is not put to a person in that step; reactions due before the call
+  are carried out in the order written and the first `stop:` ends the run; a `consult:` answers
+  the call with `not done yet — <agent> was asked first about this, and said: …` and the tool is
+  not run; then approval, at-most-once and the call; then reactions due after it
+  (`harness.py`, `reactions.py`).
+- A count (`more-than:`) is of calls that REACHED the moment — approved, and including ones a
+  reaction then held — not of calls that ran.
+- A reaction being carried out does not fire again beneath itself; an agent woken is paid from the
+  waking run's remaining budget; what has fired survives a park.
+- A runtime that cannot carry a reaction out says so on `unenforced`, one line for each; it may
+  refuse to run the agent instead, and never runs it as though the reaction were not written.
 
 ### What an existing workspace will notice
 

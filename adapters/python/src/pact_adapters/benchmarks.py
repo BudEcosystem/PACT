@@ -123,7 +123,24 @@ def record(
             **({"recorded-by": recorded_by.strip()} if recorded_by.strip() else {}),
         },
     }
-    path = Path(workspace) / "models" / "catalog.yaml"
+    root = Path(workspace)
+    path = (root.parent if root.is_file() else root) / "models" / "catalog.yaml"
+    written = [root] if root.is_file() else sorted(p for p in root.glob("*.pact") if p.is_file())
+    if written and not (root.is_dir() and path.exists()):
+        # A workspace written in the PACT language keeps its model rows in a
+        # `models` block of a `.pact` file (docs/99 §4.4). A `models/catalog.yaml`
+        # written beside it would be a second place for the same rows — or, for
+        # a workspace that is one file, a file nothing reads. So the lines are
+        # handed over to be put where the author's rows are.
+        block = yaml.safe_dump(
+            {"models": {model: {"benchmarks": {key: figure}}}}, sort_keys=False, allow_unicode=True
+        )
+        lines = "models\n" + "".join(f"  {line}\n" for line in block.splitlines())
+        raise Unrecordable(
+            f"{written[0].name} is written in the PACT language, so its model rows live in "
+            f"its `models` block and not in a file this can write. Add these lines there "
+            f"(inside the block if it already has one):\n{lines}"
+        )
     text = path.read_text(encoding="utf-8") if path.exists() else ""
     if any(line.lstrip().startswith("#") for line in text.splitlines()):
         paste = yaml.safe_dump(

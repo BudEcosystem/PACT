@@ -5984,7 +5984,11 @@ groups:
           an agent that picks a label. Its `answers-with:` has one `one of`
           line naming these labels, and may add `not-sure`, which passes the
           decision on. A decision model is an agent whose model has
-          `kind: decision`.
+          `kind: decision`. It is given the current item's fields over the
+          workflow's input — as many as it `accepts:` and nothing it does not
+          — and this stage's `says:`, where there is one, at the start of its
+          `message`. An agent that writes no `accepts:` takes a `message` and
+          nothing else.
       if-unsure-below:
         type: percent
         needs-also: [agent]
