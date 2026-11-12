@@ -3665,6 +3665,9 @@ groups:
           the same arguments (a reminder, a second notice): the call's own place in the run is
           then its identity, sent to the server as the request's idempotency key, the same on
           every retry and new for every other call. Only write it for a server that honours one.
+          It is sent as the `Idempotency-Key` header on a `url:` tool, and as
+          `dev.pact/request-key` in the request's `_meta` on a connected one — never as an
+          argument, which would change the call.
       same-request-key-across:
         # A5. A scope on the line above it, not a second setting:
         # `at-most-once-across:` would have been a THIRD name for one act,
@@ -3744,7 +3747,16 @@ groups:
           how long one call's claim on its key lasts — `5m`. Until then a second
           call with the same key is refused; after it the key is free again, so
           work somebody took and never finished goes back to whoever comes next.
-          Leave it out and a claim lasts as long as its scope does.
+          Leave it out and a claim lasts as long as its scope does. The claim is
+          taken when the call is let through — after a person has said yes, just
+          before the tool is reached — and not while anybody is being asked, so
+          a long approval uses up none of it. A lease cannot stop a call that is
+          still running when it ends; what can is the number each new claim is
+          given, one higher than the last, which whatever runs your agents
+          sends with the call so the system it writes to can refuse a late one:
+          `Pact-Fence` and `Pact-Claim` headers on a `url:` tool,
+          `dev.pact/fence` and `dev.pact/claim` in the request's `_meta` on a
+          connected one. A server that ignores them behaves as before.
       bind:
         # TWO namespaces now, and the second closes a hole the first could not
         # reach. `run-inputs.<name>` is what the surrounding system supplied for
@@ -5987,8 +5999,9 @@ groups:
           `kind: decision`. It is given the current item's fields over the
           workflow's input — as many as it `accepts:` and nothing it does not
           — and this stage's `says:`, where there is one, at the start of its
-          `message`. An agent that writes no `accepts:` takes a `message` and
-          nothing else.
+          `message`. An item that is one value and not a set of fields (a list
+          of texts) is its `message`. An agent that writes no `accepts:` takes
+          a `message` and nothing else.
       if-unsure-below:
         type: percent
         needs-also: [agent]

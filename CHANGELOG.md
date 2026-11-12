@@ -3,6 +3,31 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — how a call's key and a claim's number reach the server (12 November)
+
+The schema's help for `same-request-key:` and `claim-lasts:` now says what was left to each host
+to invent, and one gap in what a deciding agent is given is closed. Agreed with Bud Agent Flow, which already sent the first of these in
+production.
+
+### What a runtime must match
+
+- **A call's own key** (`same-request-key: the-call`) is sent as the `Idempotency-Key` header on
+  a `url:` tool, and as `dev.pact/request-key` in the request's `_meta` on a connected one.
+- **A claim's fencing token** is sent as `Pact-Fence` with `Pact-Claim` (the scoped claim key) on
+  a `url:` tool, and as `dev.pact/fence` with `dev.pact/claim` in `_meta` on a connected one:
+  both or neither, only for a claim taken from a store, and never as an argument, which would
+  change the call's own key. PACT's reference harness records the token (`Ledger.fences`) and
+  sends neither; a host does.
+- **An item that is one value is the deciding agent's `message`** (`rung.agent`'s help, and
+  `workflow_runtime.given_to`). `for each item in input.notes` over a list of texts handed the
+  sorter the stage's `says:` and nothing about the note. An agent that accepts no `message`
+  cannot be given it, and the run says so on `unenforced`. Two shared cases hold it
+  (`tests/conformance/trees/sorted-notes`): a loop over texts, and a loop over records where
+  the sorter is given the fields it accepts and nothing else.
+- **A claim is taken when the call is let through**, after a person has said yes and just before
+  the tool is reached, and not while anybody is being asked. Before a person is asked the ledger
+  only looks (`Ledger.look`).
+
 ## 2026-11 — held to a second runtime: what reviewing Bud Agent Flow against PACT found in PACT (12 November)
 
 Bud Agent Flow was reviewed for conformance to `docs/99`, and asked its own questions back. Seven
