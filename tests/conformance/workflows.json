@@ -698,8 +698,7 @@
    "people": null,
    "expect": {
     "answer": {
-     "by": "assigner",
-     "label": "powerplant"
+     "team": "powerplant"
     },
     "called": [],
     "given": [
@@ -725,7 +724,8 @@
     "shown": [],
     "trace": [
      "triage",
-     "assign"
+     "assign",
+     "reply"
     ],
     "unenforced": []
    }
@@ -751,8 +751,7 @@
    "people": null,
    "expect": {
     "answer": {
-     "by": "assigner",
-     "label": "interiors"
+     "team": "interiors"
     },
     "called": [],
     "given": [
@@ -777,7 +776,8 @@
     "shown": [],
     "trace": [
      "triage",
-     "assign"
+     "assign",
+     "reply"
     ],
     "unenforced": []
    }

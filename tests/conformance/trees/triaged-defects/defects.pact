@@ -31,13 +31,15 @@ agent shelver
 workflow fix-item
   description: Classify one defect report and pick the team that takes it.
   takes report: text, kind: text, urgency: text, secret: text
+  gives team: text
 
   triage = call triager with report: input.report
   assign = decide with kind: triage.kind, summary: triage.summary
     by:
       - { agent: assigner }
-    if powerplant: done
-    if interiors: done
+    if powerplant: reply
+    if interiors: reply
+  reply = answer with team: assign.label
 
 # A list of plain texts, and a sorter that calls its one input `note`. The
 # stage says where the item goes; nothing guesses it.
