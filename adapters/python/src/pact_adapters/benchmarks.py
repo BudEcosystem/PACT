@@ -178,7 +178,13 @@ def run_deepeval(
     cls = getattr(shipped, class_name, None)
     if cls is None:
         raise Unrecordable(f"DeepEval has no benchmark called {class_name!r}")
-    result = cls(**_settings_for(cls, benchmark.with_ or {})).evaluate(model=AskModel(model, ask))
+    try:
+        result = cls(**_settings_for(cls, benchmark.with_ or {})).evaluate(model=AskModel(model, ask))
+    except ImportError as missing:  # DeepEval imports what a benchmark needs only when it runs
+        raise Unrecordable(
+            f"DeepEval's {class_name} needs {missing.name or missing}, which is not installed here: "
+            f"`pip install {missing.name or 'it'}`"
+        ) from missing
     accuracy = float(getattr(result, "overall_accuracy", result))
     return accuracy * 100.0 if benchmark.scale == "percent" else accuracy
 

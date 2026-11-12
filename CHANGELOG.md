@@ -23,6 +23,13 @@ that binds a model the tree does not name had no row to hold it to, and `voice.p
   (`MMLU(tasks=[MMLUTask.…])`) crashed inside DeepEval; each such word is now read into that
   member (`tasks: [high_school_computer_science]`), and one the enum lacks is refused naming some
   it has.
+- **A DeepEval benchmark is answered by a model that obeys its prompt.** `AskModel.generate` read
+  only JSON when a schema was asked for, and DeepEval's MMLU asks for a bare letter: every question
+  raised `answer Field required`. A one-field schema now takes the reply itself, and a field of
+  a few words (`Literal["A", "B", "C", "D"]`) the first of them the reply says. A package a
+  benchmark imports only when it runs (`pandas`) is refused naming it, not raised. Measured
+  through Bud Agent Flow's `budflow benchmark run`: gpt-4o-mini, 90 on twenty MMLU
+  high-school computer science questions.
 
 ## 2026-11 — law 3 as the Bud Agent Flow corpus reads it (11 November)
 
