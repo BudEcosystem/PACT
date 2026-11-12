@@ -337,6 +337,12 @@ class KnowledgeSpec:
     #: The file names the payload walker found, for a runtime that needs to know
     #: what it is indexing without re-walking the tree.
     documents: tuple[str, ...] = ()
+    #: `embedded-by:` and `reranked-by:` (96 §A7): the catalogue ids of the model
+    #: that turns these documents and every question about them into numbers,
+    #: and of the one that orders what was found. `""` when not written: the
+    #: runtime's own embedder, and the order the passages were found in.
+    embedded_by: str = ""
+    reranked_by: str = ""
 
 
 @dataclass(frozen=True)
@@ -954,6 +960,8 @@ class AgentSpec:
                 do_not_use_when=_text(k.get("do-not-use-when", "")),
                 if_unsure=_text(k.get("if-unsure", "")),
                 documents=_document_names(k.get("documents")),
+                embedded_by=_text(k.get("embedded-by", "")),
+                reranked_by=_text(k.get("reranked-by", "")),
             )
             for n, k in sorted((doc.get("knowledge") or {}).items())
             if n in set(_as_list(a.get("uses"))) and isinstance(k, Mapping)

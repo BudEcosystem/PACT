@@ -3,6 +3,16 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — a set of documents names its embedder and its reranker to the runtime (12 November)
+
+`knowledge.embedded-by:` and `reranked-by:` were checked (`pact check` holds each to a catalogue
+row of kind `embedding` and `reranking`) and read by nothing: `KnowledgeSpec` dropped them, so a
+runtime indexed every set with its own embedder whatever the set said. `KnowledgeSpec` now carries
+`embedded_by` and `reranked_by`, `""` when not written. One test; README count 4766.
+
+Not changed here: an agent that `uses:` a knowledge interface (`interface: yes`, 96 §B1) is still
+given the interface's entry, not the set that `implements:` it.
+
 ## 2026-11 — the PACT language, and reactions (12 November)
 
 Two things, specified in `docs/99-THE-PACT-LANGUAGE.md`. Neither changes anything a folder of
