@@ -657,6 +657,49 @@ def AskModel(name: str, ask: Callable[[str, str], str]) -> Any:  # noqa: N802
     return _ask_model_class()(name, ask)
 
 
+def _as_deepeval_reads(cls: Any, written: dict[str, Any]) -> dict[str, Any]:
+    """The settings an author wrote under `with:`, in the types the score's constructor takes.
+
+    **G-Eval could not be written at all.** Its `evaluation_params` are members
+    of DeepEval's `SingleTurnParams` and its `rubric` entries are `Rubric`
+    objects, and YAML writes neither: `evaluation_params: [input,
+    actual_output]` arrived as two strings, and measured on DeepEval 4.3.3 every
+    such suite answered *"AttributeError: 'str' object has no attribute
+    'value'"* at measure time. Leaving `evaluation_params` out does not help:
+    G-Eval then grades a trace, and a case answer has none, so it refuses that
+    too. So an author who typed the score the way DeepEval's own page writes it
+    got a reported absence and never a number.
+
+    The names are read here, by DeepEval's own spelling (`actual_output`) or
+    the member's (`ACTUAL_OUTPUT`), and each rubric mapping by `score-range` (or
+    `score_range`) and `expected-outcome`. A name that is neither is left as it
+    was written, so G-Eval's own refusal names it. Every other score's settings
+    pass through untouched.
+    """
+    if getattr(cls, "__name__", "") != "GEval":
+        return dict(written)
+    from deepeval.metrics.g_eval.utils import Rubric
+    from deepeval.test_case import SingleTurnParams
+
+    settings = dict(written)
+    params = settings.get("evaluation_params")
+    if isinstance(params, list):
+        by_name = {**{m.value: m for m in SingleTurnParams}, **{m.name: m for m in SingleTurnParams}}
+        settings["evaluation_params"] = [by_name.get(p, p) if isinstance(p, str) else p for p in params]
+    rubric = settings.get("rubric")
+    if isinstance(rubric, list):
+        settings["rubric"] = [
+            Rubric(
+                score_range=tuple(entry.get("score-range", entry.get("score_range"))),
+                expected_outcome=str(entry.get("expected-outcome", entry.get("expected_outcome", ""))),
+            )
+            if isinstance(entry, dict) and ("score-range" in entry or "score_range" in entry)
+            else entry
+            for entry in rubric
+        ]
+    return settings
+
+
 def _takes_a_judge(cls: Any) -> bool:
     """Does this score read the answer with a model?
 
@@ -766,7 +809,7 @@ def evaluate_metric(
     # how a locally-served grader turned into a demand for `OPENAI_API_KEY` — see
     # `_ask_model_class`. `tool_correctness` and its kind genuinely take no
     # model, and their signature says so.
-    settings: dict[str, Any] = {"threshold": spec.threshold, **spec.with_}
+    settings: dict[str, Any] = {"threshold": spec.threshold, **_as_deepeval_reads(cls, spec.with_)}
     if _takes_a_judge(cls):
         settings["model"] = judge
     try:
