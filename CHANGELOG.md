@@ -3,6 +3,22 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — a case expects only what the specification fixes (12 November)
+
+Bud Agent Flow's second replay: 21 of 24 agreed, and the three that did not were each a question
+the cases had answered by accident.
+
+### What a runtime must match
+
+- **A run that stopped because its answer does not fit hands back an empty record.** PACT handed
+  back the unfitting answer beside the word `stopped`, which a caller could still read fields
+  off. Why it stopped is in `said` (`workflow_runtime.run_workflow`).
+- **A field the run did not set is absent from its answer**, not `null`: `gives reply: text,
+  optional` and a run that never set it answers `{}`.
+- **The order agents are asked in across the items of an `each`** is the runtime's to choose
+  unless the stage says `at-once-at-most: 1`, as the schema's help has always said. The shared
+  case that expected an order now runs on a tree that writes it.
+
 ## 2026-11 — the shared cases, replayed by a second runtime: three things PACT had wrong (12 November)
 
 Bud Agent Flow replayed `tests/conformance/` and sent the cases that differed before recording

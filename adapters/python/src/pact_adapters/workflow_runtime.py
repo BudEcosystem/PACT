@@ -745,6 +745,11 @@ async def run_workflow(
     if wrong:
         result.halted = "stopped"
         result.said = f"the answer does not fit `answers-with:` — {wrong}"
+        # And it is not handed back. A value that fails the workflow's own
+        # contract, returned beside the word `stopped`, is a value a caller can
+        # still read fields off — fields the workflow said it does not give.
+        # Why it stopped is in `said`; what the stages answered is in `steps`.
+        result.answer = {}
         return result
     result.halted = "final"
     return result
