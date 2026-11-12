@@ -761,7 +761,12 @@ groups:
           `date`, `time` and `date and time`, or `one of a, b, c` to choose
           between things you name. Write `list of <shape>` for several, a
           name from the workspace's `shapes:` for a shape with parts, and
-          `, optional` after a line that may be left out.
+          `, optional` after a line that may be left out. A model is shown
+          everything the agent was given and nothing else: the `message`,
+          where there is one, as the words, and every other line by its name
+          and value, in the order written here. With no `message` nothing is
+          put in front — not the description above, which is written for
+          whoever chooses this agent.
       answers-with:
         type: map of answer-shape
         shapes: *the-answer-shapes
@@ -6009,7 +6014,9 @@ groups:
           stage binds it — `bind: {note: item}`. An agent that writes no
           `accepts:` takes a `message` and nothing else. An agent that would
           be given nothing it accepts, or not something it requires, is
-          refused.
+          refused. An agent all of whose models are decision models follows
+          no instruction, so it is not given the `says:`: its `message` is
+          what it is to score, as it is.
       if-unsure-below:
         type: percent
         needs-also: [agent]
@@ -6017,8 +6024,12 @@ groups:
         tier: core
         help: >
           for a decision model, the score under which it passes the decision
-          on. A language model has no honest score, so it answers `not-sure`
-          instead and this line is refused on it.
+          on to the next rung. A score exactly at the figure decides, and an
+          answer that came with no score passes on. A language model has no
+          honest score, so it answers `not-sure` instead and this line is
+          refused on it. Passing on is always to the next rung, never to the
+          next model of the agent's own `model:` list, which is tried only
+          when a call fails.
       if-it-disagrees:
         type: one-of
         choices: [keep-its-answer, go-on]
@@ -6026,8 +6037,13 @@ groups:
         surface: S-GOV
         tier: core
         help: >
-          `go-on` passes the decision on when this rung picks a different label
-          from the rung before it. Leave it out to keep its answer.
+          `go-on` makes this rung a second opinion: it is asked even when a
+          rung before it has decided. The same label, and that decision
+          stands. Another label, or it is not sure itself, and nothing
+          stands: the rungs after it are tried as if nobody had decided. With
+          nothing decided before it, it decides as any rung does. Leave the
+          line out and the rung is asked only when nothing has been decided,
+          and its answer is kept.
       asks:
         type: text
         names: [^questions, questions]

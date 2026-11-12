@@ -3,6 +3,74 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — a decision as the specification says it: who is asked, what a model is shown, what is recorded (13 November)
+
+Writing a shared case for a classifier found that PACT's reference runtime read neither
+`if-unsure-below:` nor `if-it-disagrees: go-on`: a classifier one-tenth sure decided, and a second
+opinion was never asked. Bud Agent Flow had built both, and its answers to five questions are how
+the unwritten parts were settled. Nothing here changes a field of the schema.
+
+### What a runtime must match
+
+- **Rungs, and the label that stands.** A rung that decides makes its label the standing one. While
+  a label stands a rung is not asked, unless it writes `if-it-disagrees: go-on`, which makes it a
+  second opinion: the same label and it stands; another, or a second opinion that passes on itself,
+  and nothing stands, so the rungs after it are tried as if nobody had decided. With nothing
+  standing a `go-on` rung decides as any other. The decision is the label standing after the last
+  rung asked (`workflow_runtime.decide`).
+- **`if-unsure-below:`** passes the decision on when the classifier's `score` (a share of one,
+  beside its label) is under the figure, or it gave none. Exactly at the figure decides.
+- **Passing on is to the next rung**, never to the next model of the agent's `model:` list. That
+  list is tried when a call fails (its own help: "never because an answer was wrong").
+- **What a `decide` records**: `.label`; `.decided-by`, one of `rules`, `agent`, `person`;
+  `.answered-by`, the agent's name on an agent rung and the person on a person rung — who that
+  was is the host's to say, beside the answer, under `answered-by` (a name no question's answer can
+  have a field called). The reference wrote `by` and `because`, names the specification does not
+  have. A rule's `because:` is the run's
+  "why this path" (`WorkflowResult.because`), not a field a binding reads.
+- **What every stage has besides its answer**: `.outcome`, the word it ended in (`answered` for a
+  `decide`); and on a `repeat`, `.rounds` and `.ended` — `passed` or `ran-out`, and absent where the
+  repeat writes no `until:`. The reference had none of them, so `steps.<stage>.outcome` passed
+  `pact check` and read nothing.
+- **A workflow hands back what an `answer` stage bound**, and `{}` where it reached none. The
+  reference handed back the last stage's own record, which is what a body hands the stage that
+  holds it and nothing a workflow said it gives.
+- **A classifier is not given the stage's `says:`.** An agent all of whose models are
+  `kind: decision` is given its fields as they are; nothing is reported, since nothing was owed.
+- **What a model is shown of what an agent was given** (`accepts:`, in its help): all of it and
+  nothing else — the `message` as the words, every other field by name and value, in `accepts:`
+  order. With no `message` nothing is put in front; in particular not the agent's `description:`.
+  How the fields are laid out is each runtime's (`workflow_runtime.worded` is this one's).
+- Twelve shared cases hold these, on `tests/conformance/trees/triaged-defects`: three for the
+  threshold, five for the second opinion and the record, three for a loop's rounds, one for a
+  workflow that reaches no `answer`.
+
+### What `pact check` now says
+
+- **`loader/a-rung-with-two-kinds-of-reader`** (a warning) — an agent on a rung lists a decision
+  model and a language model in one `model:`. It reads as a cascade and is a fallback for a failed
+  call; both would be given one message.
+- **`loader/a-deciding-agent-given-nothing`** no longer counts a `says:` as something a classifier
+  is given.
+
+### What was wrong in what PACT ships
+
+- PACT's own live suite sent a called agent its `message` and dropped every other field it was
+  given. It now sends all of them (`worded`).
+
+### Proposed, not built
+
+- **Showing the person who breaks a tie what the two opinions were.** A person reached after a
+  disagreement is shown the question's `shows:` and nothing about the disagreement, in both
+  runtimes. A name for it (`steps.<stage>.opinions`) would be new vocabulary.
+
+### Still owed
+
+- A shared case for claims (`same-request-key:`, `claim-lasts:`); none of the 39 touches them.
+- A packaged copy of `spec/schema.yaml` that an editable install leaves in `site-packages` can go
+  stale; nothing in PACT reads it, and nothing checks it.
+- The `pact` command cannot say which commit it was built from.
+
 ## 2026-11 — an agent that decides is given what it decides about (13 November)
 
 Bud Agent Flow's full gate, run under the rule that a deciding agent is given only what it

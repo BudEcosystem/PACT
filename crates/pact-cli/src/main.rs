@@ -1916,7 +1916,7 @@ fn validate(
         // And what a workflow's bindings read (02W §2.0, §3 WF-4 to WF-7, WF-9,
         // WF-13, WF-14, WF-39): a path the schema holds to text, and only the
         // whole workflow can say whether it names something that has run.
-        pact_loader::bindings::check(root, &schema, &mut diags);
+        pact_loader::bindings::check(root, &schema, BUILTIN_CATALOGUE, &mut diags);
         // And what a workflow waits for (02W §2.8, §2.10, §3): a person, a group,
         // an event or the clock, with reminders, deadlines and the zone a time
         // is read in — and, the other way round, what only a workflow reads

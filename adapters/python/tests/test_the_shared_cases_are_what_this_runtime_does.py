@@ -131,5 +131,38 @@ def test_the_cases_say_the_things_they_are_there_to_say() -> None:
     ]
     assert bound["unenforced"] == []
 
+    scored = by_name[
+        "a-classifier-is-given-the-note-as-it-is-and-the-reader-is-given-the-instruction-first"
+    ]
+    # 60% sure where the rung asks for 85%: it passes on to the next RUNG. The
+    # classifier was given the note alone; the reader, the instruction first.
+    assert [g["agent"] for g in scored["given"]] == ["scorer", "reader"]
+    assert scored["given"][0]["given"] == {"message": "Invoice 14 is overdue."}
+    assert scored["given"][1]["given"]["message"].startswith("Pick the shelf for this note.\n\n")
+    exactly = by_name["a-classifier-exactly-as-sure-as-the-line-asks-decides-and-nobody-else-is-asked"]
+    assert [g["agent"] for g in exactly["given"]] == ["scorer"]
+    unmeasured = by_name["a-classifier-that-gives-no-score-passes-the-decision-on"]
+    assert [g["agent"] for g in unmeasured["given"]] == ["scorer", "reader"]
+
+    agrees = by_name["a-second-opinion-that-agrees-leaves-the-rules-label-standing"]
+    # The rule had decided, and the second opinion was asked all the same.
+    assert [g["agent"] for g in agrees["given"]] == ["checker"] and agrees["shown"] == []
+    assert agrees["answer"] == {"shelf": "bills", "decided": "rules"}
+    differs = by_name["a-second-opinion-that-disagrees-leaves-nothing-standing-and-a-person-decides"]
+    # `who` is the person, as the host named them beside their answer.
+    assert differs["answer"] == {"shelf": "other", "decided": "person", "who": "dana"}
+    assert [s["question"] for s in differs["shown"]] == ["which-shelf"]
+    unsure = by_name["a-second-opinion-that-is-not-sure-leaves-nothing-standing-either"]
+    assert unsure["answer"] == {"shelf": "bills", "decided": "person", "who": "dana"}
+    alone = by_name["with-no-label-standing-the-second-opinion-decides-and-the-record-names-it"]
+    assert alone["answer"] == {"shelf": "other", "decided": "agent", "who": "checker"}
+    waits = by_name["a-disagreement-with-nobody-to-ask-parks-at-the-decision"]
+    assert waits["halted"] == "parked" and waits["parked-at"] == "where"
+
+    passed = by_name["a-loop-that-passes-says-how-many-rounds-it-took-and-that-it-passed"]
+    assert passed["answer"] == {"rounds": 2, "ended": "passed", "outcome": "answered"}
+    ran_out = by_name["a-loop-that-runs-out-says-so-and-ends-in-too-many-times"]
+    assert ran_out["answer"] == {"rounds": 3, "ended": "ran-out", "outcome": "too-many-times"}
+
     parked = by_name["nobody-is-there-to-ask-so-the-run-parks-at-the-decision"]
     assert parked["halted"] == "parked" and parked["parked-at"] == "where" and parked["question"] == "which-desk"

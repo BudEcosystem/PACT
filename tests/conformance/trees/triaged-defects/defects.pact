@@ -56,3 +56,121 @@ workflow shelve
       if bills: done
       if other: done
   answer
+
+# A trained classifier and then a language model, on one decision with one
+# `says:`. The classifier follows no instruction and is given the note as it
+# is; the language model is given the instruction and then the note.
+models
+  version: 1
+  models:
+    note-classifier:
+      description: A trained classifier that says which shelf a note belongs on.
+      kind: decision
+      served-by: [{runtime: systemone, endpoint: local}]
+
+agent scorer
+  description: Scores a note for a shelf.
+  model: note-classifier
+  takes message: text
+  gives shelf: one of bills, other
+
+agent reader
+  description: Reads a note and says which shelf it belongs on.
+  takes message: text
+  gives shelf: one of bills, other
+  instructions: Say which shelf.
+
+workflow shelve-twice
+  description: Put every note on a shelf, by a classifier and then by a reader.
+  takes notes: list of text
+  every = for each item in input.notes
+    limits:
+      items-at-most: 5
+      at-once-at-most: 1
+      when-it-runs-out: stop-and-say-so
+    where = decide
+      says: Pick the shelf for this note.
+      by:
+        - agent: scorer
+          if-unsure-below: 85%
+        - { agent: reader }
+      if bills: done
+      if other: done
+  answer
+
+# A written rule, then a second opinion on what the rule chose, then a person.
+# The second opinion is asked even though the rule has decided; where it picks
+# another label, or is not sure, nothing stands and the person is asked.
+question which-shelf
+  description: Asked when the rule and the second opinion do not agree.
+  says: Which shelf does this note go on?
+  answer:
+    shelf: one of bills, other
+  shows: [input.note]
+  asked-of: [clerks]
+  answer-within: 1h
+
+agent checker
+  description: Gives a second opinion on which shelf a note belongs on.
+  takes message: text
+  gives shelf: one of bills, other, not-sure
+  instructions: Say which shelf, or that you are not sure.
+
+workflow shelve-checked
+  description: Put one note on a shelf, and say who decided.
+  takes note: text, folder: text
+  gives shelf: text, decided: text, who: text, optional
+  where = decide with message: input.note
+    by:
+      - rules:
+          - when:
+              - { value: input.folder, is: invoices }
+            choose: bills
+            because: Everything in the invoices folder is a bill.
+      - agent: checker
+        if-it-disagrees: go-on
+      - { asks: which-shelf }
+    if bills: reply
+    if other: reply
+  reply = answer with shelf: where.label, decided: where.decided-by, who: where.answered-by
+
+# What every stage has besides its answer: how it ended, and for a loop how
+# many rounds it took and whether what it was waiting for came to hold.
+agent drafter
+  description: Writes a draft and says whether it is good enough.
+  takes brief: text
+  gives draft: text, good: yes or no
+  instructions: Write the draft. Say whether it is good enough to send.
+
+workflow draft-until-good
+  description: Draft until the draft is good, three times at most, and say how that went.
+  takes brief: text
+  gives rounds: whole number, ended: text, outcome: text
+  polish = repeat at most 3 times
+    until:
+      - value: steps.write.good
+        is: yes
+    then:
+      too-many-times: reply
+    write = call drafter with brief: input.brief
+  reply = answer with rounds: polish.rounds, ended: polish.ended, outcome: polish.outcome
+
+# A workflow with no `answer` stage. It hands back nothing: what its last
+# stage answered is the stage's, under its name, and not the workflow's.
+workflow classify-only
+  description: Classify one defect report, and hand nothing back.
+  takes report: text
+  triage = call triager with report: input.report
+
+# A loop that is waiting for nothing: it runs its rounds and ends as any
+# stage does. `too-many-times` is for one whose `until:` never came to hold.
+workflow draft-three-times
+  description: Draft three times, and say how that went.
+  takes brief: text
+  gives rounds: whole number, outcome: text, ended: text, optional
+  polish = repeat at most 3 times
+    then:
+      too-many-times: gave-up
+    write = call drafter with brief: input.brief
+  reply = answer with rounds: polish.rounds, outcome: polish.outcome, ended: polish.ended
+  gave-up = answer with rounds: polish.rounds, outcome: polish.outcome

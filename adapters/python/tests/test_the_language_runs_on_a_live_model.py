@@ -44,7 +44,7 @@ from pact_adapters.harness import delegate_by_running, run  # noqa: E402
 from pact_adapters.ir import AgentSpec, WorkflowSpec  # noqa: E402
 from pact_adapters.reactions import WORKING_ON  # noqa: E402
 from pact_adapters.transports.ollama_transport import OllamaTransport  # noqa: E402
-from pact_adapters.workflow_runtime import Callers, run_workflow  # noqa: E402
+from pact_adapters.workflow_runtime import Callers, run_workflow, worded  # noqa: E402
 from trees import shown, write  # noqa: E402
 
 BASE_URL = os.environ.get("PACT_LIVE_BASE_URL", "")
@@ -298,7 +298,10 @@ def live_agents(doc: dict[str, Any], ran: list[str]):
         spec = AgentSpec.from_document(doc, name)
         ran.append(name)
         out = await run(
-            spec, Live(name), str(inputs.get("message") or json.dumps(inputs)),
+            # Everything it was given and nothing else (`worded`). This sent
+            # the `message` and dropped every other field, so an agent that
+            # accepted more was never shown it.
+            spec, Live(name), worded(doc, name, inputs),
             {"billing": lambda args: "invoice INV-7: 40 USD, paid on 1 November"},
         )
         answer = _answer_of(out.output)

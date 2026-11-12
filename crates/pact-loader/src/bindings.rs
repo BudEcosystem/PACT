@@ -83,9 +83,13 @@ pub(crate) fn is_binding(said: &str) -> bool {
         || ROOTS.contains(&said)
 }
 
-/// Every binding and shape check, over the loaded document.
-pub fn check(document: &Node, schema: &Schema, diags: &mut Diagnostics) {
+/// Every binding and shape check, over the loaded document. `builtin` is the
+/// distribution's `models/catalog.yaml`, as text: which models are trained
+/// classifiers decides whether a stage's `says:` is something an agent on a
+/// `decide`'s rung is given ([`Flow::decide`]).
+pub fn check(document: &Node, schema: &Schema, builtin: &str, diags: &mut Diagnostics) {
     let shapes = Shapes::of(document, schema);
+    let decision = crate::deciding::decision_models(builtin, document);
     shapes.go_round(diags);
     shapes.named_like_a_built_in(diags);
     memory_lines(document, diags);
@@ -101,6 +105,7 @@ pub fn check(document: &Node, schema: &Schema, diags: &mut Diagnostics) {
         let flow = Flow {
             document,
             shapes: &shapes,
+            decision: &decision,
             node: &entry.node,
             name,
         };
@@ -359,6 +364,8 @@ impl Frame<'_> {
 struct Flow<'a> {
     document: &'a Node,
     shapes: &'a Shapes<'a>,
+    /// Every catalogue row with `kind: decision`, by id and alias.
+    decision: &'a BTreeSet<String>,
     node: &'a Node,
     name: &'a str,
 }
@@ -609,7 +616,10 @@ impl<'a> Flow<'a> {
     ///   `shows:`;
     /// * an agent that requires an input none of the three can ever give it,
     ///   or that accepts nothing any of them has, would pick a label having
-    ///   been shown nothing (`loader/a-deciding-agent-given-nothing`). Six
+    ///   been shown nothing (`loader/a-deciding-agent-given-nothing`). A
+    ///   stage's `says:` counts as a `message` for an agent that reads
+    ///   instructions and not for one all of whose models are trained
+    ///   classifiers (`kind: decision`), which is given none. Six
     ///   trees of Bud Agent Flow's did exactly that: the sorter took a
     ///   `message`, the workflow's input was `subject` and `text`, and every
     ///   scripted sorter answered all the same.
@@ -619,7 +629,7 @@ impl<'a> Flow<'a> {
         // Each agent on a rung that the workspace has: its name, where the
         // rung names it, and what it accepts.
         type Accepts = Vec<(String, Option<Line>, String)>;
-        let mut agents: Vec<(&str, &Node, Accepts, bool)> = Vec::new();
+        let mut agents: Vec<(&str, &Node, Accepts, bool, bool)> = Vec::new();
         for rung in rungs.into_iter().flatten() {
             let Some(written) = rung.get("agent") else {
                 continue;
@@ -658,7 +668,10 @@ impl<'a> Flow<'a> {
                     "text".to_string(),
                 )],
             };
-            agents.push((name, written, accepts, declared.is_some()));
+            // A trained classifier follows no instruction, so the stage's
+            // `says:` is not something it is given.
+            let classifier = crate::deciding::decides_alone(agent, self.decision);
+            agents.push((name, written, accepts, declared.is_some(), classifier));
         }
         let bind_entry = fields.get("bind");
         let bind = bind_entry.and_then(|e| e.node.as_map());
@@ -681,7 +694,7 @@ impl<'a> Flow<'a> {
             let dotted = dotted(key);
             let takers: Vec<(&str, Option<Line>, String)> = agents
                 .iter()
-                .filter_map(|(name, _, accepts, _)| match self.fill_of(accepts, &dotted) {
+                .filter_map(|(name, _, accepts, _, _)| match self.fill_of(accepts, &dotted) {
                     Fill::Line(line, written) => Some((*name, line, written)),
                     _ => None,
                 })
@@ -707,13 +720,13 @@ impl<'a> Flow<'a> {
                 let input = dotted.split('.').next().unwrap_or(&dotted).to_string();
                 let mut names: Vec<&str> = agents
                     .iter()
-                    .flat_map(|(_, _, accepts, _)| accepts.iter().map(|(k, _, _)| k.as_str()))
+                    .flat_map(|(_, _, accepts, _, _)| accepts.iter().map(|(k, _, _)| k.as_str()))
                     .collect();
                 names.sort();
                 names.dedup();
                 let who = agents
                     .iter()
-                    .map(|(name, _, _, _)| format!("'{name}'"))
+                    .map(|(name, _, _, _, _)| format!("'{name}'"))
                     .collect::<Vec<_>>()
                     .join(", ");
                 diags.push(Diagnostic::error(
@@ -750,10 +763,20 @@ impl<'a> Flow<'a> {
                 }
             }
         }
-        let Some(given) = self.given_by_name(frames, fields, bind) else {
+        let says = fields
+            .get("says")
+            .and_then(|e| e.node.as_str())
+            .is_some_and(|s| !s.trim().is_empty());
+        let Some(by_name) = self.given_by_name(frames, bind) else {
             return;
         };
-        for (name, at, accepts, declared) in &agents {
+        for (name, at, accepts, declared, classifier) in &agents {
+            // The stage's `says:` is the start of the `message` of an agent
+            // that reads instructions, and of no classifier's.
+            let mut given = by_name.clone();
+            if says && !classifier {
+                given.insert("message".to_string());
+            }
             let missing: Vec<&str> = accepts
                 .iter()
                 .filter(|(k, line, _)| {
@@ -767,7 +790,7 @@ impl<'a> Flow<'a> {
             }
             let on_offer = if given.is_empty() {
                 "nothing is: the workflow accepts no input, the stage is inside no `for each`, \
-                 and it writes no `bind:` and no `says:`"
+                 and it writes no `bind:` and no `says:` this agent reads"
                     .to_string()
             } else {
                 format!(
@@ -848,14 +871,12 @@ impl<'a> Flow<'a> {
 
     /// The names a deciding agent can be given a value under, at this stage:
     /// the workflow's `accepts:`, the parts of the item of the `each` it is
-    /// inside (`message`, for an item that is one value), `message` where the
-    /// stage writes `says:`, and its `bind:` keys. `None` when the item's
-    /// shape cannot be known here, so nothing can be said about what is
-    /// missing.
+    /// inside (`message`, for an item that is one value) and its `bind:` keys.
+    /// `None` when the item's shape cannot be known here, so nothing can be
+    /// said about what is missing.
     fn given_by_name(
         &self,
         frames: &[Frame<'a>],
-        fields: &Map,
         bind: Option<&Map>,
     ) -> Option<BTreeSet<String>> {
         let mut given: BTreeSet<String> = self
@@ -884,13 +905,6 @@ impl<'a> Flow<'a> {
                     given.insert("message".to_string());
                 }
             }
-        }
-        if fields
-            .get("says")
-            .and_then(|e| e.node.as_str())
-            .is_some_and(|s| !s.trim().is_empty())
-        {
-            given.insert("message".to_string());
         }
         given.extend(
             bind.into_iter()
@@ -2596,7 +2610,7 @@ mod tests {
     fn rules(text: &str) -> Vec<(&'static str, String)> {
         let doc = parse_yaml(text, camino::Utf8Path::new("bindings-test.yaml")).expect("parses");
         let mut d = Diagnostics::new();
-        check(&doc, &schema(), &mut d);
+        check(&doc, &schema(), "", &mut d);
         d.items()
             .iter()
             .map(|x| (x.rule, x.message.clone()))
