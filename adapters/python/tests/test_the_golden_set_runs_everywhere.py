@@ -46,6 +46,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from pact_adapters.reactions import JUDGE_SYSTEM  # noqa: E402
 from pact_adapters.harness import run  # noqa: E402
 from pact_adapters.ir import AgentSpec  # noqa: E402
 from pact_adapters.script import Script, Turn  # noqa: E402
@@ -144,13 +145,27 @@ def _here(spec: AgentSpec, transport_cls: Any) -> dict[str, Any]:
     s = Script([Turn(ANSWER)])
     transport = transport_cls(s)
     result = asyncio.run(run(spec, transport, ASKED, {}))
+    # A judged reaction (docs/99) puts a yes-or-no question to a model, on this
+    # transport when the run was handed no second one. That is a call the
+    # agent's own steps do not account for, so it is taken out of what is
+    # compared here and counted on its own: the claim under test is about the
+    # agent's loop, and the second port — which judges nothing and says so —
+    # is held to the same loop.
+    judged = result.reactor.judged if result.reactor is not None else 0
+    told = getattr(transport, "told", None)
+    offered = getattr(transport, "offered", None)
+    if told is not None and judged:
+        mine = [i for i, system in enumerate(told) if system != JUDGE_SYSTEM]
+        assert len(told) - len(mine) == judged, (len(told), len(mine), judged)
+        told = [told[i] for i in mine]
+        offered = [offered[i] for i in mine]
     return {
         "trace": result.trace(),
         "output": result.output,
         "halted": result.halted,
-        "model_calls": s.calls,
-        "told": getattr(transport, "told", None),
-        "offered": getattr(transport, "offered", None),
+        "model_calls": s.calls - judged,
+        "told": told,
+        "offered": offered,
     }
 
 
@@ -217,6 +232,20 @@ def _there(spec: AgentSpec) -> dict[str, Any] | None:
             for f in spec.facts.declared.values()
             if f.shared_with == "the-team"
         ],
+        # docs/99: the reactions that cover this agent, by name, and the tool
+        # Python offers it to say its own topic with. Sent so the port offers
+        # the same tools and names each reaction it does not carry out.
+        "reactions": {
+            "names": [r.name for r in spec.reactions.reactions],
+            "workingOn": (
+                {
+                    "description": said_so["description"],
+                    "topics": said_so["parameters"]["properties"]["topic"]["enum"],
+                }
+                if (said_so := spec.reactions.tool()) is not None
+                else None
+            ),
+        },
     })
     out = subprocess.run(
         ["node", "--experimental-strip-types", "src/run-trace.ts",

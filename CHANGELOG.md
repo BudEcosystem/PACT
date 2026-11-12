@@ -3,6 +3,84 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — the PACT language, and reactions (12 November)
+
+Two things, specified in `docs/99-THE-PACT-LANGUAGE.md`. Neither changes anything a folder of
+YAML already says.
+
+### A workspace can be one file
+
+A `.pact` file is a second way of writing a workspace: blocks at the left margin (`agent desk`,
+`tool payments`, `workspace "Its name"`), and under each one settings (`key: value`, exactly as
+in YAML), sentences (`uses zendesk, payments`, `asks finance-desk: …`, `at most 8 steps`) and
+text blocks. `pact check team.pact` reads it directly, and every existing rule points at the
+line of the `.pact` file.
+
+- **`pact write [PATH]`** prints any workspace as one `.pact` file. **`pact build <file> --to
+  <folder>`** writes the folder a file stands for, and reads it back before it says it is done.
+- **A `.pact` file can sit at the top of a folder**, beside the things that are files by nature
+  (a knowledge set's documents, a skill's scripts). Several are read as one; anything written in
+  two places is refused.
+- **The two ways of writing cannot drift.** For every workspace under `examples/`, reading what
+  `pact write` printed gives back the document the folder gave
+  (`every_shipped_workspace_reads_back_from_what_pact_write_prints`). The printer reads each
+  block back as it writes it and falls back from a sentence to a setting where the sentence
+  would not come back the same, so a field added to the schema later round-trips with no change
+  here.
+- `examples/language/` has three: the smallest workspace there is, `finance-first` (the same
+  workspace as `examples/kernel/finance-first`), and `staff-desk` (a `.pact` file beside a
+  knowledge set's documents).
+
+### "When this happens, do that"
+
+- **`topics:`** in a workspace, and **`topics: [finance]`** on a tool, an action or a set of
+  documents. A topic's `noticed-by:` says how the runtime finds out the work has turned to it:
+  `tags` (exact), `the-agent` (it is given a `working-on` tool and says so) or `a-judge`.
+- **`events:`** — a named moment: `at:` one of six places in the loop, narrowed with `when-this:`
+  and `more-than:`; or a `topic:`; or `judged: yes`.
+- **`reactions:`** — `event:` (or the same fields inline) and `then:` a list of `remind:`,
+  `consult:`, `tell:` and `stop:`. An agent lists the ones that cover it under `reactions:`, or
+  the reaction says `applies-to: every-agent`. In the language: `when the work touches finance`
+  with what to do indented under it.
+- **`listens-for:`** on an agent — `{ topic: finance, how: asked-first }` or `{ event: …, how:
+  told-after }`. Every other agent's work is what it hears; no other file changes.
+- A `consult` before a tool call **holds the call**: the consulted agent's answer comes back in
+  the call's place, and the model can make the call again. A held call is not put to a person
+  for approval in the same step.
+
+### What holds
+
+- **A guess does not stop a run** (`loader/a-guess-cannot-stop`). `stop:` on a judgement, or on
+  a topic the agent or a judge notices, is refused; a guess may `remind:` or `consult:`.
+- **A reaction waits for one thing** (`loader/a-signal-says-one-thing`), names a call that is
+  there (`loader/a-signal-names-no-such-call`), and narrows only a moment that is about a call
+  (`loader/a-narrowing-with-nothing-to-narrow`). Five more rules are in `reactions.rs`.
+- **A reaction does not wake itself.** While one is carried out it does not fire again beneath
+  itself, so however agents consult each other, the consulting ends.
+- **A consulted agent is paid from the run that woke it**, against the same `limits:`.
+- What a run has already reacted to **survives a park** (`Suspension.reactions`).
+- The TypeScript port offers the `working-on` tool and names every reaction it does not carry
+  out on `unenforced`.
+- **What an agent woken said is written down with the run.** Each entry of
+  `RunResult.reactions` carries `heard:` — which agent, `asked-first` or `told-after`, and its
+  words. `tell:`'s own help promised this and the record held only "told auditor".
+
+### Where to read about it
+
+- `README.md` has a section for each: the tutorial again as one file, and events and reactions.
+- `site-docs/guide/first-agent-in-one-file.md` is the tutorial, step by step, with real output.
+- `site-docs/reference/language.md` is every block, sentence, signal and `lang/` rule.
+- `site-docs/reference/reactions.md` is every field of the five kinds, the six moments, what a
+  held call does, and what a run reports.
+- `crates/pact-lang/README.md` is for somebody changing the reader or the printer.
+- `examples/language/README.md` and `examples/kernel/finance-first/README.md` walk the examples.
+
+### What an existing workspace will notice
+
+Nothing, unless it has a setting called `topics`, `events`, `reactions` or `listens-for` under
+an `x-` prefix it meant to keep. Three counts moved: 68 kinds (was 63), 569 keywords (was 536),
+342 closed-choice words (was 333).
+
 ## 2026-11 — a catalogue row carries its voices, languages, sessions and dimensions (12 November)
 
 `model-can.voices`, `languages`, `sessions` and `dimensions` were checked by `pact check` for a
