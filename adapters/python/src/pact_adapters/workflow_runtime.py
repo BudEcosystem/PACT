@@ -77,7 +77,16 @@ class Stopped(Exception):
 
 @dataclass
 class Callers:
-    """How a run reaches what its stages call. Each is the host's."""
+    """How a run reaches what its stages call. Each is the host's.
+
+    `agent` RUNS an agent, and an agent a stage calls is an agent's run like
+    any other: under its own `limits:`, its own approvals and the reactions
+    that cover it (docs/99 §5). This runtime does not run agents — the host
+    does, with `harness.run` or its own loop — so none of that is carried out
+    here, and a host that answers for an agent without running it has skipped
+    it. The shared workflow cases answer for each agent on purpose, on trees
+    no reaction covers, so that what they compare is the workflow.
+    """
 
     tool: CallTool | None = None
     agent: CallAgent | None = None
@@ -646,14 +655,23 @@ class _Run:
 
     async def repeat(self, stage: StageSpec, scope: _Scope, where: str) -> tuple[str, Any]:
         inner_where = f"{where}/{stage.name}".lstrip("/")
-        kept: dict[str, Any] = {
-            name: fact.starts_as for name, fact in stage.remembers.declared.items()
-        }
-        partials: dict[str, Any] = {}
         rules = {
             name: Combine.parse(fact.combines_by) if fact.combines_by else Combine.parse("keep-all")
             for name, fact in stage.remembers.declared.items()
         }
+        # What a round reads before anything has been remembered: `starts-as:`
+        # where the author wrote one; otherwise what the rule makes of nothing
+        # — an empty list, for a rule that keeps several (`keep-all`, `top 3
+        # …`) — and for a rule that keeps one thing, nothing at all, so a
+        # `bind:` that reads it is left out. It was `null` for every rule: a
+        # proposer handed `frontier: null` where "no ideas yet" is `[]`.
+        kept: dict[str, Any] = {}
+        for name, fact in stage.remembers.declared.items():
+            if fact.starts_as is not None:
+                kept[name] = fact.starts_as
+            elif isinstance(empty := rules[name].result(rules[name].start()), list):
+                kept[name] = empty
+        partials: dict[str, Any] = {}
         rounds = stage.at_most if stage.at_most is not None else (10**9 if self.spec_unbounded() else 1)
         answer: dict[str, Any] = {}
         for _ in range(rounds):
@@ -719,9 +737,34 @@ async def run_workflow(
         return result
     finally:
         DECLARED.reset(held)
-    result.halted = "final"
     result.answer = answer or {}
+    # What a run hands back is held to what the workflow says it gives. It was
+    # handed back as it came: a workflow that `gives ideas: list of idea`
+    # returned records with none of an idea's parts, and said it had finished.
+    wrong = _does_not_fit(spec, result.answer)
+    if wrong:
+        result.halted = "stopped"
+        result.said = f"the answer does not fit `answers-with:` — {wrong}"
+        return result
+    result.halted = "final"
     return result
+
+
+def _does_not_fit(spec: WorkflowSpec, answer: Mapping[str, Any]) -> str:
+    """Why `answer` is not what `spec.answers_with` says — `""` when it is.
+
+    Each field is read by the shape it is written as (`questions.Shape`, the
+    one reader of these lines): a field left out is refused unless its shape
+    says `, optional`. What the answer carries beyond them is left alone."""
+    from .questions import Rejected, Shape
+
+    problems: list[str] = []
+    for name, written in spec.answers_with.items():
+        try:
+            Shape.parse(written, spec.shapes).read(answer.get(name))
+        except Rejected as no:
+            problems.append(f"{name}: {no}")
+    return "; ".join(problems)
 
 
 def _as_answer(value: Any) -> dict[str, Any]:

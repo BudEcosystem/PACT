@@ -369,6 +369,12 @@ are places in PACT's own code, and nothing has to be intercepted.
 | after each tool call | `step.tool.completed` |
 | before a teammate is asked | `step.delegate.before` |
 
+**An agent a workflow's stage calls is an agent's run.** The reactions that
+cover it are carried out in that run, as its limits and its approvals are —
+whoever runs it. The reference workflow runtime does not run agents itself
+(`Callers.agent` is the host's), so a host that runs a workflow runs each
+stage's agent under its reactions, or says that it did not.
+
 The agent is offered a `working-on` tool when a topic that matters to it is
 `noticed-by: the-agent`. Calling it raises the topic; what a consulted agent
 says comes back as the tool's answer.
