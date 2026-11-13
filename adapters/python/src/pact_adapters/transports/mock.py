@@ -71,6 +71,13 @@ class ReferenceTransport:
             # to somebody else, and the TypeScript port has no PACT client at
             # all — which is what keeps this column from being decoration.
             "connected_tools": "emulated",
+            # Whether a `plugins:` line can be honoured here (D29): `native` where
+            # the runtime loads packages from a registry a plugin names, and says
+            # so through `run(loaded_plugins=)`. `unsupported` on every transport
+            # in this package, because the harness loads nothing — so a plugin an
+            # agent cannot start without halts it `plugins-not-loaded` before the
+            # first call, and one it can is named on `unenforced`.
+            "plugins": "unsupported",
         }
 
     async def model_call(

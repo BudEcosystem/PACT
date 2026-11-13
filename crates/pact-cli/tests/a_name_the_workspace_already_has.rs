@@ -230,14 +230,15 @@ fn the_line_that_may_name_a_kind_is_read_from_the_specification_and_not_from_the
     // about the specification and may honestly be "none".
     let root = workspace(
         "derived",
-        // All three, because "nothing in this specification names a skill" has to
-        // be true of the whole file — `variant.may-use:` names one too now, and
-        // leaving it would have the checker honestly offer a line that this
-        // rewritten specification really does have.
+        // All four, because "nothing in this specification names a skill" has to
+        // be true of the whole file — `variant.may-use:` and `plugin.implements:`
+        // name one too now, and leaving either would have the checker honestly
+        // offer a line that this rewritten specification really does have.
         &[
             ("agent", "uses", "[tools]"),
             ("stage", "may-use", "[tools, agents]"),
             ("variant", "may-use", "[tools]"),
+            ("plugin", "implements", "[tools, knowledge]"),
         ],
         &[NARROWS_TO_THE_SKILL],
     );

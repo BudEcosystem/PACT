@@ -73,17 +73,23 @@ def _agent_key(document: Mapping[str, Any], agent: str) -> str:
     raise Uncheckable(f"the document has no agent {agent!r} to put the change in")
 
 
-def check_instructions(
-    document: Mapping[str, Any], agent: str, text: str, source: "str | Path | None" = None
+def check_agent_field(
+    document: Mapping[str, Any],
+    agent: str,
+    field: str,
+    value: Any,
+    source: "str | Path | None" = None,
 ) -> list[str]:
-    """`pact check`'s errors once `agent`'s `instructions:` become `text`.
+    """`pact check`'s errors once `agent`'s `field:` becomes `value`.
 
     Through the document when it can be written out; through a copy of the
     author's own tree when it carries files the document only references (a
-    skill's scripts, a program's body), which is the worked example's case."""
+    skill's scripts, a program's body), which is the worked example's case.
+    `instructions` is prose and lands in the agent's `instructions.md`; every
+    other field is a setting and lands in its `agent.yaml`."""
     agent = _agent_key(document, agent)
     try:
-        return check_document(with_instructions(document, agent, text))
+        return check_document(with_field(document, agent, field, value))
     except CarriesPayloads:
         pass
     binary = pact_binary()
@@ -97,7 +103,10 @@ def check_instructions(
     with tempfile.TemporaryDirectory(prefix="pact-proposed-") as scratch:
         root = Path(scratch) / "tree"
         shutil.copytree(source, root)
-        _write_instructions(root, agent, text)
+        if field == "instructions":
+            _write_instructions(root, agent, value)
+        else:
+            _write_setting(root, agent, field, value)
         return _checked(binary, root)
 
 
@@ -165,6 +174,22 @@ def as_a_folder(root: Path, binary: "Path | None" = None) -> bool:
     return True
 
 
+def _write_setting(root: Path, agent: str, field: str, value: Any) -> None:
+    """Put `field: value` where `agent`'s settings live in a copied tree.
+
+    A tree written in the PACT language is written out as its folder first, as
+    `_write_instructions` does, so the setting lands in the agent's own file."""
+    if pact_binary() is not None:
+        as_a_folder(root)
+    folder = root / "agents" / agent
+    settings = folder / "agent.yaml" if folder.is_dir() else root / "agents" / f"{agent}.yaml"
+    body = yaml.safe_load(settings.read_text()) if settings.exists() else {}
+    body = body if isinstance(body, dict) else {}
+    body[field] = value
+    settings.parent.mkdir(parents=True, exist_ok=True)
+    settings.write_text(yaml.safe_dump(body, sort_keys=False, allow_unicode=True))
+
+
 def _write_instructions(root: Path, agent: str, text: str) -> None:
     """Put `text` where `agent`'s instructions live in a copied tree.
 
@@ -221,12 +246,12 @@ def _checked(binary: Path, root: Path) -> list[str]:
     ]
 
 
-def with_instructions(document: Mapping[str, Any], agent: str, text: str) -> dict[str, Any]:
-    """A copy of `document` with one agent's `instructions:` replaced."""
+def with_field(document: Mapping[str, Any], agent: str, field: str, value: Any) -> dict[str, Any]:
+    """A copy of `document` with one agent's `field:` replaced."""
     proposed = copy.deepcopy(dict(document))
     agents = proposed.setdefault("agents", {})
     entry = dict(agents.get(agent) or {})
-    entry["instructions"] = text
+    entry[field] = value
     agents[agent] = entry
     return proposed
 
