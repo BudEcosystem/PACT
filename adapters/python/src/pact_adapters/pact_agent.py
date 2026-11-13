@@ -357,12 +357,22 @@ def to_model_messages(history: "Sequence[Mapping[str, Any]]") -> list[ModelMessa
             if thinking := str(entry.get("thinking") or ""):
                 parts.append(ThinkingPart(content=thinking))
             unanswered = []
-            for call in entry.get("tool_calls") or ():
+            written = entry.get("calls") or ()
+            for n, call in enumerate(entry.get("tool_calls") or ()):
                 minted += 1
                 name = str(call)
                 slot = f"{name}#{minted}"
                 unanswered.append((slot, name))
-                parts.append(ToolCallPart(tool_name=name, tool_call_id=slot))
+                # What the call was given, where the entry kept it (`calls:`,
+                # beside the names). `None` otherwise, which is how the way
+                # back tells "given nothing" from "not recorded".
+                given = written[n] if n < len(written) else None
+                args = (
+                    dict(given.get("args") or {})
+                    if isinstance(given, dict) and str(given.get("name")) == name
+                    else None
+                )
+                parts.append(ToolCallPart(tool_name=name, args=args, tool_call_id=slot))
             out.append(ModelResponse(parts=parts, metadata=marks))
             continue
 
@@ -424,10 +434,15 @@ def to_pact_history(
                     p.content for p in message.parts if isinstance(p, TextPart)
                 ),
             }
-            if calls := [
-                p.tool_name for p in message.parts if isinstance(p, ToolCallPart)
-            ]:
-                entry["tool_calls"] = calls
+            asked = [p for p in message.parts if isinstance(p, ToolCallPart)]
+            if asked:
+                entry["tool_calls"] = [p.tool_name for p in asked]
+                # Beside the names and never among them: `tool_calls:` is the
+                # pairing key. Only when every call says what it was given.
+                if all(p.args is not None for p in asked):
+                    entry["calls"] = [
+                        {"name": p.tool_name, "args": dict(p.args_as_dict())} for p in asked
+                    ]
             if thinking := [
                 p.content for p in message.parts if isinstance(p, ThinkingPart)
             ]:
@@ -739,13 +754,6 @@ _NO_ROOM_FOR: dict[str, str] = {
     "ThinkingPart.id": "as `TextPart.id`",
     "ThinkingPart.provider_name": "as `ModelResponse.provider_name`",
     "ThinkingPart.provider_details": "as `ModelResponse.provider_details`",
-    "ToolCallPart.args": (
-        "what the call carried. `tool_calls:` holds NAMES — `from_history` gives "
-        "each entry a `pairs_on` of `str(entry)` — so writing the arguments "
-        "there would give the call a `pairs_on` matching no tool result "
-        "anywhere, and the next `_repair_pairing` would delete every call in the "
-        "conversation. A model resuming this will not see what it asked for"
-    ),
     "ToolCallPart.tool_call_id": (
         "the provider's handle on the call. PACT pairs on the TOOL NAME, so this "
         "is minted afresh on the way back rather than carried — a history that "
@@ -792,6 +800,13 @@ _CARRIED: dict[str, str] = {
         "and what `drop-parts: the model's own thinking` matches on"
     ),
     "ToolCallPart.tool_name": "one entry of `tool_calls:`, which is the pairing key",
+    "ToolCallPart.args": (
+        "one entry of `calls:`, beside `tool_calls:` and in its order: the "
+        "call's name and what it was given. Beside the names and not among "
+        "them, because `tool_calls:` is what a result pairs on. It used not to "
+        "cross at all, and a model resuming the conversation did not see what "
+        "it had asked for"
+    ),
     "ToolReturnPart.tool_name": "`name:` on the tool entry, which is what it pairs on",
     "ToolReturnPart.content": "`content:` on the tool entry",
     "metadata.pact": "`labels:` and `checkpoint` on the entry it came from",
@@ -1866,6 +1881,9 @@ def _history_of(ran: RunResult) -> list[dict[str, Any]]:
         entry: dict[str, Any] = {"role": "assistant", "content": step.text}
         if step.tool_calls:
             entry["tool_calls"] = [call.name for call in step.tool_calls]
+            entry["calls"] = [
+                {"name": call.name, "args": dict(call.args)} for call in step.tool_calls
+            ]
         history.append(entry)
         for call, said in zip(step.tool_calls, step.tool_results):
             history.append({"role": "tool", "name": call.name, "content": said})

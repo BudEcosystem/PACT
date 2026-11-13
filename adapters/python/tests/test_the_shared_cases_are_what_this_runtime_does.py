@@ -180,6 +180,21 @@ def test_the_cases_say_the_things_they_are_there_to_say() -> None:
     assert stops["closing"] == ""
     more = by_name["out-of-tool-calls-it-asks-a-person-and-a-yes-gives-it-the-same-budget-again"]
     assert more["halted"] == "final" and len(more["executed"]) == 3 and len(more["parks"]) == 1
+    # One request is told a person said to keep going: the first after the yes.
+    assert more["after-a-yes"] == [
+        "A person was asked and said to keep going. The limit this run had reached, "
+        "`tool-calls-at-most` (2 of 2 tool calls), is now 4 tool calls.\n"
+        "Do not repeat a call that already has a result."
+    ]
+    named = by_name["a-call-not-made-is-named-to-the-model-after-a-yes"]
+    # The second reply asked for gas and water; water was not made. After the
+    # yes the model is told so, and makes it.
+    assert [e[1]["entry"] for e in named["executed"]] == ["rent", "gas", "water"]
+    assert len(named["after-a-yes"]) == 1 and (
+        'These calls you asked for were not made and can be made now: '
+        'ledger {"action": "look", "entry": "water"}.' in named["after-a-yes"][0]
+    )
+    assert named["halted"] == "final"
     refused = by_name["out-of-tool-calls-it-asks-a-person-and-a-no-ends-the-run"]
     assert refused["halted"] == "out-of-budget" and len(refused["executed"]) == 2
     # It says which ceiling and that somebody said no. Not the model's last

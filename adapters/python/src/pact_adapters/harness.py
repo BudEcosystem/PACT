@@ -1401,9 +1401,14 @@ async def run(
             answers_with=shape_to_ask_for,
             external=spec.external_prose,
             added=reactor.reminded(),
-        ) + "\n\n" + reached.closing(
-            tuple(f"{c.name} {json.dumps(dict(c.args), sort_keys=True)}" for c in not_made)
-        )
+        ) + "\n\n" + reached.closing(tuple(_as_asked(c.name, c.args) for c in not_made))
+
+    #: What the next model request is told once and no request after it: that
+    #: a person said to keep going (`Reached.raised`). Empty at every other time.
+    told_once: list[str] = []
+
+    def after_a_yes() -> str:
+        return "\n\n" + told_once.pop() if told_once else ""
     result.reaction_notes = reactor.notes
     result.reactions = reactor.log
     reports_usage = callable(getattr(transport, "usage", None))
@@ -1876,7 +1881,29 @@ async def run(
                     # — `Limits.kept_going` was written to end that and was
                     # called by nothing here. Found by the first shared case
                     # for limits (`tests/conformance/limits.json`).
+                    was = at_ceiling()
                     limits, _ = spec.limits.kept_going(meter, clock())
+                    # The model is told, at its next request and no other: the
+                    # limit it had reached is raised, and which calls it asked
+                    # for were never made.
+                    raised_to = next(
+                        (
+                            c.limit
+                            for c in limits.ceilings(None if spec.unbounded else limit)
+                            if was is not None and c.field == was.ceiling.field
+                        ),
+                        None,
+                    )
+                    if was is not None and raised_to is not None:
+                        told_once.append(
+                            was.raised(
+                                raised_to,
+                                tuple(
+                                    _as_asked(str(c.get("name")), c.get("args") or {})
+                                    for c in resume.reached.get("not-made") or ()
+                                ),
+                            )
+                        )
                     result.budget = {
                         "steps": float(limit),
                         **{
@@ -2153,7 +2180,8 @@ async def run(
                     return result
                 wrote, _ = await asking_now.model_call(
                     _system_for(
-                        spec.instructions, phase, step_skills, added=reactor.reminded()
+                        spec.instructions, phase, step_skills,
+                        added=reactor.reminded() + after_a_yes(),
                     ),
                     history,
                     [],
@@ -2256,7 +2284,7 @@ async def run(
                 asking_now,
                 _system_for(
                     spec.instructions, phase, step_skills,
-                    added=reactor.reminded(),
+                    added=reactor.reminded() + after_a_yes(),
                     # The author's declared answer shape, on every stage. Not
                     # only the last: a `check-its-work` stage that cannot see
                     # what the answer must contain cannot check it against
@@ -3161,7 +3189,17 @@ async def run(
             Step(index=i, text=text, tool_calls=tuple(ran), tool_results=tuple(outputs))
         )
         history.append(
-            {"role": "assistant", "content": text, "tool_calls": [c.name for c in ran]}
+            {
+                "role": "assistant",
+                "content": text,
+                "tool_calls": [c.name for c in ran],
+                # What each call was given, beside its name. Without it a
+                # transport cannot show the model its own calls, only their
+                # results, and a model shown results it does not remember
+                # asking for asks again: on a live model an agent made the
+                # same five lookups in each of its three steps.
+                "calls": [{"name": c.name, "args": dict(c.args)} for c in ran],
+            }
         )
         for call, out in zip(ran, outputs):
             history.append({"role": "tool", "name": call.name, "content": out})
@@ -3454,6 +3492,9 @@ async def _ran_out(
             "halted": reached.ceiling.halted,
             "default": reached.ceiling.default,
             "at": reached.at,
+            # The calls of the last reply that were not made, so a yes can
+            # tell the model which they were.
+            "not-made": [{"name": c.name, "args": dict(c.args)} for c in not_made],
         }
         result.halted = "suspended"
         result.suspension = parked
@@ -4513,6 +4554,13 @@ def _finish(
     bus.emit("turn.message.completed", at=(at,), text=said)
     bus.emit("turn.run.completed", at=(at,))
     return result
+
+
+def _as_asked(name: str, args: "Mapping[str, Any]") -> str:
+    """One call as a model is told of it: its name, a space, and what it was
+    given as JSON with sorted keys. The form `Reached.closing` and
+    `Reached.raised` are handed, and the one a shared case records."""
+    return f"{name} {json.dumps(dict(args), sort_keys=True)}"
 
 
 def _out_of_budget(

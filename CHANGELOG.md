@@ -3,6 +3,52 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — a served model is shown its own calls, and is told what a yes changed (13 November)
+
+Running the limits cases on live models (gpt-4o-mini and gpt-5-nano) found three things about
+PACT's own transport for a served model, and one more thing a model has to be told. Bud Agent Flow
+measured the last on its engine, six wordings, ten runs each. Nothing here changes a field of the
+schema.
+
+### What a runtime must match
+
+- **After a person says to keep going, the next request says so, once.** Last in its system text:
+  the ceiling the run had reached and what it is now, which calls the model asked for were not
+  made, and not to repeat a call that already has a result. No other request carries it. The
+  wording is `Reached.raised` (`pact_adapters/limits.py`); a case records it as `after-a-yes` in
+  `expect`, one text for each yes.
+- Why the calls are named. Five calls asked for at once, a ceiling of two, then a yes, on
+  gpt-5-nano: told nothing, or told only that the limit was raised (with or without how much was
+  left, once or on every request), a model gave up and blamed the limit a person had just raised,
+  or repeated calls it already had, in one or two runs of ten. Told which calls were not made, ten
+  of ten made exactly those.
+- One new case, `a-call-not-made-is-named-to-the-model-after-a-yes`: 11 limits cases, 50 shared
+  cases of replayed runs in all.
+- A call is written to a model in the form the model made it. In a case it is the tool's name, a
+  space, and its arguments as JSON with sorted keys.
+
+### What was wrong in PACT's transport for a served model
+
+- **A model was not shown its own calls.** A turn that called tools was sent as `.`, and each
+  result as a line of the user's (`[result of ledger] rent: entry found`). Asked for five lookups
+  with three steps allowed, gpt-4o-mini made the same five in every step, fifteen in all, and ran
+  out of steps. Sent `tool_calls` and `tool` messages, it makes five and answers. The conversation
+  record now keeps what each call was given (`calls:` beside `tool_calls:`), through a tidying step
+  and across the Pydantic AI message form, which used to drop it and say so.
+- **A current model could not be reached at all.** gpt-5-nano answers 400 to `max_tokens` and to
+  any temperature but its own, and every request carried both. The transport now reads the
+  server's refusal and asks again: the same ceiling as `max_completion_tokens`, and no temperature
+  when the one refused was the transport's own default. A `temperature:` the author wrote is never
+  dropped.
+
+### Still owed
+
+- A closing answer that does not fit `answers-with:` (ruled, not built in the reference).
+- Whether a workflow should be able to branch on "the agent this stage called ran out and
+  answered with what it had". Today the stage ends `answered` and the overrun is recorded; there
+  is no word a later stage can read.
+- A shared case for claims.
+
 ## 2026-11 — what a run does when a limit runs out, as shared cases (13 November)
 
 No shared case covered limits, so two runtimes could differ there unseen. Writing the first ten
@@ -64,10 +110,8 @@ changes a field of the schema.
   for at most twice in all (`checks-at-most:`'s own default), no tool offered, and then the run
   stops naming the ceiling. PACT's harness cannot hold this yet: it never checks an agent's answer
   against its shape, so it makes one closing request and takes what comes.
-- **The transport for a served model does not show the model its own calls.** It sends each tool
-  result as a line of the user's (`[result of ledger] …`) and the model's own turn as `.`. On
-  gpt-4o-mini an agent with three steps and no ceiling on calls made the same five lookups in each
-  of its three steps. The requests should carry the calls and results in the provider's own form.
+- ~~The transport for a served model does not show the model its own calls.~~ Done in the entry
+  above.
 - A shared case for claims.
 
 ## 2026-11 — `pact about`: the binary says which commit it was built from (13 November)

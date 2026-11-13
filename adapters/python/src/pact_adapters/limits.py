@@ -182,6 +182,41 @@ class Reached:
         )
         return "\n".join(lines)
 
+    def raised(self, to: float, not_made: "tuple[str, ...]" = ()) -> str:
+        """What the MODEL is told at its first request after a person said to
+        keep going.
+
+        A run stopped part-way through a reply has calls the model asked for
+        that were never made, and nothing in front of the model says which.
+        Measured on a small live model, ten runs of each, five calls asked for
+        at once with a ceiling of two and then a yes: told nothing, it gave up
+        and blamed the limit a person had just raised, or spent the new budget
+        repeating calls it already had results for. Told only that the limit
+        was raised, with or without how much was left, on every request or on
+        one, it still did, one or two runs in ten. Told WHICH calls were not
+        made, it made exactly those, ten of ten. (The numbers are Bud Agent
+        Flow's, on its engine; PACT's reference repeated calls in one run of
+        ten with no notice.)
+
+        `to` is the figure the ceiling this run had reached is raised to.
+        ONE function, as `closing` and `declined` are.
+        """
+        now = _round(to)
+        if self.ceiling.unit:
+            now = f"{now} {self.ceiling.unit}"
+        lines = [
+            "A person was asked and said to keep going. The limit this run had reached, "
+            f"{self.what}, is now {now}."
+        ]
+        if not_made:
+            lines.append(
+                "These calls you asked for were not made and can be made now: "
+                + "; ".join(not_made)
+                + "."
+            )
+        lines.append("Do not repeat a call that already has a result.")
+        return "\n".join(lines)
+
     def _whose(self) -> str:
         """Whose figure this is, with the figure: the author's, or PACT's own."""
         what = self.what
