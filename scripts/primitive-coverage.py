@@ -17,6 +17,10 @@ all: the eleven things a stage can do, the eight things a limit may do when it
 runs out, and so on). Each word is a feature of its own, so each is mapped too.
 A word inherits its field's primitives unless CH below says otherwise.
 
+A keyword that IS a kernel operation says so in the schema (`kernel-op:`, the
+operations listed in spec/kernel.yaml), and the primitive of each operation it
+names is added after the ones G gives it. The main ingredient stays G's.
+
 "-" means the keyword has no behaviour: words written for a person (a
 description, a because, a name). "Flow" includes handlers and triggers, which
 is where hooks, interceptors, policies, ports and failure plans live.
@@ -172,13 +176,18 @@ CH = {
  "rung.if-it-disagrees": {"keep-its-answer":[F],"go-on":[F,C]},
 }
 d=yaml.safe_load(open('spec/schema.yaml'))['groups']
+KERNEL=yaml.safe_load(open('spec/kernel.yaml'))['ops']
+def with_ops(fv, ps):
+    """A keyword's primitives: the table's, then the primitive of every kernel operation its `kernel-op:` names."""
+    ops=fv.get('kernel-op',[]) if isinstance(fv,dict) else []
+    return list(dict.fromkeys(list(ps)+[KERNEL[o]['primitive'] for o in ([ops] if isinstance(ops,str) else ops)]))
 missing=[g for g in d if g not in G]; extra=[g for g in G if g not in d]
 assert not missing and not extra, (missing, extra)
 prim=collections.Counter(); first=collections.Counter(); rows=[]
 for g,gv in d.items():
     dflt,ov=G[g]
-    for k in (gv.get('fields') or {}):
-        ps=ov.get(k,dflt); rows.append((g,k,ps)); first[ps[0]]+=1
+    for k,fv in (gv.get('fields') or {}).items():
+        ps=with_ops(fv,ov.get(k,dflt)); rows.append((g,k,ps)); first[ps[0]]+=1
         for p in dict.fromkeys(ps): prim[p]+=1
 bad=[r for r in rows if not r[2]]
 print("keywords mapped:",len(rows),"unmapped:",len(bad))
@@ -193,7 +202,7 @@ crows=[]; cfirst=collections.Counter()
 for g,gv in d.items():
     for k,fv in (gv.get('fields') or {}).items():
         for c in (fv.get('choices') or []):
-            ov=CH.get(f"{g}.{k}",{}); ps=ov.get(str(c), G[g][1].get(k,G[g][0]))
+            ov=CH.get(f"{g}.{k}",{}); ps=ov.get(str(c), with_ops(fv,G[g][1].get(k,G[g][0])))
             crows.append((g,k,str(c),ps)); cfirst[ps[0]]+=1
 stale=[(f,c) for f,ov in CH.items() for c in ov if str(c) not in [str(x) for x in (d[f.split(".")[0]]['fields'][f.split(".")[1]].get('choices') or [])]]
 assert not stale, stale

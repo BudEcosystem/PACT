@@ -76,6 +76,13 @@
 #                 `answer-shape`. Written like `parts:` — one entry per shape,
 #                 every spelling that means it — and read by the checker and by
 #                 `questions.Shape.parse` from this one copy.
+#   `kernel-op:`  the kernel operations this field IS (docs/97 §5.4), one or a
+#                 list, each one of the 76 in `spec/kernel.yaml` — `store.claim`
+#                 on `same-request-key:`. A runtime that keeps one
+#                 implementation per operation reads which fields reach it here.
+#                 Changes nothing `pact check` accepts. Held to
+#                 `spec/kernel.yaml` in both directions by
+#                 `crates/pact-schema/tests/every_kernel_operation_is_written_somewhere.rs`.
 #
 # What `names:` deliberately does NOT cover, because the tree does not carry the
 # answer: anything the HOST binds rather than the workspace (`port.through:`
@@ -172,6 +179,7 @@ groups:
         choices: [none, checkpoint, durable-execution]
         surface: S-GOV
         tier: expert
+        kernel-op: store.durability
         help: >
           what the system running this keeps when a run stops part-way. `none`
           means nothing survives, so a run that parks for a person starts again
@@ -208,6 +216,7 @@ groups:
         choices: [llm, stt, tts, embedder, judge, reflector, tools, programs]
         surface: S-EXEC
         tier: core
+        kernel-op: allowance.reach
         help: >
           which parts of this system are allowed to talk to something outside
           this box. Empty means nothing is. Adding a role here always needs a
@@ -216,6 +225,7 @@ groups:
         type: map of group:agent
         surface: S-TOPO
         tier: core
+        kernel-op: [actor.composite, flow.name]
         help: the agents that make up this system
       workflows:
         # 02W §2.1. A workflow is a stage loop that belongs to no agent, one file
@@ -223,6 +233,7 @@ groups:
         type: map of group:workflow
         surface: S-TOPO
         tier: core
+        kernel-op: [actor.composite, flow.name]
         help: >
           the flows this system runs, one file each under `workflows/`. A
           workflow belongs to no agent: it calls agents, tools, programs and
@@ -272,6 +283,7 @@ groups:
         #                          not have run can only fill one of these (WF-5)
         surface: S-CAP
         tier: core
+        kernel-op: shape.record
         help: >
           named shapes with parts — `invoice-line: {sku: text, quantity: whole
           number}` — so `lines: list of invoice-line` can be written anywhere
@@ -286,6 +298,7 @@ groups:
         choices: [holes, jinja]
         surface: S-CTRL
         tier: expert
+        kernel-op: shape.render
         help: >
           how the words agents are given fill in what is only known when a run
           starts. `holes`, what you get if you leave this out, is
@@ -310,11 +323,13 @@ groups:
         names: values
         surface: S-GOV
         tier: core
+        kernel-op: [store.host, check.typed]
         help: which table in `values/` lists working days and holidays, for `business-days`
       remembers:
         type: map of group:state
         surface: S-GOV
         tier: core
+        kernel-op: store.write
         help: >
           named memory any agent or workflow here may read as
           `remembers.<name>`, written only by the stock actions `bud/remember`
@@ -326,6 +341,7 @@ groups:
         type: map of group:detector
         surface: S-GOV
         tier: expert
+        kernel-op: check.detector
         help: >
           things your rules can recognise beside the five built in, each named
           and written as the patterns it looks like. A rule then says `replace
@@ -337,6 +353,7 @@ groups:
         type: map of group:ownership
         surface: S-GOV
         tier: core
+        kernel-op: allowance.write
         help: >
           parts that need their owner's yes to change, or that may not be
           removed, keyed by path — `workflows/one-invoice/steps/tiers`.
@@ -349,11 +366,13 @@ groups:
         type: map of group:tool
         surface: S-CAP
         tier: core
+        kernel-op: actor.tool
         help: the outside systems these agents may reach
       resources:
         type: map of group:resource
         surface: S-CAP
         tier: core
+        kernel-op: actor.tool
         help: servers, sandboxes and stores the system connects to
       knowledge:
         # A7. The commonest enterprise shape — an agent that answers out of a
@@ -397,6 +416,7 @@ groups:
         type: map of group:program
         surface: S-EXEC
         tier: expert
+        kernel-op: actor.program
         help: >
           programs this system carries and can run in a locked room — the exact
           bits of work a model should not be guessing at, like date arithmetic or
@@ -428,6 +448,7 @@ groups:
         type: map of group:value
         surface: S-GOV
         tier: core
+        kernel-op: store.host
         help: >
           figures this system uses in more than one place — an approval
           threshold, a deadline, a step count. Write one here and put
@@ -437,6 +458,7 @@ groups:
         type: map of group:policy
         surface: S-EXEC
         tier: core
+        kernel-op: flow.handler
         help: the rules about what needs a person, and what must never be sent
       redaction:
         # ONE field, where there were two for one idea (R61). `redactions:` was
@@ -458,6 +480,7 @@ groups:
         type: group:redaction
         surface: S-EXEC
         tier: core
+        kernel-op: flow.handler
         help: >
           what must never leave this workspace. Write it in a file called
           `redaction.yaml` next to `workspace.yaml`, and put everything you want
@@ -469,6 +492,7 @@ groups:
         type: map of group:question
         surface: S-EXEC
         tier: core
+        kernel-op: actor.person
         help: >
           the things a person can be asked, and what counts as an answer to
           each. Saying yes or no is one of these, not a separate idea.
@@ -486,6 +510,7 @@ groups:
         type: map of group:port
         surface: S-TOPO
         tier: core
+        kernel-op: flow.starts-when
         help: >
           how the outside world reaches these agents — people talking to them,
           other systems calling in, and the clock. A timer is a port with an
@@ -494,11 +519,13 @@ groups:
         type: map of group:loop
         surface: S-CTRL
         tier: expert
+        kernel-op: flow.name
         help: named shapes of thinking that agents can point at
       context-policies:
         type: map of group:context-policy
         surface: S-CTRL
         tier: core
+        kernel-op: flow.handler
         help: named rules for keeping a long conversation inside what a model can hold
       bundles:
         # G10. `defineExtension` packages tools, connections, skills, instruction
@@ -523,6 +550,7 @@ groups:
         type: map of group:interceptor
         surface: S-EXEC
         tier: expert
+        kernel-op: flow.handler
         help: >
           rules that can change what happens mid-run, not merely watch it. Each
           one says on its own line whether it covers every agent here or only
@@ -531,6 +559,7 @@ groups:
         type: map of group:watch
         surface: S-GOV
         tier: core
+        kernel-op: flow.handler
         help: >
           the things to write down as they happen, so that afterwards you can
           read what the system actually did instead of taking its word for it.
@@ -578,6 +607,7 @@ groups:
         type: group:catalog
         surface: S-CAP
         tier: expert
+        kernel-op: [store.host, actor.model]
         help: >
           extra AI models this machine can serve, on top of the ones PACT
           already knows about. You only need this if you run a model PACT has
@@ -609,6 +639,7 @@ groups:
         required: yes
         surface: S-GEN
         tier: core
+        kernel-op: shape.render
         help: >
           one line a colleague would understand. It may carry the same
           `{{run-inputs.<name>}}` and `{{remembers.<name>}}` holes as
@@ -672,6 +703,7 @@ groups:
         required: yes
         surface: S-GEN
         tier: core
+        kernel-op: shape.render
         help: >
           what it should actually do, in plain words. That line can go in
           `agent.yaml`, or the same words can go in
@@ -693,6 +725,7 @@ groups:
         key-names: agents
         surface: S-TOPO
         tier: core
+        kernel-op: [actor.composite, flow.split]
         help: >
           who helps with this work, and what each of them is for. Give each
           one a folder under `agents/`, and use the sentence you put here as
@@ -732,6 +765,7 @@ groups:
         names: [tools, skills, knowledge, programs, workflows]
         surface: S-ROUTE
         tier: core
+        kernel-op: allowance.reach
         help: >
           the tools, skills, sets of documents, carried programs and published
           workflows this agent may use — a tool it may call, a procedure it may
@@ -753,6 +787,7 @@ groups:
         shapes: *the-answer-shapes
         surface: S-CAP
         tier: core
+        kernel-op: [shape.scalar, actor.signature]
         help: >
           what you can send it, one line per thing — for example
           `message: text` or `photos: images`. The shapes are `text`,
@@ -772,6 +807,7 @@ groups:
         shapes: *the-answer-shapes
         surface: S-CAP
         tier: core
+        kernel-op: [shape.scalar, actor.signature]
         help: >
           what it hands back when it is done, one line per thing — for example
           `decision: one of approved, declined`. The same shapes `accepts:`
@@ -781,6 +817,7 @@ groups:
         choices: [text, native-json-schema, tool, prompted]
         surface: S-CAP
         tier: expert
+        kernel-op: [shape.validate, shape.parse]
         help: >
           how the answer is constrained on the wire. Leave it out: PACT picks
           from the shape you declared above, and records what it picked.
@@ -805,6 +842,7 @@ groups:
         needs-also: [checked-by]
         surface: S-GOV
         tier: core
+        kernel-op: allowance.quantity
         help: >
           how many attempts in all, asking again with the reason after each
           failed check. Leave it out for 2; write `1` to fail at the first miss.
@@ -813,6 +851,7 @@ groups:
         shapes: *the-answer-shapes
         surface: S-CAP
         tier: core
+        kernel-op: shape.scalar
         help: >
           values the surrounding system supplies for every run — a customer id,
           a locale — one line per value, with the same shapes `accepts:` takes.
@@ -825,22 +864,26 @@ groups:
         type: group:needs
         surface: S-CAP
         tier: core
+        kernel-op: [actor.model, actor.by-requirement]
         help: what the AI model behind it has to be capable of
       limits:
         type: group:limits
         surface: S-GOV
         tier: core
+        kernel-op: allowance.quantity
         help: how fast, how cheap, and how long it may run
       settings:
         type: group:settings
         surface: S-CTRL
         tier: core
+        kernel-op: actor.model
         help: how the model itself is asked to behave
       policy:
         type: text
         names: policies
         surface: S-EXEC
         tier: core
+        kernel-op: flow.handler
         help: which policy file says what needs a person's approval
       evals:
         type: text
@@ -894,6 +937,7 @@ groups:
         names: pact:models
         surface: S-CAP
         tier: core
+        kernel-op: actor.model
         help: >
           pin one exact model, if you must. Leave this out and PACT picks. A
           model that only runs somewhere else is refused here when
@@ -925,6 +969,7 @@ groups:
         needs-also: [loop]
         surface: S-CAP
         tier: expert
+        kernel-op: actor.model
         help: >
           a different model for the stages that check work, when the checking
           deserves a better one than the doing. Needs a `loop:`, because a
@@ -939,6 +984,7 @@ groups:
                     pact:loop/answer-more-than-once]
         surface: S-CTRL
         tier: expert
+        kernel-op: flow.name
         help: >
           how this agent thinks: `pact:loop/standard`, `pact:loop/plan-then-do`,
           or the name of a shape you wrote in `loops/`. Leave it out and the
@@ -971,6 +1017,7 @@ groups:
         names: context-policies
         surface: S-CTRL
         tier: core
+        kernel-op: flow.handler
         help: >
           which tidying rules to use when the conversation gets too long.
           Leave it out and no tidying happens at all — a conversation that
@@ -980,12 +1027,14 @@ groups:
         type: map of group:state
         surface: S-GOV
         tier: core
+        kernel-op: store.write
         help: what this agent keeps between messages, and for how long
       interceptors:
         type: list of text
         names: interceptors
         surface: S-EXEC
         tier: expert
+        kernel-op: flow.handler
         help: which rules may change what happens as it runs
       reactions:
         type: list of text
@@ -1036,6 +1085,7 @@ groups:
         type: list of group:turn
         surface: S-GEN
         tier: expert
+        kernel-op: store.host
         help: >
           a short conversation that comes before every real one, one turn per
           line — who speaks (`from:`) and what they say (`says:`). Use it for a
@@ -1061,6 +1111,7 @@ groups:
         type: text
         surface: S-GEN
         tier: expert
+        kernel-op: shape.render
         help: >
           what to say instead of the agent's own instructions. Leave it out to
           keep them.
@@ -1069,6 +1120,7 @@ groups:
         type: text
         surface: S-GEN
         tier: expert
+        kernel-op: shape.render
         help: >
           an extra line added after the agent's instructions, rather than in
           place of them. Use this for *"Always look the order up before
@@ -1078,6 +1130,7 @@ groups:
         at-least: 1
         surface: S-CTRL
         tier: expert
+        kernel-op: allowance.quantity
         help: >
           how many turns this way of working may take. A model that has to be
           walked through the work needs more of them.
@@ -1090,6 +1143,7 @@ groups:
         names: [tools, skills, knowledge, programs, workflows]
         surface: S-ROUTE
         tier: expert
+        kernel-op: allowance.reach
         help: >
           narrow the tools, procedures and calculations to these, for this way of
           working only. Leave it out to keep all of them.
@@ -1100,6 +1154,7 @@ groups:
         type: list of group:turn
         surface: S-GEN
         tier: expert
+        kernel-op: store.host
         help: >
           a worked conversation to show the model instead of the agent's own
           `turns:`, for this way of working only — the example a smaller model
@@ -1131,6 +1186,7 @@ groups:
         choices: [takes-turns, both-at-once]
         surface: S-CAP
         tier: expert
+        kernel-op: shape.stream
         help: >
           whether the person and the agent take turns, or can both talk at
           once — the agent stops when it is interrupted and listens. Leave it
@@ -1143,6 +1199,7 @@ groups:
         plays-role: stt
         surface: S-CAP
         tier: expert
+        kernel-op: actor.model
         help: >
           which model turns what the person says into words, by name. Leave it
           out and PACT picks one. A model that only runs somewhere else is
@@ -1154,6 +1211,7 @@ groups:
         plays-role: tts
         surface: S-CAP
         tier: expert
+        kernel-op: actor.model
         help: >
           which model speaks the answer, by name. Leave it out and PACT picks
           one. A model that only runs somewhere else is refused here when
@@ -1222,6 +1280,7 @@ groups:
         required: yes
         surface: S-GEN
         tier: expert
+        kernel-op: label.origin
         help: >
           who says this. `user` is the person, `agent` is this agent, and
           `tool` is what a tool handed back. `system` and `developer` are
@@ -1233,6 +1292,7 @@ groups:
         type: text
         surface: S-GEN
         tier: expert
+        kernel-op: shape.render
         help: >
           the words of this turn. On an agent they may carry the same
           `{{run-inputs.<name>}}` holes as `instructions:`; in an eval case
@@ -1319,6 +1379,7 @@ groups:
           rows-are: table
         surface: S-CAP
         tier: expert
+        kernel-op: shape.scalar
         help: >
           what kind of figure this is — `money`, `duration`, `whole-number`,
           `percent`, `size`, `number`, `text`, `yes-or-no`, or `table` for a
@@ -1330,6 +1391,7 @@ groups:
         names: shapes
         surface: S-CAP
         tier: core
+        kernel-op: shape.record
         summary: what each row is made of
         help: on a table, the named shape of each row — an approval matrix, a roster
       value:
@@ -1377,6 +1439,7 @@ groups:
         required: yes
         surface: S-CAP
         tier: expert
+        kernel-op: actor.program
         help: >
           what kind of program this is. `wasm` is the portable one: it runs the
           same way anywhere and needs nothing installed, so it is the one to use
@@ -1392,6 +1455,7 @@ groups:
         required: yes
         surface: S-CTRL
         tier: expert
+        kernel-op: actor.program
         help: >
           whether the same question always gets the same answer. `pure` means it
           works only from what it is given. `deterministic` means it may look at
@@ -1405,6 +1469,7 @@ groups:
         shapes: *the-answer-shapes
         surface: S-CAP
         tier: expert
+        kernel-op: [shape.scalar, actor.signature]
         help: >
           what this program needs to be given, one line per value — the same
           shapes a tool's `takes:` uses, because it is the same question.
@@ -1413,6 +1478,7 @@ groups:
         shapes: *the-answer-shapes
         surface: S-CAP
         tier: expert
+        kernel-op: [shape.scalar, actor.signature]
         help: >
           what it hands back, one line per thing. An answer that does not fit is
           that call's failure and never a silent wrong number.
@@ -1421,6 +1487,7 @@ groups:
         required: yes
         surface: S-GOV
         tier: expert
+        kernel-op: allowance.quantity
         help: >
           what one run of this program may spend before it is stopped. Required:
           a program with no ceiling is the one thing in this format that could
@@ -1434,6 +1501,7 @@ groups:
         type: anything
         surface: S-EXEC
         tier: expert
+        kernel-op: actor.program
         help: >
           the program itself, in a `body/` folder beside this file. Kept as files
           rather than as settings: PACT records what is there, what kind of file
@@ -1486,6 +1554,7 @@ groups:
         choices: [stop-and-say-so, ask-a-person, answer-with-what-it-has]
         surface: S-GOV
         tier: expert
+        kernel-op: flow.handler
         help: >
           what to do when this program reaches a ceiling above. The same three
           answers `limits:` takes, for the same reason: stopping silently, asking
@@ -1539,6 +1608,7 @@ groups:
         model-kind: [language]
         surface: S-CAP
         tier: expert
+        kernel-op: actor.model
         help: >
           which model to use when an agent names none. Leave it out to keep the
           one PACT already picks. A model that only runs somewhere else is
@@ -1548,6 +1618,7 @@ groups:
         type: map of group:model
         surface: S-CAP
         tier: expert
+        kernel-op: actor.model
         help: one entry per model, named by whatever your runtime calls it
       benchmarks:
         # 96 §B4. The names a score may be recorded under, and how each is
@@ -1658,6 +1729,7 @@ groups:
         type: group:figure
         surface: S-CAP
         tier: expert
+        kernel-op: actor.figures
         help: >
           how much thinking it is good for — `simple`, `steady`, `careful` or
           `deep` — and where that came from. Write `unknown` if nobody has
@@ -1667,6 +1739,7 @@ groups:
         type: group:model-cost
         surface: S-GOV
         tier: expert
+        kernel-op: actor.figures
         help: what it costs to run
       kind:
         # 02W §2.12. Read by `pact check` (`deciding.rs`: WF-17, and an agent
@@ -1710,6 +1783,7 @@ groups:
         type: map of group:figure
         surface: S-CAP
         tier: expert
+        kernel-op: actor.figures
         help: >
           published or measured scores, one line per benchmark, each with where
           the number came from — `MMLU: {value: "81", provenance: {source: the
@@ -1720,6 +1794,7 @@ groups:
         type: group:model-speed
         surface: S-CAP
         tier: expert
+        kernel-op: actor.figures
         help: >
           how quickly it answers, and where those figures came from. Read when
           an agent says `prefer: fastest`, and when a `feel: voice` agent is
@@ -1741,6 +1816,7 @@ groups:
         type: text
         surface: S-CAP
         tier: expert
+        kernel-op: actor.location
         help: >
           write `local` when the model runs on this machine. Anything else means
           the call leaves the box — which a workspace with nothing in
@@ -1749,6 +1825,7 @@ groups:
         type: text
         surface: S-CAP
         tier: expert
+        kernel-op: actor.location
         help: >
           the region this runtime serves the model in, as your runtime names it
           (`us-baa-region`). A workflow whose `data-stays-in:` names a region
@@ -1877,6 +1954,7 @@ groups:
         type: group:figure
         surface: S-CAP
         tier: expert
+        kernel-op: actor.figures
         help: >
           how much it can hold at once, in tokens, and where that number came
           from. Write `unknown` if you cannot find out — a made-up number here
@@ -1901,11 +1979,13 @@ groups:
         required: yes
         surface: S-CAP
         tier: expert
+        kernel-op: actor.figures
         help: the figure itself, or the word `unknown` if nobody can say
       provenance:
         type: group:provenance
         surface: S-GOV
         tier: expert
+        kernel-op: actor.figures
         help: where this number came from
 
   provenance:
@@ -2033,6 +2113,7 @@ groups:
         choices: [cheapest, fastest, best-on-the-evals]
         surface: S-CAP
         tier: core
+        kernel-op: actor.by-requirement
         help: >
           among the models that pass, which one PACT picks. `cheapest` is the
           usual answer and what you get if you leave this out. `fastest`
@@ -2064,6 +2145,7 @@ groups:
         type: list of text
         surface: S-CAP
         tier: core
+        kernel-op: actor.by-requirement
         help: >
           the figures a model has to reach to be used for this agent, one
           comparison per line, all of which have to hold — `mmlu.score > 50`,
@@ -2124,6 +2206,7 @@ groups:
         type: map of threshold
         surface: S-CAP
         tier: expert
+        kernel-op: actor.by-requirement
         help: >
           minimum published benchmark scores, one line each, all of which have
           to hold — for example `MMLU: "> 80"` and `SWE-Verified: "> 40"`
@@ -2194,6 +2277,7 @@ groups:
         type: moment
         surface: S-GOV
         tier: core
+        kernel-op: allowance.quantity
         needs-also: [when-it-runs-out]
         help: >
           how long the whole thing may take. This is the promise you are making
@@ -2215,6 +2299,7 @@ groups:
         names: ^steps
         surface: S-GOV
         tier: core
+        kernel-op: allowance.pause
         help: waits whose time does not count against `finishes-within:`
       milestones:
         type: list of group:reminder
@@ -2225,6 +2310,7 @@ groups:
         type: money
         surface: S-GOV
         tier: core
+        kernel-op: allowance.quantity
         needs-also: [when-it-runs-out]
         help: >
           the most one request may cost, before it is stopped. One request, not
@@ -2248,6 +2334,7 @@ groups:
         at-least: 1
         surface: S-GOV
         tier: core
+        kernel-op: allowance.quantity
         needs-also: [when-it-runs-out]
         help: >
           how many thinking steps before it must stop. Eve has no such limit at
@@ -2259,6 +2346,7 @@ groups:
         needs-also: [cost-per-request-under]
         surface: S-GOV
         tier: expert
+        kernel-op: allowance.value
         help: >
           where this run's money ceiling comes from, when the surrounding system
           decides it per request — `run-inputs.budget` on an agent,
@@ -2286,6 +2374,7 @@ groups:
         at-least: 1
         surface: S-GOV
         tier: core
+        kernel-op: allowance.quantity
         needs-also: [when-it-runs-out]
         help: >
           how many tool calls one run may make. Counted apart from steps because
@@ -2295,6 +2384,7 @@ groups:
         type: duration
         surface: S-GOV
         tier: core
+        kernel-op: allowance.quantity
         needs-also: [when-it-runs-out]
         help: >
           wall-clock time before it must stop, however much budget is left. Time
@@ -2305,6 +2395,7 @@ groups:
         at-least: 1
         surface: S-GOV
         tier: core
+        kernel-op: allowance.quantity
         needs-also: [when-it-runs-out]
         help: >
           how much text one run may read and write, counted the way the model
@@ -2322,6 +2413,7 @@ groups:
         at-least: 1
         surface: S-GOV
         tier: expert
+        kernel-op: allowance.quantity
         needs-also: [when-it-runs-out]
         help: >
           how many times one request may put this agent to work, counting the
@@ -2342,6 +2434,7 @@ groups:
         needs-also: [when-it-runs-out]
         surface: S-GOV
         tier: core
+        kernel-op: allowance.start
         help: >
           how many agents one request may bring in through `may-start:`,
           counted across every level. Starting one past it is refused, and the
@@ -2355,6 +2448,7 @@ groups:
         needs-also: [when-it-runs-out]
         surface: S-GOV
         tier: core
+        kernel-op: allowance.start
         help: >
           how many levels deep agents brought in may themselves bring in
           others; `1` means the ones this agent starts may start none. Bud's
@@ -2367,6 +2461,7 @@ groups:
         needs-also: [when-it-runs-out]
         surface: S-GOV
         tier: core
+        kernel-op: allowance.quantity
         help: >
           on `each`, the most items it will take — required there. With
           `carry-on` the first N run and the rest are listed as not done.
@@ -2375,6 +2470,7 @@ groups:
         at-least: 1
         surface: S-GOV
         tier: core
+        kernel-op: allowance.quantity
         help: >
           how many may run at the same time: items on an `each`, or runs of
           this flow when `counted-per:` says so. `1` is one at a time, in order.
@@ -2386,6 +2482,7 @@ groups:
         type: text
         surface: S-GOV
         tier: core
+        kernel-op: [store.scope, allowance.period]
         help: >
           what each ceiling here is counted across: `run` (the default), every
           use of a `connection`, a `team`, or a binding — `input.customer-id`
@@ -2395,6 +2492,7 @@ groups:
         needs-also: [counted-per]
         surface: S-GOV
         tier: core
+        kernel-op: allowance.period
         help: for a ceiling counted over a period — `1 day`, `30 days`
       when-it-runs-out:
         # The first three are an agent's; the other five a workflow's (02W
@@ -2408,6 +2506,7 @@ groups:
           asks: ask-a-person
         surface: S-GOV
         tier: core
+        kernel-op: flow.handler
         help: >
           what to do on reaching any ceiling above. Stopping silently, asking a
           person, and answering as if finished are three different things, so
@@ -2423,6 +2522,7 @@ groups:
         names: [^questions, questions]
         surface: S-EXEC
         tier: core
+        kernel-op: actor.person
         # "the line above" is a direction to somebody READING this setting. The
         # refusal quotes it from the other direction — it is already saying which
         # line, so the sentence came out *"'when-it-runs-out' says
@@ -2441,6 +2541,7 @@ groups:
         choices: [p50, p90, p95, p99, mean, max]
         surface: S-GOV
         tier: expert
+        kernel-op: check.aggregate
         help: whether these are typical or worst-case numbers
 
   # How the model is asked to behave. Closed on purpose: every key here has one
@@ -2566,6 +2667,7 @@ groups:
           a-person-can-be-asked: questions
         surface: S-ROUTE
         tier: expert
+        kernel-op: check.reachability
         help: >
           when this is offered to the model at all. Leave it out and it is
           always offered. Use it for something that only makes sense once the
@@ -2602,6 +2704,7 @@ groups:
         required: yes
         surface: S-CAP
         tier: core
+        kernel-op: [actor.tool, actor.remote]
         help: >
           what kind of thing this is: an MCP server, a locked room that runs
           carried programs, or an agent somewhere else reached over A2A.
@@ -2612,6 +2715,7 @@ groups:
         type: text
         surface: S-CAP
         tier: core
+        kernel-op: actor.tool
         help: >
           a name your platform team publishes. Ask them which ones this
           machine already knows about — it is their list, not a file in here.
@@ -2624,6 +2728,7 @@ groups:
         type: group:credential-reference
         surface: S-CAP
         tier: core
+        kernel-op: allowance.use-without-seeing
         help: >
           where the credential is kept — a reference your platform team
           publishes. Never the credential itself: a spec file may not contain
@@ -2650,6 +2755,7 @@ groups:
         choices: [wasm, python, typescript]
         surface: S-CAP
         tier: expert
+        kernel-op: actor.program
         help: >
           which kinds of program this locked room can run. A tool that
           `connect:`s here and runs a program written for a kind this room cannot
@@ -2659,6 +2765,7 @@ groups:
         names: questions
         surface: S-EXEC
         tier: expert
+        kernel-op: actor.person
         help: >
           which question to put to a person before this machine runs a carried
           program for the first time, by name. The run stops and waits rather
@@ -2670,6 +2777,7 @@ groups:
         names: questions
         surface: S-EXEC
         tier: core
+        kernel-op: actor.person
         help: >
           which question to put to a person when this connection has not been
           allowed yet, by name. The run stops and waits for the answer rather
@@ -2713,6 +2821,7 @@ groups:
         needs-also: [tool-snapshot-taken-at]
         surface: S-GOV
         tier: expert
+        kernel-op: [store.version, check.digest]
         help: >
           one digest over everything this server published when somebody
           reviewed it — every tool, every argument, and every sentence; for an
@@ -2740,6 +2849,7 @@ groups:
         needs-also: [tool-snapshot-digest]
         surface: S-GOV
         tier: expert
+        kernel-op: allowance.revoke
         help: >
           how old that digest may be before this connection is refused. Nothing
           can check a server you cannot reach, so what fails closed offline is
@@ -2794,6 +2904,7 @@ groups:
         names: questions
         surface: S-EXEC
         tier: expert
+        kernel-op: actor.person
         summary: which question to put to them when the server changed
         help: >
           which question to put to a person when `if-it-changes:` says
@@ -2891,6 +3002,7 @@ groups:
         choices: [meaning, words, meaning-and-words]
         surface: S-CTRL
         tier: expert
+        kernel-op: store.find
         help: >
           how the runtime finds the right passages. `words` matches the words you
           typed, which is what you want for clause numbers, product codes and
@@ -2902,6 +3014,7 @@ groups:
         choices: [paragraph, heading, page, whole-file]
         surface: S-CTRL
         tier: expert
+        kernel-op: store.find
         help: >
           how a long document is broken up before anything is looked up in it.
           Leave it out and the runtime picks, which is the usual answer.
@@ -2916,6 +3029,7 @@ groups:
         at-least: 1
         surface: S-GOV
         tier: core
+        kernel-op: store.find
         help: >
           how many pieces of document come back for one question. More is not
           better: every extra passage is more text a poisoned document could be
@@ -2966,6 +3080,7 @@ groups:
         plays-role: embedder
         surface: S-CAP
         tier: expert
+        kernel-op: [store.find, actor.model]
         help: >
           which model turns these documents, and every question asked of them,
           into numbers for looking things up by meaning — by name. It belongs to
@@ -2979,6 +3094,7 @@ groups:
         plays-role: embedder
         surface: S-CAP
         tier: expert
+        kernel-op: [store.find, actor.model]
         help: >
           a model that puts the passages found in order of how well they
           answer the question, before the best few are handed to the agent.
@@ -2994,6 +3110,7 @@ groups:
         type: yes-no
         surface: S-CAP
         tier: expert
+        kernel-op: actor.by-requirement
         help: >
           whether this describes what several interchangeable ones have in
           common — `email` for Gmail and Outlook, `refund-policy` for each
@@ -3004,6 +3121,7 @@ groups:
         type: text
         surface: S-ROUTE
         tier: expert
+        kernel-op: actor.by-requirement
         help: >
           on an interface, who picks which one does the work. `the-host` —
           what you get if you leave this out — means whatever runs your agents
@@ -3016,6 +3134,7 @@ groups:
         names: knowledge
         surface: S-CAP
         tier: expert
+        kernel-op: actor.by-requirement
         help: >
           which interface these documents are one of, by name — an entry in
           `knowledge` that says `interface: yes`.
@@ -3066,6 +3185,7 @@ groups:
           a-person-can-be-asked: questions
         surface: S-ROUTE
         tier: expert
+        kernel-op: check.reachability
         help: >
           when this is offered to the model at all. Leave it out and it is
           always offered. Use it for something that only makes sense once the
@@ -3148,6 +3268,7 @@ groups:
         names: skills
         surface: S-CAP
         tier: expert
+        kernel-op: actor.by-requirement
         help: >
           which interface this procedure is one of, by name — an entry in
           `skills` that says `interface: yes`.
@@ -3170,6 +3291,7 @@ groups:
         required: yes
         surface: S-GOV
         tier: expert
+        kernel-op: shape.digest
         help: >
           one fingerprint over everything recorded below, worked out by
           `pact-sync`. A run compares it with what the server says as it
@@ -3183,6 +3305,7 @@ groups:
         type: text
         surface: S-GEN
         tier: expert
+        kernel-op: label.fence
         help: >
           the wording the server publishes about itself. It reaches a model
           only fenced off and labelled as the server's, never as this
@@ -3201,16 +3324,19 @@ groups:
         type: text
         surface: S-GEN
         tier: expert
+        kernel-op: label.fence
         help: the server's own wording for this tool
       takes:
         type: anything
         surface: S-CAP
         tier: expert
+        kernel-op: shape.describe
         help: its arguments, as the JSON Schema the server published
       answers-with:
         type: anything
         surface: S-CAP
         tier: expert
+        kernel-op: shape.describe
         help: what it answers with, as the JSON Schema the server published, if it did
       hints:
         type: anything
@@ -3235,6 +3361,7 @@ groups:
         required: yes
         surface: S-GOV
         tier: expert
+        kernel-op: check.detector
         help: >
           the patterns it matches, as regular expressions — `ORD-[0-9]{8}`. Any
           one matching is enough.
@@ -3242,6 +3369,7 @@ groups:
         type: list of text
         surface: S-GEN
         tier: expert
+        kernel-op: check.detector
         help: >
           values it must recognise. Each is held against the patterns before
           the first model call, so a pattern that misses its own example stops
@@ -3255,6 +3383,7 @@ groups:
         required: yes
         surface: S-CAP
         tier: core
+        kernel-op: allowance.use-without-seeing
         help: >
           the name your platform team publishes for where this credential is
           kept — for example `host/payments-credential`. Ask them; it is their
@@ -3306,6 +3435,7 @@ groups:
           a-person-can-be-asked: questions
         surface: S-ROUTE
         tier: expert
+        kernel-op: check.reachability
         help: >
           when this is offered to the model at all. Leave it out and it is
           always offered. Use it for something that only makes sense once the
@@ -3329,6 +3459,7 @@ groups:
         names: resources
         surface: S-CAP
         tier: core
+        kernel-op: actor.tool
         help: >
           which server, locked room or remote agent this reaches, by name —
           one of the entries in `resources`. A name that is not there is
@@ -3360,6 +3491,7 @@ groups:
         needs-also: [method]
         surface: S-CAP
         tier: core
+        kernel-op: actor.tool
         help: >
           the address this tool calls — a name your platform team publishes, the
           same way an `endpoint:` is, with the path under it when it has one
@@ -3380,6 +3512,7 @@ groups:
         choices: [get, post, put, patch, delete]
         surface: S-CAP
         tier: core
+        kernel-op: actor.tool
         help: >
           which kind of call to make at the address in `url:` — `get` to look
           something up, `post` to send something in. Whoever published the
@@ -3405,6 +3538,7 @@ groups:
         choices: [private-data, untrusted-content, a-way-out]
         surface: S-GOV
         tier: expert
+        kernel-op: [label.origin, check.reachability]
         help: >
           what this tool brings into a run: `private-data` (records about
           people, accounts, secrets), `untrusted-content` (web pages, email,
@@ -3429,6 +3563,7 @@ groups:
         needs-also: [rests-for]
         surface: S-GOV
         tier: expert
+        kernel-op: allowance.revoke
         summary: how many failures in a row before it rests
         help: >
           how many failures in a row before this tool is rested — `3`. While it
@@ -3439,12 +3574,14 @@ groups:
         needs-also: [rests-after]
         surface: S-GOV
         tier: expert
+        kernel-op: allowance.revoke
         summary: how long it rests
         help: how long a tool rests once `rests-after:` failures in a row put it to rest — `5m`
       actions:
         type: map of group:action
         surface: S-CAP
         tier: core
+        kernel-op: [actor.tool, allowance.reach]
         help: >
           the only actions this agent may call. Anything else the server
           offers is refused. For an agent reached over A2A, each action is one
@@ -3480,6 +3617,7 @@ groups:
         names: tools
         surface: S-CAP
         tier: expert
+        kernel-op: actor.by-requirement
         help: >
           which interface this tool is one of, by name — an entry in `tools`
           that says `interface: yes`. It then offers exactly that interface's
@@ -3498,6 +3636,7 @@ groups:
         choices: [this-file, the-snapshot, the-server]
         surface: S-CAP
         tier: expert
+        kernel-op: shape.describe
         help: >
           on a tool that connects to an MCP server or a remote agent, where
           each action's arguments and answer come from. `this-file`, what you
@@ -3512,6 +3651,7 @@ groups:
         choices: [refused, each-call-asks-a-person]
         surface: S-EXEC
         tier: expert
+        kernel-op: allowance.reach
         help: >
           what happens to an action the server offers that `actions:` does not
           list. `refused` is what you get if you leave this out. With
@@ -3548,6 +3688,7 @@ groups:
         shapes: *the-answer-shapes
         surface: S-CAP
         tier: core
+        kernel-op: [shape.scalar, actor.signature]
         help: >
           what this action needs to be given, one line per argument — for
           example `order-number: text` or `amount: money`. This is what the
@@ -3570,6 +3711,7 @@ groups:
         shapes: *the-answer-shapes
         surface: S-CAP
         tier: expert
+        kernel-op: [shape.scalar, actor.signature]
         help: >
           what this action hands back, one line per thing — for example
           `latest: number` or `status: one of ok, degraded`. The same shapes an
@@ -3591,6 +3733,7 @@ groups:
         names: programs
         surface: S-EXEC
         tier: expert
+        kernel-op: actor.program
         help: >
           which carried program this action runs, by name — one of the entries in
           `programs`. Write it on an action whose tool `connect:`s to a sandbox.
@@ -3598,6 +3741,7 @@ groups:
         type: yes-no
         surface: S-EXEC
         tier: core
+        kernel-op: actor.effect
         help: whether it only looks things up
       needs-a-person:
         # F17. Gating ONE action cost three files and thirteen lines — a
@@ -3653,6 +3797,7 @@ groups:
           same-request-key: 'yes'
         surface: S-EXEC
         tier: core
+        kernel-op: actor.effect
         help: >
           whether it moves money. Ticking this makes a same-request key
           necessary, so the same refund cannot be paid twice — that half is
@@ -3664,6 +3809,7 @@ groups:
         type: text
         surface: S-EXEC
         tier: core
+        kernel-op: store.claim
         help: >-
           which argument makes two calls "the same call", so it runs once. Write `the-call`
           when the business has no key of its own, or the flow means to repeat a write with
@@ -3707,6 +3853,7 @@ groups:
         needs-also: [same-request-key]
         surface: S-EXEC
         tier: expert
+        kernel-op: store.claim
         help: >
           how far "the same call" reaches. `this-run` is the default and stops
           one run doing the same thing twice, including after it parks for an
@@ -3719,6 +3866,7 @@ groups:
         type: list of text
         surface: S-EXEC
         tier: expert
+        kernel-op: actor.write-set
         help: >
           the places this action changes, by any name you choose — `the
           checkout`, `orders/<id>`. Two branches of a `together`, or the items
@@ -3731,6 +3879,7 @@ groups:
         type: yes-no
         surface: S-GOV
         tier: expert
+        kernel-op: label.placeholder
         help: >
           `yes` lets this action receive values a redaction or `hide-values`
           rule took out — a card number the payments system must charge. While
@@ -3748,6 +3897,7 @@ groups:
         needs-also: [same-request-key]
         surface: S-EXEC
         tier: expert
+        kernel-op: store.claim
         help: >
           how long one call's claim on its key lasts — `5m`. Until then a second
           call with the same key is refused; after it the key is free again, so
@@ -3803,6 +3953,7 @@ groups:
         names: programs
         surface: S-CTRL
         tier: expert
+        kernel-op: actor.program
         help: >
           a carried program that shortens what this action hands back, before the
           model reads it — for a system that answers with forty fields when the
@@ -3818,6 +3969,7 @@ groups:
         type: text
         surface: S-EXEC
         tier: expert
+        kernel-op: store.write
         help: >
           keep what this action answered, under one of the agent's own
           `remembers:` names. A fact a tool handed back may not be kept where the
@@ -3829,6 +3981,7 @@ groups:
         type: list of text
         surface: S-EXEC
         tier: core
+        kernel-op: allowance.see
         help: >
           the arguments an approval rule is allowed to look at — an amount, a
           quantity. These are exactly the ones the model DOES choose, which is
@@ -3841,6 +3994,7 @@ groups:
         type: text
         surface: S-EXEC
         tier: core
+        kernel-op: actor.effect
         help: >
           how to reverse this write once it has succeeded — `docusign/void-envelope`.
           It is given this call's inputs and its answer, so each input it takes
@@ -3852,6 +4006,7 @@ groups:
         type: text
         surface: S-EXEC
         tier: expert
+        kernel-op: actor.effect
         help: >
           a `reads-only` action, written `<tool>/<action>`, asked "did this
           already happen?" before a retry, for systems that time out after
@@ -3867,6 +4022,7 @@ groups:
         type: text
         surface: S-CAP
         tier: expert
+        kernel-op: actor.tool
         help: >
           the server's own name for this action, when it is not the name you
           gave it here — `send_email` for an action you call `send-message`.
@@ -3941,6 +4097,7 @@ groups:
         required: yes
         surface: S-EXEC
         tier: core
+        kernel-op: check.combine
         help: >
           the situation that makes this worth asking about. One line per
           situation, and two shapes exist: `{ tool: payments/issue-refund }`,
@@ -3963,6 +4120,7 @@ groups:
         names: questions
         surface: S-EXEC
         tier: core
+        kernel-op: actor.person
         help: >
           which question to put to them, by name — one of the entries in
           `questions`. The question carries the wording and the shape of the
@@ -4017,6 +4175,7 @@ groups:
         needs-one-of: [is, is-one-of, more-than, less-than, contains-any-of, is-empty, in-share, looks-like]
         surface: S-EXEC
         tier: core
+        kernel-op: store.read
         help: >
           the value to look at, as a binding — `steps.match.result`,
           `run-inputs.requester.verified`, `remembers.ai-reading-paused`,
@@ -4060,6 +4219,7 @@ groups:
         may-be-money: yes
         surface: S-EXEC
         tier: core
+        kernel-op: check.compare
         help: >
           above this — `200 USD` for an amount of money, `80` for a score,
           `{value: steps.po.total}` for another field, or `{now-plus: 14 days}`
@@ -4069,6 +4229,7 @@ groups:
         may-be-money: yes
         surface: S-EXEC
         tier: core
+        kernel-op: check.compare
         help: >
           below this — `5000 USD`, `85%`, `{value: steps.po.total}` or
           `{now-plus: 14 days}`. Compared in the value's own shape; a date
@@ -4080,6 +4241,7 @@ groups:
         type: comparand
         surface: S-EXEC
         tier: core
+        kernel-op: check.compare
         help: >
           the one value that makes this hold — for example `is: enterprise` on a
           customer tier, or `{value: <binding>}` for another field. For several
@@ -4088,6 +4250,7 @@ groups:
         type: list of text
         surface: S-EXEC
         tier: core
+        kernel-op: check.compare
         help: >
           the values that make this hold, any one of them — for example
           `is-one-of: [enterprise, government]`.
@@ -4095,6 +4258,7 @@ groups:
         type: list of text
         surface: S-EXEC
         tier: core
+        kernel-op: check.compare
         help: >
           on text or a list: holds when any of these appears — the eval shape
           `must-contain:`, turned round. Words, not patterns.
@@ -4105,6 +4269,7 @@ groups:
         choices: [reads, writes, spends, cannot-be-undone]
         surface: S-GOV
         tier: expert
+        kernel-op: [actor.effect, check.compare]
         help: >
           in an approval rule, beside `tool:`, holds when the action called
           does this — `writes` (changes anything), `spends` (moves money),
@@ -4118,6 +4283,7 @@ groups:
         type: percent
         surface: S-GOV
         tier: expert
+        kernel-op: [shape.digest, check.digest]
         help: >
           beside `value:`, holds for this share of the values it could be —
           `{ value: input.request-id, in-share: 5% }` is true for one request in
@@ -4128,6 +4294,7 @@ groups:
         type: text
         surface: S-GOV
         tier: expert
+        kernel-op: check.detector
         help: >
           beside `value:`, holds when the value contains something that looks
           like this — `card number`, `email address`, or the name of one of
@@ -4136,6 +4303,7 @@ groups:
         type: yes-no
         surface: S-EXEC
         tier: core
+        kernel-op: check.compare
         help: >
           `yes` holds when the value is missing, blank, or an empty list; `no`
           holds when it is not.
@@ -4151,12 +4319,14 @@ groups:
         type: text
         surface: S-EXEC
         tier: core
+        kernel-op: store.read
         help: >
           another value, as a binding — `{value: steps.po.total}`
       now-plus:
         type: duration
         surface: S-EXEC
         tier: core
+        kernel-op: check.typed
         help: >
           this long after now — `{now-plus: 14 days}`. Days are counted on the
           calendar in the value's zone, so one day is the same time tomorrow
@@ -4165,6 +4335,7 @@ groups:
         type: duration
         surface: S-EXEC
         tier: core
+        kernel-op: check.typed
         help: >
           this long before now — `{now-minus: 30 days}`
 
@@ -4215,6 +4386,7 @@ groups:
         shapes: *the-answer-shapes
         surface: S-EXEC
         tier: core
+        kernel-op: shape.scalar
         help: >
           what a valid answer looks like, one line per thing you want back —
           for example `approved: yes or no` or `amount: money`. The shapes are
@@ -4240,6 +4412,7 @@ groups:
         type: list of text
         surface: S-EXEC
         tier: core
+        kernel-op: [label.fence, allowance.see]
         help: >
           which values to put in front of the person — an amount, an order
           number. They are shown as quoted data in their own box, never folded
@@ -4265,6 +4438,7 @@ groups:
         required: yes
         surface: S-EXEC
         tier: core
+        kernel-op: actor.person
         help: >
           who is asked. Naming nobody means nobody can answer, not that anybody
           can, so this line is never left out — write the team or the person who
@@ -4283,6 +4457,7 @@ groups:
         type: moment
         surface: S-GOV
         tier: core
+        kernel-op: [actor.park, flow.await]
         help: >
           how long they have to answer. Once that time is up the next line
           applies — somebody has to be watching the clock for that to happen,
@@ -4297,6 +4472,7 @@ groups:
           enough-is: enough-of-them
         surface: S-EXEC
         tier: core
+        kernel-op: [actor.person, flow.join]
         help: >
           how many of `asked-of:` must answer. With `everyone`, all of them, in
           any order, and any `no` is a no. Waits drawn side by side are separate
@@ -4332,6 +4508,7 @@ groups:
         type: list of text
         surface: S-EXEC
         tier: core
+        kernel-op: actor.identity
         help: >
           who may not answer: a binding to a person (`steps.po.raised-by`), or a
           stage, meaning whoever answered that stage. Separation of duties.
@@ -4339,6 +4516,7 @@ groups:
         type: yes-no
         surface: S-EXEC
         tier: core
+        kernel-op: actor.identity
         help: whether the answer needs a fresh sign-in and is recorded as a signature
       starts-with:
         type: map of text
@@ -4357,6 +4535,7 @@ groups:
         choices: [whenever-they-arrived, this-wait]
         surface: S-CTRL
         tier: core
+        kernel-op: [store.host, flow.await]
         help: >
           `this-wait` ignores events that arrived before this wait began. Left
           out, an event no wait was listening for is kept for the next wait
@@ -4371,6 +4550,7 @@ groups:
         type: list of group:when-this
         surface: S-CTRL
         tier: core
+        kernel-op: [flow.await, check.combine]
         help: >
           in a question a workflow asks of a port, what has to hold of an event
           for this wait to hear it — every line, each looking at what the event
@@ -4406,6 +4586,7 @@ groups:
         type: list of text
         surface: S-EXEC
         tier: core
+        kernel-op: actor.person
         help: who it goes to next, when the line above says escalate
       checked-by:
         # The check a SHAPE cannot make. `answer:` holds each field to a kind of
@@ -4427,6 +4608,7 @@ groups:
         names: programs
         surface: S-EXEC
         tier: expert
+        kernel-op: actor.program
         help: >
           a carried program that looks at the answer before the run goes on with
           it, by name — for the checks a shape cannot make, like an account
@@ -4467,6 +4649,7 @@ groups:
         names: workflows
         surface: S-EXEC
         tier: core
+        kernel-op: flow.detach
         help: >
           start this workflow with the run's data and do not wait for it — the
           one side action. It never changes this run's path.
@@ -4495,6 +4678,7 @@ groups:
           reviewed-by: sampled-frame
         surface: S-GOV
         tier: core
+        kernel-op: store.host
         help: >
           where these cases came from. `authored-enumeration` means you wrote
           down the situations you thought of — which is a fine place to start,
@@ -4545,6 +4729,7 @@ groups:
         type: percent
         surface: S-GOV
         tier: core
+        kernel-op: check.aggregate
         help: >
           the share of examples that must come out right. Set it once, from
           how many cases you plan to write; it must not move under you when you
@@ -4582,6 +4767,7 @@ groups:
         type: list of group:metric
         surface: S-GOV
         tier: expert
+        kernel-op: check.aggregate
         help: >
           ready-made scores to put every answer through, on top of `rules:`.
           This is the door for somebody who already has a set of measures they
@@ -4609,6 +4795,7 @@ groups:
         surface: S-GOV
         model-kind: [language]
         tier: core
+        kernel-op: actor.model
         help: >
           which model grades the judged rules, by name — one of the entries in
           `models/catalog.yaml`. Point it at a different model from the one doing
@@ -4649,6 +4836,7 @@ groups:
         type: group:call-order
         surface: S-GOV
         tier: core
+        kernel-op: check.count
         help: one action has to have been called before another one is
       judged:
         type: text
@@ -4666,6 +4854,7 @@ groups:
         names: programs
         surface: S-GOV
         tier: expert
+        kernel-op: actor.program
         help: >
           a carried `pure` program that passes or fails the answer, with its
           reason. It is given the answer, what the stage was given and what its
@@ -4725,6 +4914,7 @@ groups:
         type: percent
         surface: S-GOV
         tier: expert
+        kernel-op: check.aggregate
         help: >
           how high that score has to be before an answer counts as passing,
           written `0.8` or `80%`. Leave it out and the bar is half marks, which
@@ -4922,6 +5112,7 @@ groups:
         choices: [tools, permissions, team, limits, evals, policy-clauses]
         surface: S-GOV
         tier: core
+        kernel-op: allowance.write
         help: changes to what it can DO, which always need review
       keep-only-if:
         type: one-of
@@ -5035,6 +5226,7 @@ groups:
         names: pact:models
         surface: S-CAP
         tier: expert
+        kernel-op: actor.model
         help: >
           which exact model, by the id `models/catalog.yaml` publishes. Leave it
           out and PACT picks. One that only runs somewhere else is refused when
@@ -5133,6 +5325,7 @@ groups:
           every: schedule
         surface: S-TOPO
         tier: core
+        kernel-op: flow.starts-when
         help: >
           how work arrives. `conversation` is a person talking to it,
           `schedule` is the clock — write `every:` beside it saying when —
@@ -5144,6 +5337,7 @@ groups:
         type: text
         surface: S-TOPO
         tier: core
+        kernel-op: flow.starts-when
         # `kind: schedule` with no `every:` is refused, and the refusal quotes
         # this setting back — *"so nothing says …"*. It quoted the first clause
         # of the help below and read *"so nothing says when to run — plain words
@@ -5173,6 +5367,7 @@ groups:
         choices: [start, queue, join, cancel-previous, skip, stop]
         surface: S-CTRL
         tier: core
+        kernel-op: flow.starts-when
         help: >
           what an arrival does when a run with the same key is open, on any kind
           of port. `start` begins another anyway; `queue` waits its turn; `join`
@@ -5199,6 +5394,7 @@ groups:
         shapes: *the-answer-shapes
         surface: S-CAP
         tier: core
+        kernel-op: shape.scalar
         help: >
           the shape of what arrives, when it differs from the workflow's own
           `accepts:`. Same-named fields fill the workflow's input; others need
@@ -5215,11 +5411,13 @@ groups:
         type: list of group:when-this
         surface: S-EXEC
         tier: core
+        kernel-op: check.combine
         help: what has to hold of what arrived, or it is dropped and the drop recorded
       signed-with:
         type: group:credential-reference
         surface: S-EXEC
         tier: core
+        kernel-op: allowance.use-without-seeing
         help: the secret an event must be signed with; anything unsigned is refused at the door
       in-time-zone:
         type: text
@@ -5231,12 +5429,14 @@ groups:
         choices: [run-when-back, skip]
         surface: S-CTRL
         tier: core
+        kernel-op: flow.starts-when
         help: on a timer, what to do about a time that passed while nothing was running
       per-row-of:
         type: text
         names: values
         surface: S-TOPO
         tier: core
+        kernel-op: flow.starts-when
         help: >
           on a timer, one run per row of this table, each row being the run's
           input — for clinics in three zones, `in-time-zone: input.zone`.
@@ -5244,6 +5444,7 @@ groups:
         type: duration
         surface: S-GOV
         tier: core
+        kernel-op: actor.park
         help: >
           on `inbound-call`, how long the caller waits for the answer. After
           that it gets the run's id and a link where the answer will appear.
@@ -5281,11 +5482,13 @@ groups:
         names: workflows
         surface: S-EXEC
         tier: core
+        kernel-op: flow.detach
         help: with `stop`, a workflow to start afterwards with the run's data, not waited for
       who-can-reach-it:
         type: list of text
         surface: S-EXEC
         tier: core
+        kernel-op: allowance.reach
         help: >
           who is allowed to start work here. Naming nobody means nobody, not
           everybody.
@@ -5299,6 +5502,7 @@ groups:
         type: map of group:state
         surface: S-GOV
         tier: expert
+        kernel-op: store.write
         help: what this port keeps between messages, such as where it last replied
 
   # ── WORKFLOW ────────────────────────────────────────────────────────────────
@@ -5329,6 +5533,7 @@ groups:
         shapes: *the-answer-shapes
         surface: S-CAP
         tier: core
+        kernel-op: [shape.scalar, actor.signature]
         help: >
           what starts a run, one line per thing. Every port that `answers:`
           this workflow fills it, so several ways in reach one input.
@@ -5337,6 +5542,7 @@ groups:
         shapes: *the-answer-shapes
         surface: S-CAP
         tier: core
+        kernel-op: [shape.scalar, actor.signature]
         help: >
           what a run hands back, given by its `does: answer` stage. Leave it out
           for a flow nobody waits on.
@@ -5346,6 +5552,7 @@ groups:
         names: ^steps
         surface: S-CTRL
         tier: core
+        kernel-op: flow.then
         help: which stage runs first
       steps:
         type: map of group:stage
@@ -5359,6 +5566,7 @@ groups:
         type: map of group:question
         surface: S-EXEC
         tier: core
+        kernel-op: actor.person
         help: >
           questions only this workflow asks, with the same fields as a file in
           `questions/`. Every `asks:` in this workflow (a stage's, a limit's)
@@ -5368,11 +5576,13 @@ groups:
         names: policies
         surface: S-EXEC
         tier: core
+        kernel-op: flow.handler
         help: which policy says what needs a person's yes before it happens
       limits:
         type: group:limits
         surface: S-GOV
         tier: core
+        kernel-op: allowance.quantity
         help: how long, how much and how many, for the whole run
       evals:
         type: text
@@ -5384,11 +5594,13 @@ groups:
         type: map of group:state
         surface: S-GOV
         tier: core
+        kernel-op: store.write
         help: memory that belongs to this flow, kept across its runs
       hides:
         type: map of list of text
         surface: S-EXEC
         tier: core
+        kernel-op: [label.sensitivity, allowance.see]
         help: >
           values some readers may never see, one line per binding —
           `input.student-name: [logs]`. Readers are `the-ai`, `logs`, a role,
@@ -5397,6 +5609,7 @@ groups:
         type: text
         surface: S-GOV
         tier: core
+        kernel-op: label.region
         help: >
           the region this run, its record and every model call it makes stay
           in — a region your runtime names, or a binding (`input.region`). A
@@ -5405,6 +5618,7 @@ groups:
         type: moment
         surface: S-GOV
         tier: core
+        kernel-op: [store.lifetime, store.forget]
         help: >
           how long a run's record is kept after it ends — `90 days`, or
           `{at: input.matter-closed-on, after: 2555 days}` (seven years).
@@ -5416,6 +5630,7 @@ groups:
         type: text
         surface: S-EXEC
         tier: core
+        kernel-op: actor.effect
         help: >
           how to undo a finished run of this flow when a caller's undo reaches
           it — a `<tool>/<action>` or another workflow. Leave it out and its own
@@ -5425,6 +5640,7 @@ groups:
         choices: [tool, mcp-tool, a2a-agent, api]
         surface: S-EXEC
         tier: core
+        kernel-op: [shape.describe, actor.composite]
         help: >
           other ways to reach this flow, built from `accepts:` and
           `answers-with:`: `tool` lets an agent name it in `uses:`. Who may
@@ -5470,6 +5686,7 @@ groups:
         choices: [calendar-days, business-days]
         surface: S-GOV
         tier: core
+        kernel-op: check.typed
         help: >
           `business-days` skips weekends and the holidays in the workspace's
           `calendar:`. Leave it out for calendar days.
@@ -5490,12 +5707,14 @@ groups:
         type: text
         surface: S-GOV
         tier: core
+        kernel-op: [actor.identity, allowance.write]
         help: the person or team whose yes a change to this part needs
       locked:
         type: one-of
         choices: [no, here, here-and-below]
         surface: S-GOV
         tier: core
+        kernel-op: allowance.write
         help: >
           `here` means it may not be removed in this workspace; `here-and-below`
           means not in any workspace based on this one either.
@@ -5504,6 +5723,7 @@ groups:
         needs-also: [locked]
         surface: S-GOV
         tier: core
+        kernel-op: allowance.revoke
         help: >
           when the lock ends — `{at: values.exam-series-ends}`. Leave it out
           for a lock with no end. A Brain tier locked this way keeps its model.
@@ -5516,6 +5736,7 @@ groups:
         names: questions
         surface: S-GOV
         tier: core
+        kernel-op: actor.person
         help: >
           the question that approves publishing — the same Wait as any other,
           so several approvers or a quorum is `answered-by:` on it. It is asked
@@ -5564,6 +5785,7 @@ groups:
         names: ^steps
         surface: S-CTRL
         tier: expert
+        kernel-op: flow.then
         help: which stage runs first
 
   # Called `stage` because that is the word the author reads everywhere else —
@@ -5612,6 +5834,7 @@ groups:
         # Was `expert`. A workflow's stage is drawn by a no-code author in the
         # Outline (02W §2.3), so what it does is a core line.
         tier: core
+        kernel-op: [flow.ask, flow.choose, flow.split, flow.cancel, actor.park, actor.instantiate]
         help: >
           what happens in this stage. `ask-someone` needs an `asks:` line beside
           it naming the question, or the stage stops with wording and nothing
@@ -5634,6 +5857,7 @@ groups:
         type: yes-no
         surface: S-EXEC
         tier: expert
+        kernel-op: store.fork
         help: >
           `yes` makes each attempt at this stage start from the conversation as
           it stood when the stage began, so no attempt reads another, and the
@@ -5647,6 +5871,7 @@ groups:
         type: yes-no
         surface: S-EXEC
         tier: expert
+        kernel-op: flow.join
         help: >
           on an `each`, `yes` takes items added to the `over:` list while it is
           running, too, and ends once the list has stopped growing and nothing
@@ -5658,6 +5883,7 @@ groups:
         summary: which detached run it ends
         surface: S-EXEC
         tier: expert
+        kernel-op: [flow.cancel, shape.reference]
         help: >
           on a `stop` stage, the run to stop — `steps.recheck.run`, from a
           `call` with `waits-for-result: no`. What it did is undone as its own
@@ -5679,6 +5905,7 @@ groups:
         names: [^questions, questions]
         surface: S-EXEC
         tier: core
+        kernel-op: actor.person
         # `does: ask-someone` with no `asks:` is refused, and the refusal quotes
         # this setting back. Reading the first clause of the help below, it read
         # *"so nothing says for a stage that does `ask-someone`"* — the
@@ -5697,6 +5924,7 @@ groups:
         type: group:outcome
         surface: S-CTRL
         tier: expert
+        kernel-op: flow.then
         help: >
           where to go next, by outcome. There are three outcomes and they are
           the only ones: `used-a-tool`, `answered`, and `too-many-times` (which
@@ -5727,6 +5955,7 @@ groups:
         names: [tools, skills, knowledge, agents, programs, workflows]
         surface: S-ROUTE
         tier: expert
+        kernel-op: allowance.reach
         help: >
           what this stage may reach: any of the tools, written procedures and
           teammates the agent itself may use, and nothing else. Say nothing and a
@@ -5747,6 +5976,7 @@ groups:
         at-least: 1
         surface: S-GOV
         tier: expert
+        kernel-op: allowance.quantity
         help: >
           how many times this stage may run. Reaching it produces the
           `too-many-times` outcome, so you can send the agent somewhere sensible
@@ -5762,6 +5992,7 @@ groups:
         type: group:program-fuel
         surface: S-GOV
         tier: expert
+        kernel-op: allowance.quantity
         summary: how long and how much its code may run
         help: >
           on `run-code`, what one run of the code the model writes may spend
@@ -5781,6 +6012,7 @@ groups:
         names: resources
         surface: S-EXEC
         tier: expert
+        kernel-op: [actor.program, actor.location]
         help: >
           on `run-code`, which locked room the code runs in, by name — one of
           the entries in `resources` whose `resource-kind:` is `sandbox` and
@@ -5798,6 +6030,7 @@ groups:
         type: text
         surface: S-TOPO
         tier: core
+        kernel-op: [flow.ask, shape.reference]
         summary: what this stage runs
         help: >
           what this stage runs once: `<tool>/<action>`, an agent, a carried
@@ -5808,6 +6041,7 @@ groups:
         needs-also: [call]
         surface: S-EXEC
         tier: core
+        kernel-op: allowance.reach
         help: >
           every target a `call:` written as a binding may run. A value outside
           this list stops the run rather than calling something nobody approved.
@@ -5815,6 +6049,7 @@ groups:
         type: map of text
         surface: S-EXEC
         tier: core
+        kernel-op: flow.ask
         help: >
           the inputs, `<input>: <binding>` — `email: input.email`. Fixed wording
           and figures come from `values.<name>`. A part of an input is written
@@ -5828,6 +6063,7 @@ groups:
         type: yes-no
         surface: S-CTRL
         tier: core
+        kernel-op: flow.detach
         help: >
           on a call to a workflow, `no` starts it and goes on at once. The stage
           gets back the new run as `.run`, or `.outcome: already-done` when that
@@ -5836,6 +6072,7 @@ groups:
         type: text
         surface: S-GOV
         tier: core
+        kernel-op: store.version
         help: >
           on a call to a workflow: `latest` (the default), a version number, or
           a binding to a date (`input.applied-on`) for the version that was in
@@ -5846,6 +6083,7 @@ groups:
         or-one-of: [done]
         surface: S-CTRL
         tier: core
+        kernel-op: flow.choose
         summary: which labels it can pick, and where each one leads
         help: >
           the labels this decision can pick, each with the stage it leads to —
@@ -5857,6 +6095,7 @@ groups:
         type: list of group:rung
         surface: S-CTRL
         tier: core
+        kernel-op: flow.choose
         help: >
           who decides, tried in order: written rules, then agents (cheapest
           first), then a person. A rung that cannot decide passes the decision
@@ -5865,6 +6104,7 @@ groups:
         type: text
         surface: S-CTRL
         tier: core
+        kernel-op: [flow.split, store.read]
         summary: which list to go through
         help: >
           the list to go through: a binding to a list (`input.attachments`).
@@ -5894,6 +6134,7 @@ groups:
           top-n: ["top <n> highest by <field>", "top <n> lowest by <field>"]
         surface: S-CTRL
         tier: core
+        kernel-op: [store.merge, flow.join]
         help: >
           how each field of the items' answers becomes one, one line per field —
           `codes: vote`, `confidence: top 1 lowest by confidence`. Unnamed
@@ -5911,6 +6152,7 @@ groups:
         type: map of group:stage
         surface: S-CTRL
         tier: core
+        kernel-op: flow.scope
         help: >
           the inside of an `each`, a `repeat` or a `together`. Its stages go to
           each other or to `done`, which ends that item, that round or that branch.
@@ -5919,11 +6161,13 @@ groups:
         names: ^steps
         surface: S-CTRL
         tier: core
+        kernel-op: flow.then
         help: which inside stage runs first (not on `together`, where every inside stage starts at once)
       until:
         type: list of group:when-this
         surface: S-CTRL
         tier: core
+        kernel-op: check.combine
         help: >
           on `repeat`, what has to be true for it to stop, checked when each
           round ends; every line must hold. Leave it out to always run
@@ -5932,6 +6176,7 @@ groups:
         type: map of group:state
         surface: S-GOV
         tier: core
+        kernel-op: store.write
         help: >
           on `repeat`, what survives from one round to the next. Read inside as
           `remembers.<name>` and afterwards as `steps.<this stage>.<name>`.
@@ -5949,6 +6194,7 @@ groups:
         needs-also: [checked-by]
         surface: S-GOV
         tier: core
+        kernel-op: allowance.quantity
         help: >
           how many attempts in all, asking again with the reason after each
           failed check. Leave it out for 2; write `1` to fail at the first miss.
@@ -5957,6 +6203,7 @@ groups:
         type: text
         surface: S-EXEC
         tier: core
+        kernel-op: actor.effect
         help: >
           how to undo what this stage did — a `<tool>/<action>` or a workflow —
           in place of its action's own `undone-by:`.
@@ -5964,6 +6211,7 @@ groups:
         type: group:limits
         surface: S-GOV
         tier: core
+        kernel-op: [flow.scope, allowance.quantity]
         help: >
           ceilings and a deadline for this stage and everything inside it. On
           `each`, `items-at-most:` is required here.
@@ -5973,6 +6221,7 @@ groups:
         type: group:if-it-fails
         surface: S-EXEC
         tier: core
+        kernel-op: flow.handler
         help: >
           what happens once every attempt at this stage has failed — call a
           backup, carry on with set values, ask a person, wait for a new
@@ -5992,6 +6241,7 @@ groups:
         type: list of group:route-rule
         surface: S-EXEC
         tier: core
+        kernel-op: flow.choose
         help: >
           written rules, tried in order; the first whose conditions all hold
           picks its label. None holding passes the decision to the next rung.
@@ -6000,6 +6250,7 @@ groups:
         names: agents
         surface: S-ROUTE
         tier: core
+        kernel-op: flow.choose
         help: >
           an agent that picks a label. Its `answers-with:` has one `one of`
           line naming these labels, and may add `not-sure`, which passes the
@@ -6022,6 +6273,7 @@ groups:
         needs-also: [agent]
         surface: S-GOV
         tier: core
+        kernel-op: flow.choose
         help: >
           for a decision model, the score under which it passes the decision
           on to the next rung. A score exactly at the figure decides, and an
@@ -6036,6 +6288,7 @@ groups:
         needs-also: [agent]
         surface: S-GOV
         tier: core
+        kernel-op: flow.choose
         help: >
           `go-on` makes this rung a second opinion: it is asked even when a
           rung before it has decided. The same label, and that decision
@@ -6049,6 +6302,7 @@ groups:
         names: [^questions, questions]
         surface: S-EXEC
         tier: core
+        kernel-op: [actor.person, flow.choose]
         help: >
           the person rung: a question whose answer has a `one of` line naming
           these labels. It is always last.
@@ -6062,6 +6316,7 @@ groups:
         type: list of group:when-this
         surface: S-EXEC
         tier: core
+        kernel-op: [check.combine, flow.choose]
         help: >
           the conditions, every one of which must hold. Leave it out on the last
           rule for "otherwise".
@@ -6073,6 +6328,7 @@ groups:
         required: yes
         surface: S-EXEC
         tier: core
+        kernel-op: flow.choose
         help: which label this rule picks
       because:
         type: text
@@ -6100,6 +6356,7 @@ groups:
           undo: undo
         surface: S-EXEC
         tier: core
+        kernel-op: flow.handler
         help: >
           what happens once every attempt has failed. `use-a-backup` calls
           `backup:` with the same inputs. `carry-on` goes on with the values in
@@ -6133,6 +6390,7 @@ groups:
         names: [^questions, questions]
         surface: S-EXEC
         tier: core
+        kernel-op: actor.person
         summary: which question to put to them
         help: which question to put to them when the line above says ask-a-person
       new-version-of:
@@ -6170,6 +6428,7 @@ groups:
         or-one-of: [done]
         surface: S-CTRL
         tier: expert
+        kernel-op: flow.then
         help: where to go when the stage called a tool
       answered:
         type: text
@@ -6177,6 +6436,7 @@ groups:
         or-one-of: [done]
         surface: S-CTRL
         tier: expert
+        kernel-op: flow.then
         help: where to go when the stage produced an answer
       too-many-times:
         type: text
@@ -6184,6 +6444,7 @@ groups:
         or-one-of: [done]
         surface: S-CTRL
         tier: expert
+        kernel-op: flow.then
         help: where to go when the stage has run its `at-most:` times
       declined:
         # 02W §2.4: what a workflow's `ask-someone` can end in, besides
@@ -6193,6 +6454,7 @@ groups:
         or-one-of: [done]
         surface: S-CTRL
         tier: core
+        kernel-op: flow.then
         help: >
           where to go when the person's `yes or no` came back no. Leave it out
           and the run stops and says so: a no is never quietly carried past.
@@ -6202,6 +6464,7 @@ groups:
         or-one-of: [done, stop-and-say-so]
         surface: S-CTRL
         tier: core
+        kernel-op: flow.then
         help: >
           where to go when `answer-within:` arrives with no answer. On a
           question asked only of the clock, this is the one exit, taken when
@@ -6214,6 +6477,7 @@ groups:
         or-one-of: [done]
         surface: S-CTRL
         tier: core
+        kernel-op: flow.await
         help: >
           where to go when an event arrives, one line per port — `{fee-received:
           gather}`. What it brought is `latest-update.<field>`.
@@ -6239,6 +6503,7 @@ groups:
         needs-also: [may-go-to]
         surface: S-CTRL
         tier: expert
+        kernel-op: [actor.program, flow.then]
         help: >
           a carried program that says which stage to go to next, by name — for
           when where to go depends on what was actually said rather than on what
@@ -6258,6 +6523,7 @@ groups:
         needs-also: [decided-by]
         surface: S-CTRL
         tier: expert
+        kernel-op: flow.then
         help: >
           every stage the program above may send this one to, and `done` for
           finishing. It picks between these and nothing else — a name outside
@@ -6297,6 +6563,7 @@ groups:
         type: list of text
         surface: S-CTRL
         tier: core
+        kernel-op: store.pin
         help: >
           what must survive tidying no matter what — for example
           `the refund policy`, `anything a person approved`. Nothing else in
@@ -6320,6 +6587,7 @@ groups:
         model-kind: [language]
         surface: S-CAP
         tier: expert
+        kernel-op: actor.model
         help: >
           which model writes the summary, by name. Keep it separate from the one
           doing the work: a weaker model summarising its own history compounds
@@ -6344,6 +6612,7 @@ groups:
         names: questions
         surface: S-EXEC
         tier: core
+        kernel-op: actor.person
         # Same setting, same sentence, same `summary:` — see `limits.asks`.
         summary: which question to put to them
         help: >
@@ -6360,6 +6629,7 @@ groups:
         required: yes
         surface: S-CTRL
         tier: expert
+        kernel-op: store.forget
         help: >
           which tidying move this is. `summarise-older` folds older messages into
           one; pictures and voice messages in them are kept beside the summary,
@@ -6465,6 +6735,7 @@ groups:
         required: yes
         surface: S-CTRL
         tier: core
+        kernel-op: flow.handler
         help: >
           the moments it runs at. Write one on a line of its own with a `- ` in
           front, as `<part>.<thing>.<moment>` — a card-number rule that has to
@@ -6716,6 +6987,7 @@ groups:
                 - step.message.before
         surface: S-EXEC
         tier: core
+        kernel-op: flow.handler
         help: >
           what it does, in plain sentences. Eight sentences exist and they are
           the only ones, because a sentence nobody can turn into behaviour is a
@@ -6830,6 +7102,7 @@ groups:
         always-may: [hide-values]
         surface: S-EXEC
         tier: core
+        kernel-op: [label.sensitivity, check.detector]
         help: >
           what must never leave, in plain sentences — one on each line with a
           `- ` in front. Three sentences: `anything that looks like a card
@@ -6939,6 +7212,7 @@ groups:
         required: yes
         surface: S-GOV
         tier: core
+        kernel-op: flow.handler
         help: >
           the moment to write down, written as `<part>.<thing>.<moment>` — for
           example `step.tool.completed`, which is every time one of its tools has
@@ -6959,6 +7233,7 @@ groups:
         required: yes
         surface: S-GOV
         tier: core
+        kernel-op: store.write
         help: >
           the name of the file to write it down in — for example
           `tool-calls.jsonl`. One line each time it happens. Just a name, no
@@ -7051,6 +7326,7 @@ groups:
         needs-also: [at]
         surface: S-CTRL
         tier: core
+        kernel-op: check.count
         help: >
           how many times the moment has to have happened in one run before this
           holds — `more-than: 5` beside `at: step.run.started` holds from the
@@ -7136,6 +7412,7 @@ groups:
         needs-also: [at]
         surface: S-CTRL
         tier: core
+        kernel-op: check.count
         help: >
           how many times the moment has to have happened in one run before this
           holds — `more-than: 5` beside `at: step.run.started` holds from the
@@ -7271,6 +7548,7 @@ groups:
         required: yes
         surface: S-GOV
         tier: core
+        kernel-op: store.scope
         help: >
           how long it survives. `forever` means across conversations, which is
           the one thing that needs care: it is memory about a person.
@@ -7282,6 +7560,7 @@ groups:
         shapes: *the-answer-shapes
         surface: S-CAP
         tier: expert
+        kernel-op: shape.scalar
         help: >
           what it holds, one line per part in the shapes `accepts:` takes, so a
           change of shape is caught rather than corrupting
@@ -7297,6 +7576,7 @@ groups:
         type: duration
         surface: S-GOV
         tier: core
+        kernel-op: [store.lifetime, store.forget]
         help: >
           the old name of `kept-for:`, read the same way for one more release.
           Rename it `kept-for:`; the value is unchanged.
@@ -7304,6 +7584,7 @@ groups:
         type: moment
         surface: S-GOV
         tier: core
+        kernel-op: [store.lifetime, store.forget]
         help: >
           when to discard it; replaces `forget-after:`. Required in practice
           for anything remembered about a person.
@@ -7314,6 +7595,7 @@ groups:
         type: text
         surface: S-GOV
         tier: core
+        kernel-op: store.scope
         help: >
           keep one of these per value of this input field — `specialty`,
           `customer-id`. A run reads the one for its own value.
@@ -7329,6 +7611,7 @@ groups:
         needs-also: [comes-from]
         surface: S-CTRL
         tier: core
+        kernel-op: store.merge
         help: how each round's value joins what is already remembered; `top <n>` over a round's best (a list) ranks the items it holds, so the best few are carried round to round
       shared-with:
         # docs/98 WP-8: the team store. docs/remediation/F7 refused a blackboard
@@ -7341,6 +7624,7 @@ groups:
         choices: [this-agent, the-team]
         surface: S-EXEC
         tier: expert
+        kernel-op: store.scope
         help: >
           who may read and write this. `this-agent` is the default: only the
           agent that remembers it. `the-team` lets every teammate read it and
@@ -7350,6 +7634,7 @@ groups:
         type: list of group:when-this
         surface: S-GOV
         tier: expert
+        kernel-op: check.combine
         help: >
           what an entry has to look like to be written here, every line holding
           — `{ value: entry.status, is-one-of: [open, solved] }`. Read a part of
@@ -7387,6 +7672,7 @@ groups:
           - a teammate
         surface: S-EXEC
         tier: core
+        kernel-op: [check.origin, label.propagate]
         help: >
           sources that may never write here — tool output above all. Letting a
           tool result become remembered instruction is how a single poisoned
@@ -7411,6 +7697,7 @@ groups:
         type: yes-no
         surface: S-EXEC
         tier: core
+        kernel-op: store.pin
         help: >
           whether this is still known after the conversation is shortened. Say
           yes for anything a rule later checks — that a person approved
@@ -7426,6 +7713,7 @@ groups:
         needs-also: [survives-shortening]
         surface: S-EXEC
         tier: core
+        kernel-op: store.forget
         help: >
           what makes it stale — for example `the file changes` or `the turn
           ends`. When one of these happens the fact is forgotten and anything
@@ -7445,6 +7733,7 @@ groups:
         type: text
         surface: S-META
         tier: core
+        kernel-op: store.version
         help: >
           which version of it this workspace expects, so an upgrade that changes
           behaviour is a line somebody edited rather than something that
@@ -7568,6 +7857,7 @@ groups:
         choices: [catalogue, narrowed-new]
         surface: S-TOPO
         tier: core
+        kernel-op: [allowance.start, actor.instantiate]
         help: >
           who this agent may bring in while it runs, beyond its `team:`.
           `catalogue`: any agent of this workspace that runs (not a `base:`),
@@ -7598,6 +7888,7 @@ groups:
           gives-up-after: whoever-answers-in-time
         surface: S-TOPO
         tier: core
+        kernel-op: flow.join
         help: >
           how much of the team has to come back before this agent carries on.
           Leave it out and it waits for all of them. `everyone` waits for all of
@@ -7611,6 +7902,7 @@ groups:
         at-least: 1
         surface: S-TOPO
         tier: core
+        kernel-op: flow.join
         # `waits-for: enough-of-them` with no `enough-is:` is a barrier nobody
         # can clear, so it is refused — and the refusal quoted the first clause
         # of the help below, which read *"so nothing says with
@@ -7625,6 +7917,7 @@ groups:
         type: duration
         surface: S-GOV
         tier: core
+        kernel-op: flow.join
         # And the same sentence on the other wait: *"so nothing says with
         # `whoever-answers-in-time`"*.
         summary: how long to wait before carrying on
@@ -7637,6 +7930,7 @@ groups:
         choices: [all-at-once, one-after-another]
         surface: S-CTRL
         tier: core
+        kernel-op: flow.split
         help: >
           whether the team works at the same time or takes turns. Turns are
           slower, and are worth it only when a later member needs to read what
@@ -7646,6 +7940,7 @@ groups:
         choices: [evenly, by-share, as-needed]
         surface: S-GOV
         tier: core
+        kernel-op: allowance.pass
         help: >
           how the money and thinking room this agent is allowed get shared out
           among the team. `evenly` gives each the same. `by-share` uses the
@@ -7655,6 +7950,7 @@ groups:
         type: map of percent
         surface: S-GOV
         tier: core
+        kernel-op: allowance.pass
         help: >
           with `by-share`, how much of the budget each member gets — written as
           percentages, one line per member. Everyone under `team:` needs a line
@@ -7668,6 +7964,7 @@ groups:
           asks: ask-a-person
         surface: S-EXEC
         tier: core
+        kernel-op: flow.cancel
         help: >
           what happens when one of them cannot answer. `carry-on` says so in
           the answer and keeps the rest. `stop-the-others` gives up the whole
@@ -7678,6 +7975,7 @@ groups:
         names: [^questions, questions]
         surface: S-EXEC
         tier: core
+        kernel-op: actor.person
         # Same setting, same sentence, same `summary:` — see `limits.asks`.
         summary: which question to put to them
         help: >

@@ -3,6 +3,31 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — the kernel's operations are a file, and each field says which it is (13 November)
+
+A runtime that runs PACT one operation at a time needs to know which fields reach each of the 76
+operations of the seven primitives. That list lived in one place, the `OPS` table inside
+`scripts/pattern-coverage.py`, and said it in keyword prose (`limits, at-most, fuel,
+checks-at-most`), which a runtime can only match against field names by guessing. Nothing here
+changes what an author writes or what `pact check` accepts.
+
+- **`spec/kernel.yaml`** lists the 76 operations: for each, its primitive, what it does, and the
+  keyword that is it today. `scripts/pattern-coverage.py` reads them from there rather than
+  keeping its own copy. An operation written as syntax inside a value rather than as a field of its
+  own (`one of a, b` in a shape line, `input.x` in a binding) says where with `written-in:`.
+- **`kernel-op:` on a field of `spec/schema.yaml`** names the operations the field is:
+  `store.claim` on `action.same-request-key`, `allowance.reach` on `agent.uses`, several where a
+  field is several (`stage.does`). 295 fields carry one; descriptions, names and `because:` carry
+  none. The checker reads it into `Field::kernel_ops`, and `pattern-coverage.py --ops` lists each
+  operation's fields.
+- **`crates/pact-schema/tests/every_kernel_operation_is_written_somewhere.rs`** holds the two
+  files to each other: a `kernel-op:` naming an operation the kernel does not list fails, and so
+  does an operation that no field names and no `written-in:` places.
+- **`scripts/primitive-coverage.py` adds a keyword's operations' primitives to its own.** Its main
+  ingredient is unchanged; the "takes any part in" counts of docs/97 §6 grow where the table had
+  given a keyword fewer primitives than its operations have (`agent.accepts` is a signature, so an
+  Actor as well as a Shape).
+
 ## 2026-11 — a digest moves only when the tree does, and who answered a wait (13 November)
 
 Bud Agent Flow asked whether "a new version of PACT never moves the digest of a tree nobody
