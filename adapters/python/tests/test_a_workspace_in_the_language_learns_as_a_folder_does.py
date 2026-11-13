@@ -21,7 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from pact_adapters.checking import check_instructions  # noqa: E402
+from pact_adapters.checking import check_agent_field  # noqa: E402
 from pact_adapters.exploding import CarriesPayloads, explode  # noqa: E402
 from pact_adapters.ir import AgentSpec  # noqa: E402
 from pact_adapters.learning import Learner  # noqa: E402
@@ -48,17 +48,17 @@ def test_the_tree_this_is_about_carries_files_the_document_only_points_at(tmp_pa
 
 
 def test_a_sound_change_passes() -> None:
-    assert check_instructions(shown(STAFF), "helpdesk", SOUND, source=STAFF) == []
+    assert check_agent_field(shown(STAFF), "helpdesk", "instructions", SOUND, source=STAFF) == []
 
 
 def test_a_change_that_breaks_a_rule_is_refused_in_the_checkers_own_words() -> None:
-    refused = check_instructions(shown(STAFF), "helpdesk", BROKEN, source=STAFF)
+    refused = check_agent_field(shown(STAFF), "helpdesk", "instructions", BROKEN, source=STAFF)
     assert refused and any("nobody-declared-this" in r for r in refused), refused
 
 
 def test_the_authors_own_files_are_not_touched() -> None:
     before = {p: p.read_bytes() for p in STAFF.rglob("*") if p.is_file()}
-    check_instructions(shown(STAFF), "helpdesk", BROKEN, source=STAFF)
+    check_agent_field(shown(STAFF), "helpdesk", "instructions", BROKEN, source=STAFF)
     assert {p: p.read_bytes() for p in STAFF.rglob("*") if p.is_file()} == before
 
 
@@ -94,8 +94,8 @@ def test_a_folder_with_a_runtime_area_is_not_taken_for_one_written_in_the_langua
     (copy / ".pact" / "learning").mkdir(parents=True)
     (copy / ".pact" / "learning" / "spend.jsonl").write_text("")
     doc = shown(copy)
-    assert check_instructions(doc, "refund-desk", "Decide the refund. Be brief.", source=copy) == []
-    refused = check_instructions(doc, "refund-desk", BROKEN, source=copy)
+    assert check_agent_field(doc, "refund-desk", "instructions", "Decide the refund. Be brief.", source=copy) == []
+    refused = check_agent_field(doc, "refund-desk", "instructions", BROKEN, source=copy)
     assert refused and any("nobody-declared-this" in r for r in refused), refused
 
 
@@ -103,8 +103,8 @@ def test_a_workspace_in_several_files_is_held_the_same_way() -> None:
     # No files to carry, so this one goes through the document — and an agent
     # made from a pattern (`based on desk with …`) takes the change as its own.
     doc = shown(HELP)
-    assert check_instructions(doc, "billing-desk", "Answer billing questions, briefly.", source=HELP) == []
-    refused = check_instructions(doc, "billing-desk", BROKEN, source=HELP)
+    assert check_agent_field(doc, "billing-desk", "instructions", "Answer billing questions, briefly.", source=HELP) == []
+    refused = check_agent_field(doc, "billing-desk", "instructions", BROKEN, source=HELP)
     assert refused and any("nobody-declared-this" in r for r in refused), refused
 
 
