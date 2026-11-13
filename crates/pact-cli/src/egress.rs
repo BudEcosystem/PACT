@@ -963,9 +963,17 @@ fn grants(roles: &[&str]) -> String {
 /// offers a fix in another one — R56, in a document the author is already being
 /// told to put a workspace around. Asked of the schema rather than by comparing
 /// `kind` to a literal, so a second kind of document that can draw a boundary is
-/// held to it the day it declares the field. An absent `allow-egress:` in a
-/// document that COULD have one still means nothing may leave: that is the
-/// air-gapped default (D17), and it is the answer this has always given.
+/// held to it the day it declares the field.
+///
+/// # A workspace that writes no boundary is not held to one
+///
+/// An absent `allow-egress:` means this workspace has drawn no boundary, the
+/// same answer `nothing_reaches_outside_the_box` and
+/// `looking_up_by_meaning_needs_an_embedder` in `main.rs` give: a default that
+/// refused every hosted model refused trees that never opted in, and an author
+/// who wants the air-gapped desk of D17 says so with `allow-egress: []`, which
+/// is held exactly as before. Constraining is a declaration; leaving it out is
+/// not one.
 pub fn refusals(
     root: &Node,
     kind: &str,
@@ -979,6 +987,9 @@ pub fn refusals(
         .group(kind)
         .is_some_and(|g| g.fields.iter().any(|f| f.name == "allow-egress"))
     {
+        return;
+    }
+    if root.get("allow-egress").is_none() {
         return;
     }
     let written = listed(root);

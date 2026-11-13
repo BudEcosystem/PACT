@@ -1085,7 +1085,7 @@ _ON_CHANGE = {
 
 #: The action lines a decision about a call rests on (96 §E).
 _DECIDING_ARGUMENTS = ("inspects", "same-request-key", "bind")
-_DECIDING_ACTIONS = ("spends-money", "needs-a-person")
+_DECIDING_ACTIONS = ("spends-money", "moves-hardware", "needs-a-person")
 
 
 def when_it_changed(document: Mapping[str, Any], server: str, live: Any, instructions: str = "") -> Change:
