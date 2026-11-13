@@ -345,3 +345,54 @@ fn it_is_printed_back_as_it_was_written() {
     );
     assert!(text.contains("    where = decide with note: item\n"), "{text}");
 }
+
+// A decision is one label, from one person. A question that needs several
+// answers can come back with several labels, and nothing says which stands;
+// `steps.<stage>.answered-by` on a `decide` is one name. Ruled with Bud Agent
+// Flow, none of whose 184 trees writes it, so it is refused before one does.
+
+const ASKED_OF: &str = "  asked-of: [clerks]\n  answer-within: 1h\n\nquestion may-we-close\n";
+
+#[test]
+fn a_decision_put_to_everyone_at_once_is_refused() {
+    let text = refused(
+        "everyone",
+        &[(
+            ASKED_OF,
+            "  asked-of: [clerks]\n  answered-by: everyone\n  answer-within: 1h\n\nquestion may-we-close\n",
+        )],
+        "loader/a-decision-asked-of-several",
+    );
+    assert!(
+        text.contains(
+            "'where' is decided by the question 'which-shelf', which is `answered-by: everyone`. \
+             A decision is one label from one person."
+        ),
+        "{text}"
+    );
+    assert!(text.contains("Take `answered-by:` off 'which-shelf'"), "{text}");
+}
+
+#[test]
+fn a_decision_put_to_enough_of_them_is_refused_too() {
+    refused(
+        "enough",
+        &[(
+            ASKED_OF,
+            "  asked-of: [clerks]\n  answered-by: enough-of-them\n  enough-is: 2\n  answer-within: 1h\n\nquestion may-we-close\n",
+        )],
+        "loader/a-decision-asked-of-several",
+    );
+}
+
+#[test]
+fn a_decision_put_to_whoever_answers_first_loads() {
+    let (ok, text) = check(
+        "anyone",
+        &[(
+            ASKED_OF,
+            "  asked-of: [clerks]\n  answered-by: anyone\n  answer-within: 1h\n\nquestion may-we-close\n",
+        )],
+    );
+    assert!(ok, "{text}");
+}

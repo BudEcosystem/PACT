@@ -70,6 +70,25 @@ doubts."*
 author's own `when-it-runs-out:` action, and each reported distinctly so
 "ran out of budget" is never confused with "finished".
 
+| `when-it-runs-out:` | What the run does at the ceiling | What it hands back |
+|---|---|---|
+| `stop-and-say-so` | makes no further request | a sentence naming the setting and both figures |
+| `answer-with-what-it-has` | makes one closing request with no tools offered, which tells the model a limit was reached and which of its calls were not made | the model's answer, reported as having reached the ceiling |
+| `ask-a-person` | waits, and asks whether to keep going | after a yes, the same budget again from where it is, and the model is told which of its calls were not made; after a no, a sentence naming the ceiling and saying a person declined |
+
+A run that asked and was told no ends as `out-of-budget`, and says so:
+*"Stopped before finishing: this run reached the limit you set with
+`tool-calls-at-most` (2 of 2 tool calls). A person was asked and said not to
+keep going."* If the wait ran out instead, it says nobody answered in time.
+
+The closing request says why the tools have gone. Taking them away is not a
+message: a live model asked for five lookups, allowed two, and sent one more
+request with no word of explanation wrote a third tool result itself, for a
+lookup that was never made, and that was the run's answer. Told *"This run has
+reached its limit … These calls you asked for were NOT made … Answer now, from
+the results you already have"*, the same model answered with the two it had and
+named the three it did not get to.
+
 **Exactly-once side effects.** `same-request-key:` means a refund asked for twice
 with the same order number happens once. Eve's documented answer to the same
 problem is *"make non-idempotent side effects like charges or emails idempotent,

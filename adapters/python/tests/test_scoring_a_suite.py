@@ -124,7 +124,9 @@ class _Runtime:
             # so, and answering in that shape is what makes this a stand-in for a
             # grader rather than a second decision-maker.
             return _text("PASS\nthe reason is one sentence a customer could read")
-        if "[result of payments]" not in said:
+        # A result is a `tool` message answering the call the stand-in made:
+        # the transport sends a model its own calls as calls.
+        if not any(m.get("role") == "tool" for m in messages):
             # One `payments` call per run and no more. The worked example's own
             # `interceptors/stop-runaway-refunds.yaml` ends any run that calls
             # that tool twice — it counts calls to the tool, not refunds — so a

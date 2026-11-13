@@ -16,6 +16,9 @@ reaches a network.
     PACT_LIVE_BASE_URL=https://api.openai.com/v1 PACT_LIVE_MODEL=gpt-4o-mini \\
     PACT_LIVE_API_KEY=... pytest tests/test_the_language_runs_on_a_live_model.py -s
 
+A model that reasons before it answers needs room for both; add
+`PACT_LIVE_MAX_TOKENS=4000` for one.
+
 Tools are the test's own functions — nothing here moves money — and every
 model in the run is the live one: the agent, the agents it wakes, the judge.
 Assertions are about what the HARNESS guarantees whatever the model says (no
@@ -50,6 +53,10 @@ from trees import shown, write  # noqa: E402
 BASE_URL = os.environ.get("PACT_LIVE_BASE_URL", "")
 MODEL = os.environ.get("PACT_LIVE_MODEL", "")
 API_KEY = os.environ.get("PACT_LIVE_API_KEY", "")
+#: The most a reply may run to. 400 is plenty for a model that only writes its
+#: answer. A model that reasons first spends this on its reasoning too, and at
+#: 400 has nothing left to answer with: give it `PACT_LIVE_MAX_TOKENS=4000`.
+MAX_TOKENS = int(os.environ.get("PACT_LIVE_MAX_TOKENS", "400"))
 REPO = Path(__file__).resolve().parents[3]
 
 pytestmark = pytest.mark.skipif(
@@ -66,7 +73,7 @@ class Live(OllamaTransport):
     log: list[tuple[str, list[str]]] = []
 
     def __init__(self, who: str = "") -> None:
-        super().__init__(MODEL, base_url=BASE_URL, api_key=API_KEY, timeout=120.0, max_tokens=400)
+        super().__init__(MODEL, base_url=BASE_URL, api_key=API_KEY, timeout=120.0, max_tokens=MAX_TOKENS)
         self.who = who
         self.told: list[str] = []
         self.offered: list[str] = []
@@ -105,6 +112,89 @@ def test_the_smallest_file_there_is_answers() -> None:
     print("\n[hello]", out.output)
     assert out.halted == "final", said(out)
     assert out.output.strip(), "the model said nothing"
+
+
+# ── a limit runs out: answer with what it has ────────────────────────────────
+
+
+def test_out_of_lookups_it_answers_from_what_it_has_and_makes_nothing_up() -> None:
+    """Five lookups asked for, two allowed, `answer-with-what-it-has`.
+
+    The closing request offers no tools. Before it also SAID a limit had been
+    reached, this model answered it with `[result of ledger] water: entry
+    found` — a tool result it wrote itself, for a lookup never made — five
+    runs of five. Told which calls were not made, none of five.
+    """
+    doc = shown(REPO / "tests/conformance/trees/metered-desk")
+    spec = AgentSpec.from_document(doc, "answers")
+    looked: list[str] = []
+
+    def ledger(args: dict[str, Any]) -> str:
+        looked.append(str(args.get("entry")))
+        return f"{args.get('entry')}: entry found"
+
+    live = Live("answers")
+    out = asyncio.run(
+        run(spec, live, "Look up these five entries in the ledger and tell me which exist: "
+            "rent, gas, water, phone, tax.", {"ledger": ledger})
+    )
+    print("\n[out of lookups]", looked, "->", out.output)
+    # What the harness guarantees, whatever the model says.
+    assert len(looked) == 2, f"the ceiling is two lookups, and {len(looked)} were made"
+    assert out.halted == "tool-call-limit", said(out)
+    assert live.offers[-1] == [], "the closing request offered a tool"
+    assert "This run has reached its limit, `tool-calls-at-most` (2 of 2 tool calls)" in live.told[-1]
+    # What the model was expected to do with being told.
+    assert "[result of" not in out.output, f"the model wrote a tool result itself: {out.output!r}"
+    never = [e for e in ("rent", "gas", "water", "phone", "tax") if e not in looked]
+    made_up = [e for e in never if f"{e}: entry found" in out.output]
+    assert not made_up, f"the model reported lookups that were never made: {made_up}"
+
+
+def _ledger(looked: list[str]):
+    def ledger(args: dict[str, Any]) -> str:
+        looked.append(str(args.get("entry")))
+        return f"{args.get('entry')}: entry found"
+
+    return ledger
+
+
+FIVE = "Look up these five entries in the ledger and tell me which exist: rent, gas, water, phone, tax."
+
+
+def test_a_model_shown_its_own_calls_does_not_make_them_again() -> None:
+    """Five lookups, three steps allowed. While a turn that called tools was
+    sent as `.` and its results as lines of the user's, this model made the
+    same five lookups in every step — fifteen — and ran out of steps."""
+    doc = shown(REPO / "tests/conformance/trees/metered-desk")
+    looked: list[str] = []
+    out = asyncio.run(run(AgentSpec.from_document(doc, "paced"), Live("paced"), FIVE, {"ledger": _ledger(looked)}))
+    print("\n[its own calls]", looked, "->", out.halted, out.output)
+    assert sorted(looked) == sorted(set(looked)), f"the model repeated a lookup: {looked}"
+    assert out.halted == "final", said(out)
+
+
+def test_after_a_yes_it_makes_the_calls_that_were_not_made_and_repeats_none() -> None:
+    """Five asked for, two allowed, `ask-a-person`, and the person says yes."""
+    doc = shown(REPO / "tests/conformance/trees/metered-desk")
+    spec = AgentSpec.from_document(doc, "asks")
+    looked: list[str] = []
+    out = asyncio.run(run(spec, Live("asks"), FIVE, {"ledger": _ledger(looked)}))
+    # What the harness guarantees.
+    assert out.halted == "suspended" and len(looked) == 2, said(out)
+    parked = out.suspension
+    live = Live("asks")
+    out = asyncio.run(
+        run(spec, live, FIVE, {"ledger": _ledger(looked)}, resume=parked,
+            answer=parked.answer(**{a.name: "yes" for a in parked.asks}), now=1.0)
+    )
+    print("\n[after a yes]", looked, "->", out.halted)
+    assert len(looked) <= 4, f"a yes grants two more lookups, and {len(looked) - 2} were made"
+    assert "A person was asked and said to keep going." in live.told[0]
+    assert all("said to keep going" not in later for later in live.told[1:])
+    # What the model was expected to do with being told.
+    assert sorted(looked) == sorted(set(looked)), f"the model repeated a lookup: {looked}"
+    assert len(looked) == 4, f"the model did not go on with the lookups it was owed: {looked}"
 
 
 # ── reactions: asked first, a person, once, told after ───────────────────────
@@ -205,8 +295,15 @@ def test_a_live_judge_reads_who_is_upset_and_only_then_is_the_agent_reminded(wro
     reminded = any("The customer is upset." in told for told in lead.told)
     assert reminded is upset
     if upset:
-        assert re.search(r"sorry|apolog", out.output, re.I), (
-            f"the agent was reminded to apologise, and did not: {out.output!r}"
+        # Everything the agent said in the run, not its last message alone. The
+        # reminder is "Apologise once, plainly, before anything else", and a
+        # model that is shown its own earlier turn does exactly that: it
+        # apologises in its first words, beside the lookup, and not a second
+        # time in the answer. (While its own turn reached it as text it could
+        # not recognise, it apologised twice, and this read only the second.)
+        spoken = " ".join([*(step.text for step in out.steps), out.output])
+        assert re.search(r"sorry|apolog", spoken, re.I), (
+            f"the agent was reminded to apologise, and did not: {spoken!r}"
         )
 
 

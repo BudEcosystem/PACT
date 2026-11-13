@@ -1088,6 +1088,8 @@ def test_the_conversation_on_the_result_is_the_dialect_the_harness_writes(
             "role": "assistant",
             "content": "looking the ticket up",
             "tool_calls": ["zendesk"],
+            # What the call was given crosses too, beside the name it pairs on.
+            "calls": [{"name": "zendesk", "args": {"ticket-id": "T-1", "action": "read-ticket"}}],
         },
         {"role": "tool", "name": "zendesk", "content": LOOKED_UP},
         {"role": "assistant", "content": ANSWERED},

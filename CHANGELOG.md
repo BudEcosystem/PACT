@@ -24,6 +24,146 @@ checked there and here is the same document.
   `\{{`; under `template-language: jinja` the text goes in raw blocks.
 - `check_document` on the result is the check.
 
+## 2026-11 — a digest moves only when the tree does, and who answered a wait (13 November)
+
+Bud Agent Flow asked whether "a new version of PACT never moves the digest of a tree nobody
+edited" was a rule PACT held, with a check. It was true and nothing checked it. Three smaller
+things were settled in the same exchange. Nothing here changes a field of the schema.
+
+- **A tree's digests are pinned across versions of PACT.** `tests/conformance/digests.json` holds,
+  for ten trees in this repository, the tree's `digest` and each workflow's `doc-digest` and
+  `contract-digest` as `pact discover` prints them. A test compares. A change to PACT that moves
+  one without the tree being edited fails, and has to change that file in the same commit and say
+  here which trees move and why. A runtime that pins PACT holds the same file with one
+  `pact discover` per tree. (Checked against binaries built on 18 October and 12 November: the
+  trees unedited since then have the digests they had.)
+- **On a stage that waits for people, `steps.<stage>.answered-by` is a list**, in the order they
+  answered, also when one person did: a question can need several answers, and a binding's shape
+  must not depend on how many people happened to answer. On a `decide` it stays one name. The
+  reference runtime passed through whatever a host put there. Two new cases on a new workflow,
+  `sign-off`: 28 workflow cases, 52 cases of replayed runs.
+- **`loader/a-decision-asked-of-several`** (an error): a `decide` whose person rung asks a
+  question that is `answered-by: everyone` or `enough-of-them`. A decision is one label from one
+  person, and nothing says which label stands when several pick different ones. None of Bud Agent
+  Flow's 184 trees writes it; it is refused before one does.
+- **A stage that waits shows the person what the question says to show.** The reference showed
+  them nothing: it read the stage's `bind:`, which a waiting stage cannot write, and not the
+  question's `shows:`, which a `decide` asking the same question did read. Found by the first
+  shared case with a waiting stage in it.
+- Ruled, with no case yet: a workflow run a port ended (`if-still-running: stop`,
+  `cancel-previous`) ends as `cancelled`. `stopped` stays "could not go on, and says why".
+
+## 2026-11 — a served model is shown its own calls, and is told what a yes changed (13 November)
+
+Running the limits cases on live models (gpt-4o-mini and gpt-5-nano) found three things about
+PACT's own transport for a served model, and one more thing a model has to be told. Bud Agent Flow
+measured the last on its engine, six wordings, ten runs each. Nothing here changes a field of the
+schema.
+
+### What a runtime must match
+
+- **After a person says to keep going, the next request says so, once.** Last in its system text:
+  the ceiling the run had reached and what it is now, which calls the model asked for were not
+  made, and not to repeat a call that already has a result. No other request carries it. The
+  wording is `Reached.raised` (`pact_adapters/limits.py`); a case records it as `after-a-yes` in
+  `expect`, one text for each yes.
+- Why the calls are named. Five calls asked for at once, a ceiling of two, then a yes, on
+  gpt-5-nano: told nothing, or told only that the limit was raised (with or without how much was
+  left, once or on every request), a model gave up and blamed the limit a person had just raised,
+  or repeated calls it already had, in one or two runs of ten. Told which calls were not made, ten
+  of ten made exactly those.
+- One new case, `a-call-not-made-is-named-to-the-model-after-a-yes`: 11 limits cases, 50 shared
+  cases of replayed runs in all.
+- A call is written to a model in the form the model made it. In a case it is the tool's name, a
+  space, and its arguments as JSON with sorted keys.
+
+### What was wrong in PACT's transport for a served model
+
+- **A model was not shown its own calls.** A turn that called tools was sent as `.`, and each
+  result as a line of the user's (`[result of ledger] rent: entry found`). Asked for five lookups
+  with three steps allowed, gpt-4o-mini made the same five in every step, fifteen in all, and ran
+  out of steps. Sent `tool_calls` and `tool` messages, it makes five and answers. The conversation
+  record now keeps what each call was given (`calls:` beside `tool_calls:`), through a tidying step
+  and across the Pydantic AI message form, which used to drop it and say so.
+- **A current model could not be reached at all.** gpt-5-nano answers 400 to `max_tokens` and to
+  any temperature but its own, and every request carried both. The transport now reads the
+  server's refusal and asks again: the same ceiling as `max_completion_tokens`, and no temperature
+  when the one refused was the transport's own default. A `temperature:` the author wrote is never
+  dropped.
+
+### Still owed
+
+- A closing answer that does not fit `answers-with:` (ruled, not built in the reference).
+- Whether a workflow should be able to branch on "the agent this stage called ran out and
+  answered with what it had". Today the stage ends `answered` and the overrun is recorded; there
+  is no word a later stage can read.
+- A shared case for claims.
+
+## 2026-11 — what a run does when a limit runs out, as shared cases (13 November)
+
+No shared case covered limits, so two runtimes could differ there unseen. Writing the first ten
+and running them on a live model found five things PACT's own harness got wrong. Nothing here
+changes a field of the schema.
+
+### What a runtime must match
+
+- **A ceiling is reached when the count is at the figure written**, and the first one reached is
+  the one that acts; `halted` is its word (`tool-call-limit`, `step-limit`). With
+  `tool-calls-at-most: 2` both calls run. A third asked for in the same reply as the second is not
+  run.
+- **`answer-with-what-it-has`** makes one closing request with no tools offered, and its text is
+  the answer. The run reports the ceiling; it is not `final`.
+- **The closing request says why.** Last in its system text: which ceiling was reached, which
+  calls the model asked for were not made, and to answer from what it already has. The wording is
+  `Reached.closing` (`pact_adapters/limits.py`), and a case records it as `closing` in `expect`.
+- **`stop-and-say-so`** makes no further request and ends with a sentence naming the ceiling.
+- **`ask-a-person`** parks. A yes grants the same budget again, of every ceiling, from where the
+  run is; that budget can run out and ask again. A no ends the run (`out-of-budget`), and the run
+  says which ceiling and that a person declined: *"Stopped before finishing: this run reached the
+  limit you set with `tool-calls-at-most` (2 of 2 tool calls). A person was asked and said not to
+  keep going."* The wording is one function, `Reached.declined` (`pact_adapters/limits.py`), so two
+  runtimes do not each write it. A wait that ran out says nobody answered in time instead: that is
+  not a person saying no, and the sentence does not say one did.
+- **The ceiling named is the one that stopped the run.** A run can be at two together: with
+  `steps-at-most: 2` and `tool-calls-at-most: 2`, a second step that asks for two calls runs one
+  and is refused the other. It is then at two of two of each, and it was the calls that stopped it.
+- **`people: ["nobody"]`** is new in a case: no answer is given and the time the question allows
+  passes.
+- Ten cases: `tests/conformance/limits.json`, on `tests/conformance/trees/metered-desk`.
+
+### What was wrong in PACT's harness
+
+- **"Keep going" did not let a run keep going.** A yes raised the step ceiling and no other, so a
+  run that had reached `tool-calls-at-most` (or tokens, money, time) parked again at once with the
+  same question. `Limits.kept_going` existed to grant all of them and was called by nothing in the
+  harness.
+- **A granted budget was lost at the next park.** It is now carried in the park
+  (`Suspension.budget`, `budget` in its JSON), so a run told to keep going and then parked for an
+  approval comes back under the ceilings it had been raised to.
+- **The closing request was told less than any other**: the bare `instructions:`, without the
+  agent's procedures, the shape of its answer, or what a reaction had reminded it of. It is now
+  told what every request is told, less a stage's own line.
+- **The closing request did not say a limit had been reached**, and a live model made the rest up.
+  Asked for five lookups and allowed two, gpt-4o-mini answered the closing request with
+  `[result of ledger] water: entry found`: a tool result it wrote itself, for a lookup never made,
+  handed back as the run's answer. Five runs of five. Told what had happened, none of five, and it
+  named the three lookups it had not got to. No scripted test could have found this.
+- **A run a person refused more budget said nothing about why.** Its answer was the model's last
+  words, which is an empty string when its last step was a call. Bud Agent Flow's engine named the
+  ceiling and the refusal, and that is now the rule above. The park records which ceiling stopped
+  the run (`Suspension.reached`), because working it out again afterwards can name another: a run
+  at `steps-at-most` and `tool-calls-at-most` together was stopped by one of them.
+
+### Still owed
+
+- **A closing answer that does not fit `answers-with:`.** Ruled with Bud Agent Flow: it is asked
+  for at most twice in all (`checks-at-most:`'s own default), no tool offered, and then the run
+  stops naming the ceiling. PACT's harness cannot hold this yet: it never checks an agent's answer
+  against its shape, so it makes one closing request and takes what comes.
+- ~~The transport for a served model does not show the model its own calls.~~ Done in the entry
+  above.
+- A shared case for claims.
+
 ## 2026-11 — `pact about`: the binary says which commit it was built from (13 November)
 
 A runtime pins PACT by commit and then runs whatever `pact` binary it finds. The binary could not

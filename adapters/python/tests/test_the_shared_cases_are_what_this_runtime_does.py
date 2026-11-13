@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from conformance_kit import CASES, REPO, replay  # noqa: E402
 
-FILES = ("reactions.json", "workflows.json")
+FILES = ("reactions.json", "workflows.json", "limits.json")
 
 
 def _cases() -> list[tuple[str, dict[str, Any]]]:
@@ -113,6 +113,15 @@ def test_the_cases_say_the_things_they_are_there_to_say() -> None:
     asked = by_name["the-agent-is-not-sure-so-a-person-decides-and-is-shown-the-message"]
     assert asked["shown"] == [{"question": "which-desk", "shown": {"input.message": "The app crashes."}}]
 
+    one = by_name["who-answered-a-wait-is-a-list-of-one-when-one-person-did"]
+    # On a stage that waits for people, who answered is a list, also of one;
+    # and the person is shown what the question says to show.
+    assert one["answer"] == {"close": True, "by": ["dana"]}
+    assert one["shown"] == [
+        {"question": "may-we-close", "shown": {"input.report": "Seat 14C will not recline."}}
+    ]
+    both = by_name["who-answered-a-wait-is-everyone-who-did-in-the-order-they-answered"]
+    assert both["answer"]["by"] == ["lee", "dana"], "in the order they answered, not sorted"
     found = by_name["a-deciding-agent-is-given-what-an-earlier-stage-found-and-the-bound-name-wins"]
     # `kind` is triage's `engine`, not the `cabin` the report came in with; the
     # `secret` the assigner does not accept is not given to it.
@@ -163,6 +172,67 @@ def test_the_cases_say_the_things_they_are_there_to_say() -> None:
     assert passed["answer"] == {"rounds": 2, "ended": "passed", "outcome": "answered"}
     ran_out = by_name["a-loop-that-runs-out-says-so-and-ends-in-too-many-times"]
     assert ran_out["answer"] == {"rounds": 3, "ended": "ran-out", "outcome": "too-many-times"}
+
+    closes = by_name["out-of-tool-calls-it-answers-with-what-it-has-in-one-request-with-no-tools"]
+    # Both calls ran; the closing request was offered nothing; the run says
+    # which ceiling ended it, and is not `final`.
+    assert len(closes["executed"]) == 2 and closes["offered"][-1] == []
+    assert closes["halted"] == "tool-call-limit" and closes["output"].startswith("Rent and gas")
+    # And that request says why: which ceiling, and to answer from what it has.
+    assert closes["closing"].startswith(
+        "This run has reached its limit, `tool-calls-at-most` (2 of 2 tool calls)."
+    )
+    assert "NOT made" not in closes["closing"], "every call asked for was made"
+    stops = by_name["out-of-tool-calls-it-stops-and-says-which-ceiling"]
+    assert stops["halted"] == "tool-call-limit" and "`tool-calls-at-most` (2 of 2" in stops["output"]
+    assert all(offer for offer in stops["offered"]), "no closing request is made"
+    assert stops["closing"] == ""
+    more = by_name["out-of-tool-calls-it-asks-a-person-and-a-yes-gives-it-the-same-budget-again"]
+    assert more["halted"] == "final" and len(more["executed"]) == 3 and len(more["parks"]) == 1
+    # One request is told a person said to keep going: the first after the yes.
+    assert more["after-a-yes"] == [
+        "A person was asked and said to keep going. The limit this run had reached, "
+        "`tool-calls-at-most` (2 of 2 tool calls), is now 4 tool calls.\n"
+        "Do not repeat a call that already has a result."
+    ]
+    named = by_name["a-call-not-made-is-named-to-the-model-after-a-yes"]
+    # The second reply asked for gas and water; water was not made. After the
+    # yes the model is told so, and makes it.
+    assert [e[1]["entry"] for e in named["executed"]] == ["rent", "gas", "water"]
+    assert len(named["after-a-yes"]) == 1 and (
+        'These calls you asked for were not made and can be made now: '
+        'ledger {"action": "look", "entry": "water"}.' in named["after-a-yes"][0]
+    )
+    assert named["halted"] == "final"
+    refused = by_name["out-of-tool-calls-it-asks-a-person-and-a-no-ends-the-run"]
+    assert refused["halted"] == "out-of-budget" and len(refused["executed"]) == 2
+    # It says which ceiling and that somebody said no. Not the model's last
+    # words (there were none), and not "Waiting for a person".
+    assert refused["output"] == (
+        "Stopped before finishing: this run reached the limit you set with "
+        "`tool-calls-at-most` (2 of 2 tool calls). A person was asked and said not to keep going."
+    )
+    silence = by_name["nobody-answers-the-budget-question-in-time"]
+    # The same ending, and no person is said to have refused.
+    assert silence["halted"] == "out-of-budget" and len(silence["executed"]) == 2
+    assert silence["output"].endswith("A person was asked and nobody answered in time.")
+    assert "said not to" not in silence["output"]
+    both = by_name["two-ceilings-reached-together-and-a-no-names-the-one-that-stopped-the-run"]
+    # At two of two steps and two of two lookups; the lookups stopped it.
+    assert [e[1]["entry"] for e in both["executed"]] == ["rent", "gas"]
+    assert "`tool-calls-at-most` (2 of 2 tool calls)" in both["output"]
+    assert "steps-at-most" not in both["output"]
+    together = by_name["a-third-call-asked-for-in-the-same-reply-as-the-second"]
+    assert [e[1]["entry"] for e in together["executed"]] == ["rent", "gas"], "the third never ran"
+    # The model is told the third was not made, so it does not answer as if it had been.
+    assert (
+        'were NOT made and have no result: ledger {"action": "look", "entry": "water"}.'
+        in together["closing"]
+    )
+    paced = by_name["out-of-steps-it-answers-with-what-it-has"]
+    assert paced["halted"] == "step-limit" and paced["offered"][-1] == []
+    plain = by_name["an-answer-before-any-ceiling-is-an-ordinary-answer"]
+    assert plain["halted"] == "final"
 
     parked = by_name["nobody-is-there-to-ask-so-the-run-parks-at-the-decision"]
     assert parked["halted"] == "parked" and parked["parked-at"] == "where" and parked["question"] == "which-desk"

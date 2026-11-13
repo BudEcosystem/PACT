@@ -233,6 +233,19 @@ Afterwards the step says who decided: `where.label`, `where.decided-by`
 the person). Every step also has `.outcome`, the word it ended in, and a
 `repeat` has `.rounds` and `.ended` (`passed` or `ran-out`).
 
+A decision is one person's. A question that needs several answers
+(`answered-by: everyone`) cannot decide a branch, because nothing says which
+label stands when people pick different ones; `pact check` refuses it
+(`loader/a-decision-asked-of-several`). Ask them in a step of its own instead:
+
+```text
+  approve = ask may-we-close
+  reply = answer with close: approve.close, by: approve.answered-by
+```
+
+On a step that asks people, `.answered-by` is a list, in the order they
+answered, also when one person did.
+
 ## Things at once
 
 ```text
