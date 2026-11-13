@@ -1,0 +1,5 @@
+description: Money moving — refunds, invoices, credit, tax.
+# `tags` is exact: the billing tool is about to be used. `the-agent` is a guess:
+# the agent is given a `working-on` tool and says so itself, which is how the
+# finance desk hears about a tax question no tool was called for.
+noticed-by: [tags, the-agent]

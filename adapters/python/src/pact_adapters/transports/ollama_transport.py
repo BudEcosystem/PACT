@@ -43,8 +43,16 @@ class OllamaTransport:
         timeout: float = 180.0,
         workspace: str = "",
         _script: Script | None = None,   # accepted for interface symmetry; unused
+        api_key: str = "",
     ) -> None:
         self.model = model
+        #: What the server wants as a key, when it wants one. A model served on
+        #: this machine wants none and none is sent. A hosted server that speaks
+        #: the same `/chat/completions` does, and without this the one transport
+        #: here that reaches a real model could reach only a local one — which
+        #: is why nothing in this package had ever been run against a model its
+        #: authors do not host.
+        self._headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         #: The workspace root, so a row this machine added to its own
         #: `models/catalog.yaml` is priced and sized. This is the transport that
         #: case is FOR: a locally-served model the distribution has never heard
@@ -55,6 +63,11 @@ class OllamaTransport:
         self.name = f"ollama/{model}"
         self._url = base_url.rstrip("/") + "/chat/completions"
         self._temperature = temperature
+        #: What this server has taught this transport about itself
+        #: (`_refitted`): the name it takes a ceiling on the answer under, and
+        #: whether it takes this transport's default temperature at all.
+        self._max_tokens_field = "max_tokens"
+        self._sends_temperature = True
         # On CPU, generation time dominates: an uncapped model writes 300 tokens
         # where 40 would answer, at roughly five tokens a second. Capping is also
         # honest for this task — the contract asks for a decision, a reason and
@@ -78,6 +91,52 @@ class OllamaTransport:
         #: fix an author needs for the money half is a `cost:` block on the row in
         #: their workspace's own `models/catalog.yaml`, not a branch here.
         self.prices_money = can_price(self.model, self.workspace)
+
+    def _refitted(
+        self, payload: dict[str, Any], resp: "httpx.Response", ours: bool | None = None
+    ) -> "dict[str, Any] | None":
+        """The request again, without what this server has just refused; or
+        `None` when it refused nothing this can put right.
+
+        Two refusals, both read off the server's own answer and neither off a
+        list of model names, so a model nobody here has heard of is handled
+        the day it is served:
+
+        * `max_tokens` refused in favour of `max_completion_tokens`. The same
+          ceiling under the name this model takes. The figure is sent, not
+          dropped.
+        * a `temperature` this model does not take. Dropped ONLY when it is
+          this transport's own default: nobody wrote it, so nothing an author
+          asked for is lost. A `temperature:` the author wrote is never
+          dropped; the refusal stands and the run fails saying so, because a
+          setting quietly not applied is the failure this package exists to
+          name.
+
+        `ours` says the temperature in `payload` is this transport's own
+        choice; unsaid, it is whenever the author's `settings:` wrote none.
+
+        What was learned is kept, so the next request is right the first time.
+        A whole class of current models answered 400 to every request before
+        this, which meant the one transport here that reaches a real model
+        could not reach them at all.
+        """
+        if resp.status_code != 400:
+            return None
+        try:
+            said = str(((resp.json() or {}).get("error") or {}).get("message") or "")
+        except ValueError:
+            return None
+        if "max_tokens" in payload and "max_completion_tokens" in said:
+            self._max_tokens_field = "max_completion_tokens"
+            fitted = dict(payload)
+            fitted["max_completion_tokens"] = fitted.pop("max_tokens")
+            return fitted
+        if ours is None:
+            ours = "temperature" not in getattr(self, "_settings", {})
+        if "temperature" in payload and "temperature" in said and ours:
+            self._sends_temperature = False
+            return {k: v for k, v in payload.items() if k != "temperature"}
+        return None
 
     def usage(self) -> tuple[int, "float | None"]:
         """What the last call used, as the server reported it, priced here.
@@ -131,25 +190,31 @@ class OllamaTransport:
         One blocking request, to a model this machine already serves — no
         network leaves the box, so this still holds air-gapped (D17).
         """
-        resp = httpx.post(
-            self._url,
-            json={
-                "model": model,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": (
-                            "Summarise the conversation below. Keep decisions, "
-                            "figures and anything a person approved. Be brief."
-                        ),
-                    },
-                    {"role": "user", "content": text},
-                ],
-                "temperature": 0.0,
-                "stream": False,
-            },
-            timeout=self._timeout,
-        )
+        payload: dict[str, Any] = {
+            "model": model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "Summarise the conversation below. Keep decisions, "
+                        "figures and anything a person approved. Be brief."
+                    ),
+                },
+                {"role": "user", "content": text},
+            ],
+            "temperature": 0.0,
+            "stream": False,
+        }
+        resp = httpx.post(self._url, headers=self._headers, json=payload, timeout=self._timeout)
+        # The summarising model may be one that takes no temperature but its
+        # own. That figure is this method's, so it is dropped and asked again.
+        # What is learned here is about the SUMMARISING model, so it is not
+        # kept: the bound model may take a temperature perfectly well.
+        sends = self._sends_temperature
+        again = self._refitted(payload, resp, ours=True)
+        self._sends_temperature = sends
+        if again is not None:
+            resp = httpx.post(self._url, headers=self._headers, json=again, timeout=self._timeout)
         resp.raise_for_status()
         answered = resp.json()
         # What the summarising call cost, priced on the SUMMARISING model's row
@@ -211,24 +276,13 @@ class OllamaTransport:
         messages: list[dict[str, Any]] = []
         if system:
             messages.append({"role": "system", "content": system})
-        for m in history:
-            if m["role"] == "user":
-                messages.append({"role": "user", "content": m["content"]})
-            elif m["role"] == "assistant":
-                messages.append({"role": "assistant", "content": m["content"] or "."})
-            elif m["role"] == "tool":
-                messages.append(
-                    {"role": "user", "content": f"[result of {m['name']}] {m['content']}"}
-                )
+        messages.extend(_in_the_servers_words(history))
 
-        payload: dict[str, Any] = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": self._temperature,
-            "stream": False,
-        }
+        payload: dict[str, Any] = {"model": self.model, "messages": messages, "stream": False}
+        if self._sends_temperature:
+            payload["temperature"] = self._temperature
         if self._max_tokens is not None:
-            payload["max_tokens"] = self._max_tokens
+            payload[self._max_tokens_field] = self._max_tokens
         # The author's `settings:` block, on the transport an air-gapped install
         # actually runs. Applied AFTER the two defaults above so a written
         # `temperature:` or `max-tokens:` wins over the constructor's — the
@@ -249,7 +303,8 @@ class OllamaTransport:
             # precisely when it has stopped early.
             if key == "tool-choice" and not can_choose(value, offered):
                 continue
-            payload[_WIRE[key]] = _translated(key, value)
+            wire = _WIRE[key]
+            payload[self._max_tokens_field if wire == "max_tokens" else wire] = _translated(key, value)
         if tools:
             payload["tools"] = [
                 {
@@ -257,7 +312,19 @@ class OllamaTransport:
                     "function": {
                         "name": t["name"],
                         "description": t.get("description", ""),
-                        "parameters": {"type": "object", "properties": {}},
+                        # The arguments the author wrote under `takes:`, each
+                        # with its shape as the description. This used to send
+                        # `"properties": {}` — a tool with no arguments — so a
+                        # model had to guess that `billing` wants `order` and
+                        # `amount`. A scripted model never guesses; the first
+                        # live run did, and guessed wrong.
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                str(a): _argument(str(s))
+                                for a, s in (t.get("parameters") or {}).items()
+                            },
+                        },
                     },
                 }
                 for t in tools
@@ -274,7 +341,14 @@ class OllamaTransport:
 
         started = time.perf_counter()
         async with httpx.AsyncClient(timeout=self._timeout) as client:
-            resp = await client.post(self._url, json=payload)
+            resp = await client.post(self._url, json=payload, headers=self._headers)
+            # At most twice: the two things a server is known to refuse.
+            for _ in range(2):
+                again = self._refitted(payload, resp)
+                if again is None:
+                    break
+                payload = again
+                resp = await client.post(self._url, json=payload, headers=self._headers)
             resp.raise_for_status()
             data = resp.json()
         self.last_latency_s = time.perf_counter() - started
@@ -300,6 +374,91 @@ class OllamaTransport:
             for c in (message.get("tool_calls") or [])
         ]
         return text, calls
+
+
+def _in_the_servers_words(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The conversation as this kind of server takes it.
+
+    A model turn that made calls is sent as one: `tool_calls`, each with an id
+    and its arguments, and each result after it as a `tool` message answering
+    that id. It used to be sent as `.` followed by each result as a line of the
+    USER's (`[result of ledger] rent: entry found`). The model was shown
+    results and no sign it had asked for them, and two things followed on a
+    live model. Asked for five lookups, it made the same five in every step it
+    was allowed. And at a closing request it carried on the only pattern in
+    front of it and wrote a sixth "result" itself.
+
+    A turn is sent the old way when the record cannot pair it: one written
+    before the arguments were kept (`calls` absent), or one whose results a
+    tidying step has removed or reordered. A `tool` message with no call
+    before it is refused outright by this kind of server, so an unpaired
+    result must never be sent as one.
+    """
+    out: list[dict[str, Any]] = []
+    i = 0
+    while i < len(history):
+        m = history[i]
+        role = m["role"]
+        if role == "user":
+            out.append({"role": "user", "content": m["content"]})
+        elif role == "assistant":
+            calls = [c for c in (m.get("calls") or ()) if isinstance(c, dict)]
+            results = history[i + 1 : i + 1 + len(calls)]
+            paired = (
+                bool(calls)
+                and len(results) == len(calls)
+                and all(
+                    r.get("role") == "tool" and r.get("name") == c.get("name")
+                    for c, r in zip(calls, results)
+                )
+            )
+            if paired:
+                ids = [f"call_{i}_{n}" for n in range(len(calls))]
+                out.append(
+                    {
+                        "role": "assistant",
+                        "content": m["content"] or "",
+                        "tool_calls": [
+                            {
+                                "id": id_,
+                                "type": "function",
+                                "function": {
+                                    "name": str(c.get("name")),
+                                    "arguments": json.dumps(c.get("args") or {}),
+                                },
+                            }
+                            for id_, c in zip(ids, calls)
+                        ],
+                    }
+                )
+                for id_, r in zip(ids, results):
+                    out.append({"role": "tool", "tool_call_id": id_, "content": str(r["content"])})
+                i += 1 + len(calls)
+                continue
+            out.append({"role": "assistant", "content": m["content"] or "."})
+        elif role == "tool":
+            out.append({"role": "user", "content": f"[result of {m['name']}] {m['content']}"})
+        i += 1
+    return out
+
+
+def _argument(shape: str) -> dict[str, Any]:
+    """One argument, from the shape its author wrote under `takes:`.
+
+    The shape in the author's own words is the description, as it is on every
+    transport here. `one of a, b, c` is ALSO sent as the closed list it is: a
+    model shown `one of legal` as prose answered `Contracts`, and one shown
+    `action: one of issue-refund, look-up-invoice` has to get the word exactly
+    right for the call to mean anything."""
+    said = shape.strip()
+    choices = said.removesuffix(", optional").removeprefix("one of ")
+    if said.startswith("one of ") and choices:
+        return {
+            "type": "string",
+            "enum": [c.strip() for c in choices.split(",") if c.strip()],
+            "description": said,
+        }
+    return {"type": "string", "description": said}
 
 
 def _billed(model: str, used: Any, workspace: str = "") -> "tuple[int, float] | None":

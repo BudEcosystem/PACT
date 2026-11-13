@@ -1,0 +1,17 @@
+description: Invoices and refunds.
+connect: back-office
+topics: [finance]
+actions:
+  look-up-invoice:
+    description: Read one invoice.
+    reads-only: yes
+    takes:
+      invoice: text
+  issue-refund:
+    description: Refund an order.
+    spends-money: yes
+    needs-a-person: yes
+    same-request-key: order
+    takes:
+      order: text
+      amount: money

@@ -1,5 +1,12 @@
 description: Says whether an attachment is a supplier invoice.
 # 02W §5.2: a decision model needs no instructions.
 model: ap-attachment-classifier      # catalogue entry with `kind: decision`
+# What it decides about: an agent on a `decide`'s rung is given the fields of
+# the item it is inside a `for each` of, by name, and only the ones it accepts.
+# With no `accepts:` it would take a `message`, an attachment has none, and it
+# would sort a file it was never shown (`loader/a-deciding-agent-given-nothing`).
+accepts:
+  name: text
+  file: file
 answers-with:
   label: one of invoice, other
