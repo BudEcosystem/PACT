@@ -79,6 +79,7 @@ pub fn of(doc: &Node) -> J {
             let effect = pact_loader::effects::of(doc, name, &mut BTreeSet::new());
             o.insert("effect".into(), J::String(effect.word().into()));
             o.insert("moves-money".into(), J::Bool(effect.moves_money));
+            o.insert("moves-hardware".into(), J::Bool(effect.moves_hardware));
             // The workflows its doc-digest keeps (itself among them), in name
             // order: what a runtime comparing two versions of the document a
             // run relies on must compare, and nothing else (02W §7.2's drift

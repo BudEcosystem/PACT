@@ -13,7 +13,7 @@ write: most workspaces use a dozen.
 
 | Kind | Fields | Core fields |
 |---|---:|---|
-| `action` | 21 | `description`, `topics`, `takes`, `reads-only`, `needs-a-person` |
+| `action` | 22 | `description`, `topics`, `takes`, `reads-only`, `needs-a-person` |
 | `agent` | 30 | `name`, `description`, `instructions`, `team`, `teamwork` |
 | `loop` | 4 | `description`, `based-on` |
 | `knowledge` | 15 | `description`, `topics`, `documents`, `passages-at-most`, `must-cite` |
