@@ -1,5 +1,5 @@
 {
- "about": "Workflows: stages in the order they run, what each called agent and each person was given, and the answer. Replayed as conformance_kit.replay_workflow does: `agents` is what each agent answers when called (a list is one answer for each time it is asked, the last repeating); `tools` is what each `<tool>/<action>` hands back; `people` is what a person answers to each question by name (absent: nobody is there to ask, and the run parks). In `expect`: `trace` is the stages that ran, nested ones as `outer/inner`; `given` is each agent called and its inputs, in order; `shown` is each question put to a person and what they were shown; `called` is each tool call. An agent a stage calls is an agent's run, under its own limits, approvals and reactions; here each is answered by the case, so what is compared is the workflow. A case expects only what the specification fixes: where the order things happen in is the runtime's to choose (an `each` with no `at-once-at-most:`), the tree a case runs on says `at-once-at-most: 1`. In `answer`, a field the run did not set is absent, not null; a run that stopped hands back an empty record, and why is in `said`. A trained classifier's answer carries `score` beside its label, a share of one: how sure it was of the label it picked, which `if-unsure-below:` is read against. A person's answer may carry `answered-by` beside the fields the question asks for: who answered, which the stage keeps as `steps.<stage>.answered-by` and does not leave in the answer.",
+ "about": "Workflows: stages in the order they run, what each called agent and each person was given, and the answer. Replayed as conformance_kit.replay_workflow does: `agents` is what each agent answers when called (a list is one answer for each time it is asked, the last repeating); `tools` is what each `<tool>/<action>` hands back; `people` is what a person answers to each question by name (absent: nobody is there to ask, and the run parks). In `expect`: `trace` is the stages that ran, nested ones as `outer/inner`; `given` is each agent called and its inputs, in order; `shown` is each question put to a person and what they were shown; `called` is each tool call. An agent a stage calls is an agent's run, under its own limits, approvals and reactions; here each is answered by the case, so what is compared is the workflow. A case expects only what the specification fixes: where the order things happen in is the runtime's to choose (an `each` with no `at-once-at-most:`), the tree a case runs on says `at-once-at-most: 1`. In `answer`, a field the run did not set is absent, not null; a run that stopped hands back an empty record, and why is in `said`. A trained classifier's answer carries `score` beside its label, a share of one: how sure it was of the label it picked, which `if-unsure-below:` is read against. A person's answer may carry `answered-by` beside the fields the question asks for: who answered, which the stage keeps as `steps.<stage>.answered-by` and does not leave in the answer. On a `decide` that is one name; on a stage that waits for people (`ask`) it is a list, always, in the order they answered, so one name is a list of one.",
  "cases": [
   {
    "name": "a-written-rule-decides-and-nobody-is-asked",
@@ -1406,6 +1406,94 @@
      "polish/write",
      "polish/write",
      "polish/write",
+     "reply"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "who-answered-a-wait-is-a-list-of-one-when-one-person-did",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "sign-off",
+   "input": {
+    "report": "Seat 14C will not recline."
+   },
+   "agents": {},
+   "people": {
+    "may-we-close": {
+     "close": true,
+     "answered-by": "dana"
+    }
+   },
+   "expect": {
+    "answer": {
+     "by": [
+      "dana"
+     ],
+     "close": true
+    },
+    "called": [],
+    "given": [],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [
+     {
+      "question": "may-we-close",
+      "shown": {
+       "input.report": "Seat 14C will not recline."
+      }
+     }
+    ],
+    "trace": [
+     "approve",
+     "reply"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "who-answered-a-wait-is-everyone-who-did-in-the-order-they-answered",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "sign-off",
+   "input": {
+    "report": "Seat 14C will not recline."
+   },
+   "agents": {},
+   "people": {
+    "may-we-close": {
+     "close": true,
+     "answered-by": [
+      "lee",
+      "dana"
+     ]
+    }
+   },
+   "expect": {
+    "answer": {
+     "by": [
+      "lee",
+      "dana"
+     ],
+     "close": true
+    },
+    "called": [],
+    "given": [],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [
+     {
+      "question": "may-we-close",
+      "shown": {
+       "input.report": "Seat 14C will not recline."
+      }
+     }
+    ],
+    "trace": [
+     "approve",
      "reply"
     ],
     "unenforced": []

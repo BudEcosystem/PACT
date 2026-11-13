@@ -3,6 +3,35 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — a digest moves only when the tree does, and who answered a wait (13 November)
+
+Bud Agent Flow asked whether "a new version of PACT never moves the digest of a tree nobody
+edited" was a rule PACT held, with a check. It was true and nothing checked it. Three smaller
+things were settled in the same exchange. Nothing here changes a field of the schema.
+
+- **A tree's digests are pinned across versions of PACT.** `tests/conformance/digests.json` holds,
+  for ten trees in this repository, the tree's `digest` and each workflow's `doc-digest` and
+  `contract-digest` as `pact discover` prints them. A test compares. A change to PACT that moves
+  one without the tree being edited fails, and has to change that file in the same commit and say
+  here which trees move and why. A runtime that pins PACT holds the same file with one
+  `pact discover` per tree. (Checked against binaries built on 18 October and 12 November: the
+  trees unedited since then have the digests they had.)
+- **On a stage that waits for people, `steps.<stage>.answered-by` is a list**, in the order they
+  answered, also when one person did: a question can need several answers, and a binding's shape
+  must not depend on how many people happened to answer. On a `decide` it stays one name. The
+  reference runtime passed through whatever a host put there. Two new cases on a new workflow,
+  `sign-off`: 28 workflow cases, 52 cases of replayed runs.
+- **`loader/a-decision-asked-of-several`** (an error): a `decide` whose person rung asks a
+  question that is `answered-by: everyone` or `enough-of-them`. A decision is one label from one
+  person, and nothing says which label stands when several pick different ones. None of Bud Agent
+  Flow's 184 trees writes it; it is refused before one does.
+- **A stage that waits shows the person what the question says to show.** The reference showed
+  them nothing: it read the stage's `bind:`, which a waiting stage cannot write, and not the
+  question's `shows:`, which a `decide` asking the same question did read. Found by the first
+  shared case with a waiting stage in it.
+- Ruled, with no case yet: a workflow run a port ended (`if-still-running: stop`,
+  `cancel-previous`) ends as `cancelled`. `stopped` stays "could not go on, and says why".
+
 ## 2026-11 — a served model is shown its own calls, and is told what a yes changed (13 November)
 
 Running the limits cases on live models (gpt-4o-mini and gpt-5-nano) found three things about

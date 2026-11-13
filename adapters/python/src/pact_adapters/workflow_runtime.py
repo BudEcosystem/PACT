@@ -645,12 +645,23 @@ class _Run:
 
     async def ask(self, stage: StageSpec, scope: _Scope) -> tuple[str, Any]:
         try:
-            answer = await self.person(stage.asks, self.inputs(stage, scope), stage.name)
+            # What the question's own `shows:` lists, as a `decide` asking the
+            # same question shows it. A stage that waits showed the person
+            # nothing: it passed its `bind:`, which a waiting stage cannot
+            # write, so "May this fix be closed?" arrived with no fix.
+            shown = {**self.shown_for(stage.asks, scope), **self.inputs(stage, scope)}
+            answer = await self.person(stage.asks, shown, stage.name)
         except NobodyAnswered:
             return "nobody-answered", {}
         who = answer.pop(ANSWERED_BY, None)
         if who:
-            self.stage_words[id(stage)] = {ANSWERED_BY: who}
+            # A LIST on a wait, always, in the order they answered: a question
+            # can need several answers (`answered-by: everyone`), and the
+            # shape of `steps.<stage>.answered-by` must not depend on how many
+            # people happened to answer. One name is a list of one. (On a
+            # `decide` it is one name: a decision is one person's.)
+            names = [str(w) for w in who] if isinstance(who, (list, tuple)) else [str(who)]
+            self.stage_words[id(stage)] = {ANSWERED_BY: names}
         no = [k for k, v in answer.items() if isinstance(v, bool) and v is False]
         return ("declined" if no else "answered"), answer
 
