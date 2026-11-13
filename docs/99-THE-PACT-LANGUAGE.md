@@ -209,7 +209,7 @@ A line that is none of the three is refused, naming the nearest sentence.
 header word — `agent`, `tool`, `workflow`, `policy`, `question`, `loop`,
 `topic`, `event`, `reaction`, `knowledge`, `skill`, `resource`, `program`,
 `value`, `port`, `shape`, `remembers`, `detector`, `owner`, `context-policy`,
-`bundle`, `interceptor`, `watch` — followed by the entry's name:
+`bundle`, `interceptor`, `watch`, `plugin` — followed by the entry's name:
 `tool payments`. An `agent` may add its display name in quotes. The five
 single documents — `redaction`, `evals`, `learning`, `release`, `models` — are
 headers with no name. `when <signal>` is a reaction (§4.3).
@@ -440,7 +440,7 @@ All seven packages are built (12 November 2026), and an eighth that was not in t
   author's to move.
 
 - **A proposed change is checked against the folder a `.pact` tree stands
-  for.** `checking.check_instructions` copies the author's tree to try a
+  for.** `checking.check_agent_field` copies the author's tree to try a
   learning cycle's proposal on it. A copy written in the language is rewritten
   as a folder first — `pact write`, then `pact build`, with the files it
   carries left in place — because that module changes one field of a file and
