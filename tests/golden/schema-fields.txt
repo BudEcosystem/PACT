@@ -14,6 +14,7 @@ action.remember-as	text | S-EXEC | expert | optional
 action.same-request-key	text | S-EXEC | core | optional
 action.same-request-key-across	one-of | S-EXEC | expert | optional
 action.spends-money	yes-no | S-EXEC | core | optional
+action.moves-hardware	yes-no | S-EXEC | core | optional
 action.status-check	text | S-EXEC | expert | optional
 action.takes	map of answer-shape | S-CAP | core | optional
 action.topics	list of text | S-GOV | core | optional

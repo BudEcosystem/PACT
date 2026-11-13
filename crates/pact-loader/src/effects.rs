@@ -41,12 +41,15 @@ pub enum Level {
 pub struct Effect {
     pub level: Level,
     pub moves_money: bool,
+    /// Whether it moves something in the physical world (`moves-hardware:`).
+    pub moves_hardware: bool,
 }
 
 impl Effect {
     pub const NOTHING: Effect = Effect {
         level: Level::Nothing,
         moves_money: false,
+        moves_hardware: false,
     };
 
     /// The worse of two.
@@ -55,6 +58,7 @@ impl Effect {
         Effect {
             level: self.level.max(other.level),
             moves_money: self.moves_money || other.moves_money,
+            moves_hardware: self.moves_hardware || other.moves_hardware,
         }
     }
 
@@ -80,6 +84,7 @@ impl Effect {
             "writes" => self.level >= Level::Changes,
             "cannot-be-undone" => self.level == Level::CannotBeUndone,
             "spends" => self.moves_money,
+            "moves-hardware" => self.moves_hardware,
             _ => false,
         }
     }
@@ -89,6 +94,7 @@ impl Effect {
 #[must_use]
 pub fn of_action(action: &Node) -> Effect {
     let money = action.get("spends-money").is_some_and(said_yes);
+    let hardware = action.get("moves-hardware").is_some_and(said_yes);
     let level = if action.get("reads-only").is_some_and(said_yes) {
         Level::Reads
     } else if action.get("undone-by").is_some() {
@@ -99,6 +105,7 @@ pub fn of_action(action: &Node) -> Effect {
     Effect {
         level,
         moves_money: money,
+        moves_hardware: hardware,
     }
 }
 
