@@ -62,6 +62,19 @@ pub fn known_here(root: Option<&Node>) -> Known {
         // The path: where that node actually came from, so a leading-slash line
         // keeps working and keeps meaning the same thing.
         names.insert(path_spelling(&node.span.file, SUITE_KEY));
+        // A suite written as an `evals` block of a PACT-language file has no
+        // file of its own to be the path of. The block stands for
+        // `evals/suite.yaml` — it is the file `pact build` writes it as — so
+        // that is the path spelling there, and a workspace moved between the
+        // two ways of writing keeps the line it had (`docs/99` §4.5).
+        if node
+            .span
+            .file
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case(pact_lang::EXTENSION))
+        {
+            names.insert(format!("/{SUITE_KEY}/suite.yaml"));
+        }
     }
     Known {
         label: "this workspace's checks".to_string(),

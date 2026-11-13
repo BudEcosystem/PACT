@@ -11,6 +11,8 @@
 //! | `loader/a-label-with-nowhere-to-go` | WF-15 (agent and person half) | an agent rung's agent, or a person rung's question, answers with no single `one of` line, or with one whose labels differ from `chooses-between:` (an agent may add `not-sure`) |
 //! | `loader/a-decide-that-can-run-out-of-rungs` | WF-16 (agent half) | the last rung is an agent that may pass the decision on: its `one of` line has `not-sure`, or it writes `if-unsure-below:` or `if-it-disagrees: go-on` |
 //! | `loader/sure-only-a-decision-model-can-be` | WF-17 | `if-unsure-below:` on an agent none of whose models has `kind: decision` |
+//! | `loader/a-decision-asked-of-several` | new | a person rung's question writes `answered-by: everyone` or `enough-of-them`: a decision is one label, from one person, and nothing says which label stands when several people pick different ones |
+//! | `loader/a-rung-with-two-kinds-of-reader` | new (a warning) | an agent on a rung names a decision model and a language model in one `model:` list: the list is a fallback for a failed call, not a cascade for an unsure answer, and both are given the same message |
 //!
 //! And one thing the schema cannot know: an agent all of whose models are
 //! decision models needs no `instructions:` (`model.kind`'s own help), so the
@@ -234,6 +236,7 @@ impl<'a> Decide<'a> {
             return;
         };
         let stage = self.stage;
+        self.two_kinds_of_reader(name, agent, &written.node, diags);
         let who = format!("the agent '{name}'");
         let picks = self.picks(&who, agent.get("answers-with"), true, &written.node, diags);
         let unsure = rung.get("if-unsure-below");
@@ -292,6 +295,39 @@ impl<'a> Decide<'a> {
         }
     }
 
+    /// An agent on a rung whose `model:` list has a trained classifier and a
+    /// language model in it. The list is a fallback chain — the next model is
+    /// asked when a CALL fails, never because an answer was unsure — so the
+    /// cascade it looks like is not what it does; and both are given one
+    /// message, with the stage's `says:` in front of it, which a classifier
+    /// scores as if it were part of the text.
+    fn two_kinds_of_reader(&self, name: &str, agent: &Node, at: &Node, diags: &mut Diagnostics) {
+        let models = models_of(agent);
+        let Some(classifier) = models.iter().find(|m| self.decision.contains(**m)) else {
+            return;
+        };
+        let Some(language) = models.iter().find(|m| !self.decision.contains(**m)) else {
+            return;
+        };
+        let stage = self.stage;
+        diags.push(Diagnostic::warning(
+            "loader/a-rung-with-two-kinds-of-reader",
+            at.span.clone(),
+            format!(
+                "'{stage}' asks '{name}' to decide, and '{name}' runs on a trained classifier \
+                 ('{classifier}') and on a language model ('{language}'). A `model:` list is \
+                 tried in order only when a call fails, never because an answer was unsure — \
+                 being unsure passes the decision to the next rung — and both are given the \
+                 same message, the stage's `says:` in front of it, which a classifier scores \
+                 as text."
+            ),
+            format!(
+                "Make them two agents on two rungs: one on '{classifier}' with \
+                 `if-unsure-below:`, then one on '{language}' with `instructions:`."
+            ),
+        ));
+    }
+
     /// WF-15 for the person rung: its question's answer names the labels.
     fn person_rung(&self, rung: &pact_doc::Map, diags: &mut Diagnostics) {
         let Some(written) = rung.get("asks") else {
@@ -305,6 +341,37 @@ impl<'a> Decide<'a> {
         };
         let who = format!("the question '{name}'");
         self.picks(&who, q.get("answer"), false, &written.node, diags);
+        self.asked_of_several(name, q, &written.node, diags);
+    }
+
+    /// A person rung whose question needs more than one answer. A decision is
+    /// one label, and the record says who gave it (`steps.<stage>.answered-by`
+    /// is one name on a `decide`). With `everyone` or `enough-of-them` several
+    /// people answer, they can pick different labels, and nothing written
+    /// anywhere says which label then stands. Refused here, where the author
+    /// is, rather than left for each runtime to settle its own way.
+    fn asked_of_several(&self, name: &str, q: &Node, at: &Node, diags: &mut Diagnostics) {
+        let Some(needs) = q.get("answered-by").and_then(Node::as_str).map(str::trim) else {
+            return;
+        };
+        if needs != "everyone" && needs != "enough-of-them" {
+            return;
+        }
+        let stage = self.stage;
+        diags.push(Diagnostic::error(
+            "loader/a-decision-asked-of-several",
+            at.span.clone(),
+            format!(
+                "'{stage}' is decided by the question '{name}', which is `answered-by: {needs}`. \
+                 A decision is one label from one person. When several people answer and pick \
+                 different labels, nothing says which one stands."
+            ),
+            format!(
+                "Take `answered-by:` off '{name}' so the first answer decides. Or ask them in a \
+                 stage of its own (`does: ask-someone`, `asks: {name}`) and decide after it by \
+                 `rules:` on what they answered."
+            ),
+        ));
     }
 
     /// The one `one of` line of `answers`, held to the stage's labels (WF-15).

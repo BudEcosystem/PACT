@@ -535,6 +535,45 @@ groups:
           the things to write down as they happen, so that afterwards you can
           read what the system actually did instead of taking its word for it.
           Nothing here can change anything — these only look.
+      topics:
+        # docs/99 §3.1. What the work can be ABOUT, as a name the rest of the
+        # workspace can use: a tool is tagged with one, an event fires on one,
+        # an agent listens for one. Without the name, "this is finance work" was
+        # something only a model's judgement could say, and a rule that rests on
+        # a judgement is a rule that sometimes does not run.
+        type: map of group:topic
+        surface: S-GOV
+        tier: core
+        help: >
+          what the work here can be about — `finance`, `legal`, `a complaint` —
+          one entry per subject, each a name and a sentence. Tag a tool with one
+          (`topics: [finance]`) and anything written `topic: finance` happens
+          the moment that tool is about to be used.
+      events:
+        # docs/99 §3.1. A NAMED condition over what the harness can see happen.
+        # The address vocabulary already named every moment of a run; what was
+        # missing was a way to say "this moment, when it is about THAT" once and
+        # use the name in several places.
+        type: map of group:event
+        surface: S-EXEC
+        tier: core
+        help: >
+          things that can happen while an agent works, each given a name: a tool
+          about to be called, a count passed, the work turning to a topic. A
+          reaction is written `event:` one, and an agent can listen for one.
+      reactions:
+        # docs/99 §2. "When this happens, do that." Not an interceptor: an
+        # interceptor changes or stops what is passing through it, from a fixed
+        # list of sentences. A reaction ADDS work — a reminder, another agent
+        # asked or told — at an event of the author's own.
+        type: map of group:reaction
+        surface: S-EXEC
+        tier: core
+        help: >
+          what to do when something happens while an agent works: remind it of
+          something, ask another agent first, tell another agent afterwards, or
+          stop. Each one says on its own line whether it covers every agent here
+          or only the agents that name it.
       models:
         type: group:catalog
         surface: S-CAP
@@ -722,7 +761,12 @@ groups:
           `date`, `time` and `date and time`, or `one of a, b, c` to choose
           between things you name. Write `list of <shape>` for several, a
           name from the workspace's `shapes:` for a shape with parts, and
-          `, optional` after a line that may be left out.
+          `, optional` after a line that may be left out. A model is shown
+          everything the agent was given and nothing else: the `message`,
+          where there is one, as the words, and every other line by its name
+          and value, in the order written here. With no `message` nothing is
+          put in front — not the description above, which is written for
+          whoever chooses this agent.
       answers-with:
         type: map of answer-shape
         shapes: *the-answer-shapes
@@ -943,6 +987,25 @@ groups:
         surface: S-EXEC
         tier: expert
         help: which rules may change what happens as it runs
+      reactions:
+        type: list of text
+        names: reactions
+        surface: S-EXEC
+        tier: core
+        help: >
+          which reactions cover this agent, by name. One that says `applies-to:
+          every-agent` covers it without being listed.
+      listens-for:
+        # docs/99 §2. A reaction written from the other side: the agent that
+        # wants to be asked or told says so itself, and every OTHER agent's work
+        # is what it hears. Adding a finance desk then changes no other file.
+        type: list of group:subscription
+        surface: S-EXEC
+        tier: core
+        help: >
+          what in the other agents' work this agent wants to hear about: a
+          `topic:` or an `event:`, and `how:` — `asked-first`, so the other agent
+          gets this one's answer before it carries on, or `told-after`.
       voice:
         # 96 §A6. The CONTRACT of a voice agent was already writable and stays
         # where it was: `accepts: {message: audio}`, `answers-with: {reply:
@@ -2779,6 +2842,16 @@ groups:
           what this set of documents is, in one line. If it is one procedure and
           it always applies, write a skill instead: a skill is read end to end,
           this is looked things up in.
+      topics:
+        type: list of text
+        names: topics
+        surface: S-GOV
+        tier: core
+        help: >
+          what using this set of documents is about, as names from the workspace's `topics:` —
+          `topics: [finance]`. Anything written `topic: finance` then happens
+          whenever this set of documents is looked in. A tag is exact: it does not
+          depend on a model noticing.
       documents:
         # NOT a glob, and this is the change that made the construct shippable.
         # There is no path type in this language and no glob anywhere in it, and
@@ -3338,6 +3411,16 @@ groups:
           anything a stranger wrote), `a-way-out` (it can send something
           outside — mail, a post, a payment). An agent that can reach all three
           is refused unless every way out needs a person's yes.
+      topics:
+        type: list of text
+        names: topics
+        surface: S-GOV
+        tier: core
+        help: >
+          what using this tool is about, as names from the workspace's `topics:` —
+          `topics: [finance]`. Anything written `topic: finance` then happens
+          whenever this tool is about to be used. A tag is exact: it does not
+          depend on a model noticing.
       rests-after:
         # docs/98 WP-13: the Allowance primitive's revoke-for-a-period — a
         # circuit breaker.
@@ -3445,6 +3528,16 @@ groups:
         surface: S-ROUTE
         tier: core
         help: what this action does
+      topics:
+        type: list of text
+        names: topics
+        surface: S-GOV
+        tier: core
+        help: >
+          what using this action is about, as names from the workspace's `topics:` —
+          `topics: [finance]`. Anything written `topic: finance` then happens
+          whenever this action is about to be used. A tag is exact: it does not
+          depend on a model noticing.
       takes:
         # There was nowhere at all to declare a tool's arguments, so every tool
         # was offered to the model with `parameters: {}` — and `inspects:`,
@@ -3571,7 +3664,15 @@ groups:
         type: text
         surface: S-EXEC
         tier: core
-        help: which argument makes two calls "the same call", so it runs once
+        help: >-
+          which argument makes two calls "the same call", so it runs once. Write `the-call`
+          when the business has no key of its own, or the flow means to repeat a write with
+          the same arguments (a reminder, a second notice): the call's own place in the run is
+          then its identity, sent to the server as the request's idempotency key, the same on
+          every retry and new for every other call. Only write it for a server that honours one.
+          It is sent as the `Idempotency-Key` header on a `url:` tool, and as
+          `dev.pact/request-key` in the request's `_meta` on a connected one — never as an
+          argument, which would change the call.
       same-request-key-across:
         # A5. A scope on the line above it, not a second setting:
         # `at-most-once-across:` would have been a THIRD name for one act,
@@ -3651,7 +3752,16 @@ groups:
           how long one call's claim on its key lasts — `5m`. Until then a second
           call with the same key is refused; after it the key is free again, so
           work somebody took and never finished goes back to whoever comes next.
-          Leave it out and a claim lasts as long as its scope does.
+          Leave it out and a claim lasts as long as its scope does. The claim is
+          taken when the call is let through — after a person has said yes, just
+          before the tool is reached — and not while anybody is being asked, so
+          a long approval uses up none of it. A lease cannot stop a call that is
+          still running when it ends; what can is the number each new claim is
+          given, one higher than the last, which whatever runs your agents
+          sends with the call so the system it writes to can refuse a late one:
+          `Pact-Fence` and `Pact-Claim` headers on a `url:` tool,
+          `dev.pact/fence` and `dev.pact/claim` in the request's `_meta` on a
+          connected one. A server that ignores them behaves as before.
       bind:
         # TWO namespaces now, and the second closes a hole the first could not
         # reach. `run-inputs.<name>` is what the surrounding system supplied for
@@ -5710,7 +5820,10 @@ groups:
           and figures come from `values.<name>`. A part of an input is written
           with a dot: `fills.first-name`. The model never sees these lines and
           cannot change them. On an `answer`, what it hands back, field by
-          field — `contact-id: steps.upsert.id`.
+          field — `contact-id: steps.upsert.id`. On a `decide`, what the
+          agents on its rungs are given besides the workflow's input and the
+          current item — `kind: steps.triage.kind` — which is the only way
+          one of them is shown what an earlier stage found.
       waits-for-result:
         type: yes-no
         surface: S-CTRL
@@ -5891,7 +6004,19 @@ groups:
           an agent that picks a label. Its `answers-with:` has one `one of`
           line naming these labels, and may add `not-sure`, which passes the
           decision on. A decision model is an agent whose model has
-          `kind: decision`.
+          `kind: decision`. It is given this stage's `bind:` over the current
+          item's fields over the workflow's input — as many as it `accepts:`
+          and nothing it does not — and this stage's `says:`, where there is
+          one, at the start of its `message`. A name the stage binds is the
+          binding's alone: where the binding reads nothing, the agent is
+          given nothing under that name. An item that is one value and not a
+          set of fields (a list of texts) is its `message`, or goes where the
+          stage binds it — `bind: {note: item}`. An agent that writes no
+          `accepts:` takes a `message` and nothing else. An agent that would
+          be given nothing it accepts, or not something it requires, is
+          refused. An agent all of whose models are decision models follows
+          no instruction, so it is not given the `says:`: its `message` is
+          what it is to score, as it is.
       if-unsure-below:
         type: percent
         needs-also: [agent]
@@ -5899,8 +6024,12 @@ groups:
         tier: core
         help: >
           for a decision model, the score under which it passes the decision
-          on. A language model has no honest score, so it answers `not-sure`
-          instead and this line is refused on it.
+          on to the next rung. A score exactly at the figure decides, and an
+          answer that came with no score passes on. A language model has no
+          honest score, so it answers `not-sure` instead and this line is
+          refused on it. Passing on is always to the next rung, never to the
+          next model of the agent's own `model:` list, which is tried only
+          when a call fails.
       if-it-disagrees:
         type: one-of
         choices: [keep-its-answer, go-on]
@@ -5908,8 +6037,13 @@ groups:
         surface: S-GOV
         tier: core
         help: >
-          `go-on` passes the decision on when this rung picks a different label
-          from the rung before it. Leave it out to keep its answer.
+          `go-on` makes this rung a second opinion: it is asked even when a
+          rung before it has decided. The same label, and that decision
+          stands. Another label, or it is not sure itself, and nothing
+          stands: the rungs after it are tried as if nobody had decided. With
+          nothing decided before it, it decides as any rung does. Leave the
+          line out and the rung is asked only when nothing has been decided,
+          and its answer is kept.
       asks:
         type: text
         names: [^questions, questions]
@@ -6302,6 +6436,9 @@ groups:
             - run
             - stage
             - limit
+            # docs/99 §5: a reaction carried out. One row, so a watch can
+            # write down that the finance desk was asked.
+            - reaction
           moment: [requested, before, started, after, completed, failed, cancelled]
         # Well-formed is not the same as REACHED. `parts:` above will spell
         # `session.tool.before` quite happily and no run ever arrives there, so a
@@ -6778,6 +6915,7 @@ groups:
           - step.message.completed
           - step.model.completed
           - step.model.requested
+          - step.reaction.completed
           - step.run.started
           - step.stage.completed
           - step.stage.started
@@ -6834,6 +6972,282 @@ groups:
           values handed to a tool. That is the whole reason writing one of these
           needs nobody's permission: a watch cannot write down what an
           interceptor was written to hide.
+
+  # ── TOPICS, EVENTS, REACTIONS ───────────────────────────────────────────────
+  # docs/99. What the work is about, what can happen while it is done, and what
+  # to do then. The moments are the address vocabulary above; these three groups
+  # are what lets an author name one, narrow it, and hang something on it.
+  topic:
+    describe: topic
+    fields:
+      description:
+        type: text
+        required: yes
+        surface: S-GEN
+        tier: core
+        help: >
+          what counts as this subject, in a sentence a person or a model could
+          decide by — "money moving: refunds, invoices, tax".
+      noticed-by:
+        type: list of one-of
+        choices: [tags, the-agent, a-judge]
+        surface: S-GOV
+        tier: core
+        help: >
+          how the runtime finds out the work has turned to this. `tags` — a
+          tool, action or set of documents tagged with it is about to be used;
+          exact, and what you get if you leave this out. `the-agent` — the agent
+          is given a `working-on` tool and says so itself; free, and a guess.
+          `a-judge` — a second model reads every step; a guess that costs a
+          model call each time.
+
+  event:
+    describe: event
+    fields:
+      description:
+        type: text
+        required: yes
+        surface: S-GEN
+        tier: core
+        help: >
+          what has happened when this holds, in a sentence. Where the event is
+          `judged: yes`, this sentence is the question the judge answers.
+      at:
+        # The SAME closed lists `interceptor.when` uses, by reference. The six
+        # under `reaches:` are the moments the harness stops at for a reaction
+        # (docs/99 §5); a moment outside them is one where nothing would run it.
+        type: event-address
+        parts: *the-address-vocabulary
+        reaches:
+          - turn.run.started
+          - step.run.started
+          - step.tool.before
+          - step.tool.completed
+          - step.message.after
+          - step.delegate.before
+        surface: S-CTRL
+        tier: core
+        help: >
+          the moment this is about, written `<part>.<thing>.<moment>`:
+          `step.tool.before` (a tool is about to be called), `step.tool.completed`
+          (one has answered), `step.run.started` (a step begins — the one to
+          count with), `turn.run.started` (the turn begins), `step.message.after`
+          (the agent has written a step's words) or `step.delegate.before` (a
+          teammate is about to be asked). Narrow it with `when-this:`.
+      when-this:
+        type: list of group:when-this
+        needs-also: [at]
+        surface: S-EXEC
+        tier: core
+        help: >
+          which calls this is about, at a moment that is about a call — every
+          line has to hold. `{ tool: invoices/send }` is one action of a tool,
+          `{ tool: payments, effect: spends }` every action of it that moves
+          money, and `{ tool: payments/issue-refund, arg: amount, more-than: 200
+          USD }` reads what the model chose.
+      more-than:
+        type: integer
+        at-least: 1
+        needs-also: [at]
+        surface: S-CTRL
+        tier: core
+        help: >
+          how many times the moment has to have happened in one run before this
+          holds — `more-than: 5` beside `at: step.run.started` holds from the
+          sixth step on.
+      topic:
+        type: text
+        names: topics
+        surface: S-EXEC
+        tier: core
+        help: >
+          the subject, from the workspace's `topics:`, that the work has to turn
+          to. It holds when a tool, action or set of documents tagged with it is
+          about to be used, and — where the topic says so — when the agent says
+          it is working on it or a judge reads that it is.
+      judged:
+        type: yes-no
+        surface: S-EXEC
+        tier: expert
+        help: >
+          `yes` has a second model read the step and answer the `description:`
+          as a yes-or-no question. A guess: it costs a model call each time it
+          looks, it can be wrong, and so it may add advice but never stop a run.
+          Put `at: turn.run.started` beside it to read what the customer wrote
+          instead of what the agent wrote.
+
+  reaction:
+    describe: reaction
+    fields:
+      description:
+        type: text
+        required: yes
+        surface: S-GEN
+        tier: core
+        help: what this does and why
+      event:
+        # Not `on:`. A YAML 1.1 reader takes a bare `on` for the word "true",
+        # so the commonest editor plugin would have shown this line as a
+        # boolean key — and it is the word a subscription already uses.
+        type: text
+        names: events
+        surface: S-EXEC
+        tier: core
+        help: >
+          the event this waits for, by its name under `events:`. Or leave it out
+          and say what to wait for right here, with `at:`, `topic:` or
+          `judged:` — one way or the other, never both.
+      at:
+        # The SAME closed lists `interceptor.when` uses, by reference. The six
+        # under `reaches:` are the moments the harness stops at for a reaction
+        # (docs/99 §5); a moment outside them is one where nothing would run it.
+        type: event-address
+        parts: *the-address-vocabulary
+        reaches:
+          - turn.run.started
+          - step.run.started
+          - step.tool.before
+          - step.tool.completed
+          - step.message.after
+          - step.delegate.before
+        surface: S-CTRL
+        tier: core
+        help: >
+          the moment this is about, written `<part>.<thing>.<moment>`:
+          `step.tool.before` (a tool is about to be called), `step.tool.completed`
+          (one has answered), `step.run.started` (a step begins — the one to
+          count with), `turn.run.started` (the turn begins), `step.message.after`
+          (the agent has written a step's words) or `step.delegate.before` (a
+          teammate is about to be asked). Narrow it with `when-this:`.
+      when-this:
+        type: list of group:when-this
+        needs-also: [at]
+        surface: S-EXEC
+        tier: core
+        help: >
+          which calls this is about, at a moment that is about a call — every
+          line has to hold. `{ tool: invoices/send }` is one action of a tool,
+          `{ tool: payments, effect: spends }` every action of it that moves
+          money, and `{ tool: payments/issue-refund, arg: amount, more-than: 200
+          USD }` reads what the model chose.
+      more-than:
+        type: integer
+        at-least: 1
+        needs-also: [at]
+        surface: S-CTRL
+        tier: core
+        help: >
+          how many times the moment has to have happened in one run before this
+          holds — `more-than: 5` beside `at: step.run.started` holds from the
+          sixth step on.
+      topic:
+        type: text
+        names: topics
+        surface: S-EXEC
+        tier: core
+        help: >
+          the subject, from the workspace's `topics:`, that the work has to turn
+          to. It holds when a tool, action or set of documents tagged with it is
+          about to be used, and — where the topic says so — when the agent says
+          it is working on it or a judge reads that it is.
+      judged:
+        type: yes-no
+        surface: S-EXEC
+        tier: expert
+        help: >
+          `yes` has a second model read the step and answer the `description:`
+          as a yes-or-no question. A guess: it costs a model call each time it
+          looks, it can be wrong, and so it may add advice but never stop a run.
+          Put `at: turn.run.started` beside it to read what the customer wrote
+          instead of what the agent wrote.
+      applies-to:
+        type: one-of
+        choices: [the-agents-that-name-it, every-agent]
+        surface: S-EXEC
+        tier: core
+        help: >
+          who this covers. `the-agents-that-name-it` is the default: an agent
+          lists it under `reactions:`. `every-agent` covers the whole workspace.
+      fires:
+        type: one-of
+        choices: [once-a-run, every-time]
+        surface: S-CTRL
+        tier: expert
+        help: >
+          how often. `once-a-run` is the default: the first time it holds, and
+          not again until the next run. `every-time` is each time it holds — and
+          where it holds a tool call back, each DIFFERENT call, so the agent can
+          make the same call again and have it go through.
+      then:
+        type: list of group:reaction-step
+        required: yes
+        surface: S-EXEC
+        tier: core
+        help: >
+          what to do, in order — each line one of `remind:`, `consult:`,
+          `tell:` and `stop:`.
+
+  reaction-step:
+    describe: something a reaction's step can have
+    fields:
+      remind:
+        type: text
+        surface: S-GEN
+        tier: core
+        help: >
+          words added to what the model is told, from its next step to the end
+          of the run. Nothing waits and nothing is held back.
+      consult:
+        type: text
+        names: agents
+        surface: S-EXEC
+        tier: core
+        help: >
+          the agent to ask first. It is told what is happening and its answer is
+          put in front of the model. Before a tool call, the call is held and
+          the answer comes back in its place; the model can then make the call
+          again. What the consulted agent costs is spent from this run's limits.
+      tell:
+        type: text
+        names: agents
+        surface: S-EXEC
+        tier: core
+        help: >
+          the agent to tell. It is told what happened; what it says is written
+          down with the run and is not shown to the model.
+      stop:
+        type: text
+        surface: S-EXEC
+        tier: core
+        help: >
+          the sentence the run ends with. Only on something exact — a moment or
+          a tag — never on a guess.
+
+  subscription:
+    describe: something a listens-for line can have
+    fields:
+      topic:
+        type: text
+        names: topics
+        surface: S-EXEC
+        tier: core
+        help: the subject to hear about, from the workspace's `topics:`
+      event:
+        type: text
+        names: events
+        surface: S-EXEC
+        tier: core
+        help: the event to hear about, by its name under `events:`
+      how:
+        type: one-of
+        choices: [asked-first, told-after]
+        required: yes
+        surface: S-EXEC
+        tier: core
+        help: >
+          `asked-first` — the agent whose work it is gets this one's answer
+          before it carries on. `told-after` — this one is told what happened,
+          and what it says is not shown to the agent whose work it was.
 
   # ── STATE ───────────────────────────────────────────────────────────────────
   # What the agent remembers, and for how long.
@@ -7089,6 +7503,12 @@ groups:
           # not nameable by `{use:}`. Mounting is the half that is unbuilt (§6),
           # and it is unbuilt uniformly rather than for this kind in particular.
           - values
+          # docs/99: topics, events and reactions are collections like the
+          # rest — a bundle of house rules is exactly where "finance work goes
+          # past the finance desk" belongs.
+          - topics
+          - events
+          - reactions
           # A carried program (P6). A bundle of ready-made capabilities is
           # exactly where a shared checksum or a shared date calculation belongs,
           # and `what_a_bundle_may_bring_is_what_a_workspace_can_hold` holds this
