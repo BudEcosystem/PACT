@@ -298,10 +298,17 @@ impl<'a> Printer<'a> {
         }
 
         bare(name).then_some(())?;
+        let with = match rest.get("bind").and_then(|e| binds(&e.node)) {
+            Some(said) => {
+                rest.shift_remove("bind");
+                format!(" with {said}")
+            }
+            None => String::new(),
+        };
         if name == "decide" {
-            out.push_str(&format!("{pad}decide\n"));
+            out.push_str(&format!("{pad}decide{with}\n"));
         } else {
-            out.push_str(&format!("{pad}{name} = decide\n"));
+            out.push_str(&format!("{pad}{name} = decide{with}\n"));
         }
         self.lines(out, Kind::Plain, &rest, indent + 2, Style::Rich, &[]).ok()?;
         let comes_back = join.or(outer.and_then(|o| steps.get_key_value(o)).map(|(k, _)| k.as_str()));

@@ -1,9 +1,9 @@
 {
- "about": "Workflows: stages in the order they run, what each called agent and each person was given, and the answer. Replayed as conformance_kit.replay_workflow does: `agents` is what each agent answers when called (a list is one answer for each time it is asked, the last repeating); `tools` is what each `<tool>/<action>` hands back; `people` is what a person answers to each question by name (absent: nobody is there to ask, and the run parks). In `expect`: `trace` is the stages that ran, nested ones as `outer/inner`; `given` is each agent called and its inputs, in order; `shown` is each question put to a person and what they were shown; `called` is each tool call.",
+ "about": "Workflows: stages in the order they run, what each called agent and each person was given, and the answer. Replayed as conformance_kit.replay_workflow does: `agents` is what each agent answers when called (a list is one answer for each time it is asked, the last repeating); `tools` is what each `<tool>/<action>` hands back; `people` is what a person answers to each question by name (absent: nobody is there to ask, and the run parks). In `expect`: `trace` is the stages that ran, nested ones as `outer/inner`; `given` is each agent called and its inputs, in order; `shown` is each question put to a person and what they were shown; `called` is each tool call. An agent a stage calls is an agent's run, under its own limits, approvals and reactions; here each is answered by the case, so what is compared is the workflow. A case expects only what the specification fixes: where the order things happen in is the runtime's to choose (an `each` with no `at-once-at-most:`), the tree a case runs on says `at-once-at-most: 1`. In `answer`, a field the run did not set is absent, not null; a run that stopped hands back an empty record, and why is in `said`. A trained classifier's answer carries `score` beside its label, a share of one: how sure it was of the label it picked, which `if-unsure-below:` is read against. A person's answer may carry `answered-by` beside the fields the question asks for: who answered, which the stage keeps as `steps.<stage>.answered-by` and does not leave in the answer. On a `decide` that is one name; on a stage that waits for people (`ask`) it is a list, always, in the order they answered, so one name is a list of one.",
  "cases": [
   {
    "name": "a-written-rule-decides-and-nobody-is-asked",
-   "tree": "examples/language/help-centre",
+   "tree": "tests/conformance/trees/routed-desk",
    "workflow": "route",
    "input": {
     "message": "My invoice is wrong.",
@@ -53,7 +53,7 @@
   },
   {
    "name": "no-rule-holds-so-the-agent-decides-and-is-given-what-it-accepts",
-   "tree": "examples/language/help-centre",
+   "tree": "tests/conformance/trees/routed-desk",
    "workflow": "route",
    "input": {
     "message": "The app crashes.",
@@ -109,7 +109,7 @@
   },
   {
    "name": "the-agent-is-not-sure-so-a-person-decides-and-is-shown-the-message",
-   "tree": "examples/language/help-centre",
+   "tree": "tests/conformance/trees/routed-desk",
    "workflow": "route",
    "input": {
     "message": "The app crashes.",
@@ -172,7 +172,7 @@
   },
   {
    "name": "a-label-with-one-step-beneath-it-ends-there",
-   "tree": "examples/language/help-centre",
+   "tree": "tests/conformance/trees/routed-desk",
    "workflow": "route",
    "input": {
     "message": "What is the weather?",
@@ -219,7 +219,7 @@
   },
   {
    "name": "nobody-is-there-to-ask-so-the-run-parks-at-the-decision",
-   "tree": "examples/language/help-centre",
+   "tree": "tests/conformance/trees/routed-desk",
    "workflow": "route",
    "input": {
     "message": "The app crashes.",
@@ -260,7 +260,7 @@
   },
   {
    "name": "one-workflow-calls-another-once-for-each-item-and-the-same-item-once",
-   "tree": "examples/language/help-centre",
+   "tree": "tests/conformance/trees/routed-desk",
    "workflow": "clear-inbox",
    "input": {
     "messages": [
@@ -423,7 +423,7 @@
       "best": 0.5,
       "scored": [
        {
-        "idea": "Lumen",
+        "text": "Lumen",
         "score": 0.5
        }
       ]
@@ -432,7 +432,7 @@
       "best": 0.95,
       "scored": [
        {
-        "idea": "Glow",
+        "text": "Glow",
         "score": 0.95
        }
       ]
@@ -443,12 +443,12 @@
     "answer": {
      "ideas": [
       {
-       "idea": "Glow",
-       "score": 0.95
+       "score": 0.95,
+       "text": "Glow"
       },
       {
-       "idea": "Lumen",
-       "score": 0.5
+       "score": 0.5,
+       "text": "Lumen"
       }
      ]
     },
@@ -457,7 +457,7 @@
      {
       "agent": "proposer",
       "given": {
-       "frontier": null
+       "frontier": []
       }
      },
      {
@@ -473,8 +473,8 @@
       "given": {
        "frontier": [
         {
-         "idea": "Lumen",
-         "score": 0.5
+         "score": 0.5,
+         "text": "Lumen"
         }
        ]
       }
@@ -500,6 +500,1000 @@
      "rounds/score",
      "rounds/propose",
      "rounds/score",
+     "reply"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "inside-a-loop-over-texts-each-text-is-what-the-sorter-is-given",
+   "tree": "tests/conformance/trees/sorted-notes",
+   "workflow": "sort-texts",
+   "input": {
+    "notes": [
+     "Your invoice is attached.",
+     "Hello from the seaside."
+    ]
+   },
+   "agents": {
+    "sorter": [
+     {
+      "shelf": "bills"
+     },
+     {
+      "shelf": "other"
+     }
+    ]
+   },
+   "expect": {
+    "answer": {},
+    "called": [],
+    "given": [
+     {
+      "agent": "sorter",
+      "given": {
+       "message": "Pick the shelf for this note.\n\nYour invoice is attached."
+      }
+     },
+     {
+      "agent": "sorter",
+      "given": {
+       "message": "Pick the shelf for this note.\n\nHello from the seaside."
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "every",
+     "every/where",
+     "every/where",
+     "answer"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "inside-a-loop-over-records-the-sorter-is-given-the-fields-it-accepts-and-nothing-else",
+   "tree": "tests/conformance/trees/sorted-notes",
+   "workflow": "sort-letters",
+   "input": {
+    "message": "the workflow's own",
+    "letters": [
+     {
+      "id": "a",
+      "message": "Your invoice is attached.",
+      "secret": "never for the sorter"
+     },
+     {
+      "id": "b",
+      "message": "Hello from the seaside.",
+      "secret": "nor this"
+     }
+    ]
+   },
+   "agents": {
+    "sorter": [
+     {
+      "shelf": "bills"
+     },
+     {
+      "shelf": "other"
+     }
+    ]
+   },
+   "expect": {
+    "answer": {},
+    "called": [],
+    "given": [
+     {
+      "agent": "sorter",
+      "given": {
+       "message": "Pick the shelf for this letter.\n\nYour invoice is attached."
+      }
+     },
+     {
+      "agent": "sorter",
+      "given": {
+       "message": "Pick the shelf for this letter.\n\nHello from the seaside."
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "every",
+     "every/where",
+     "every/where",
+     "answer"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "an-answer-that-does-not-fit-what-the-workflow-gives-stops-the-run",
+   "tree": "examples/kernel/tree-search",
+   "workflow": "search",
+   "input": {
+    "problem": "Name the product."
+   },
+   "agents": {
+    "proposer": [
+     {
+      "ideas": [
+       "Lumen"
+      ]
+     }
+    ],
+    "scorer": [
+     {
+      "best": 0.95,
+      "scored": [
+       {
+        "idea": "Lumen",
+        "score": 0.95
+       }
+      ]
+     }
+    ]
+   },
+   "expect": {
+    "answer": {},
+    "called": [],
+    "given": [
+     {
+      "agent": "proposer",
+      "given": {
+       "frontier": []
+      }
+     },
+     {
+      "agent": "scorer",
+      "given": {
+       "ideas": [
+        "Lumen"
+       ]
+      }
+     }
+    ],
+    "halted": "stopped",
+    "parked-at": "",
+    "question": "",
+    "said": "the answer does not fit `answers-with:` — ideas: item 1 has 'idea', and idea has no part by that name\nitem 1 leaves out 'text', which should be some text",
+    "shown": [],
+    "trace": [
+     "rounds",
+     "rounds/propose",
+     "rounds/score",
+     "reply"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "a-deciding-agent-is-given-what-an-earlier-stage-found-and-the-bound-name-wins",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "fix-item",
+   "input": {
+    "report": "Oil on the cowling after landing.",
+    "kind": "cabin",
+    "urgency": "high",
+    "secret": "tail number N123"
+   },
+   "agents": {
+    "triager": {
+     "kind": "engine",
+     "summary": "Oil leak at the cowling."
+    },
+    "assigner": {
+     "team": "powerplant"
+    }
+   },
+   "people": null,
+   "expect": {
+    "answer": {
+     "team": "powerplant"
+    },
+    "called": [],
+    "given": [
+     {
+      "agent": "triager",
+      "given": {
+       "report": "Oil on the cowling after landing."
+      }
+     },
+     {
+      "agent": "assigner",
+      "given": {
+       "kind": "engine",
+       "summary": "Oil leak at the cowling.",
+       "urgency": "high"
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "triage",
+     "assign",
+     "reply"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "a-binding-that-reads-nothing-gives-nothing-under-that-name",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "fix-item",
+   "input": {
+    "report": "Seat 14C will not recline.",
+    "kind": "cabin",
+    "urgency": "low",
+    "secret": "tail number N123"
+   },
+   "agents": {
+    "triager": {
+     "summary": "Seat 14C is stuck upright."
+    },
+    "assigner": {
+     "team": "interiors"
+    }
+   },
+   "people": null,
+   "expect": {
+    "answer": {
+     "team": "interiors"
+    },
+    "called": [],
+    "given": [
+     {
+      "agent": "triager",
+      "given": {
+       "report": "Seat 14C will not recline."
+      }
+     },
+     {
+      "agent": "assigner",
+      "given": {
+       "summary": "Seat 14C is stuck upright.",
+       "urgency": "low"
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "triage",
+     "assign",
+     "reply"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "a-one-value-item-goes-where-the-stage-binds-it",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "shelve",
+   "input": {
+    "notes": [
+     "Invoice 14 is overdue.",
+     "Lunch on Friday?"
+    ]
+   },
+   "agents": {
+    "shelver": [
+     {
+      "shelf": "bills"
+     },
+     {
+      "shelf": "other"
+     }
+    ]
+   },
+   "people": null,
+   "expect": {
+    "answer": {},
+    "called": [],
+    "given": [
+     {
+      "agent": "shelver",
+      "given": {
+       "note": "Invoice 14 is overdue."
+      }
+     },
+     {
+      "agent": "shelver",
+      "given": {
+       "note": "Lunch on Friday?"
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "every",
+     "every/where",
+     "every/where",
+     "answer"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "a-classifier-is-given-the-note-as-it-is-and-the-reader-is-given-the-instruction-first",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "shelve-twice",
+   "input": {
+    "notes": [
+     "Invoice 14 is overdue."
+    ]
+   },
+   "agents": {
+    "scorer": {
+     "shelf": "bills",
+     "score": 0.6
+    },
+    "reader": {
+     "shelf": "other"
+    }
+   },
+   "people": null,
+   "expect": {
+    "answer": {},
+    "called": [],
+    "given": [
+     {
+      "agent": "scorer",
+      "given": {
+       "message": "Invoice 14 is overdue."
+      }
+     },
+     {
+      "agent": "reader",
+      "given": {
+       "message": "Pick the shelf for this note.\n\nInvoice 14 is overdue."
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "every",
+     "every/where",
+     "answer"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "a-classifier-exactly-as-sure-as-the-line-asks-decides-and-nobody-else-is-asked",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "shelve-twice",
+   "input": {
+    "notes": [
+     "Invoice 14 is overdue."
+    ]
+   },
+   "agents": {
+    "scorer": {
+     "shelf": "bills",
+     "score": 0.85
+    },
+    "reader": {
+     "shelf": "other"
+    }
+   },
+   "people": null,
+   "expect": {
+    "answer": {},
+    "called": [],
+    "given": [
+     {
+      "agent": "scorer",
+      "given": {
+       "message": "Invoice 14 is overdue."
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "every",
+     "every/where",
+     "answer"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "a-classifier-that-gives-no-score-passes-the-decision-on",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "shelve-twice",
+   "input": {
+    "notes": [
+     "Invoice 14 is overdue."
+    ]
+   },
+   "agents": {
+    "scorer": {
+     "shelf": "bills"
+    },
+    "reader": {
+     "shelf": "other"
+    }
+   },
+   "people": null,
+   "expect": {
+    "answer": {},
+    "called": [],
+    "given": [
+     {
+      "agent": "scorer",
+      "given": {
+       "message": "Invoice 14 is overdue."
+      }
+     },
+     {
+      "agent": "reader",
+      "given": {
+       "message": "Pick the shelf for this note.\n\nInvoice 14 is overdue."
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "every",
+     "every/where",
+     "answer"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "a-second-opinion-that-agrees-leaves-the-rules-label-standing",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "shelve-checked",
+   "input": {
+    "note": "Invoice 14 is overdue.",
+    "folder": "invoices"
+   },
+   "agents": {
+    "checker": {
+     "shelf": "bills"
+    }
+   },
+   "people": {
+    "which-shelf": {
+     "shelf": "other",
+     "answered-by": "dana"
+    }
+   },
+   "expect": {
+    "answer": {
+     "decided": "rules",
+     "shelf": "bills"
+    },
+    "called": [],
+    "given": [
+     {
+      "agent": "checker",
+      "given": {
+       "message": "Invoice 14 is overdue."
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "where",
+     "reply"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "a-second-opinion-that-disagrees-leaves-nothing-standing-and-a-person-decides",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "shelve-checked",
+   "input": {
+    "note": "Invoice 14 is overdue.",
+    "folder": "invoices"
+   },
+   "agents": {
+    "checker": {
+     "shelf": "other"
+    }
+   },
+   "people": {
+    "which-shelf": {
+     "shelf": "other",
+     "answered-by": "dana"
+    }
+   },
+   "expect": {
+    "answer": {
+     "decided": "person",
+     "shelf": "other",
+     "who": "dana"
+    },
+    "called": [],
+    "given": [
+     {
+      "agent": "checker",
+      "given": {
+       "message": "Invoice 14 is overdue."
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [
+     {
+      "question": "which-shelf",
+      "shown": {
+       "input.note": "Invoice 14 is overdue."
+      }
+     }
+    ],
+    "trace": [
+     "where",
+     "reply"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "a-second-opinion-that-is-not-sure-leaves-nothing-standing-either",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "shelve-checked",
+   "input": {
+    "note": "Invoice 14 is overdue.",
+    "folder": "invoices"
+   },
+   "agents": {
+    "checker": {
+     "shelf": "not-sure"
+    }
+   },
+   "people": {
+    "which-shelf": {
+     "shelf": "bills",
+     "answered-by": "dana"
+    }
+   },
+   "expect": {
+    "answer": {
+     "decided": "person",
+     "shelf": "bills",
+     "who": "dana"
+    },
+    "called": [],
+    "given": [
+     {
+      "agent": "checker",
+      "given": {
+       "message": "Invoice 14 is overdue."
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [
+     {
+      "question": "which-shelf",
+      "shown": {
+       "input.note": "Invoice 14 is overdue."
+      }
+     }
+    ],
+    "trace": [
+     "where",
+     "reply"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "with-no-label-standing-the-second-opinion-decides-and-the-record-names-it",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "shelve-checked",
+   "input": {
+    "note": "Lunch on Friday?",
+    "folder": "inbox"
+   },
+   "agents": {
+    "checker": {
+     "shelf": "other"
+    }
+   },
+   "people": {
+    "which-shelf": {
+     "shelf": "bills",
+     "answered-by": "dana"
+    }
+   },
+   "expect": {
+    "answer": {
+     "decided": "agent",
+     "shelf": "other",
+     "who": "checker"
+    },
+    "called": [],
+    "given": [
+     {
+      "agent": "checker",
+      "given": {
+       "message": "Lunch on Friday?"
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "where",
+     "reply"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "a-disagreement-with-nobody-to-ask-parks-at-the-decision",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "shelve-checked",
+   "input": {
+    "note": "Invoice 14 is overdue.",
+    "folder": "invoices"
+   },
+   "agents": {
+    "checker": {
+     "shelf": "other"
+    }
+   },
+   "people": null,
+   "expect": {
+    "answer": {},
+    "called": [],
+    "given": [
+     {
+      "agent": "checker",
+      "given": {
+       "message": "Invoice 14 is overdue."
+      }
+     }
+    ],
+    "halted": "parked",
+    "parked-at": "where",
+    "question": "which-shelf",
+    "said": "waiting on 'which-shelf' at 'where'",
+    "shown": [],
+    "trace": [
+     "where"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "a-loop-that-passes-says-how-many-rounds-it-took-and-that-it-passed",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "draft-until-good",
+   "input": {
+    "brief": "Thank the customer."
+   },
+   "agents": {
+    "drafter": [
+     {
+      "draft": "A draft.",
+      "good": false
+     },
+     {
+      "draft": "A better draft.",
+      "good": true
+     }
+    ]
+   },
+   "people": null,
+   "expect": {
+    "answer": {
+     "ended": "passed",
+     "outcome": "answered",
+     "rounds": 2
+    },
+    "called": [],
+    "given": [
+     {
+      "agent": "drafter",
+      "given": {
+       "brief": "Thank the customer."
+      }
+     },
+     {
+      "agent": "drafter",
+      "given": {
+       "brief": "Thank the customer."
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "polish",
+     "polish/write",
+     "polish/write",
+     "reply"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "a-loop-that-runs-out-says-so-and-ends-in-too-many-times",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "draft-until-good",
+   "input": {
+    "brief": "Thank the customer."
+   },
+   "agents": {
+    "drafter": [
+     {
+      "draft": "A draft.",
+      "good": false
+     }
+    ]
+   },
+   "people": null,
+   "expect": {
+    "answer": {
+     "ended": "ran-out",
+     "outcome": "too-many-times",
+     "rounds": 3
+    },
+    "called": [],
+    "given": [
+     {
+      "agent": "drafter",
+      "given": {
+       "brief": "Thank the customer."
+      }
+     },
+     {
+      "agent": "drafter",
+      "given": {
+       "brief": "Thank the customer."
+      }
+     },
+     {
+      "agent": "drafter",
+      "given": {
+       "brief": "Thank the customer."
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "polish",
+     "polish/write",
+     "polish/write",
+     "polish/write",
+     "reply"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "a-workflow-that-reaches-no-answer-stage-hands-back-an-empty-record",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "classify-only",
+   "input": {
+    "report": "Oil on the cowling after landing."
+   },
+   "agents": {
+    "triager": {
+     "kind": "engine",
+     "summary": "Oil leak at the cowling."
+    }
+   },
+   "people": null,
+   "expect": {
+    "answer": {},
+    "called": [],
+    "given": [
+     {
+      "agent": "triager",
+      "given": {
+       "report": "Oil on the cowling after landing."
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "triage"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "a-loop-waiting-for-nothing-runs-its-rounds-and-ends-as-any-stage-does",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "draft-three-times",
+   "input": {
+    "brief": "Thank the customer."
+   },
+   "agents": {
+    "drafter": {
+     "draft": "A draft.",
+     "good": false
+    }
+   },
+   "people": null,
+   "expect": {
+    "answer": {
+     "outcome": "answered",
+     "rounds": 3
+    },
+    "called": [],
+    "given": [
+     {
+      "agent": "drafter",
+      "given": {
+       "brief": "Thank the customer."
+      }
+     },
+     {
+      "agent": "drafter",
+      "given": {
+       "brief": "Thank the customer."
+      }
+     },
+     {
+      "agent": "drafter",
+      "given": {
+       "brief": "Thank the customer."
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [],
+    "trace": [
+     "polish",
+     "polish/write",
+     "polish/write",
+     "polish/write",
+     "reply"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "who-answered-a-wait-is-a-list-of-one-when-one-person-did",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "sign-off",
+   "input": {
+    "report": "Seat 14C will not recline."
+   },
+   "agents": {},
+   "people": {
+    "may-we-close": {
+     "close": true,
+     "answered-by": "dana"
+    }
+   },
+   "expect": {
+    "answer": {
+     "by": [
+      "dana"
+     ],
+     "close": true
+    },
+    "called": [],
+    "given": [],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [
+     {
+      "question": "may-we-close",
+      "shown": {
+       "input.report": "Seat 14C will not recline."
+      }
+     }
+    ],
+    "trace": [
+     "approve",
+     "reply"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "who-answered-a-wait-is-everyone-who-did-in-the-order-they-answered",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "sign-off",
+   "input": {
+    "report": "Seat 14C will not recline."
+   },
+   "agents": {},
+   "people": {
+    "may-we-close": {
+     "close": true,
+     "answered-by": [
+      "lee",
+      "dana"
+     ]
+    }
+   },
+   "expect": {
+    "answer": {
+     "by": [
+      "lee",
+      "dana"
+     ],
+     "close": true
+    },
+    "called": [],
+    "given": [],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "said": "",
+    "shown": [
+     {
+      "question": "may-we-close",
+      "shown": {
+       "input.report": "Seat 14C will not recline."
+      }
+     }
+    ],
+    "trace": [
+     "approve",
      "reply"
     ],
     "unenforced": []

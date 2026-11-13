@@ -209,7 +209,7 @@ A line that is none of the three is refused, naming the nearest sentence.
 header word — `agent`, `tool`, `workflow`, `policy`, `question`, `loop`,
 `topic`, `event`, `reaction`, `knowledge`, `skill`, `resource`, `program`,
 `value`, `port`, `shape`, `remembers`, `detector`, `owner`, `context-policy`,
-`bundle`, `interceptor`, `watch` — followed by the entry's name:
+`bundle`, `interceptor`, `watch`, `plugin` — followed by the entry's name:
 `tool payments`. An `agent` may add its display name in quotes. The five
 single documents — `redaction`, `evals`, `learning`, `release`, `models` — are
 headers with no name. `when <signal>` is a reaction (§4.3).
@@ -297,7 +297,7 @@ workflow deliver
 | `for each item in <binding>` + body | `does: each`, `over:`, and the body as its `steps:` |
 | `repeat [at most <n> times]` + body | `does: repeat`, `at-most:`, and the body as its `steps:` |
 | `together` + body | `does: together`; the statements in the body all start at once |
-| `decide` + an `if <label>` for each label | `does: decide`, `chooses-between:` |
+| `decide [with <input>: <binding>, …]` + an `if <label>` for each label | `does: decide`, `bind:`, `chooses-between:` |
 | `answer [with <field>: <binding>, …]` | `does: answer`, `bind:` |
 | `stop <binding>` | `does: stop`, `stops:` |
 | `ask <question>` | `does: ask-someone`, `asks:` |
@@ -369,6 +369,12 @@ are places in PACT's own code, and nothing has to be intercepted.
 | after each tool call | `step.tool.completed` |
 | before a teammate is asked | `step.delegate.before` |
 
+**An agent a workflow's stage calls is an agent's run.** The reactions that
+cover it are carried out in that run, as its limits and its approvals are —
+whoever runs it. The reference workflow runtime does not run agents itself
+(`Callers.agent` is the host's), so a host that runs a workflow runs each
+stage's agent under its reactions, or says that it did not.
+
 The agent is offered a `working-on` tool when a topic that matters to it is
 `noticed-by: the-agent`. Calling it raises the topic; what a consulted agent
 says comes back as the tool's answer.
@@ -434,7 +440,7 @@ All seven packages are built (12 November 2026), and an eighth that was not in t
   author's to move.
 
 - **A proposed change is checked against the folder a `.pact` tree stands
-  for.** `checking.check_instructions` copies the author's tree to try a
+  for.** `checking.check_agent_field` copies the author's tree to try a
   learning cycle's proposal on it. A copy written in the language is rewritten
   as a folder first — `pact write`, then `pact build`, with the files it
   carries left in place — because that module changes one field of a file and
@@ -477,6 +483,15 @@ What it found, none of which a scripted model could:
   shown, said `not-sure` every time. The agent is now given the workflow's
   input, as much of it as it `accepts:`; the person is shown the question's
   own `shows:`.
+- **And could not be shown what an earlier stage found.** The input and the
+  item were all there was to hand a deciding agent, so one asked which team
+  takes a defect that triage had just classified was given no classification
+  — in this runtime and in Bud Agent Flow's, which found it. A `decide` now
+  writes `bind:` (`decide with kind: triage.kind`), and `pact check` refuses
+  an agent rung that would be given nothing it accepts
+  (`loader/a-deciding-agent-given-nothing`). That rule found a seventh silent
+  case in PACT's own `tests/trees/workflows-48-invoices`: a file sorter that
+  accepted nothing and so was never given the file.
 
 ### What is not done
 

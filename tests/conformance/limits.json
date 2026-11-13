@@ -1,0 +1,1382 @@
+{
+ "about": "Limits: what a run does when a ceiling is reached, for each `when-it-runs-out:` an agent can write. Replayed as reactions.json is (adapters/python/tests/conformance_kit.py), and `expect` has the same fields. A ceiling is reached when the count is AT the figure written, and it is tested between steps: with `tool-calls-at-most: 2` both calls run, and the run goes no further. The first ceiling reached is the one that acts, and `halted` is its word. `answer-with-what-it-has` makes one closing request with no tools offered (the last entry of `offered` is empty) and its text is the answer; that request is told, last in its system text, which ceiling was reached, which calls the model asked for were not made, and to answer from what it has (`closing` in `expect`; `Reached.closing` in pact_adapters/limits.py is the wording, and a call is written as its name, a space, and its arguments as JSON with sorted keys); `stop-and-say-so` ends with a sentence saying which ceiling; `ask-a-person` parks, and a yes gives the run the same budget again from where it is. The first request after the yes, and no other, is told last in its system text that a person said to keep going, what the ceiling it had reached is now, and which calls it asked for were not made (`after-a-yes` in `expect`, one text for each yes; `Reached.raised` is the wording). A no ends the run as `out-of-budget`, and `output` is a sentence naming the ceiling and saying a person was asked and said not to keep going (`Reached.declined` in pact_adapters/limits.py is the wording, for every runtime). When nobody answers in time (`people: [\"nobody\"]`) and the question says `if-nobody-answers: decline`, the run ends the same way and the sentence says nobody answered in time, not that a person said no. The ceiling named is the one that stopped the run: a run at `steps-at-most` and `tool-calls-at-most` together, stopped because a call was not allowed, names `tool-calls-at-most`.",
+ "cases": [
+  {
+   "name": "out-of-tool-calls-it-answers-with-what-it-has-in-one-request-with-no-tools",
+   "tree": "tests/conformance/trees/metered-desk",
+   "agent": "answers",
+   "says": "Look up rent, gas and water.",
+   "model": [
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "rent"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "gas"
+       }
+      }
+     ]
+    },
+    {
+     "text": "Rent and gas are there; I did not get to water."
+    }
+   ],
+   "tools": {
+    "ledger": {
+     "look": "entry found",
+     "*": ""
+    }
+   },
+   "members": null,
+   "judge": null,
+   "people": null,
+   "expect": {
+    "after-a-yes": [],
+    "closing": "This run has reached its limit, `tool-calls-at-most` (2 of 2 tool calls). No tool can be called any more.\nAnswer now, from the results you already have. Say plainly what you did not get to. Never write a tool's result yourself.",
+    "executed": [
+     [
+      "ledger",
+      {
+       "action": "look",
+       "entry": "rent"
+      }
+     ],
+     [
+      "ledger",
+      {
+       "action": "look",
+       "entry": "gas"
+      }
+     ]
+    ],
+    "halted": "tool-call-limit",
+    "offered": [
+     [
+      "ledger"
+     ],
+     [
+      "ledger"
+     ],
+     []
+    ],
+    "output": "Rent and gas are there; I did not get to water.",
+    "parks": [],
+    "reactions": [],
+    "reminders": [],
+    "steps": [
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "entry": "rent"
+        },
+        "name": "ledger"
+       }
+      ],
+      "results": [
+       "entry found"
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "entry": "gas"
+        },
+        "name": "ledger"
+       }
+      ],
+      "results": [
+       "entry found"
+      ]
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "out-of-tool-calls-it-stops-and-says-which-ceiling",
+   "tree": "tests/conformance/trees/metered-desk",
+   "agent": "stops",
+   "says": "Look up rent, gas and water.",
+   "model": [
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "rent"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "gas"
+       }
+      }
+     ]
+    },
+    {
+     "text": "Rent and gas are there; I did not get to water."
+    }
+   ],
+   "tools": {
+    "ledger": {
+     "look": "entry found",
+     "*": ""
+    }
+   },
+   "members": null,
+   "judge": null,
+   "people": null,
+   "expect": {
+    "after-a-yes": [],
+    "closing": "",
+    "executed": [
+     [
+      "ledger",
+      {
+       "action": "look",
+       "entry": "rent"
+      }
+     ],
+     [
+      "ledger",
+      {
+       "action": "look",
+       "entry": "gas"
+      }
+     ]
+    ],
+    "halted": "tool-call-limit",
+    "offered": [
+     [
+      "ledger"
+     ],
+     [
+      "ledger"
+     ]
+    ],
+    "output": "Stopped before finishing: this run reached the limit you set with `tool-calls-at-most` (2 of 2 tool calls).",
+    "parks": [],
+    "reactions": [],
+    "reminders": [],
+    "steps": [
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "entry": "rent"
+        },
+        "name": "ledger"
+       }
+      ],
+      "results": [
+       "entry found"
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "entry": "gas"
+        },
+        "name": "ledger"
+       }
+      ],
+      "results": [
+       "entry found"
+      ]
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "out-of-tool-calls-it-asks-a-person-and-a-yes-gives-it-the-same-budget-again",
+   "tree": "tests/conformance/trees/metered-desk",
+   "agent": "asks",
+   "says": "Look up rent, gas and water.",
+   "model": [
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "rent"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "gas"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "water"
+       }
+      }
+     ]
+    },
+    {
+     "text": "All three are there."
+    }
+   ],
+   "tools": {
+    "ledger": {
+     "look": "entry found",
+     "*": ""
+    }
+   },
+   "members": null,
+   "judge": null,
+   "people": [
+    "yes"
+   ],
+   "expect": {
+    "after-a-yes": [
+     "A person was asked and said to keep going. The limit this run had reached, `tool-calls-at-most` (2 of 2 tool calls), is now 4 tool calls.\nDo not repeat a call that already has a result."
+    ],
+    "closing": "",
+    "executed": [
+     [
+      "ledger",
+      {
+       "action": "look",
+       "entry": "rent"
+      }
+     ],
+     [
+      "ledger",
+      {
+       "action": "look",
+       "entry": "gas"
+      }
+     ],
+     [
+      "ledger",
+      {
+       "action": "look",
+       "entry": "water"
+      }
+     ]
+    ],
+    "halted": "final",
+    "offered": [
+     [
+      "ledger"
+     ],
+     [
+      "ledger"
+     ],
+     [
+      "ledger"
+     ],
+     [
+      "ledger"
+     ]
+    ],
+    "output": "All three are there.",
+    "parks": [
+     {
+      "asks": [
+       "go-on"
+      ],
+      "executed-so-far": 2,
+      "reason": "out-of-budget",
+      "steps-finished": 2
+     }
+    ],
+    "reactions": [],
+    "reminders": [],
+    "steps": [
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "entry": "rent"
+        },
+        "name": "ledger"
+       }
+      ],
+      "results": [
+       "entry found"
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "entry": "gas"
+        },
+        "name": "ledger"
+       }
+      ],
+      "results": [
+       "entry found"
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "entry": "water"
+        },
+        "name": "ledger"
+       }
+      ],
+      "results": [
+       "entry found"
+      ]
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "a-call-not-made-is-named-to-the-model-after-a-yes",
+   "tree": "tests/conformance/trees/metered-desk",
+   "agent": "asks",
+   "says": "Look up rent, gas and water.",
+   "model": [
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "rent"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "gas"
+       }
+      },
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "water"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "water"
+       }
+      }
+     ]
+    },
+    {
+     "text": "All three are there."
+    }
+   ],
+   "tools": {
+    "ledger": {
+     "look": "entry found",
+     "*": ""
+    }
+   },
+   "members": null,
+   "judge": null,
+   "people": [
+    "yes"
+   ],
+   "expect": {
+    "after-a-yes": [
+     "A person was asked and said to keep going. The limit this run had reached, `tool-calls-at-most` (2 of 2 tool calls), is now 4 tool calls.\nThese calls you asked for were not made and can be made now: ledger {\"action\": \"look\", \"entry\": \"water\"}.\nDo not repeat a call that already has a result."
+    ],
+    "closing": "",
+    "executed": [
+     [
+      "ledger",
+      {
+       "action": "look",
+       "entry": "rent"
+      }
+     ],
+     [
+      "ledger",
+      {
+       "action": "look",
+       "entry": "gas"
+      }
+     ],
+     [
+      "ledger",
+      {
+       "action": "look",
+       "entry": "water"
+      }
+     ]
+    ],
+    "halted": "final",
+    "offered": [
+     [
+      "ledger"
+     ],
+     [
+      "ledger"
+     ],
+     [
+      "ledger"
+     ],
+     [
+      "ledger"
+     ]
+    ],
+    "output": "All three are there.",
+    "parks": [
+     {
+      "asks": [
+       "go-on"
+      ],
+      "executed-so-far": 2,
+      "reason": "out-of-budget",
+      "steps-finished": 2
+     }
+    ],
+    "reactions": [],
+    "reminders": [],
+    "steps": [
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "entry": "rent"
+        },
+        "name": "ledger"
+       }
+      ],
+      "results": [
+       "entry found"
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "entry": "gas"
+        },
+        "name": "ledger"
+       }
+      ],
+      "results": [
+       "entry found"
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "entry": "water"
+        },
+        "name": "ledger"
+       }
+      ],
+      "results": [
+       "entry found"
+      ]
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "out-of-tool-calls-it-asks-a-person-and-a-no-ends-the-run",
+   "tree": "tests/conformance/trees/metered-desk",
+   "agent": "asks",
+   "says": "Look up rent, gas and water.",
+   "model": [
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "rent"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "gas"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "water"
+       }
+      }
+     ]
+    },
+    {
+     "text": "All three are there."
+    }
+   ],
+   "tools": {
+    "ledger": {
+     "look": "entry found",
+     "*": ""
+    }
+   },
+   "members": null,
+   "judge": null,
+   "people": [
+    "no"
+   ],
+   "expect": {
+    "after-a-yes": [],
+    "closing": "",
+    "executed": [
+     [
+      "ledger",
+      {
+       "action": "look",
+       "entry": "rent"
+      }
+     ],
+     [
+      "ledger",
+      {
+       "action": "look",
+       "entry": "gas"
+      }
+     ]
+    ],
+    "halted": "out-of-budget",
+    "offered": [
+     [
+      "ledger"
+     ],
+     [
+      "ledger"
+     ]
+    ],
+    "output": "Stopped before finishing: this run reached the limit you set with `tool-calls-at-most` (2 of 2 tool calls). A person was asked and said not to keep going.",
+    "parks": [
+     {
+      "asks": [
+       "go-on"
+      ],
+      "executed-so-far": 2,
+      "reason": "out-of-budget",
+      "steps-finished": 2
+     }
+    ],
+    "reactions": [],
+    "reminders": [],
+    "steps": [
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "entry": "rent"
+        },
+        "name": "ledger"
+       }
+      ],
+      "results": [
+       "entry found"
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "entry": "gas"
+        },
+        "name": "ledger"
+       }
+      ],
+      "results": [
+       "entry found"
+      ]
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "nobody-answers-the-budget-question-in-time",
+   "tree": "tests/conformance/trees/metered-desk",
+   "agent": "asks",
+   "says": "Look up rent, gas and water.",
+   "model": [
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "rent"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "gas"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "water"
+       }
+      }
+     ]
+    },
+    {
+     "text": "All three are there."
+    }
+   ],
+   "tools": {
+    "ledger": {
+     "look": "entry found",
+     "*": ""
+    }
+   },
+   "members": null,
+   "judge": null,
+   "people": [
+    "nobody"
+   ],
+   "expect": {
+    "after-a-yes": [],
+    "closing": "",
+    "executed": [
+     [
+      "ledger",
+      {
+       "action": "look",
+       "entry": "rent"
+      }
+     ],
+     [
+      "ledger",
+      {
+       "action": "look",
+       "entry": "gas"
+      }
+     ]
+    ],
+    "halted": "out-of-budget",
+    "offered": [
+     [
+      "ledger"
+     ],
+     [
+      "ledger"
+     ]
+    ],
+    "output": "Stopped before finishing: this run reached the limit you set with `tool-calls-at-most` (2 of 2 tool calls). A person was asked and nobody answered in time.",
+    "parks": [
+     {
+      "asks": [
+       "go-on"
+      ],
+      "executed-so-far": 2,
+      "reason": "out-of-budget",
+      "steps-finished": 2
+     }
+    ],
+    "reactions": [],
+    "reminders": [],
+    "steps": [
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "entry": "rent"
+        },
+        "name": "ledger"
+       }
+      ],
+      "results": [
+       "entry found"
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "entry": "gas"
+        },
+        "name": "ledger"
+       }
+      ],
+      "results": [
+       "entry found"
+      ]
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "two-ceilings-reached-together-and-a-no-names-the-one-that-stopped-the-run",
+   "tree": "tests/conformance/trees/metered-desk",
+   "agent": "both",
+   "says": "Look up rent, gas and water.",
+   "model": [
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "rent"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "gas"
+       }
+      },
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "water"
+       }
+      }
+     ]
+    },
+    {
+     "text": "Rent and gas are there."
+    }
+   ],
+   "tools": {
+    "ledger": {
+     "look": "entry found",
+     "*": ""
+    }
+   },
+   "members": null,
+   "judge": null,
+   "people": [
+    "no"
+   ],
+   "expect": {
+    "after-a-yes": [],
+    "closing": "",
+    "executed": [
+     [
+      "ledger",
+      {
+       "action": "look",
+       "entry": "rent"
+      }
+     ],
+     [
+      "ledger",
+      {
+       "action": "look",
+       "entry": "gas"
+      }
+     ]
+    ],
+    "halted": "out-of-budget",
+    "offered": [
+     [
+      "ledger"
+     ],
+     [
+      "ledger"
+     ]
+    ],
+    "output": "Stopped before finishing: this run reached the limit you set with `tool-calls-at-most` (2 of 2 tool calls). A person was asked and said not to keep going.",
+    "parks": [
+     {
+      "asks": [
+       "go-on"
+      ],
+      "executed-so-far": 2,
+      "reason": "out-of-budget",
+      "steps-finished": 2
+     }
+    ],
+    "reactions": [],
+    "reminders": [],
+    "steps": [
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "entry": "rent"
+        },
+        "name": "ledger"
+       }
+      ],
+      "results": [
+       "entry found"
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "entry": "gas"
+        },
+        "name": "ledger"
+       }
+      ],
+      "results": [
+       "entry found"
+      ]
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "two-calls-in-one-reply-reach-the-ceiling-together",
+   "tree": "tests/conformance/trees/metered-desk",
+   "agent": "answers",
+   "says": "Look up rent, gas and water.",
+   "model": [
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "rent"
+       }
+      },
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "gas"
+       }
+      }
+     ]
+    },
+    {
+     "text": "Rent and gas are there."
+    }
+   ],
+   "tools": {
+    "ledger": {
+     "look": "entry found",
+     "*": ""
+    }
+   },
+   "members": null,
+   "judge": null,
+   "people": null,
+   "expect": {
+    "after-a-yes": [],
+    "closing": "This run has reached its limit, `tool-calls-at-most` (2 of 2 tool calls). No tool can be called any more.\nAnswer now, from the results you already have. Say plainly what you did not get to. Never write a tool's result yourself.",
+    "executed": [
+     [
+      "ledger",
+      {
+       "action": "look",
+       "entry": "rent"
+      }
+     ],
+     [
+      "ledger",
+      {
+       "action": "look",
+       "entry": "gas"
+      }
+     ]
+    ],
+    "halted": "tool-call-limit",
+    "offered": [
+     [
+      "ledger"
+     ],
+     []
+    ],
+    "output": "Rent and gas are there.",
+    "parks": [],
+    "reactions": [],
+    "reminders": [],
+    "steps": [
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "entry": "rent"
+        },
+        "name": "ledger"
+       },
+       {
+        "args": {
+         "action": "look",
+         "entry": "gas"
+        },
+        "name": "ledger"
+       }
+      ],
+      "results": [
+       "entry found",
+       "entry found"
+      ]
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "a-third-call-asked-for-in-the-same-reply-as-the-second",
+   "tree": "tests/conformance/trees/metered-desk",
+   "agent": "answers",
+   "says": "Look up rent, gas and water.",
+   "model": [
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "rent"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "gas"
+       }
+      },
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "water"
+       }
+      }
+     ]
+    },
+    {
+     "text": "Rent and gas are there."
+    }
+   ],
+   "tools": {
+    "ledger": {
+     "look": "entry found",
+     "*": ""
+    }
+   },
+   "members": null,
+   "judge": null,
+   "people": null,
+   "expect": {
+    "after-a-yes": [],
+    "closing": "This run has reached its limit, `tool-calls-at-most` (2 of 2 tool calls). No tool can be called any more.\nThese calls you asked for were NOT made and have no result: ledger {\"action\": \"look\", \"entry\": \"water\"}.\nAnswer now, from the results you already have. Say plainly what you did not get to. Never write a tool's result yourself.",
+    "executed": [
+     [
+      "ledger",
+      {
+       "action": "look",
+       "entry": "rent"
+      }
+     ],
+     [
+      "ledger",
+      {
+       "action": "look",
+       "entry": "gas"
+      }
+     ]
+    ],
+    "halted": "tool-call-limit",
+    "offered": [
+     [
+      "ledger"
+     ],
+     [
+      "ledger"
+     ],
+     []
+    ],
+    "output": "Rent and gas are there.",
+    "parks": [],
+    "reactions": [],
+    "reminders": [],
+    "steps": [
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "entry": "rent"
+        },
+        "name": "ledger"
+       }
+      ],
+      "results": [
+       "entry found"
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "entry": "gas"
+        },
+        "name": "ledger"
+       }
+      ],
+      "results": [
+       "entry found"
+      ]
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "out-of-steps-it-answers-with-what-it-has",
+   "tree": "tests/conformance/trees/metered-desk",
+   "agent": "paced",
+   "says": "Look up rent, gas and water.",
+   "model": [
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "rent"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "gas"
+       }
+      }
+     ]
+    },
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "water"
+       }
+      }
+     ]
+    },
+    {
+     "text": "All three are there."
+    }
+   ],
+   "tools": {
+    "ledger": {
+     "look": "entry found",
+     "*": ""
+    }
+   },
+   "members": null,
+   "judge": null,
+   "people": null,
+   "expect": {
+    "after-a-yes": [],
+    "closing": "This run has reached its limit, `steps-at-most` (3 of 3 steps). No tool can be called any more.\nAnswer now, from the results you already have. Say plainly what you did not get to. Never write a tool's result yourself.",
+    "executed": [
+     [
+      "ledger",
+      {
+       "action": "look",
+       "entry": "rent"
+      }
+     ],
+     [
+      "ledger",
+      {
+       "action": "look",
+       "entry": "gas"
+      }
+     ],
+     [
+      "ledger",
+      {
+       "action": "look",
+       "entry": "water"
+      }
+     ]
+    ],
+    "halted": "step-limit",
+    "offered": [
+     [
+      "ledger"
+     ],
+     [
+      "ledger"
+     ],
+     [
+      "ledger"
+     ],
+     []
+    ],
+    "output": "All three are there.",
+    "parks": [],
+    "reactions": [],
+    "reminders": [],
+    "steps": [
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "entry": "rent"
+        },
+        "name": "ledger"
+       }
+      ],
+      "results": [
+       "entry found"
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "entry": "gas"
+        },
+        "name": "ledger"
+       }
+      ],
+      "results": [
+       "entry found"
+      ]
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "entry": "water"
+        },
+        "name": "ledger"
+       }
+      ],
+      "results": [
+       "entry found"
+      ]
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "an-answer-before-any-ceiling-is-an-ordinary-answer",
+   "tree": "tests/conformance/trees/metered-desk",
+   "agent": "answers",
+   "says": "Look up rent, gas and water.",
+   "model": [
+    {
+     "calls": [
+      {
+       "name": "ledger",
+       "args": {
+        "action": "look",
+        "entry": "rent"
+       }
+      }
+     ]
+    },
+    {
+     "text": "Rent is there."
+    }
+   ],
+   "tools": {
+    "ledger": {
+     "look": "entry found",
+     "*": ""
+    }
+   },
+   "members": null,
+   "judge": null,
+   "people": null,
+   "expect": {
+    "after-a-yes": [],
+    "closing": "",
+    "executed": [
+     [
+      "ledger",
+      {
+       "action": "look",
+       "entry": "rent"
+      }
+     ]
+    ],
+    "halted": "final",
+    "offered": [
+     [
+      "ledger"
+     ],
+     [
+      "ledger"
+     ]
+    ],
+    "output": "Rent is there.",
+    "parks": [],
+    "reactions": [],
+    "reminders": [],
+    "steps": [
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "entry": "rent"
+        },
+        "name": "ledger"
+       }
+      ],
+      "results": [
+       "entry found"
+      ]
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  }
+ ]
+}

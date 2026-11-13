@@ -194,6 +194,7 @@ class LangChainTransport:
             # framework. `mock.py` states the rule once for every target that
             # shares it.
             "connected_tools": "emulated",
+            "plugins": "unsupported",
         }
 
     def apply_settings(self, settings: dict[str, Any]) -> tuple[str, ...]:

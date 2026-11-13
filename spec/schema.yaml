@@ -519,6 +519,26 @@ groups:
           sets of ready-made capabilities this workspace uses. Each says where
           its folder is and which kinds it may contribute; anything else it
           contains is refused rather than quietly mounted.
+      plugins:
+        # D29, which narrows R17. A bundle above is definitions PACT reads; a
+        # plugin is CODE, and PACT never reads it, fetches it or runs it (R5).
+        # What lives here is the request for it — which package, which versions
+        # will do, its settings, and what an agent does on a runtime that cannot
+        # load it — so a reviewer reads the request in the folder they were
+        # handed, and every runtime answers it the same way: it loaded it, it
+        # refused to start, or the run says the plugin was not there.
+        #
+        # S-EXEC because a plugin can do anything its runtime lets it, which is
+        # what "touching tools" means to D23. A person approves adding one.
+        type: map of group:plugin
+        surface: S-EXEC
+        tier: expert
+        help: >
+          code that whatever runs these agents loads for them, one file each
+          under `plugins/`. Each says which package, which versions will do, its
+          settings, and whether an agent may start without it. PACT never
+          fetches or runs one: `pact check` reads the lines, and the runtime says
+          whether it loaded it. Adding one always needs a person to approve it.
       interceptors:
         type: map of group:interceptor
         surface: S-EXEC
@@ -761,7 +781,12 @@ groups:
           `date`, `time` and `date and time`, or `one of a, b, c` to choose
           between things you name. Write `list of <shape>` for several, a
           name from the workspace's `shapes:` for a shape with parts, and
-          `, optional` after a line that may be left out.
+          `, optional` after a line that may be left out. A model is shown
+          everything the agent was given and nothing else: the `message`,
+          where there is one, as the words, and every other line by its name
+          and value, in the order written here. With no `message` nothing is
+          put in front — not the description above, which is written for
+          whoever chooses this agent.
       answers-with:
         type: map of answer-shape
         shapes: *the-answer-shapes
@@ -1037,6 +1062,15 @@ groups:
           worked example the model should copy, including the tool it should
           call and what came back. These words may carry the same
           `{{run-inputs.<name>}}` holes as `instructions:`.
+      plugins:
+        type: list of text
+        names: plugins
+        surface: S-EXEC
+        tier: expert
+        help: >
+          which of the workspace's plugins this agent needs, by name. One whose
+          `applies-to:` is `every-agent` is loaded for every agent here and need
+          not be named.
 
   variant:
     describe: something a variant can have
@@ -3665,6 +3699,9 @@ groups:
           the same arguments (a reminder, a second notice): the call's own place in the run is
           then its identity, sent to the server as the request's idempotency key, the same on
           every retry and new for every other call. Only write it for a server that honours one.
+          It is sent as the `Idempotency-Key` header on a `url:` tool, and as
+          `dev.pact/request-key` in the request's `_meta` on a connected one — never as an
+          argument, which would change the call.
       same-request-key-across:
         # A5. A scope on the line above it, not a second setting:
         # `at-most-once-across:` would have been a THIRD name for one act,
@@ -3744,7 +3781,16 @@ groups:
           how long one call's claim on its key lasts — `5m`. Until then a second
           call with the same key is refused; after it the key is free again, so
           work somebody took and never finished goes back to whoever comes next.
-          Leave it out and a claim lasts as long as its scope does.
+          Leave it out and a claim lasts as long as its scope does. The claim is
+          taken when the call is let through — after a person has said yes, just
+          before the tool is reached — and not while anybody is being asked, so
+          a long approval uses up none of it. A lease cannot stop a call that is
+          still running when it ends; what can is the number each new claim is
+          given, one higher than the last, which whatever runs your agents
+          sends with the call so the system it writes to can refuse a late one:
+          `Pact-Fence` and `Pact-Claim` headers on a `url:` tool,
+          `dev.pact/fence` and `dev.pact/claim` in the request's `_meta` on a
+          connected one. A server that ignores them behaves as before.
       bind:
         # TWO namespaces now, and the second closes a hole the first could not
         # reach. `run-inputs.<name>` is what the surrounding system supplied for
@@ -4902,7 +4948,12 @@ groups:
           `needs-a-person-to-approve:` below is for.
       needs-a-person-to-approve:
         type: list of one-of
-        choices: [tools, permissions, team, limits, evals, policy-clauses]
+        # `plugins` (D29): a plugin is code its runtime loads, so a change to
+        # which one an agent needs, or which versions will do, is a change to
+        # what it can do. The classifier holds it to a person with or without
+        # this line (`learning.HIGH_RISK_FIELDS`); listing it is how an author
+        # says so in the file.
+        choices: [tools, permissions, team, limits, evals, policy-clauses, plugins]
         surface: S-GOV
         tier: core
         help: changes to what it can DO, which always need review
@@ -5803,7 +5854,10 @@ groups:
           and figures come from `values.<name>`. A part of an input is written
           with a dot: `fills.first-name`. The model never sees these lines and
           cannot change them. On an `answer`, what it hands back, field by
-          field — `contact-id: steps.upsert.id`.
+          field — `contact-id: steps.upsert.id`. On a `decide`, what the
+          agents on its rungs are given besides the workflow's input and the
+          current item — `kind: steps.triage.kind` — which is the only way
+          one of them is shown what an earlier stage found.
       waits-for-result:
         type: yes-no
         surface: S-CTRL
@@ -5984,11 +6038,19 @@ groups:
           an agent that picks a label. Its `answers-with:` has one `one of`
           line naming these labels, and may add `not-sure`, which passes the
           decision on. A decision model is an agent whose model has
-          `kind: decision`. It is given the current item's fields over the
-          workflow's input — as many as it `accepts:` and nothing it does not
-          — and this stage's `says:`, where there is one, at the start of its
-          `message`. An agent that writes no `accepts:` takes a `message` and
-          nothing else.
+          `kind: decision`. It is given this stage's `bind:` over the current
+          item's fields over the workflow's input — as many as it `accepts:`
+          and nothing it does not — and this stage's `says:`, where there is
+          one, at the start of its `message`. A name the stage binds is the
+          binding's alone: where the binding reads nothing, the agent is
+          given nothing under that name. An item that is one value and not a
+          set of fields (a list of texts) is its `message`, or goes where the
+          stage binds it — `bind: {note: item}`. An agent that writes no
+          `accepts:` takes a `message` and nothing else. An agent that would
+          be given nothing it accepts, or not something it requires, is
+          refused. An agent all of whose models are decision models follows
+          no instruction, so it is not given the `says:`: its `message` is
+          what it is to score, as it is.
       if-unsure-below:
         type: percent
         needs-also: [agent]
@@ -5996,8 +6058,12 @@ groups:
         tier: core
         help: >
           for a decision model, the score under which it passes the decision
-          on. A language model has no honest score, so it answers `not-sure`
-          instead and this line is refused on it.
+          on to the next rung. A score exactly at the figure decides, and an
+          answer that came with no score passes on. A language model has no
+          honest score, so it answers `not-sure` instead and this line is
+          refused on it. Passing on is always to the next rung, never to the
+          next model of the agent's own `model:` list, which is tried only
+          when a call fails.
       if-it-disagrees:
         type: one-of
         choices: [keep-its-answer, go-on]
@@ -6005,8 +6071,13 @@ groups:
         surface: S-GOV
         tier: core
         help: >
-          `go-on` passes the decision on when this rung picks a different label
-          from the rung before it. Leave it out to keep its answer.
+          `go-on` makes this rung a second opinion: it is asked even when a
+          rung before it has decided. The same label, and that decision
+          stands. Another label, or it is not sure itself, and nothing
+          stands: the rungs after it are tried as if nobody had decided. With
+          nothing decided before it, it decides as any rung does. Leave the
+          line out and the rung is asked only when nothing has been decided,
+          and its answer is kept.
       asks:
         type: text
         names: [^questions, questions]
@@ -7488,6 +7559,11 @@ groups:
           - shapes
           - remembers
           - owners
+          # D29. A plugin line is a definition like the rest — a name, a
+          # package and a range — and a bundle that starts carrying one asks
+          # every runtime to load code, so it is a kind `brings:` governs
+          # rather than one it is blind to.
+          - plugins
         required: yes
         surface: S-EXEC
         tier: core
@@ -7506,6 +7582,107 @@ groups:
         help: >
           what it defines, read exactly as if you had written it here. You do
           not type this — it is what is in the bundle's own folder.
+
+  # ── PLUGINS (D29) ─────────────────────────────────────────────────────────────
+  # A request for code the runtime loads, never the code. `pact check` holds each
+  # line to its own grammar (`crates/pact-loader/src/plugins.rs`) and never
+  # resolves, downloads or opens the package, so checking a workspace stays an act
+  # of reading (R5) and stays offline (D17). Whether the package was loaded is the
+  # runtime's answer, given on every run: the `plugins` lattice column says which
+  # registries a runtime can load at all, and a plugin it did not load either
+  # stops the agent before its first step or is named on `unenforced`.
+  plugin:
+    describe: something a plugin line can have
+    fields:
+      description:
+        type: text
+        required: yes
+        surface: S-GEN
+        tier: core
+        help: what it adds, in one line, for whoever has to approve it
+      package:
+        # The registry word is the portability fact. A runtime written in
+        # TypeScript can load an npm package and not a pypi one, so the word in
+        # front of the name says, before anything runs, which runtimes can
+        # honour the line at all — and `pact discover` publishes it.
+        type: text
+        required: yes
+        surface: S-EXEC
+        tier: expert
+        help: >
+          the package, written `<registry>:<name>` — `npm:@acme/crm-tools` or
+          `pypi:acme-crm-tools`. The registry word says which runtimes can load
+          it at all; a runtime with no loader for that registry treats it as a
+          plugin it cannot load.
+      version:
+        # A range and never "latest": an upgrade that changes what an agent can
+        # do is a line somebody edited and a reviewer read, not something that
+        # happened on the next install. Held to the registry's own grammar, so
+        # `^1.4` under pypi or `>=1.4,<2` under npm is refused where it is typed.
+        type: text
+        required: yes
+        surface: S-EXEC
+        tier: expert
+        help: >
+          which versions will do, written the registry's own way — `^1.4.0` for
+          npm, `>=1.4,<2` for pypi — so an upgrade that changes behaviour is a
+          line somebody edited rather than something that happened.
+      if-it-cannot-be-loaded:
+        # Two answers, because a runtime that cannot load the package has only
+        # two honest things to do. Refusing is the default: an agent written to
+        # rely on code it did not get is an agent that is not the one reviewed.
+        type: one-of
+        choices: [refuse-to-start, run-without-it]
+        surface: S-GOV
+        tier: core
+        help: >
+          what happens on a runtime that cannot load it. `refuse-to-start`, which
+          is what you get if you leave this out, stops the agent before its first
+          step and says which plugin and why. `run-without-it` starts the agent,
+          and every run says the plugin was not there.
+      config:
+        # Open, like `bundle.contributes`, because the settings are the
+        # plugin's and not PACT's: a second copy of every plugin's settings
+        # here would be a schema PACT cannot keep true. What PACT does hold is
+        # the one rule no plugin may waive — no secret in the file.
+        type: map of anything
+        surface: S-EXEC
+        tier: expert
+        help: >
+          the plugin's own settings, handed to it as written. A secret goes in as
+          `{by-reference: <name>}`, the name your platform team publishes for
+          where it is kept, never as the secret itself.
+      applies-to:
+        # The same polarity `interceptor.applies-to` and `policy.applies-to`
+        # record, on the same two words.
+        type: one-of
+        choices: [the-agents-that-name-it, every-agent]
+        surface: S-EXEC
+        tier: expert
+        help: >
+          who it is loaded for. `the-agents-that-name-it` is the default and is
+          for a plugin one job needs. `every-agent` loads it for every agent here,
+          and an agent cannot opt out by leaving it off its `plugins:` line.
+      implements:
+        # Law 4 (closed world) for code PACT never reads. What a plugin lets an
+        # agent ASK is written here as an interface the tree declares, so the
+        # contract a policy, an approval and an eval are written against is the
+        # tree's, and the plugin supplies only the code behind it. The same
+        # interface then carries law 1 (its actions' effect is the effect of
+        # every agent the plugin is loaded for) and law 3 (an action it cannot
+        # undo names its same-request key, because the code that does it is
+        # code no checker sees).
+        type: list of text
+        names: [tools, skills, knowledge]
+        surface: S-CAP
+        tier: expert
+        help: >
+          the interfaces this plugin's code stands behind, by name — entries in
+          `tools`, `skills` or `knowledge` that say `interface: yes`. An agent
+          asks the interface, so what it may do, what needs a person and what
+          it does to the world are written in this tree, and the plugin is
+          one way of doing it. Leave it out for a plugin that gives an agent
+          nothing to ask.
 
   # ── TEAMWORK ────────────────────────────────────────────────────────────────
   # How an agent waits for the people it asked for help, and how what it may

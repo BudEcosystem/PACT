@@ -116,29 +116,117 @@ class Reached:
         """What a person is told. Names the setting, both numbers, and what
         happened — a message saying only "limit exceeded" leaves the reader with
         nowhere to go, which is the failure D13 rules out."""
+        whose = self._whose()
+        if self.action is Action.ASK:
+            return f"Waiting for a person: this run reached {whose}."
+        if self.action is Action.ANSWER:
+            return (
+                f"This run reached {whose}, so it answered with what it had rather "
+                f"than finishing the work."
+            )
+        return f"Stopped before finishing: this run reached {whose}."
+
+    def declined(self, words: str = "", *, nobody_answered: bool = False) -> str:
+        """What a person is told when the run asked for more and did not get it.
+
+        `sentence()` cannot say this. For a ceiling whose action is
+        `ask-a-person` it begins "Waiting for a person", which is true while
+        the run is parked and false the moment somebody has said no: nothing is
+        waiting any more. And the run's last words are not the answer either —
+        the reference used to hand those back, which was often an empty string
+        (a reply that was only tool calls), so a refused run said nothing about
+        why it had ended.
+
+        ONE function, because two runtimes end a run this way and a reader
+        comparing them should be reading the same sentence. `words` is what the
+        person said beyond the no, when the question asked for a reason.
+        `nobody_answered` is the other way a request for more is not granted:
+        the wait ran out (`if-nobody-answers: decline`). That is not a person
+        saying no, and the sentence does not claim one did.
+        """
+        asked = (
+            "A person was asked and nobody answered in time."
+            if nobody_answered
+            else "A person was asked and said not to keep going."
+        )
+        said = f"Stopped before finishing: this run reached {self._whose()}. {asked}"
+        words = words.strip()
+        return f"{said} {words}" if words else said
+
+    def closing(self, not_made: "tuple[str, ...]" = ()) -> str:
+        """What the MODEL is told at the closing request of a run that answers
+        with what it has.
+
+        Offering no tools is not telling a model anything. Asked to look up
+        five entries, allowed two, and then sent one more request with its
+        tools gone and no word why, a live model carried on in the only
+        pattern in front of it and wrote a third tool result itself:
+        `[result of ledger] water: entry found`, for a lookup that was never
+        made. That came back as the run's answer. So the closing request says
+        what happened, which calls the model asked for were not made
+        (`not_made`, each as the runtime shows a call), and what to do now.
+
+        ONE function, as `declined` is, so two runtimes tell a model the same
+        thing at the one request nobody planned for.
+        """
+        lines = [f"This run has reached its limit, {self.what}. No tool can be called any more."]
+        if not_made:
+            lines.append(
+                "These calls you asked for were NOT made and have no result: "
+                + "; ".join(not_made)
+                + "."
+            )
+        lines.append(
+            "Answer now, from the results you already have. Say plainly what you did "
+            "not get to. Never write a tool's result yourself."
+        )
+        return "\n".join(lines)
+
+    def raised(self, to: float, not_made: "tuple[str, ...]" = ()) -> str:
+        """What the MODEL is told at its first request after a person said to
+        keep going.
+
+        A run stopped part-way through a reply has calls the model asked for
+        that were never made, and nothing in front of the model says which.
+        Measured on a small live model, ten runs of each, five calls asked for
+        at once with a ceiling of two and then a yes: told nothing, it gave up
+        and blamed the limit a person had just raised, or spent the new budget
+        repeating calls it already had results for. Told only that the limit
+        was raised, with or without how much was left, on every request or on
+        one, it still did, one or two runs in ten. Told WHICH calls were not
+        made, it made exactly those, ten of ten. (The numbers are Bud Agent
+        Flow's, on its engine; PACT's reference repeated calls in one run of
+        ten with no notice.)
+
+        `to` is the figure the ceiling this run had reached is raised to.
+        ONE function, as `closing` and `declined` are.
+        """
+        now = _round(to)
+        if self.ceiling.unit:
+            now = f"{now} {self.ceiling.unit}"
+        lines = [
+            "A person was asked and said to keep going. The limit this run had reached, "
+            f"{self.what}, is now {now}."
+        ]
+        if not_made:
+            lines.append(
+                "These calls you asked for were not made and can be made now: "
+                + "; ".join(not_made)
+                + "."
+            )
+        lines.append("Do not repeat a call that already has a result.")
+        return "\n".join(lines)
+
+    def _whose(self) -> str:
+        """Whose figure this is, with the figure: the author's, or PACT's own."""
         what = self.what
         if self.ceiling.default:
-            whose = (
+            return (
                 f"PACT's default limit, {what}, which applies when no "
                 f"`{self.ceiling.field}:` is written (write one under `limits:` to set "
                 f"your own)"
             )
-            if self.action is Action.ASK:
-                return f"Waiting for a person: this run reached {whose}."
-            if self.action is Action.ANSWER:
-                return (
-                    f"This run reached {whose}, so it answered with what it had rather "
-                    f"than finishing the work."
-                )
-            return f"Stopped before finishing: this run reached {whose}."
-        if self.action is Action.ASK:
-            return f"Waiting for a person: this run reached the limit you set with {what}."
-        if self.action is Action.ANSWER:
-            return (
-                f"This run reached the limit you set with {what}, so it answered "
-                f"with what it had rather than finishing the work."
-            )
-        return f"Stopped before finishing: this run reached the limit you set with {what}."
+        return f"the limit you set with {what}"
 
 
 @dataclass

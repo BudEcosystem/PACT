@@ -45,8 +45,11 @@ const A_MIND: &[&str] = &["model", "instructions", "loop", "team", "uses"];
 const BELONGS_WITH: &[(&str, &[&str])] = &[
     ("call", &["call"]),
     ("may-call", &["call"]),
-    // An `answer` hands back its `bind:` (02W §5: `reply`, `give`).
-    ("bind", &["call", "answer"]),
+    // An `answer` hands back its `bind:` (02W §5: `reply`, `give`). A
+    // `decide` hands its `bind:` to the agents on its rungs: without it an
+    // agent that decides could be given the workflow's input and the item and
+    // nothing an earlier stage found out (`bindings.rs`, `Flow::decide`).
+    ("bind", &["call", "answer", "decide"]),
     ("waits-for-result", &["call"]),
     ("version", &["call"]),
     ("chooses-between", &["decide"]),

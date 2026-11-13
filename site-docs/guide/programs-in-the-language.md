@@ -78,7 +78,7 @@ run; what changes during a run is what steps answer.
 workflow clear-inbox
   description: Route every message in an inbox.
   takes messages: list of message
-  gives replies: text, optional
+  gives replies: list of text, optional
 
   every = for each item in input.messages
     identified-by: [id]
@@ -156,6 +156,95 @@ then a person. Each `if` is one label the decision can pick, with the steps
 for it beneath. Steps written *after* the whole `decide` block run once the
 chosen branch has finished, which is how branches come back together.
 `if <label>: done` ends the run for that label.
+
+### What the deciding agent is shown
+
+An agent that decides is given three things, by name: the workflow's input,
+the fields of the item it is inside a `for each` of, and whatever the
+`decide` hands it with the word a `call` uses. Of those it gets only what it
+`takes`.
+
+```text
+  triage = call triager with report: input.report
+  assign = decide with kind: triage.kind, summary: triage.summary
+    by:
+      - { agent: assigner }
+    if powerplant: done
+    if interiors: done
+```
+
+`with` is the only way a deciding agent sees what an earlier step found. A
+name written there is filled from that place and no other: if `triage` gave
+no `kind`, the assigner is given no `kind`, even when the workflow's input
+has a field of the same name.
+
+In a loop over plain texts each text is the agent's `message`. An agent that
+calls it something else says so: `decide with note: item`.
+
+An agent that runs only on trained classifiers (`kind: decision` in the model
+catalogue) is not given the `says:` line. A classifier follows no
+instruction; it scores the text, and an instruction in front of the text
+would be scored with it.
+
+`pact check` refuses a decision whose agent would be given nothing it takes,
+or would be left without something it requires
+(`loader/a-deciding-agent-given-nothing`), and tells you what is on offer.
+
+### Who decides, in what order
+
+The rungs under `by:` are tried from the top. The first that decides makes
+its label *the standing one*, and the rungs after it are not asked — with one
+exception, a second opinion.
+
+| A rung | Decides when | Passes the decision on when |
+|---|---|---|
+| `rules:` | a rule's conditions all hold | none does |
+| `agent:` | it answers one of the labels | it answers `not-sure` |
+| `agent:` with `if-unsure-below: 85%` | its score is 85% or more | its score is lower, or it gave none |
+| `asks:` | always (it is last) | never |
+
+`if-it-disagrees: go-on` on an agent's rung makes it a **second opinion**: it
+is asked even though a rung above has decided.
+
+```text
+    by:
+      - rules:
+          - when:
+              - { value: input.folder, is: invoices }
+            choose: bills
+      - agent: checker
+        if-it-disagrees: go-on
+      - { asks: which-shelf }
+```
+
+- The checker agrees with the rule: `bills` stands and nobody else is asked.
+- The checker picks another label, or is not sure: nothing stands, and the
+  person is asked.
+- No rule held: the checker decides on its own.
+
+Passing on is always to the next rung. A `model:` list on the agent names
+fallbacks for a call that *fails*; it is not tried because an answer was
+unsure. To have a classifier and then a language model, write two agents on
+two rungs. `pact check` warns about one agent that lists both
+(`loader/a-rung-with-two-kinds-of-reader`).
+
+Afterwards the step says who decided: `where.label`, `where.decided-by`
+(`rules`, `agent` or `person`) and `where.answered-by` (the agent's name, or
+the person). Every step also has `.outcome`, the word it ended in, and a
+`repeat` has `.rounds` and `.ended` (`passed` or `ran-out`).
+
+A decision is one person's. A question that needs several answers
+(`answered-by: everyone`) cannot decide a branch, because nothing says which
+label stands when people pick different ones; `pact check` refuses it
+(`loader/a-decision-asked-of-several`). Ask them in a step of its own instead:
+
+```text
+  approve = ask may-we-close
+  reply = answer with close: approve.close, by: approve.answered-by
+```
+
+On a step that asks people, `.answered-by` is a list, in the order they
+answered, also when one person did.
 
 ## Things at once
 

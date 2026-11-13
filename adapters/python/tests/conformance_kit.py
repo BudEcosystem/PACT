@@ -22,8 +22,20 @@ How a case is replayed, so a second runtime can do the same:
   after, or asked as a teammate): `{agent: text, "*": text}`. `null` means the
   host has nothing that can run another agent.
 * **`judge`** — what the checking model answers each time it is asked.
+
+In `expect`, **`closing`** is what the closing request of a run that answers
+with what it has was told about the limit, last in its system text
+(`Reached.closing` in `pact_adapters/limits.py`): which ceiling, which calls
+the model asked for were not made, and to answer from what it has. `""` when
+the run made no closing request. **`after-a-yes`** is what the model was told
+after a person said to keep going (`Reached.raised`): one text for each request
+that was told, which is one for each yes, the first request after it and no
+other.
+
 * **`people`** — one entry for each time the run parks, in order: `"yes"` or
-  `"no"`, given to every question of that park.
+  `"no"`, given to every question of that park. `"nobody"` means no answer is
+  given and the time the question allows (`answer-within:`) passes: the run is
+  resumed with no answer, at a moment after the wait has run out.
 """
 
 from __future__ import annotations
@@ -41,6 +53,10 @@ from pact_adapters.workflow_runtime import Callers, run_workflow
 from trees import shown
 
 REPO = Path(__file__).resolve().parents[3]
+#: How `Reached.closing` begins: what a closing request is told about the limit.
+CLOSING_BEGINS = "This run has reached its limit, "
+#: How `Reached.raised` begins: what the first request after a yes is told.
+RAISED_BEGINS = "A person was asked and said to keep going. "
 CASES = REPO / "tests" / "conformance"
 
 
@@ -62,10 +78,21 @@ def replay_agent(case: dict[str, Any]) -> dict[str, Any]:
     executed: list[list[Any]] = []
     woken: list[dict[str, str]] = []
     offered: list[list[str]] = []
+    closing: list[str] = []
+    after_a_yes: list[str] = []
 
     class Lead(ReferenceTransport):
         async def model_call(self, system, history, tools):  # type: ignore[override]
             offered.append([t["name"] for t in tools])
+            # What a closing request was told about the limit: the end of its
+            # system text, from the sentence `Reached.closing` begins with.
+            at = system.rfind(CLOSING_BEGINS)
+            if not tools and at >= 0:
+                closing.append(system[at:])
+            # What a request after a person said to keep going was told.
+            at = system.rfind(RAISED_BEGINS)
+            if at >= 0:
+                after_a_yes.append(system[at:])
             return await super().model_call(system, history, tools)
 
     def tool(name: str):
@@ -110,6 +137,14 @@ def replay_agent(case: dict[str, Any]) -> dict[str, Any]:
             "asks": [a.name for a in parked.asks],
             "executed-so-far": len(executed),
         })
+        if said == "nobody":
+            # Nobody answers, and the time the question allows goes by.
+            assert parked.waits_for is not None, "a wait with no `answer-within:` never runs out"
+            out = asyncio.run(
+                run(spec, Lead(lead), case["says"], tools, resume=parked,
+                    now=parked.parked_at + parked.waits_for + 1.0, **kw)
+            )
+            continue
         answer = parked.answer(**{a.name: said for a in parked.asks})
         out = asyncio.run(
             run(spec, Lead(lead), case["says"], tools, resume=parked, answer=answer,
@@ -125,6 +160,8 @@ def replay_agent(case: dict[str, Any]) -> dict[str, Any]:
             for s in out.steps
         ],
         "offered": offered,
+        "closing": closing[-1] if closing else "",
+        "after-a-yes": after_a_yes,
         "executed": executed,
         "woken": woken,
         "parks": parks,

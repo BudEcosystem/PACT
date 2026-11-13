@@ -1,11 +1,11 @@
-# The 68 kinds
+# The 69 kinds
 
 Generated from `spec/schema.yaml`. Every kind, what it is for, and how
 many fields it has. You do not need to learn these — `pact check` names the
 right one when you need it.
 
 
-**68 kinds.** A kind is a *shape a document can take*, not a file you must
+**69 kinds.** A kind is a *shape a document can take*, not a file you must
 write: most workspaces use a dozen.
 
 
@@ -14,7 +14,7 @@ write: most workspaces use a dozen.
 | Kind | Fields | Core fields |
 |---|---:|---|
 | `action` | 21 | `description`, `topics`, `takes`, `reads-only`, `needs-a-person` |
-| `agent` | 29 | `name`, `description`, `instructions`, `team`, `teamwork` |
+| `agent` | 30 | `name`, `description`, `instructions`, `team`, `teamwork` |
 | `loop` | 4 | `description`, `based-on` |
 | `knowledge` | 15 | `description`, `topics`, `documents`, `passages-at-most`, `must-cite` |
 | `skill` | 14 | `name`, `description`, `use-when`, `do-not-use-when`, `if-unsure` |
@@ -26,7 +26,7 @@ write: most workspaces use a dozen.
 | `variant` | 6 | — |
 | `turn` | 6 | — |
 | `voice` | 9 | — |
-| `workspace` | 39 | `name`, `workspace-id`, `description`, `owner`, `profile` |
+| `workspace` | 40 | `name`, `workspace-id`, `description`, `owner`, `profile` |
 
 ## Topics, events and reactions
 
@@ -93,6 +93,7 @@ write: most workspaces use a dozen.
 | Kind | Fields | Core fields |
 |---|---:|---|
 | `bundle` | 5 | `description`, `version`, `from`, `brings` |
+| `plugin` | 7 | `description`, `if-it-cannot-be-loaded` |
 | `port` | 22 | `description`, `kind`, `every`, `says`, `if-still-running` |
 | `resource` | 14 | `resource-kind`, `endpoint`, `auth`, `asks-to-connect`, `description` |
 | `published` | 5 | — |
@@ -126,7 +127,7 @@ write: most workspaces use a dozen.
 
 ## How to read a kind
 
-Every kind follows the same shape, so 54 is not 54 things to learn:
+Every kind follows the same shape, so 64 is not 64 things to learn:
 
 ```yaml
 description: what this is, in one line     # every kind has this

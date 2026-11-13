@@ -23,6 +23,7 @@
 //! | `repeat [at most <n> times]` + body | `does: repeat`, `at-most:`, and the body as its `steps:` |
 //! | `together` + body | `does: together`; every statement in the body starts at once |
 //! | `decide` + `if <label>` lines | `does: decide`, `chooses-between:` |
+//! | `decide with kind: triage.kind` | the same, and `bind:` — what the agents that decide are given |
 //! | `answer [with <field>: <binding>, …]` | `does: answer`, `bind:` |
 //! | `stop <binding>` | `does: stop`, `stops:` |
 //! | `ask <question>` | `does: ask-someone`, `asks:` |
@@ -301,8 +302,17 @@ impl<'a> Reader<'a> {
             let inner = self.flow_body(rest, Kind::Stage, false);
             self.merge(&mut fields, inner);
             default = "together".to_string();
-        } else if said == "decide" {
+        } else if said == "decide" || said.starts_with("decide with ") {
             does(self, &mut fields, "decide", &whole);
+            // What the agents that decide are given besides the workflow's
+            // input and the item: `decide with kind: triage.kind`, the same
+            // `with` a `call` has.
+            if said != "decide" {
+                match self.binds(&l, at + "decide with ".len()) {
+                    Some(node) => self.put(&mut fields, "bind".to_string(), whole.clone(), node),
+                    None => return Line2::Refused,
+                }
+            }
             branches = self.decision(rest, &whole, &mut fields);
             ends = Ends::Decides;
             default = "decide".to_string();

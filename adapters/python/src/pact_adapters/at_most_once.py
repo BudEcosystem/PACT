@@ -130,6 +130,14 @@ class RequestKeys:
     #: in the run is its identity, which a host sends to the server as the
     #: request's idempotency key. Nothing here holds them: two calls at two
     #: places are two calls, and a retry of one is the host's to identify.
+    #:
+    #: HOW it is sent is one convention, written in the schema's help and here
+    #: (agreed with Bud Agent Flow, which already sent the first in production):
+    #: `Idempotency-Key` as a header on a `url:` tool, `dev.pact/request-key` in
+    #: the request's `_meta` on a connected one. A fencing token
+    #: (`Ledger.fences`) travels the same two ways, as `Pact-Fence` with
+    #: `Pact-Claim`, and `dev.pact/fence` with `dev.pact/claim` — both or
+    #: neither, only for a claim taken from a store, and never as an argument.
     by_the_call: frozenset[tuple[str, str]] = frozenset()
 
     def __bool__(self) -> bool:

@@ -36,6 +36,8 @@ USAGE:
     pact build <FILE> --to <FOLDER>
                           Write the folder of YAML and Markdown that a
                           PACT-language file stands for
+    pact about            Say which commit this `pact` was built from, and
+                          whether it was built with uncommitted changes
     pact help             Show this message (also written -h or --help)
 
 PATH defaults to the current directory.
@@ -134,6 +136,33 @@ fn main() {
             std::process::exit(2);
         }
     }
+}
+
+/// `pact about`: what this binary is, in three lines a script can read.
+///
+/// ```text
+/// version: 0.1.0
+/// commit: 63a048bbbc5279feefcac453d38a8582090b29db
+/// uncommitted: no
+/// ```
+///
+/// `version:` is the release the crate says it is. `commit:` is the commit the binary was built from, or `unknown` when it was
+/// built with no repository around it. `uncommitted:` is `no`, `yes` or
+/// `unknown`: whether anything the binary is built from (the crates, the
+/// specification, the model catalogue, the manifests) differed from that
+/// commit when it was built. Both are fixed when it is compiled (`build.rs`),
+/// so they describe the binary and not the folder it is run from.
+///
+/// A runtime that pins PACT by commit compares the first with its pin and
+/// refuses anything but `no` for the second.
+fn about() -> anyhow::Result<i32> {
+    out_raw!(
+        "version: {}\ncommit: {}\nuncommitted: {}\n",
+        env!("CARGO_PKG_VERSION"),
+        env!("PACT_BUILT_FROM_COMMIT"),
+        env!("PACT_BUILT_UNCOMMITTED"),
+    );
+    Ok(0)
 }
 
 /// Whether this is somebody asking what the commands are — answered BEFORE the
@@ -362,6 +391,7 @@ fn run() -> Result<i32> {
     };
 
     match cmd {
+        "about" => about(),
         "check" => check(&path, quiet, unsafe_spec, deny_warnings),
         "show" => show(&path, unsafe_spec),
         "waits" => waits_cmd(&path, unsafe_spec),
@@ -390,7 +420,7 @@ fn run() -> Result<i32> {
             // typo suggestion is the same `suggest::closest` the option refusal
             // two functions up already uses.
             let verbs = [
-                "check", "show", "waits", "discover", "card", "write", "build", "help",
+                "check", "show", "waits", "discover", "card", "write", "build", "about", "help",
             ];
             let fix = match pact_schema::suggest::closest(other, &verbs) {
                 Some(near) => format!("Did you mean `pact {near}`?"),
@@ -1806,6 +1836,12 @@ fn validate(
         // now stop this run — with nothing in this workspace changed and nobody
         // here having approved it.
         pact_loader::bundles::a_bundle_brings_only_what_it_said(root, &schema, &mut diags);
+        // D29. A plugin line asks a runtime to load code, and each half of the
+        // request has a grammar that is not PACT's — a registry word, a version
+        // range written that registry's way — which a runtime applies later,
+        // somewhere the author is not watching. Held here, where they are, and
+        // without resolving, downloading or opening the package (R5, D17).
+        pact_loader::plugins::check(root, &mut diags);
         // And the seventh, which was decided only by RUNNING the agent.
         // `spends-money:`'s own help promises the call is routed through the
         // author's approval policy; whether it is, is a fact about a different
@@ -1916,7 +1952,7 @@ fn validate(
         // And what a workflow's bindings read (02W §2.0, §3 WF-4 to WF-7, WF-9,
         // WF-13, WF-14, WF-39): a path the schema holds to text, and only the
         // whole workflow can say whether it names something that has run.
-        pact_loader::bindings::check(root, &schema, &mut diags);
+        pact_loader::bindings::check(root, &schema, BUILTIN_CATALOGUE, &mut diags);
         // And what a workflow waits for (02W §2.8, §2.10, §3): a person, a group,
         // an event or the clock, with reminders, deadlines and the zone a time
         // is read in — and, the other way round, what only a workflow reads
