@@ -32,7 +32,9 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from .checking import Uncheckable, check_instructions
+import yaml
+
+from .checking import Uncheckable, check_agent_field
 from .evals import Case, CaseOutcome, Verdict, check, verdict
 from .harness import run
 from .ir import AgentSpec
@@ -51,7 +53,25 @@ class Risk:
 HIGH_RISK_FIELDS = (
     "uses", "tools", "team", "model", "policy", "needs-approval-before",
     "limits", "needs", "evals", "learning", "answers-with", "run-inputs",
+    "plugins",
 )
+
+def _names_in(text: str) -> list[str]:
+    """The names a list-valued proposal's `after` carries, written either as
+    YAML (`- web-search`, `[web-search]`) or as a comma list, the two ways a
+    proposal for a list field is written."""
+    read = yaml.safe_load(text) if text.strip() else []
+    if isinstance(read, list):
+        return [str(n).strip() for n in read if str(n).strip()]
+    return [n.strip() for n in str(read or "").split(",") if n.strip()]
+
+
+#: Fields no cycle applies whose proposal is held to `pact check` before it is
+#: held for a person (law 8), each with how its `after` text becomes the value
+#: written into the document. `plugins` (D29): which code the agent's runtime
+#: loads is a change to what it can do, and a name no plugin file defines is a
+#: tree the checker refuses.
+CHECKED_BEFORE_HELD: dict[str, Any] = {"plugins": _names_in}
 
 #: What each of `may-improve-on-its-own:`'s four choices names, as a field of a
 #: spec document. The schema's words are written for whoever reads the file; the
@@ -1496,6 +1516,16 @@ class Learner:
             # reviewer and, for `uses:`, simply false: it is the skills the agent
             # may read. What is true is narrower, and is said below.
             if cls.needs_a_person:
+                # LAW 8 for a field no cycle applies: a person is asked to
+                # approve a change only once it passes the checker the author's
+                # own tree is held to, so nobody is asked to say yes to a tree
+                # that does not load.
+                if proposal.field in CHECKED_BEFORE_HELD:
+                    refused = self._refused_by_the_checker(
+                        proposal, CHECKED_BEFORE_HELD[proposal.field](proposal.after), cls
+                    )
+                    if refused is not None:
+                        return refused
                 return Outcome(
                     False, f"held for review: {cls.reason}", cls,
                     unmeasured=self._unmeasured(), held=True,
@@ -1682,28 +1712,10 @@ class Learner:
         # paid one, so a change that breaks a
         # rule the author's own tree is held to never takes effect — whoever, or
         # whatever, proposed it.
-        if self.document is not None and proposal.field == "instructions":
-            try:
-                refused = check_instructions(
-                    self.document,
-                    self.agent_key or self.spec.key or self.spec.name,
-                    proposal.after,
-                    source=self.spec.workspace or None,
-                )
-            except Uncheckable as why:
-                # Not a refusal: said on every outcome, as a ceiling nobody
-                # could hold is (`_unmeasured`).
-                refused = []
-                self.unchecked = f"law 8: this change was not held to `pact check`: {why}"
-            if refused:
-                self.rejected.append(proposal)
-                return Outcome(
-                    False,
-                    "the proposed change does not pass `pact check`, the checker the "
-                    "author's own tree is held to: " + "; ".join(refused[:3]),
-                    cls,
-                    unmeasured=self._unmeasured(),
-                )
+        if proposal.field == "instructions":
+            refused = self._refused_by_the_checker(proposal, proposal.after, cls)
+            if refused is not None:
+                return refused
 
         if score is None:
             before_v = self._score(self.spec, self.holdout, transport_for)
@@ -1810,6 +1822,37 @@ class Learner:
         "do-not-use-when": "do_not_use_when",
         "if-unsure": "if_unsure",
     }
+
+    def _refused_by_the_checker(
+        self, proposal: Proposal, value: Any, cls: Classification
+    ) -> "Outcome | None":
+        """The refusal when `pact check` refuses the document with `proposal`
+        written into it (law 8, docs/98 WP-15); `None` when it passes, or when
+        there is no document or checker to hold it to — which is said on every
+        outcome through `unchecked`, as a ceiling nobody could hold is."""
+        if self.document is None:
+            return None
+        try:
+            refused = check_agent_field(
+                self.document,
+                self.agent_key or self.spec.key or self.spec.name,
+                proposal.field,
+                value,
+                source=self.spec.workspace or None,
+            )
+        except Uncheckable as why:
+            refused = []
+            self.unchecked = f"law 8: this change was not held to `pact check`: {why}"
+        if not refused:
+            return None
+        self.rejected.append(proposal)
+        return Outcome(
+            False,
+            "the proposed change does not pass `pact check`, the checker the "
+            "author's own tree is held to: " + "; ".join(refused[:3]),
+            cls,
+            unmeasured=self._unmeasured(),
+        )
 
     def _with(self, p: Proposal) -> AgentSpec:
         """The candidate this proposal describes — the spec that gets scored.

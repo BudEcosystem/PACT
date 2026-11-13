@@ -318,6 +318,12 @@ def test_every_spec_field_that_holds_authored_state_is_filled_from_the_document(
         "unbounded",        # an owner's, and this example keeps its step limit
         "detectors",        # authored, and this example declares none
         "rests",            # authored, and this example rests no tool
+        # Authored (D29), and this example asks its runtime to load nothing: it
+        # demonstrates the no-code ceiling, and a plugin is code. What proves
+        # the line reaches the spec, refuses a run or is named on `unenforced`
+        # is `test_a_plugin_the_agent_can_do_without_is_named_on_unenforced.py`
+        # over `examples/plugin-desk/`, the example that exists for it.
+        "plugins",
     }
     empty: list[str] = []
     for f in dataclass_fields(spec):

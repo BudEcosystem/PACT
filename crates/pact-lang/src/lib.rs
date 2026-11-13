@@ -73,6 +73,7 @@ pub const COLLECTIONS: &[(&str, &str)] = &[
     ("topic", "topics"),
     ("event", "events"),
     ("reaction", "reactions"),
+    ("plugin", "plugins"),
 ];
 
 /// The workspace fields that are one document each, written as a header with

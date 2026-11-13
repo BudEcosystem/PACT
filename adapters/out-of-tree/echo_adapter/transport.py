@@ -62,6 +62,7 @@ class EchoTransport:
             # transport that takes the LOOP away — `a2a_transport.py` — is
             # `unsupported` there.
             "connected_tools": "emulated",
+            "plugins": "unsupported",
         }
 
     #: Whether ANYTHING can put a price on what a call here carried. Nothing
