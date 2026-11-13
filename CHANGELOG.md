@@ -12,6 +12,16 @@ necessary (a repeated instruction never moves the machine twice), `pact discover
 policy's `when-this` names every such action, and an MCP snapshot change to one always stops or
 asks. The Python adapter reads it the same way.
 
+## 2026-11 — an absent `allow-egress:` draws no boundary
+
+A workspace that writes no `allow-egress:` is no longer read as air-gapped: every part of it may
+talk outside, as `nothing_reaches_outside_the_box` and the meaning-search check already read it.
+`allow-egress: []` still means nothing may leave, and every list is held exactly as before. The
+binding check (`loader/leaves-the-box`), the Python adapter's `egress.admits` and `missing_for`
+(which `resolve` filters model candidates with), the judge check and a carried program's network
+follow the one reading. An author who wants the air-gapped desk of D17 writes `allow-egress: []`;
+constraining is a declaration, and leaving it out is not one.
+
 ## 2026-11 — plugins under the eight laws (11 November)
 
 The plugins kind (D29), rebased onto the seven primitives, now holds the laws through the
