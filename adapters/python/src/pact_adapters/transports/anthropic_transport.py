@@ -161,6 +161,7 @@ class AnthropicTransport:
             # PACT's own client above the seam, which is `emulated`; `mock.py`
             # states the rule once for every target that shares it.
             "connected_tools": "emulated",
+            "plugins": "unsupported",
         }
 
     def _message(self, history: list[dict[str, Any]], system: str = "") -> Message:

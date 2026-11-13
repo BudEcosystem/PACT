@@ -243,6 +243,7 @@ class AutoGenTransport:
             # server through PACT's own client above the framework, which is
             # what `emulated` means here; `mock.py` states the rule once.
             "connected_tools": "emulated",
+            "plugins": "unsupported",
         }
 
     def apply_settings(self, settings: dict[str, Any]) -> tuple[str, ...]:

@@ -1,0 +1,23 @@
+description: Lets the desk search the web and read the pages it finds.
+
+# Which package, from which registry. The word in front of the colon is the
+# portability fact: a runtime that cannot load npm packages cannot honour this
+# line, and `pact discover` says so before it takes the agent.
+package: npm:@budmh/tool-web
+
+# Which versions will do, written the way npm writes a range. The release
+# candidate the harness ships today and every 0.2 release after it; 0.3 is a
+# line somebody edits and a reviewer reads.
+version: ^0.2.1-rc.3
+
+# The desk can still answer from what it knows, so it may start without the
+# plugin — and every run on a runtime that did not load it says the plugin was
+# not there, so nobody mistakes an answer from memory for a searched one. Leave
+# the line out and the agent refuses to start instead.
+if-it-cannot-be-loaded: run-without-it
+
+# The plugin's own settings, named the way its documentation names them and
+# handed over as written. No secret goes here: a key for a search service is
+# written `{by-reference: <name>}`, and `pact check` refuses the value itself.
+config:
+  searchMaxResults: 5

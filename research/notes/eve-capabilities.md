@@ -16,7 +16,7 @@ them into eleven areas carrying 58 bullets; the numbered list it was condensed
 *from* was never in this repository, so `50-NOT-COPIED.md` §8 could account for
 58 and had to record 22 as unverifiable. Re-enumerating from source closes that.
 
-**Count:** 101 rows — 49 (a), 22 (b), 30 (c).
+**Count:** 101 rows — 51 (a), 22 (b), 28 (c).
 
 ## The number is 101, not 80, and that is not padding
 
@@ -69,7 +69,7 @@ constants and test fixtures are not capabilities and are not rows.
 | **b** | The spec declares it and the host does it | the row of `50-NOT-COPIED.md` §4 that says so |
 | **c** | PACT will not have it, or has not yet | the `R<n>` ledger row in §5, or §6 for a deferral |
 
-Four rows carry a letter for the half PACT answers with and name the other half
+Six rows carry a letter for the half PACT answers with and name the other half
 in the same cell — that is §8.1's rule, not a new one. **Tooling rows are (a)
 only when PACT ships that capability as a command that EXISTS**; the cell says
 which command, and `crates/pact-cli/src/main.rs` is what it is checked against.
@@ -219,7 +219,7 @@ were written, which is the argument for them.
 | 81 | Resetting a session and starting the conversation over | `packages/eve/src/channel/reset-session.ts` : `createResetFn` | b | §4, the store |
 | 82 | Cron schedules that start a run on their own | `packages/eve/src/public/definitions/schedule.ts` : `defineSchedule` | a | `port.every`, `port.if-still-running` |
 | 83 | Twenty-eight hook events, all observe-only | `packages/eve/src/public/definitions/hook.ts` : `defineHook` | a | `watch.when`, `watch.writes-to` |
-| 84 | Extensions mounted from packages, eleven versioned contracts | `packages/eve/src/compiler/extension-compatibility.ts` : `EXTENSION_CAPABILITY_CONTRACTS` | c | R17 |
+| 84 | Extensions mounted from packages, eleven versioned contracts | `packages/eve/src/compiler/extension-compatibility.ts` : `EXTENSION_CAPABILITY_CONTRACTS` | a | `workspace.plugins` and `plugin.package` — the naming half is (a); loading is the host's, §4 |
 | 85 | Prompt-cache markers placed for the provider that supports them | `packages/eve/src/harness/prompt-cache.ts` : `detectPromptCachePath` | c | R46 |
 | 86 | An instrumentation slot for OpenTelemetry setup | `packages/eve/src/public/instrumentation/index.ts` : `defineInstrumentation` | b | §4, a stream of run events |
 
@@ -244,7 +244,7 @@ were written, which is the argument for them.
 | 96 | The CLI editing the author's source file to record a choice | `packages/eve/src/source-change/apply-model-name.ts` : `applyModelNameToSource` | a | `workspace.agents` — the files are the API for every surface (D18) |
 | 97 | Mount points for Next, Nuxt and SvelteKit | `packages/eve/src/public/next/index.ts` : `EveNextConfig` | b | §4, the connector |
 | 98 | An integration catalogue — 25 channels, 40 connections, 5 extensions | `packages/eve-catalog/src/index.ts` : `INTEGRATIONS` | a | `resource.endpoint` names the server; which servers a machine has is the host's, §4 |
-| 99 | `defineExtension` — tools, connections, skills, instruction fragments and hooks packaged as one installable npm unit | `packages/eve/src/public/definitions/extension.ts` : `defineExtension` | c | §6, deferred — G10 `bundle` is the re-admission fixture; PACT has no distribution unit today |
+| 99 | `defineExtension` — tools, connections, skills, instruction fragments and hooks packaged as one installable npm unit | `packages/eve/src/public/definitions/extension.ts` : `defineExtension` | a | `workspace.plugins` and `plugin.package` — the naming half is (a); loading is the host's, §4. What the unit would bring as definitions is still a `bundle`, a folder |
 | 100 | `experimental_workflow` — the model orchestrates the agent's own subagents from model-authored JavaScript, one durable step, `maxSubagents` 100 | `packages/eve/src/harness/workflow-subagent-limit.ts` : `DEFAULT_WORKFLOW_MAX_SUBAGENTS` | c | R5 and R42 — a spec that names code to run makes `pact check` decide whether that code is safe |
 | 101 | `experimental_setAttributes` — author-set span attributes on the active trace | `packages/eve/src/public/instrumentation/index.ts` : `experimental_setAttributes` | b | §4, the exporter |
 

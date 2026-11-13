@@ -138,7 +138,10 @@ pub fn of(document: &Node, target: &str, seen: &mut BTreeSet<String>) -> Effect 
     Effect::NOTHING
 }
 
-/// An agent: everything on `uses:` and everyone on `team:`.
+/// An agent: everything on `uses:`, everyone on `team:`, and every interface
+/// a plugin it is loaded with implements. The last is law 1 for code PACT
+/// never reads: the plugin is in the agent's runtime whether or not the agent
+/// names the interface, so the agent is never reported lighter than it.
 #[must_use]
 pub fn of_agent(document: &Node, agent: &Node, seen: &mut BTreeSet<String>) -> Effect {
     let used: Vec<String> = agent
@@ -154,6 +157,11 @@ pub fn of_agent(document: &Node, agent: &Node, seen: &mut BTreeSet<String>) -> E
                 .and_then(Node::as_map)
                 .into_iter()
                 .flat_map(|m| m.keys().cloned()),
+        )
+        .chain(
+            crate::plugins::interfaces_loaded_for(document, agent)
+                .into_iter()
+                .map(str::to_string),
         )
         .collect();
     used.iter()
