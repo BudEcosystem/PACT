@@ -163,6 +163,7 @@ pub mod money;
 pub mod origins;
 pub mod phrases;
 pub mod picked;
+pub mod plugins;
 pub mod policy;
 pub mod ports;
 pub mod pots;

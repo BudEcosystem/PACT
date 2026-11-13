@@ -1,0 +1,7 @@
+name: Research desk
+description: Answers questions about what is published on the web, and says where it read it.
+
+# The plugin this agent needs, by its name under `plugins/`. A name that is not
+# there is refused here, and the message names the plugins that are.
+plugins:
+  - web-search

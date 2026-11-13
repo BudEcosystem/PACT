@@ -1,0 +1,6 @@
+description: Reads customer accounts out of the CRM.
+package: pypi:acme-crm-tools
+version: ">=1.4,<2"
+config:
+  region: eu
+  api-key: { by-reference: host/crm-key }

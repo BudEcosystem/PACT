@@ -13,6 +13,25 @@ binding check (`loader/leaves-the-box`), the Python adapter's `egress.admits` an
 follow the one reading. An author who wants the air-gapped desk of D17 writes `allow-egress: []`;
 constraining is a declaration, and leaving it out is not one.
 
+## 2026-11 — plugins under the eight laws (11 November)
+
+The plugins kind (D29), rebased onto the seven primitives, now holds the laws through the
+interfaces a plugin implements (D29 consequence 7).
+
+- **`plugin.implements:`** names the interfaces (`interface: yes` tools, procedures or sets of
+  documents) whose code the plugin supplies. A name that is not an interface is refused
+  (`loader/plugin-implements-what-is-not-an-interface`); a plugin counts as an implementation,
+  so `loader/an-interface-nothing-implements` no longer fires for one, and it may be a choice of
+  `chosen-by: run-inputs.<name>`. An agent using an interface only absent plugins implement is
+  warned (`loader/an-interface-only-an-absent-plugin-implements`).
+- **Law 1:** `pact discover`'s `effect` and `moves-money` for an agent include every interface its
+  plugins implement.
+- **Law 3:** an interface action a plugin implements that cannot be undone names
+  `same-request-key:` (`loader/a-plugin-action-with-no-claim`).
+- **Law 8:** `Learner.cycle` holds a `plugins` proposal to `pact check` before holding it for a
+  person (`checking.check_agent_field`); `explode` keeps a plugin's own `config:` whole, so a
+  package's camel-case setting names no longer make the document unexplodable.
+
 ## 2026-11 — a digest moves only when the tree does, and who answered a wait (13 November)
 
 Bud Agent Flow asked whether "a new version of PACT never moves the digest of a tree nobody
@@ -820,6 +839,32 @@ which also lists what is still pending at run time.
   server changed, and a change an approval rests on always stops it
   (`mcp_bridge.when_it_changed`). `tool.unlisted-actions: each-call-asks-a-person` offers what the
   server adds behind a person.
+### Plugins: code a runtime loads, named, versioned and governed (26 October)
+
+- **`plugins:` (D29, narrowing R17).** `plugins/<name>.yaml` asks whatever runs these agents
+  to load a package: `package:` with its registry (`npm:@acme/crm-tools`,
+  `pypi:acme-crm-tools`), `version:` as a range in that registry's own grammar, the plugin's
+  own `config:`, `if-it-cannot-be-loaded:` (`refuse-to-start`, the default, or
+  `run-without-it`) and `applies-to:` (`the-agents-that-name-it` or `every-agent`); an agent
+  names the plugins it needs on `plugins:`. `S-EXEC`, so adding one needs a person (D23).
+  `bundle.brings:` and `needs-a-person-to-approve:` gain `plugins`.
+- **`pact check` reads the request and never the package** (R5, D17;
+  `crates/pact-loader/src/plugins.rs`): `loader/plugin-package-has-no-registry`,
+  `loader/plugin-version-is-not-a-range` (npm ranges by `nodejs-semver`, pypi specifiers by
+  `pep440_rs`), `loader/plugin-secret-written-in-the-file` (a key naming a token, secret,
+  password or API key holds `{by-reference: …}`), and the note
+  `loader/plugin-runs-only-where-loaded` naming the agents a `refuse-to-start` plugin keeps
+  to the runtimes that can load it. A plugin nothing names is `loader/nothing-points-at-it`;
+  `plugins/<name>/plugin.yaml` is the folder form. `pact discover` lists each agent's plugins
+  with the default written out; a plugin moves the workspace digest and the doc-digest of a
+  workflow that reaches its agent, never the contract-digest.
+- **Both ports refuse or report what they did not load.** A missing `refuse-to-start`
+  plugin ends the turn before the first model call with `halted: plugins-not-loaded` and
+  `turn.run.failed`; a missing `run-without-it` one is named on `unenforced`. A host that
+  loads plugins passes `run(loaded_plugins=)`. Every lattice gains `plugins`, `unsupported`
+  on every shipped transport, so the conformance report states it before execution.
+  `examples/plugin-desk/` is the worked example; `tests/trees/a-desk-that-needs-a-plugin/`
+  and `tests/trees/a-plugin-with-no-registry/` the refusal and the error.
 
 ### Tests over recorded runs (18 October)
 
