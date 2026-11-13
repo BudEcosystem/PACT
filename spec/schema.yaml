@@ -201,17 +201,22 @@ groups:
         # this file said seven and that list said six for a round, and the word
         # in the gap loaded here and was silently read as `llm` there.
         # `programs` is the EIGHTH part, and it is a part rather than a model
-        # role for the same reason `tools` is. A carried program has no network
-        # unless this line says so: without it a program runs in a room with the
-        # door shut, which is the state a reviewer should be able to assume by
-        # reading nothing.
+        # role for the same reason `tools` is. Under a written `allow-egress:`, a
+        # carried program has no network unless this line names `programs`.
+        #
+        # Absent means no boundary is drawn, and every part may talk outside;
+        # `[]` means nothing may. A default that refused every hosted model
+        # refused trees that never opted in, and two of the three checks that
+        # read this line already treated absence that way. Constraining is a
+        # declaration.
         choices: [llm, stt, tts, embedder, judge, reflector, tools, programs]
         surface: S-EXEC
         tier: core
         help: >
           which parts of this system are allowed to talk to something outside
-          this box. Empty means nothing is. Adding a role here always needs a
-          person to approve it.
+          this box. Empty means nothing is; leaving it out draws no boundary,
+          so every part is. Adding a role here always needs a person to
+          approve it.
       agents:
         type: map of group:agent
         surface: S-TOPO
