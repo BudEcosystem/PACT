@@ -27,7 +27,10 @@ In `expect`, **`closing`** is what the closing request of a run that answers
 with what it has was told about the limit, last in its system text
 (`Reached.closing` in `pact_adapters/limits.py`): which ceiling, which calls
 the model asked for were not made, and to answer from what it has. `""` when
-the run made no closing request.
+the run made no closing request. **`after-a-yes`** is what the model was told
+after a person said to keep going (`Reached.raised`): one text for each request
+that was told, which is one for each yes, the first request after it and no
+other.
 
 * **`people`** — one entry for each time the run parks, in order: `"yes"` or
   `"no"`, given to every question of that park. `"nobody"` means no answer is
@@ -52,6 +55,8 @@ from trees import shown
 REPO = Path(__file__).resolve().parents[3]
 #: How `Reached.closing` begins: what a closing request is told about the limit.
 CLOSING_BEGINS = "This run has reached its limit, "
+#: How `Reached.raised` begins: what the first request after a yes is told.
+RAISED_BEGINS = "A person was asked and said to keep going. "
 CASES = REPO / "tests" / "conformance"
 
 
@@ -74,6 +79,7 @@ def replay_agent(case: dict[str, Any]) -> dict[str, Any]:
     woken: list[dict[str, str]] = []
     offered: list[list[str]] = []
     closing: list[str] = []
+    after_a_yes: list[str] = []
 
     class Lead(ReferenceTransport):
         async def model_call(self, system, history, tools):  # type: ignore[override]
@@ -83,6 +89,10 @@ def replay_agent(case: dict[str, Any]) -> dict[str, Any]:
             at = system.rfind(CLOSING_BEGINS)
             if not tools and at >= 0:
                 closing.append(system[at:])
+            # What a request after a person said to keep going was told.
+            at = system.rfind(RAISED_BEGINS)
+            if at >= 0:
+                after_a_yes.append(system[at:])
             return await super().model_call(system, history, tools)
 
     def tool(name: str):
@@ -151,6 +161,7 @@ def replay_agent(case: dict[str, Any]) -> dict[str, Any]:
         ],
         "offered": offered,
         "closing": closing[-1] if closing else "",
+        "after-a-yes": after_a_yes,
         "executed": executed,
         "woken": woken,
         "parks": parks,

@@ -74,7 +74,7 @@ author's own `when-it-runs-out:` action, and each reported distinctly so
 |---|---|---|
 | `stop-and-say-so` | makes no further request | a sentence naming the setting and both figures |
 | `answer-with-what-it-has` | makes one closing request with no tools offered, which tells the model a limit was reached and which of its calls were not made | the model's answer, reported as having reached the ceiling |
-| `ask-a-person` | waits, and asks whether to keep going | after a yes, the same budget again from where it is; after a no, a sentence naming the ceiling and saying a person declined |
+| `ask-a-person` | waits, and asks whether to keep going | after a yes, the same budget again from where it is, and the model is told which of its calls were not made; after a no, a sentence naming the ceiling and saying a person declined |
 
 A run that asked and was told no ends as `out-of-budget`, and says so:
 *"Stopped before finishing: this run reached the limit you set with

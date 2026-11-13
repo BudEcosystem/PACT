@@ -297,6 +297,40 @@ def test_a_run_stopped_between_replies_has_no_call_to_report_as_not_made(tmp_pat
     assert "NOT made" not in told[-1]
 
 
+def test_after_a_yes_the_model_is_told_once_which_calls_were_not_made(tmp_path: Path) -> None:
+    """Five lookups asked for in one reply, two allowed, and a person says
+    yes. Nothing in front of the model says three of its calls were never
+    made. On a small live model that cost the answer: it blamed the limit a
+    person had just raised, or repeated lookups it already had. Told which
+    calls were not made, it made those (ten runs of ten)."""
+    five = Turn("", tuple(look(e).tool_calls[0] for e in "abcde"))
+    out, again, looked, told = go(tmp_path, "asks", [five, look("c"), look("d"), Turn("Done.")])
+    parked = out.suspension
+    assert looked == ["a", "b"] and len(told) == 1
+    assert [c["args"]["entry"] for c in parked.reached["not-made"]] == ["c", "d", "e"]
+    # Across a process, as a host would hold it.
+    parked = Suspension.from_json(parked.to_json())
+    out = again(resume=parked, answer=parked.answer(**{"go-on": "yes"}), now=1.0)
+    assert looked == ["a", "b", "c", "d"]
+    assert told[1].endswith(
+        "A person was asked and said to keep going. The limit this run had reached, "
+        "`tool-calls-at-most` (2 of 2 tool calls), is now 4 tool calls.\n"
+        "These calls you asked for were not made and can be made now: "
+        'ledger {"action": "look", "entry": "c"}; ledger {"action": "look", "entry": "d"}; '
+        'ledger {"action": "look", "entry": "e"}.\n'
+        "Do not repeat a call that already has a result."
+    )
+    # Once. The request after it is told nothing of the kind.
+    assert len(told) == 3 and "said to keep going" not in told[2]
+
+
+def test_a_no_tells_the_model_nothing(tmp_path: Path) -> None:
+    out, again, _, told = go(tmp_path, "asks", FIVE)
+    parked = out.suspension
+    again(resume=parked, answer=parked.answer(**{"go-on": "no"}), now=1.0)
+    assert all("said to keep going" not in request for request in told)
+
+
 def test_the_sentence_for_a_refusal_carries_what_the_person_said() -> None:
     """`Reached.declined` is the one place this is worded, for every runtime.
     A question that asks for a reason passes it in; PACT's own default step

@@ -50,6 +50,7 @@
     "yes"
    ],
    "expect": {
+    "after-a-yes": [],
     "closing": "",
     "executed": [
      [
@@ -222,6 +223,7 @@
     "yes"
    ],
    "expect": {
+    "after-a-yes": [],
     "closing": "",
     "executed": [
      [
@@ -394,6 +396,7 @@
     "no"
    ],
    "expect": {
+    "after-a-yes": [],
     "closing": "",
     "executed": [],
     "halted": "final",
@@ -548,6 +551,7 @@
     "yes"
    ],
    "expect": {
+    "after-a-yes": [],
     "closing": "",
     "executed": [
      [
@@ -757,6 +761,7 @@
    },
    "judge": "no",
    "expect": {
+    "after-a-yes": [],
     "closing": "",
     "executed": [],
     "halted": "final",
@@ -876,6 +881,7 @@
    },
    "judge": "yes",
    "expect": {
+    "after-a-yes": [],
     "closing": "",
     "executed": [],
     "halted": "final",
@@ -933,6 +939,7 @@
    },
    "judge": "no",
    "expect": {
+    "after-a-yes": [],
     "closing": "",
     "executed": [],
     "halted": "final",
@@ -1056,6 +1063,7 @@
    },
    "judge": "no",
    "expect": {
+    "after-a-yes": [],
     "closing": "",
     "executed": [
      [
@@ -1307,6 +1315,7 @@
     "*": "Noted."
    },
    "expect": {
+    "after-a-yes": [],
     "closing": "",
     "executed": [],
     "halted": "stopped-by-rule",
@@ -1380,6 +1389,7 @@
     "*": "Noted."
    },
    "expect": {
+    "after-a-yes": [],
     "closing": "",
     "executed": [
      [
@@ -1568,6 +1578,7 @@
     "*": "Noted."
    },
    "expect": {
+    "after-a-yes": [],
     "closing": "",
     "executed": [
      [
@@ -1775,6 +1786,7 @@
     "*": "Noted."
    },
    "expect": {
+    "after-a-yes": [],
     "closing": "",
     "executed": [
      [
@@ -1910,6 +1922,7 @@
    },
    "members": null,
    "expect": {
+    "after-a-yes": [],
     "closing": "",
     "executed": [
      [
