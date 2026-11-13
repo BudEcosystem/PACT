@@ -13,6 +13,683 @@ binding check (`loader/leaves-the-box`), the Python adapter's `egress.admits` an
 follow the one reading. An author who wants the air-gapped desk of D17 writes `allow-egress: []`;
 constraining is a declaration, and leaving it out is not one.
 
+## 2026-11 — a digest moves only when the tree does, and who answered a wait (13 November)
+
+Bud Agent Flow asked whether "a new version of PACT never moves the digest of a tree nobody
+edited" was a rule PACT held, with a check. It was true and nothing checked it. Three smaller
+things were settled in the same exchange. Nothing here changes a field of the schema.
+
+- **A tree's digests are pinned across versions of PACT.** `tests/conformance/digests.json` holds,
+  for ten trees in this repository, the tree's `digest` and each workflow's `doc-digest` and
+  `contract-digest` as `pact discover` prints them. A test compares. A change to PACT that moves
+  one without the tree being edited fails, and has to change that file in the same commit and say
+  here which trees move and why. A runtime that pins PACT holds the same file with one
+  `pact discover` per tree. (Checked against binaries built on 18 October and 12 November: the
+  trees unedited since then have the digests they had.)
+- **On a stage that waits for people, `steps.<stage>.answered-by` is a list**, in the order they
+  answered, also when one person did: a question can need several answers, and a binding's shape
+  must not depend on how many people happened to answer. On a `decide` it stays one name. The
+  reference runtime passed through whatever a host put there. Two new cases on a new workflow,
+  `sign-off`: 28 workflow cases, 52 cases of replayed runs.
+- **`loader/a-decision-asked-of-several`** (an error): a `decide` whose person rung asks a
+  question that is `answered-by: everyone` or `enough-of-them`. A decision is one label from one
+  person, and nothing says which label stands when several pick different ones. None of Bud Agent
+  Flow's 184 trees writes it; it is refused before one does.
+- **A stage that waits shows the person what the question says to show.** The reference showed
+  them nothing: it read the stage's `bind:`, which a waiting stage cannot write, and not the
+  question's `shows:`, which a `decide` asking the same question did read. Found by the first
+  shared case with a waiting stage in it.
+- Ruled, with no case yet: a workflow run a port ended (`if-still-running: stop`,
+  `cancel-previous`) ends as `cancelled`. `stopped` stays "could not go on, and says why".
+
+## 2026-11 — a served model is shown its own calls, and is told what a yes changed (13 November)
+
+Running the limits cases on live models (gpt-4o-mini and gpt-5-nano) found three things about
+PACT's own transport for a served model, and one more thing a model has to be told. Bud Agent Flow
+measured the last on its engine, six wordings, ten runs each. Nothing here changes a field of the
+schema.
+
+### What a runtime must match
+
+- **After a person says to keep going, the next request says so, once.** Last in its system text:
+  the ceiling the run had reached and what it is now, which calls the model asked for were not
+  made, and not to repeat a call that already has a result. No other request carries it. The
+  wording is `Reached.raised` (`pact_adapters/limits.py`); a case records it as `after-a-yes` in
+  `expect`, one text for each yes.
+- Why the calls are named. Five calls asked for at once, a ceiling of two, then a yes, on
+  gpt-5-nano: told nothing, or told only that the limit was raised (with or without how much was
+  left, once or on every request), a model gave up and blamed the limit a person had just raised,
+  or repeated calls it already had, in one or two runs of ten. Told which calls were not made, ten
+  of ten made exactly those.
+- One new case, `a-call-not-made-is-named-to-the-model-after-a-yes`: 11 limits cases, 50 shared
+  cases of replayed runs in all.
+- A call is written to a model in the form the model made it. In a case it is the tool's name, a
+  space, and its arguments as JSON with sorted keys.
+
+### What was wrong in PACT's transport for a served model
+
+- **A model was not shown its own calls.** A turn that called tools was sent as `.`, and each
+  result as a line of the user's (`[result of ledger] rent: entry found`). Asked for five lookups
+  with three steps allowed, gpt-4o-mini made the same five in every step, fifteen in all, and ran
+  out of steps. Sent `tool_calls` and `tool` messages, it makes five and answers. The conversation
+  record now keeps what each call was given (`calls:` beside `tool_calls:`), through a tidying step
+  and across the Pydantic AI message form, which used to drop it and say so.
+- **A current model could not be reached at all.** gpt-5-nano answers 400 to `max_tokens` and to
+  any temperature but its own, and every request carried both. The transport now reads the
+  server's refusal and asks again: the same ceiling as `max_completion_tokens`, and no temperature
+  when the one refused was the transport's own default. A `temperature:` the author wrote is never
+  dropped.
+
+### Still owed
+
+- A closing answer that does not fit `answers-with:` (ruled, not built in the reference).
+- Whether a workflow should be able to branch on "the agent this stage called ran out and
+  answered with what it had". Today the stage ends `answered` and the overrun is recorded; there
+  is no word a later stage can read.
+- A shared case for claims.
+
+## 2026-11 — what a run does when a limit runs out, as shared cases (13 November)
+
+No shared case covered limits, so two runtimes could differ there unseen. Writing the first ten
+and running them on a live model found five things PACT's own harness got wrong. Nothing here
+changes a field of the schema.
+
+### What a runtime must match
+
+- **A ceiling is reached when the count is at the figure written**, and the first one reached is
+  the one that acts; `halted` is its word (`tool-call-limit`, `step-limit`). With
+  `tool-calls-at-most: 2` both calls run. A third asked for in the same reply as the second is not
+  run.
+- **`answer-with-what-it-has`** makes one closing request with no tools offered, and its text is
+  the answer. The run reports the ceiling; it is not `final`.
+- **The closing request says why.** Last in its system text: which ceiling was reached, which
+  calls the model asked for were not made, and to answer from what it already has. The wording is
+  `Reached.closing` (`pact_adapters/limits.py`), and a case records it as `closing` in `expect`.
+- **`stop-and-say-so`** makes no further request and ends with a sentence naming the ceiling.
+- **`ask-a-person`** parks. A yes grants the same budget again, of every ceiling, from where the
+  run is; that budget can run out and ask again. A no ends the run (`out-of-budget`), and the run
+  says which ceiling and that a person declined: *"Stopped before finishing: this run reached the
+  limit you set with `tool-calls-at-most` (2 of 2 tool calls). A person was asked and said not to
+  keep going."* The wording is one function, `Reached.declined` (`pact_adapters/limits.py`), so two
+  runtimes do not each write it. A wait that ran out says nobody answered in time instead: that is
+  not a person saying no, and the sentence does not say one did.
+- **The ceiling named is the one that stopped the run.** A run can be at two together: with
+  `steps-at-most: 2` and `tool-calls-at-most: 2`, a second step that asks for two calls runs one
+  and is refused the other. It is then at two of two of each, and it was the calls that stopped it.
+- **`people: ["nobody"]`** is new in a case: no answer is given and the time the question allows
+  passes.
+- Ten cases: `tests/conformance/limits.json`, on `tests/conformance/trees/metered-desk`.
+
+### What was wrong in PACT's harness
+
+- **"Keep going" did not let a run keep going.** A yes raised the step ceiling and no other, so a
+  run that had reached `tool-calls-at-most` (or tokens, money, time) parked again at once with the
+  same question. `Limits.kept_going` existed to grant all of them and was called by nothing in the
+  harness.
+- **A granted budget was lost at the next park.** It is now carried in the park
+  (`Suspension.budget`, `budget` in its JSON), so a run told to keep going and then parked for an
+  approval comes back under the ceilings it had been raised to.
+- **The closing request was told less than any other**: the bare `instructions:`, without the
+  agent's procedures, the shape of its answer, or what a reaction had reminded it of. It is now
+  told what every request is told, less a stage's own line.
+- **The closing request did not say a limit had been reached**, and a live model made the rest up.
+  Asked for five lookups and allowed two, gpt-4o-mini answered the closing request with
+  `[result of ledger] water: entry found`: a tool result it wrote itself, for a lookup never made,
+  handed back as the run's answer. Five runs of five. Told what had happened, none of five, and it
+  named the three lookups it had not got to. No scripted test could have found this.
+- **A run a person refused more budget said nothing about why.** Its answer was the model's last
+  words, which is an empty string when its last step was a call. Bud Agent Flow's engine named the
+  ceiling and the refusal, and that is now the rule above. The park records which ceiling stopped
+  the run (`Suspension.reached`), because working it out again afterwards can name another: a run
+  at `steps-at-most` and `tool-calls-at-most` together was stopped by one of them.
+
+### Still owed
+
+- **A closing answer that does not fit `answers-with:`.** Ruled with Bud Agent Flow: it is asked
+  for at most twice in all (`checks-at-most:`'s own default), no tool offered, and then the run
+  stops naming the ceiling. PACT's harness cannot hold this yet: it never checks an agent's answer
+  against its shape, so it makes one closing request and takes what comes.
+- ~~The transport for a served model does not show the model its own calls.~~ Done in the entry
+  above.
+- A shared case for claims.
+
+## 2026-11 — `pact about`: the binary says which commit it was built from (13 November)
+
+A runtime pins PACT by commit and then runs whatever `pact` binary it finds. The binary could not
+say what it was, so one built from an edited checkout, or left over from another commit, passed
+every check a pin makes of the source beside it. Bud Agent Flow's pin guard asked for this.
+
+- **`pact about`** prints three lines, each `<name>: <value>`: `version:`, `commit: <40 hex, or unknown>` and
+  `uncommitted: no | yes | unknown` — whether anything the binary is built from (`crates`, `spec`,
+  `models`, `Cargo.toml`, `Cargo.lock`) differed from that commit when it was built. Both are fixed
+  at compile time (`crates/pact-cli/build.rs`). Built with no repository around it, both are
+  `unknown`.
+- A pin check compares `commit:` with its pin and refuses anything but `uncommitted: no`.
+
+## 2026-11 — a decision as the specification says it: who is asked, what a model is shown, what is recorded (13 November)
+
+Writing a shared case for a classifier found that PACT's reference runtime read neither
+`if-unsure-below:` nor `if-it-disagrees: go-on`: a classifier one-tenth sure decided, and a second
+opinion was never asked. Bud Agent Flow had built both, and its answers to five questions are how
+the unwritten parts were settled. Nothing here changes a field of the schema.
+
+### What a runtime must match
+
+- **Rungs, and the label that stands.** A rung that decides makes its label the standing one. While
+  a label stands a rung is not asked, unless it writes `if-it-disagrees: go-on`, which makes it a
+  second opinion: the same label and it stands; another, or a second opinion that passes on itself,
+  and nothing stands, so the rungs after it are tried as if nobody had decided. With nothing
+  standing a `go-on` rung decides as any other. The decision is the label standing after the last
+  rung asked (`workflow_runtime.decide`).
+- **`if-unsure-below:`** passes the decision on when the classifier's `score` (a share of one,
+  beside its label) is under the figure, or it gave none. Exactly at the figure decides.
+- **Passing on is to the next rung**, never to the next model of the agent's `model:` list. That
+  list is tried when a call fails (its own help: "never because an answer was wrong").
+- **What a `decide` records**: `.label`; `.decided-by`, one of `rules`, `agent`, `person`;
+  `.answered-by`, the agent's name on an agent rung and the person on a person rung — who that
+  was is the host's to say, beside the answer, under `answered-by` (a name no question's answer can
+  have a field called). The reference wrote `by` and `because`, names the specification does not
+  have. A rule's `because:` is the run's
+  "why this path" (`WorkflowResult.because`), not a field a binding reads.
+- **What every stage has besides its answer**: `.outcome`, the word it ended in (`answered` for a
+  `decide`); and on a `repeat`, `.rounds` and `.ended` — `passed` or `ran-out`, and absent where the
+  repeat writes no `until:`. The reference had none of them, so `steps.<stage>.outcome` passed
+  `pact check` and read nothing.
+- **A workflow hands back what an `answer` stage bound**, and `{}` where it reached none. The
+  reference handed back the last stage's own record, which is what a body hands the stage that
+  holds it and nothing a workflow said it gives.
+- **A classifier is not given the stage's `says:`.** An agent all of whose models are
+  `kind: decision` is given its fields as they are; nothing is reported, since nothing was owed.
+- **What a model is shown of what an agent was given** (`accepts:`, in its help): all of it and
+  nothing else — the `message` as the words, every other field by name and value, in `accepts:`
+  order. With no `message` nothing is put in front; in particular not the agent's `description:`.
+  How the fields are laid out is each runtime's (`workflow_runtime.worded` is this one's).
+- Twelve shared cases hold these, on `tests/conformance/trees/triaged-defects`: three for the
+  threshold, five for the second opinion and the record, three for a loop's rounds, one for a
+  workflow that reaches no `answer`.
+
+### What `pact check` now says
+
+- **`loader/a-rung-with-two-kinds-of-reader`** (a warning) — an agent on a rung lists a decision
+  model and a language model in one `model:`. It reads as a cascade and is a fallback for a failed
+  call; both would be given one message.
+- **`loader/a-deciding-agent-given-nothing`** no longer counts a `says:` as something a classifier
+  is given.
+
+### What was wrong in what PACT ships
+
+- PACT's own live suite sent a called agent its `message` and dropped every other field it was
+  given. It now sends all of them (`worded`).
+
+### Proposed, not built
+
+- **Showing the person who breaks a tie what the two opinions were.** A person reached after a
+  disagreement is shown the question's `shows:` and nothing about the disagreement, in both
+  runtimes. A name for it (`steps.<stage>.opinions`) would be new vocabulary.
+
+### Still owed
+
+- A shared case for claims (`same-request-key:`, `claim-lasts:`); none of the 39 touches them.
+- A packaged copy of `spec/schema.yaml` that an editable install leaves in `site-packages` can go
+  stale; nothing in PACT reads it, and nothing checks it.
+- The `pact` command cannot say which commit it was built from.
+
+## 2026-11 — an agent that decides is given what it decides about (13 November)
+
+Bud Agent Flow's full gate, run under the rule that a deciding agent is given only what it
+`accepts:`, found six of its own workspaces where the agent on a `decide`'s rung was handed
+nothing and a scripted agent answered regardless. Two of the six could not be fixed in PACT as
+it stood: the agent had to judge what an earlier stage found, and a `decide` could not say so.
+
+### What an author can now write
+
+- **`bind:` on a stage that does `decide`**, and in the language `decide with kind:
+  triage.kind, summary: triage.summary` — the word a `call` uses. It is what the agents on the
+  stage's rungs are given besides the workflow's input and the current item, and the only way
+  one of them is shown what an earlier stage found. No field is new: `bind:` was refused on a
+  `decide` (`loader/a-line-this-stage-never-reads`) and is now read there.
+- **`bind: {note: item}`** says where a one-value item goes, for an agent that does not call it
+  `message`.
+
+### What a runtime must match
+
+- **What a deciding agent is given**, in this order, a later one winning: the workflow's input;
+  the fields of the item it is inside a `for each` of (an item that is one value is its
+  `message`); the stage's `bind:`. Of that, only what the agent `accepts:` — no `accepts:` is a
+  `message` and nothing else. The stage's `says:` goes at the start of the `message`, a bound
+  one included (`workflow_runtime.given_to`).
+- **A name the stage binds is the binding's alone.** Where the binding reads nothing — an
+  optional field the earlier stage left out — the agent is given nothing under that name. The
+  workflow's input is not read for it instead, so a `kind` that the stage says comes from
+  triage is never quietly the `kind` the request came in with.
+- **Every agent rung of one `decide` is given the same subject**, each as much of it as it
+  accepts. Written rules read their own bindings and a person is shown the question's
+  `shows:`; neither reads `bind:`.
+- **A one-value item an agent cannot take as `message` is reported** on `unenforced` only when
+  the stage does not bind `item` to a name.
+- Three shared cases hold these: `tests/conformance/workflows.json`, on the new tree
+  `tests/conformance/trees/triaged-defects`.
+
+### What `pact check` now refuses
+
+- **`loader/a-deciding-agent-given-nothing`** — an agent on a `decide`'s rung requires an input
+  nothing can ever give it, or accepts nothing that anything can. What can give it one: a field
+  of the workflow's `accepts:`, a part of the item's shape, `message` for a one-value item or a
+  stage that writes `says:`, and a `bind:` key. The message lists what is on offer. It says
+  nothing where the list's shape cannot be known.
+- **`loader/a-call-that-does-not-fit`** on a `decide`'s `bind:` — a name none of its agents
+  accepts, or a value in a shape one of them does not take. Each value is read as any binding
+  is (`loader/a-binding-to-nothing`, `-from-later`, `-to-a-stage-that-may-not-have-run`,
+  `loader/an-item-outside-for-each`).
+- **`loader/a-line-this-stage-never-reads`** — `bind:` on a `decide` with no agent rung.
+- **`loader/hidden-from-the-ai-but-handed-to-it`** (a warning) now also covers a value a
+  `decide` binds for its agent.
+
+A workspace that loaded clean can now be refused: one whose deciding agent was never going to
+be shown anything.
+
+### What was wrong in what PACT ships
+
+- **`tests/trees/workflows-48-invoices`**, the invoice inbox the workflow specification prints,
+  was a seventh silent case. Its attachment sorter wrote no `accepts:`, so it took a `message`;
+  an attachment has a `name` and a `file` and no `message`; it was asked to sort a file it was
+  never given. It now accepts `name` and `file`.
+
+### Still owed
+
+- A value the workflow `hides:` from `the-ai` that reaches a deciding agent BY NAME (the input
+  has a field the agent accepts) is not warned about; only one bound for it is.
+- The reference runtime passes a `bind:` key written with a dot (`fills.first-name`) as that
+  literal name, on a `call` and on a `decide` alike.
+
+## 2026-11 — a case expects only what the specification fixes (12 November)
+
+Bud Agent Flow's second replay: 21 of 24 agreed, and the three that did not were each a question
+the cases had answered by accident.
+
+### What a runtime must match
+
+- **A run that stopped because its answer does not fit hands back an empty record.** PACT handed
+  back the unfitting answer beside the word `stopped`, which a caller could still read fields
+  off. Why it stopped is in `said` (`workflow_runtime.run_workflow`).
+- **A field the run did not set is absent from its answer**, not `null`: `gives reply: text,
+  optional` and a run that never set it answers `{}`.
+- **The order agents are asked in across the items of an `each`** is the runtime's to choose
+  unless the stage says `at-once-at-most: 1`, as the schema's help has always said. The shared
+  case that expected an order now runs on a tree that writes it.
+
+## 2026-11 — the shared cases, replayed by a second runtime: three things PACT had wrong (12 November)
+
+Bud Agent Flow replayed `tests/conformance/` and sent the cases that differed before recording
+any as its own. Three were PACT's.
+
+### What a runtime must match
+
+- **A workflow's answer is held to what it says it gives.** `run_workflow` handed back whatever
+  the `answer` stage bound; it now reads each field of `answers-with:` by its shape and stops
+  with *the answer does not fit `answers-with:` — …* when one does not (`halted: stopped`). A
+  field left out is refused unless its shape says `, optional`.
+- **Before anything has been remembered**, a `repeat`'s `remembers:` entry with no `starts-as:`
+  is what its `combines-by:` makes of nothing: an empty list for a rule that keeps several
+  (`keep-all`, `top 3 …`), and absent — so a `bind:` reading it is left out — for one that keeps
+  one thing. It was `null` for every rule.
+- **A workflow that hands back nothing answers with an empty record**, `{}`: `answers-with:` is
+  a set of fields, and no fields is still a set.
+- **An agent a workflow's stage calls is an agent's run**, under its own limits, approvals and
+  the reactions that cover it (`docs/99` §5). The reference workflow runtime does not run agents
+  — `Callers.agent` is the host's — and now says so.
+
+### What was wrong in what PACT ships
+
+- `examples/language/help-centre`'s `clear-inbox` said `gives replies: text, optional` and handed
+  back a list. It says `list of text, optional`. `pact check` passed it: nothing holds an
+  `answer` stage's `bind:` to the workflow's `answers-with:` at check time. Owed.
+- The shared case on `examples/kernel/tree-search` scripted a scorer whose ideas had no `text`,
+  which the workspace's own `idea` shape requires. Corrected, and the wrong data kept as a case
+  of its own: *an-answer-that-does-not-fit-what-the-workflow-gives-stops-the-run*.
+- The six routing cases ran on `help-centre`, whose desks are covered by a reaction, so a runtime
+  that refuses an uncarried guard refused the whole workflow. They run on
+  `tests/conformance/trees/routed-desk`: the same two workflows, agents no reaction covers.
+  Their `expect` is unchanged to the letter.
+
+## 2026-11 — how a call's key and a claim's number reach the server (12 November)
+
+The schema's help for `same-request-key:` and `claim-lasts:` now says what was left to each host
+to invent, and one gap in what a deciding agent is given is closed. Agreed with Bud Agent Flow, which already sent the first of these in
+production.
+
+### What a runtime must match
+
+- **A call's own key** (`same-request-key: the-call`) is sent as the `Idempotency-Key` header on
+  a `url:` tool, and as `dev.pact/request-key` in the request's `_meta` on a connected one.
+- **A claim's fencing token** is sent as `Pact-Fence` with `Pact-Claim` (the scoped claim key) on
+  a `url:` tool, and as `dev.pact/fence` with `dev.pact/claim` in `_meta` on a connected one:
+  both or neither, only for a claim taken from a store, and never as an argument, which would
+  change the call's own key. PACT's reference harness records the token (`Ledger.fences`) and
+  sends neither; a host does.
+- **An item that is one value is the deciding agent's `message`** (`rung.agent`'s help, and
+  `workflow_runtime.given_to`). `for each item in input.notes` over a list of texts handed the
+  sorter the stage's `says:` and nothing about the note. An agent that accepts no `message`
+  cannot be given it, and the run says so on `unenforced`. Two shared cases hold it
+  (`tests/conformance/trees/sorted-notes`): a loop over texts, and a loop over records where
+  the sorter is given the fields it accepts and nothing else.
+- **A claim is taken when the call is let through**, after a person has said yes and just before
+  the tool is reached, and not while anybody is being asked. Before a person is asked the ledger
+  only looks (`Ledger.look`).
+
+## 2026-11 — held to a second runtime: what reviewing Bud Agent Flow against PACT found in PACT (12 November)
+
+Bud Agent Flow was reviewed for conformance to `docs/99`, and asked its own questions back. Seven
+of them had no answer in PACT, or the wrong one. Nothing here changes a field of the schema; one
+help text now says what was unwritten.
+
+### What a runtime must match
+
+Behaviour another runtime can observe, with where PACT does it. This section is in every entry
+from now on, because a runtime that pins PACT could not tell a change of behaviour from a
+refactor without reading the diff.
+
+- **A guess does not spend what is exact.** A reaction that is once-a-run fires once on a guess
+  and once on something exact. A topic `noticed-by: [tags, the-agent]` raised by the agent
+  saying so is advice; the tagged call that comes later is still held
+  (`reactions.py` `_due`/`_spend`; saved state gains `sure`).
+- **What a deciding agent is given** (`rung.agent`, now in the schema's help): the current
+  item's fields over the workflow's input, as many as it `accepts:` and nothing it does not;
+  the stage's `says:` at the start of its `message`; an agent with no `accepts:` takes a
+  `message` only (`workflow_runtime.py` `given_to`). A `says:` that cannot be delivered is said
+  on `WorkflowResult.unenforced`, which is new.
+- **Which implementation does an interface's work** is the runtime's to decide by `chosen-by:`,
+  and there is now one reading of it: `pact_adapters.interfaces.chosen(document, agent,
+  run_inputs, picked_by_the_host)`. Nothing was read before; an agent that looked things up in
+  an interface looked them up in nothing.
+- **What a teammate could not do reaches the run that asked it.** Each line of a member's
+  `unenforced` and `unmetered` is on the caller's own, worded `<member> (put to work by this
+  agent): <its line>`, for a teammate, an agent consulted or told by a reaction, and across a
+  park (`Suspension.from_members`). `delegate_by_running.ask` returned the member's words and
+  nothing else. Bud Agent Flow was told its engine dropped these where PACT's did not; PACT's
+  dropped them too, and the wording is Bud Agent Flow's.
+- **An agent a reaction woke is not offered `working-on`.** It was run to be asked or told
+  about one thing; what the work has turned to is the waking run's to say. What its own tagged
+  calls raise is exact and still holds. Found live, once a woken agent's lines reached the run
+  that woke it: the auditor, told of a refund, said `finance`.
+- **A workspace's own `.pact/` area** is `<folder>/.pact/` for a folder and
+  `<folder>/.pact/<name>/` for a workspace that is one file `<name>.pact`
+  (`watches.area`). A lone `.pact` file used to lose its learning ledger without a word.
+
+### What an author or a host can now do
+
+- **A workspace written in the language brings its own model rows.**
+  `resolve.load_catalogue(workspace=…)` reads a `.pact` workspace's `models` from the document,
+  and `load_catalogue(document=…)` takes one a host has already loaded. It opened
+  `models/catalog.yaml` from the disk only, so such a workspace's transcriber and speaker passed
+  `pact check` and were unknown to everything that binds or prices a model.
+- **`pact_adapters.checking.as_a_folder(root)`** is public: a COPY of a tree written in the
+  language, rewritten as the folder it stands for, for a runtime that tries a change on a
+  scratch copy.
+- **`benchmarks.record`** on a workspace written in the language hands back the lines to add to
+  its `models` block, where it used to write a file nothing reads.
+
+### The shared cases
+
+`tests/conformance/reactions.json` (13) and `workflows.json` (8): a scripted run written down —
+the tree, who runs, what the model writes at each step, what each tool, agent, judge and person
+answers — and everything another runtime can observe of it. PACT's own runtime is held to them
+(`test_the_shared_cases_are_what_this_runtime_does.py`); another runtime replays the same cases.
+`tests/conformance/trees/guarded-desk` is a workspace whose calls are stopped, held, counted and
+reported by reactions on exact signals.
+
+### Owed, and written down so it is not lost
+
+A shipped loop the default step ceiling cannot finish (`pact:loop/reflexion` at 8 steps); a URL
+as a run input (a host fetches it under `allow-egress:` and hands over a file — unwritten until
+now); the words an answer shape is asked for in (`docs/99` §7); a warning for a shape named one
+letter from a built-in kind; an edit that changes one field of a `.pact` file in place.
+
+## 2026-11 — the language writes programs: figures, patterns, and workflows in the order they run (12 November)
+
+`docs/99-THE-PACT-LANGUAGE.md` §4.3a. Nothing here is new to the specification: a `.pact` file
+can now SAY, the way a program is written, what a folder of YAML already could.
+
+### What an author can now write
+
+- **A workflow's steps as statements, in the order they run.** In a `workflow` block:
+  `plan = call planner with brief: input.brief`, `for each item in input.documents`,
+  `repeat at most 4 times`, `together`, `decide` with an `if <label>` for each way it can go,
+  `answer with result: make.result`, `stop watch.run`, `ask <question>`. The order of the lines
+  is the wiring — `starts-at:` and each stage's `then: { answered: … }` are written for you —
+  and the statements beneath an `if` come back together at whatever follows the `decide`.
+- **A step's name is a variable.** `plan.findings` is `steps.plan.findings`. A path that starts
+  with `input`, `item`, `remembers`, `values` or another word a binding starts with is left as
+  written.
+- **`takes` and `gives`** on a workflow (`accepts:`, `answers-with:`) and on a carried program
+  (`takes:`, `answers-with:`).
+- **How an agent thinks, the same way.** A `loop` block takes `think`, `use tools`,
+  `check its work`, `run code` and `answer` as statements.
+- **`let refund-limit = 200 USD`** — one entry of `values:`. `{use: refund-limit}` now stands
+  for a figure inside a sentence too: `before billing/issue-refund, when amount is more than
+  {use: refund-limit}: ask …`.
+- **`based on desk with domain: billing, cap: 0.10 USD`** — `based-on:` and `with:` on one
+  line, in any block.
+
+### What now holds
+
+- **`pact write` prints every workflow and loop this repository ships as statements**, and each
+  is read back and compared before it is used, as every block is. Wiring no order of lines can
+  say — a stage a statement cannot name — is written as the settings it is.
+- **A name no step has is told where it was read.** The checker's own
+  `loader/a-binding-to-nothing` points at `nobody.reply` on the statement's line.
+- **`examples/language/help-centre`** is one workspace in four `.pact` files: figures, a
+  pattern and two desks made from it, tools and an approval, two workflows with one calling
+  the other, a reaction, an agent that listens, and `learning:`. Both workflows are RUN by
+  `test_a_workflow_written_as_statements_runs.py`, through the reference workflow runtime.
+
+### What was wrong, and is fixed
+
+- **A learning cycle on a workspace written in the language checked the wrong tree.** A
+  proposal is held to `pact check` by copying the tree and writing the new instructions where
+  they live. In a `.pact` file they lived nowhere that code looked, so on a workspace that
+  also carries files (a set of documents) nothing was written, the author's own tree was
+  checked, and a change that breaks a rule passed. The copy is now rewritten as the folder it
+  stands for first (`pact write`, then `pact build`), and a tree in which the instructions
+  still cannot be found is refused as uncheckable instead of checked as it stands.
+
+### What a runtime must match
+
+- `working-on` is offered with `{"topic": "one of a, b"}` as its arguments, like every tool, and is
+  no longer offered once every topic the agent can say has been said (`harness.py`,
+  `Reactor.more_to_say`; `harness.ts` `saidTopics`). Saved reaction state gains `said`.
+- A `decide` stage's agent and person are handed something (see the entry above for what);
+  both were handed `{}`.
+- A workflow's `starts-at:` and each `then: { answered: … }` are unchanged in the document: the
+  statements are a way of writing them and nothing a runtime sees.
+
+### What a real model found
+
+The `.pact` examples were run against a live model for the first time
+(`test_the_language_runs_on_a_live_model.py`, opt-in; `gpt-4o-mini`): the refund on
+`finance-first`, a judge reading who is upset, a topic only the agent can notice, and both
+`help-centre` workflows with real agents. Nine cases pass. Four things it found are fixed,
+each with a test that needs no model:
+
+- **A tool's arguments were never sent to a served model.** `OllamaTransport` sent
+  `"properties": {}` for every tool. It sends the author's `takes:` now, `one of a, b` as a
+  closed list, and takes an `api_key` for a server that wants one.
+- **`working-on`'s arguments were a JSON schema**, which no transport reads; a provider was
+  sent three arguments called `type`, `properties` and `required`.
+- **`working-on` is not offered once every topic has been said**, on both ports. Told
+  `noted: legal`, a model said it again until its steps ran out.
+- **An agent or a person that decides is shown what it decides about.** The reference
+  workflow runtime handed both `{}`: the agent now gets the workflow's input, as much as it
+  `accepts:`, and the person the question's own `shows:`.
+
+The older opt-in live test (`test_the_phase_1_fields_reach_a_live_model.py`, the Pydantic AI
+path) was run too and passes; its one stale line expected no step ceiling, which law 2 gave
+every run on 10 November.
+
+One is written down and not fixed: an agent that `gives reply: text` ends its reply with the
+line `- reply: text`, word for word (`docs/99` §7).
+
+### What is not there
+
+Expressions. A path is a path: no arithmetic, no reassignment, and the loop variable is always
+`item`. Those are the document's rules (02W §2.0) and they are why a stage that reads
+something that may not have run is refused before anything runs.
+
+## 2026-11 — a set of documents names its embedder and its reranker to the runtime (12 November)
+
+`knowledge.embedded-by:` and `reranked-by:` were checked (`pact check` holds each to a catalogue
+row of kind `embedding` and `reranking`) and read by nothing: `KnowledgeSpec` dropped them, so a
+runtime indexed every set with its own embedder whatever the set said. `KnowledgeSpec` now carries
+`embedded_by` and `reranked_by`, `""` when not written. One test; README count 4766.
+
+Not changed here: an agent that `uses:` a knowledge interface (`interface: yes`, 96 §B1) is still
+given the interface's entry, not the set that `implements:` it.
+
+## 2026-11 — the PACT language, and reactions (12 November)
+
+Two things, specified in `docs/99-THE-PACT-LANGUAGE.md`. Neither changes anything a folder of
+YAML already says.
+
+### A workspace can be one file
+
+A `.pact` file is a second way of writing a workspace: blocks at the left margin (`agent desk`,
+`tool payments`, `workspace "Its name"`), and under each one settings (`key: value`, exactly as
+in YAML), sentences (`uses zendesk, payments`, `asks finance-desk: …`, `at most 8 steps`) and
+text blocks. `pact check team.pact` reads it directly, and every existing rule points at the
+line of the `.pact` file.
+
+- **`pact write [PATH]`** prints any workspace as one `.pact` file. **`pact build <file> --to
+  <folder>`** writes the folder a file stands for, and reads it back before it says it is done.
+- **A `.pact` file can sit at the top of a folder**, beside the things that are files by nature
+  (a knowledge set's documents, a skill's scripts). Several are read as one; anything written in
+  two places is refused.
+- **The two ways of writing cannot drift.** For every workspace under `examples/`, reading what
+  `pact write` printed gives back the document the folder gave
+  (`every_shipped_workspace_reads_back_from_what_pact_write_prints`). The printer reads each
+  block back as it writes it and falls back from a sentence to a setting where the sentence
+  would not come back the same, so a field added to the schema later round-trips with no change
+  here.
+- `examples/language/` has three: the smallest workspace there is, `finance-first` (the same
+  workspace as `examples/kernel/finance-first`), and `staff-desk` (a `.pact` file beside a
+  knowledge set's documents).
+
+### "When this happens, do that"
+
+- **`topics:`** in a workspace, and **`topics: [finance]`** on a tool, an action or a set of
+  documents. A topic's `noticed-by:` says how the runtime finds out the work has turned to it:
+  `tags` (exact), `the-agent` (it is given a `working-on` tool and says so) or `a-judge`.
+- **`events:`** — a named moment: `at:` one of six places in the loop, narrowed with `when-this:`
+  and `more-than:`; or a `topic:`; or `judged: yes`.
+- **`reactions:`** — `event:` (or the same fields inline) and `then:` a list of `remind:`,
+  `consult:`, `tell:` and `stop:`. An agent lists the ones that cover it under `reactions:`, or
+  the reaction says `applies-to: every-agent`. In the language: `when the work touches finance`
+  with what to do indented under it.
+- **`listens-for:`** on an agent — `{ topic: finance, how: asked-first }` or `{ event: …, how:
+  told-after }`. Every other agent's work is what it hears; no other file changes.
+- A `consult` before a tool call **holds the call**: the consulted agent's answer comes back in
+  the call's place, and the model can make the call again. A held call is not put to a person
+  for approval in the same step.
+
+### What holds
+
+- **A guess does not stop a run** (`loader/a-guess-cannot-stop`). `stop:` on a judgement, or on
+  a topic the agent or a judge notices, is refused; a guess may `remind:` or `consult:`.
+- **A reaction waits for one thing** (`loader/a-signal-says-one-thing`), names a call that is
+  there (`loader/a-signal-names-no-such-call`), and narrows only a moment that is about a call
+  (`loader/a-narrowing-with-nothing-to-narrow`). Five more rules are in `reactions.rs`.
+- **A reaction does not wake itself.** While one is carried out it does not fire again beneath
+  itself, so however agents consult each other, the consulting ends.
+- **A consulted agent is paid from the run that woke it**, against the same `limits:`.
+- What a run has already reacted to **survives a park** (`Suspension.reactions`).
+- The TypeScript port offers the `working-on` tool and names every reaction it does not carry
+  out on `unenforced`.
+- **What an agent woken said is written down with the run.** Each entry of
+  `RunResult.reactions` carries `heard:` — which agent, `asked-first` or `told-after`, and its
+  words. `tell:`'s own help promised this and the record held only "told auditor".
+
+### Where to read about it
+
+- `README.md` has a section for each: the tutorial again as one file, and events and reactions.
+- `site-docs/guide/first-agent-in-one-file.md` is the tutorial, step by step, with real output.
+- `site-docs/reference/language.md` is every block, sentence, signal and `lang/` rule.
+- `site-docs/reference/reactions.md` is every field of the five kinds, the six moments, what a
+  held call does, and what a run reports.
+- `crates/pact-lang/README.md` is for somebody changing the reader or the printer.
+- `examples/language/README.md` and `examples/kernel/finance-first/README.md` walk the examples.
+
+### What a runtime must match
+
+- The six moments, and the order at a tool call: the workspace's own rules rewrite the arguments;
+  a call a reaction will hold is not put to a person in that step; reactions due before the call
+  are carried out in the order written and the first `stop:` ends the run; a `consult:` answers
+  the call with `not done yet — <agent> was asked first about this, and said: …` and the tool is
+  not run; then approval, at-most-once and the call; then reactions due after it
+  (`harness.py`, `reactions.py`).
+- A count (`more-than:`) is of calls that REACHED the moment — approved, and including ones a
+  reaction then held — not of calls that ran.
+- A reaction being carried out does not fire again beneath itself; an agent woken is paid from the
+  waking run's remaining budget; what has fired survives a park.
+- A runtime that cannot carry a reaction out says so on `unenforced`, one line for each; it may
+  refuse to run the agent instead, and never runs it as though the reaction were not written.
+
+### What an existing workspace will notice
+
+Nothing, unless it has a setting called `topics`, `events`, `reactions` or `listens-for` under
+an `x-` prefix it meant to keep. Three counts moved: 68 kinds (was 63), 569 keywords (was 536),
+342 closed-choice words (was 333).
+
+## 2026-11 — a catalogue row carries its voices, languages, sessions and dimensions (12 November)
+
+`model-can.voices`, `languages`, `sessions` and `dimensions` were checked by `pact check` for a
+`voice:` that names its models, and read by nothing else: `ModelEntry` dropped them, so a host
+that binds a model the tree does not name had no row to hold it to, and `voice.plan_for` read
+`sessions` from the raw rows beside the entry. Now:
+
+- **`ModelEntry` carries the four lines** (`voices`, `languages`, `sessions`, `dimensions`), read
+  where `regions` and `first_words_ms` are; a line the row leaves out is not said, never a guess.
+- **`ModelEntry.fits_voice(plan, role)`** holds the model a host binds for a voice plan as the
+  loader holds a named one (`crates/pact-loader/src/voice.rs`): the speaker must have the voice
+  `speaks-as:` names, every model listening or speaking must handle each of `languages:` (`en`
+  covers `en-GB`), and the one model of a plan that talks both at once must hold a duplex session.
+- **`voice.plan_for` reads `sessions` off the entry**; `rows=` is still read beside it for a caller
+  that builds entries by hand.
+- **A benchmark's `with:` reaches DeepEval as DeepEval takes it.** `run_deepeval` passed `with:` as
+  written, and a word where the benchmark's constructor takes a member of its enum
+  (`MMLU(tasks=[MMLUTask.…])`) crashed inside DeepEval; each such word is now read into that
+  member (`tasks: [high_school_computer_science]`), and one the enum lacks is refused naming some
+  it has.
+- **A DeepEval benchmark is answered by a model that obeys its prompt.** `AskModel.generate` read
+  only JSON when a schema was asked for, and DeepEval's MMLU asks for a bare letter: every question
+  raised `answer Field required`. A one-field schema now takes the reply itself, and a field of
+  a few words (`Literal["A", "B", "C", "D"]`) the first of them the reply says. A package a
+  benchmark imports only when it runs (`pandas`) is refused naming it, not raised. Measured
+  through Bud Agent Flow's `budflow benchmark run`: gpt-4o-mini, 90 on twenty MMLU
+  high-school computer science questions.
+
+## 2026-11 — law 3 as the Bud Agent Flow corpus reads it (11 November)
+
+Running the new checker over Bud Agent Flow's 168 shipped trees refused 29 of them, all with
+`loader/repeated-with-no-claim` or `loader/a-key-that-changes-every-attempt`. Read one by one,
+three of the rule's readings were wider than law 3, and each is narrowed here with a test:
+
+- **A `together` is not repetition by itself.** Its branches are different stages, each run
+  once: an email in one branch and a chat message in the other are two calls. What repeats is
+  the *same* action called from two branches side by side, and that is still refused
+  (`two_branches_calling_the_same_write_do_it_twice`). The old reading also replaced the
+  context around a `together`, so a `together` inside a `repeat` lost the repeat; it now keeps
+  it (`a_together_inside_a_repeat_still_runs_every_round`).
+- **The stock memory tools are not held by the rule.** `bud/remember` and `bud/forget` in a
+  `repeat` are how a round leaves what it learned for the next (Reflexion's buffer); the memory
+  is the workspace's own (`a_round_may_keep_what_it_learned`).
+- **A key bound from the round's own output is a warning.** The author wrote a claim, and a
+  retry of one round produces the same output and so the same key. Whether two *different*
+  rounds aim at the same thing is an intent the checker cannot see; a rolling plan whose every
+  round posts a new update is the other reading, and the corpus has nine of them. A call with
+  no claim at all inside a `repeat` or a retry is still an error.
+
+The other trees were real defects (writes retried or repeated with no claim) and were fixed in
+Bud Agent Flow by giving each action the key its business has.
+
 ## 2026-11 — the seven primitives, built (10 November)
 
 `docs/97-PRIMITIVES.md` names seven building blocks (Shape, Origin, Store, Actor, Flow, Check,

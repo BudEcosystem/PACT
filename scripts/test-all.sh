@@ -31,6 +31,11 @@ echo "── CLI on every shipped tree ──"
 for spec in $(find examples -name workspace.yaml | sort); do
   cargo run --quiet -p pact-cli -- check "$(dirname "$spec")" --deny-warnings
 done
+# And every workspace written the other way (docs/99): a folder with a
+# PACT-language file at the top of it. Found the same way, for the same reason.
+for spec in $(find examples -name '*.pact' | sort); do
+  cargo run --quiet -p pact-cli -- check "$(dirname "$spec")" --deny-warnings
+done
 echo "── TypeScript ──"
 # 1238 lines of the "second, independent port" were never type-checked: there was
 # no tsconfig, `typescript` was not a dependency, and `--experimental-strip-types`
