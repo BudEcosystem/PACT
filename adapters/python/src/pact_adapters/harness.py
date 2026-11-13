@@ -63,7 +63,8 @@ from .facts import TURN_ENDS, Fact, Facts
 from .holes import fill
 from .interceptors import Chain
 from .ir import AgentSpec, SkillSpec
-from .limits import RAN_OUT, Action, Meter, Reached, money, step_ceiling
+from .limits import RAN_OUT, Action, Ceiling, Limits, Meter, Reached, money, step_ceiling
+from .limits import _CEILING_FIELDS as CEILING_FIELDS
 from .loops import DONE, Does, Loop, LoopError, Phase
 from .questions import AN_AGENT, ANYTHING, Gate, Question, Rejected, Wait, quoted
 #: Three outcomes where this file used to read two. `_cleared` returned a bare
@@ -225,6 +226,9 @@ class RunResult:
     #: Bud Agent Flow had the same hole and closed it first; the wording is its.
     members_unmetered: list[str] = field(default_factory=list)
     members_unenforced: list[str] = field(default_factory=list)
+    #: The ceilings a person's "keep going" has raised this run to, as
+    #: `Suspension.budget` carries them. Empty until somebody has.
+    budget: dict[str, float] = field(default_factory=dict)
     #: Rules the author wrote that this run could not decide, each a sentence
     #: naming the file, the line, what was not applied and a line to type. A
     #: different fact from `unmetered` and so a different field: `unmetered` is
@@ -1326,6 +1330,10 @@ async def run(
     pending_text: str = ""
     already: dict[str, str] = {}
     limit = spec.max_steps
+    # The ceilings in force. They are the ones written until a person says
+    # "keep going", which grants the same budget again from where the run is
+    # (`Limits.kept_going`); `spec.limits` stays what the author wrote.
+    limits = spec.limits
 
     # Every stage an interceptor can send this run to, held against the loop
     # here rather than when a rule fires. `Loop.check_against` states the
@@ -1380,6 +1388,22 @@ async def run(
         state=resume.reactions if resume is not None else None,
     )
     result.reactor = reactor
+
+    def closing_words(reached: "Reached", not_made: "tuple[ToolCall, ...]" = ()) -> str:
+        """What the closing request of a run that ran out is told: the agent's
+        instructions, every procedure it has, anything a connected server said
+        of itself, the shape of its answer, and what its reactions have added
+        — what any request is told, less a stage's own line — and then, last,
+        that the run has reached a limit and which calls were not made
+        (`Reached.closing`)."""
+        return _system_for(
+            spec.instructions, None, spec.skills,
+            answers_with=shape_to_ask_for,
+            external=spec.external_prose,
+            added=reactor.reminded(),
+        ) + "\n\n" + reached.closing(
+            tuple(f"{c.name} {json.dumps(dict(c.args), sort_keys=True)}" for c in not_made)
+        )
     result.reaction_notes = reactor.notes
     result.reactions = reactor.log
     reports_usage = callable(getattr(transport, "usage", None))
@@ -1752,6 +1776,36 @@ async def run(
         # lunch. Eve has nothing to carry here, because it has nothing to spend.
         meter = Meter.restored(resume.used, clock(), start)
         result.used = meter
+        # And the ceilings it had been raised to come back with it.
+        if resume.budget:
+            result.budget = dict(resume.budget)
+            limits = replace(
+                spec.limits,
+                **{k: _as_written(spec.limits, k, v) for k, v in resume.budget.items() if k != "steps"},
+            )
+            if "steps" in resume.budget:
+                limit = int(resume.budget["steps"])
+
+        def at_ceiling() -> "Reached | None":
+            """The ceiling this run is parked at: the one the pause recorded,
+            or, for a pause written before it recorded one, worked out again
+            from what the run has spent."""
+            if resume.reached:
+                r = resume.reached
+                return Reached(
+                    Ceiling(
+                        str(r["field"]), str(r["reads"]), float(r["limit"]),
+                        str(r["unit"]), str(r["halted"]), bool(r.get("default")),
+                    ),
+                    float(r["at"]),
+                    Action.ASK,
+                )
+            return limits.reached(
+                meter,
+                clock(),
+                None if spec.unbounded else limit,
+                not spec.steps_written and not spec.unbounded,
+            )
 
         if resume.expired(now):
             outcome = _give_up(resume, now, result, bus)
@@ -1761,7 +1815,9 @@ async def run(
             # run carries on knowing that. It is never granted: a timeout that
             # grants is not a gate, it is a delay.
             if resume.reason == OUT_OF_BUDGET:
-                return _out_of_budget(result, bus, start)
+                return _out_of_budget(
+                    result, bus, start, reached=at_ceiling(), nobody_answered=True
+                )
             if resume.reason == ASKED_A_PERSON:
                 # The stage asked and nobody came. Recording that as the stage's
                 # own words is the honest reading — the run continues knowing it,
@@ -1813,8 +1869,24 @@ async def run(
                     # continuation grants — which can itself run out, under a
                     # new key, so a second continuation is a second decision.
                     limit = start + spec.max_steps
+                    # Of EVERY ceiling, not the step ceiling alone. A run that
+                    # reached `tool-calls-at-most` and was told to keep going
+                    # kept the figure it had already reached, so it parked
+                    # again at once, at the same place, with the same question
+                    # — `Limits.kept_going` was written to end that and was
+                    # called by nothing here. Found by the first shared case
+                    # for limits (`tests/conformance/limits.json`).
+                    limits, _ = spec.limits.kept_going(meter, clock())
+                    result.budget = {
+                        "steps": float(limit),
+                        **{
+                            attr: float(getattr(limits, attr))
+                            for attr, _line, _reads in CEILING_FIELDS
+                            if getattr(limits, attr) is not None
+                        },
+                    }
                 elif said:
-                    return _out_of_budget(result, bus, start)
+                    return _out_of_budget(result, bus, start, reached=at_ceiling())
                 else:
                     result.halted = "suspended"
                     result.suspension = resume
@@ -1850,11 +1922,12 @@ async def run(
         meter.steps = i
         # Checked at the top of the step, not the bottom: a run that is already
         # out of time or money must not start work it cannot pay to finish.
-        if (out := spec.limits.reached(meter, clock())) is not None:
+        if (out := limits.reached(meter, clock())) is not None:
             return await _ran_out(
                 out, spec=spec, transport=transport, result=result, history=history,
                 already=already, bus=bus, meter=meter, now=now, clock=clock, at=i,
                 phase=phase_name, visits=visits, asking=asking, once=once, chain=chain, given=given,
+            closing_words=closing_words,
             )
         # Which stage runs now. A stage that has used up its `at-most` is routed
         # past here rather than after the fact, so it never spends a model call
@@ -2205,11 +2278,12 @@ async def run(
             # What that call cost. Checked immediately: a spend cap enforced one
             # step late has already spent the step that broke it.
             _meter_usage(transport, meter)
-            if (out := spec.limits.reached(meter, clock())) is not None:
+            if (out := limits.reached(meter, clock())) is not None:
                 return await _ran_out(
                     out, spec=spec, transport=transport, result=result, history=history,
                     already=already, bus=bus, meter=meter, now=now, clock=clock, at=i,
                     phase=phase_name, visits=visits, asking=asking, once=once, chain=chain, given=given,
+            closing_words=closing_words,
                 )
             # The reactions on what the agent just wrote (docs/99 §5) — AFTER
             # the step's own call has been metered. A judge may be the same
@@ -2758,6 +2832,7 @@ async def run(
         outputs: list[str] = []
         ran: list[ToolCall] = []
         out_of_calls: "Reached | None" = None
+        not_made: tuple[ToolCall, ...] = ()
         #: The stage a rule sent this run to instead of doing the call it was
         #: about to do (G5's third outcome, `send-elsewhere`).
         sent_to: str = ""
@@ -2803,7 +2878,10 @@ async def run(
             # the 41st through because it arrived in the same batch as the 40th
             # is not a ceiling, it is a suggestion — and a batch is exactly where
             # a runaway agent spends fastest.
-            if (out_of_calls := spec.limits.reached(meter, clock())) is not None:
+            if (out_of_calls := limits.reached(meter, clock())) is not None:
+                # `ran` holds every call of this reply already dealt with, so
+                # what is left is this one and all after it.
+                not_made = tuple(calls[len(ran):])
                 break
 
             # What the person said, if they were asked. Their answer is not only
@@ -3097,6 +3175,7 @@ async def run(
                 out_of_calls, spec=spec, transport=transport, result=result,
                 history=history, already=already, bus=bus, meter=meter, now=now,
                 clock=clock, at=i, phase=phase_name, visits=visits, asking=asking, once=once, chain=chain, given=given,
+            closing_words=closing_words, not_made=not_made,
             )
 
         visits[phase_name] = visits.get(phase_name, 0) + 1
@@ -3169,7 +3248,14 @@ async def run(
         spec=spec, transport=transport, result=result, history=history,
         already=already, bus=bus, meter=meter, now=now, clock=clock, at=limit,
         phase=phase_name, visits=visits, asking=asking, once=once, chain=chain, given=given,
+            closing_words=closing_words,
     )
+
+
+def _as_written(limits: Limits, attr: str, figure: float) -> "int | float":
+    """A carried ceiling in the kind of number its line is written in: a count
+    stays a whole number."""
+    return int(figure) if isinstance(getattr(limits, attr, None), int) else float(figure)
 
 
 def _park_state(
@@ -3225,6 +3311,7 @@ def _park_state(
         "unenforced": list(result.members_unenforced),
         "unmetered": list(result.members_unmetered),
     }
+    parked.budget = dict(result.budget)
     if text:
         parked.text = text
     if awaiting:
@@ -3272,6 +3359,13 @@ async def _ran_out(
     #: had just replaced. `None` means the agent's own, so a caller with nothing
     #: to override behaves exactly as before.
     asking: "Gate | None" = None,
+    #: The system text of the closing request, built where the run knows what
+    #: it has been telling the model. Required for the reason `chain` is: a
+    #: caller that forgets it sends the closing request less than every other.
+    closing_words: "Callable[[Reached, tuple[ToolCall, ...]], str]",
+    #: The calls of this reply that were not made because the ceiling was
+    #: reached part-way through it. The closing request tells the model.
+    not_made: "tuple[ToolCall, ...]" = (),
 ) -> RunResult:
     """A ceiling has been reached. Do what the author said, and say which one.
 
@@ -3347,6 +3441,20 @@ async def _ran_out(
             waits_for=budget_rule.answer_within if budget_rule else "",
             asked_of=tuple(budget_rule.who_can_answer) if budget_rule else (),
         )
+        # Which ceiling, as it was when the run stopped. A refusal names it
+        # (`Reached.declined`), and working it out again afterwards can name a
+        # different one: a run whose second step makes its second call is at
+        # `steps-at-most: 2` and `tool-calls-at-most: 2` together, was stopped
+        # by the calls, and would be reported as stopped by the steps.
+        parked.reached = {
+            "field": reached.ceiling.field,
+            "reads": reached.ceiling.reads,
+            "limit": reached.ceiling.limit,
+            "unit": reached.ceiling.unit,
+            "halted": reached.ceiling.halted,
+            "default": reached.ceiling.default,
+            "at": reached.at,
+        }
         result.halted = "suspended"
         result.suspension = parked
         bus.emit("turn.run.failed", at=(at,), reason=OUT_OF_BUDGET)
@@ -3361,7 +3469,12 @@ async def _ran_out(
         # budget — charging for the work and withholding the answer helps
         # nobody — and the run still reports the ceiling it reached.
         bus.emit("step.model.requested", at=(at,))
-        text, _ = await transport.model_call(spec.instructions, history, [])
+        # Told everything every other request is told. It was sent the bare
+        # `instructions:` — so the one answer nobody planned for was written
+        # without the procedures the agent follows, without the shape its
+        # answer must have, and without anything a reaction had reminded it
+        # of.
+        text, _ = await transport.model_call(closing_words(reached, not_made), history, [])
         # THE SAME RULES AS EVERY OTHER REPLY. `_finish`'s docstring states the
         # guarantee this used to break, word for word: "a redaction rule cannot
         # be escaped by finishing from a stage rather than by running out of
@@ -4234,7 +4347,7 @@ def _answer_shape_in_words(shape: Mapping[str, str]) -> str:
 
 def _system_for(
     instructions: str,
-    phase: Phase,
+    phase: "Phase | None",
     skills: tuple[SkillSpec, ...] = (),
     answers_with: "Mapping[str, str] | None" = None,
     external: tuple[str, ...] = (),
@@ -4265,7 +4378,9 @@ def _system_for(
     bug one level up, and quietly fixing it would hide whichever other path is
     handling the same text unfenced.
     """
-    stage = phase.instruction()
+    # `None` is the closing request of a run that reached a ceiling and
+    # answers with what it has: it is no stage, so it has no stage's line.
+    stage = phase.instruction() if phase is not None else ""
     parts = [p for p in (instructions, stage) if p]
     if skills:
         body = "\n\n".join(s.in_words() for s in skills)
@@ -4400,10 +4515,34 @@ def _finish(
     return result
 
 
-def _out_of_budget(result: RunResult, bus: Bus, at: int) -> RunResult:
+def _out_of_budget(
+    result: RunResult,
+    bus: Bus,
+    at: int,
+    *,
+    #: The ceiling the run is at, worked out again from what it has spent and
+    #: the ceilings in force. `None` when it is at none of them any more — the
+    #: file was edited to allow more while the run waited.
+    reached: "Reached | None",
+    nobody_answered: bool = False,
+) -> RunResult:
     """The run asked for more budget and did not get it. Distinct from
-    `step-limit`, which is a run that was never allowed to ask."""
+    `step-limit`, which is a run that was never allowed to ask.
+
+    It says so, and which ceiling (`Reached.declined`). It used to hand back
+    the model's last words, which for a run stopped between tool calls is
+    usually nothing at all: a person who refused more budget was shown an empty
+    answer and no reason.
+    """
     result.halted = "out-of-budget"
-    result.output = result.steps[-1].text if result.steps else ""
+    result.stopped_by = reached
+    if reached is not None:
+        result.output = reached.declined(nobody_answered=nobody_answered)
+    else:
+        result.output = (
+            "Stopped before finishing: this run reached a limit and asked whether to "
+            "keep going. "
+            + ("Nobody answered in time." if nobody_answered else "A person said not to.")
+        )
     bus.emit("turn.run.failed", at=(at,), reason=OUT_OF_BUDGET)
     return result

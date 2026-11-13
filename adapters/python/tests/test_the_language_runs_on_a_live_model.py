@@ -107,6 +107,43 @@ def test_the_smallest_file_there_is_answers() -> None:
     assert out.output.strip(), "the model said nothing"
 
 
+# ── a limit runs out: answer with what it has ────────────────────────────────
+
+
+def test_out_of_lookups_it_answers_from_what_it_has_and_makes_nothing_up() -> None:
+    """Five lookups asked for, two allowed, `answer-with-what-it-has`.
+
+    The closing request offers no tools. Before it also SAID a limit had been
+    reached, this model answered it with `[result of ledger] water: entry
+    found` — a tool result it wrote itself, for a lookup never made — five
+    runs of five. Told which calls were not made, none of five.
+    """
+    doc = shown(REPO / "tests/conformance/trees/metered-desk")
+    spec = AgentSpec.from_document(doc, "answers")
+    looked: list[str] = []
+
+    def ledger(args: dict[str, Any]) -> str:
+        looked.append(str(args.get("entry")))
+        return f"{args.get('entry')}: entry found"
+
+    live = Live("answers")
+    out = asyncio.run(
+        run(spec, live, "Look up these five entries in the ledger and tell me which exist: "
+            "rent, gas, water, phone, tax.", {"ledger": ledger})
+    )
+    print("\n[out of lookups]", looked, "->", out.output)
+    # What the harness guarantees, whatever the model says.
+    assert len(looked) == 2, f"the ceiling is two lookups, and {len(looked)} were made"
+    assert out.halted == "tool-call-limit", said(out)
+    assert live.offers[-1] == [], "the closing request offered a tool"
+    assert "This run has reached its limit, `tool-calls-at-most` (2 of 2 tool calls)" in live.told[-1]
+    # What the model was expected to do with being told.
+    assert "[result of" not in out.output, f"the model wrote a tool result itself: {out.output!r}"
+    never = [e for e in ("rent", "gas", "water", "phone", "tax") if e not in looked]
+    made_up = [e for e in never if f"{e}: entry found" in out.output]
+    assert not made_up, f"the model reported lookups that were never made: {made_up}"
+
+
 # ── reactions: asked first, a person, once, told after ───────────────────────
 
 

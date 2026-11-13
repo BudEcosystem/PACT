@@ -3,6 +3,73 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — what a run does when a limit runs out, as shared cases (13 November)
+
+No shared case covered limits, so two runtimes could differ there unseen. Writing the first ten
+and running them on a live model found five things PACT's own harness got wrong. Nothing here
+changes a field of the schema.
+
+### What a runtime must match
+
+- **A ceiling is reached when the count is at the figure written**, and the first one reached is
+  the one that acts; `halted` is its word (`tool-call-limit`, `step-limit`). With
+  `tool-calls-at-most: 2` both calls run. A third asked for in the same reply as the second is not
+  run.
+- **`answer-with-what-it-has`** makes one closing request with no tools offered, and its text is
+  the answer. The run reports the ceiling; it is not `final`.
+- **The closing request says why.** Last in its system text: which ceiling was reached, which
+  calls the model asked for were not made, and to answer from what it already has. The wording is
+  `Reached.closing` (`pact_adapters/limits.py`), and a case records it as `closing` in `expect`.
+- **`stop-and-say-so`** makes no further request and ends with a sentence naming the ceiling.
+- **`ask-a-person`** parks. A yes grants the same budget again, of every ceiling, from where the
+  run is; that budget can run out and ask again. A no ends the run (`out-of-budget`), and the run
+  says which ceiling and that a person declined: *"Stopped before finishing: this run reached the
+  limit you set with `tool-calls-at-most` (2 of 2 tool calls). A person was asked and said not to
+  keep going."* The wording is one function, `Reached.declined` (`pact_adapters/limits.py`), so two
+  runtimes do not each write it. A wait that ran out says nobody answered in time instead: that is
+  not a person saying no, and the sentence does not say one did.
+- **The ceiling named is the one that stopped the run.** A run can be at two together: with
+  `steps-at-most: 2` and `tool-calls-at-most: 2`, a second step that asks for two calls runs one
+  and is refused the other. It is then at two of two of each, and it was the calls that stopped it.
+- **`people: ["nobody"]`** is new in a case: no answer is given and the time the question allows
+  passes.
+- Ten cases: `tests/conformance/limits.json`, on `tests/conformance/trees/metered-desk`.
+
+### What was wrong in PACT's harness
+
+- **"Keep going" did not let a run keep going.** A yes raised the step ceiling and no other, so a
+  run that had reached `tool-calls-at-most` (or tokens, money, time) parked again at once with the
+  same question. `Limits.kept_going` existed to grant all of them and was called by nothing in the
+  harness.
+- **A granted budget was lost at the next park.** It is now carried in the park
+  (`Suspension.budget`, `budget` in its JSON), so a run told to keep going and then parked for an
+  approval comes back under the ceilings it had been raised to.
+- **The closing request was told less than any other**: the bare `instructions:`, without the
+  agent's procedures, the shape of its answer, or what a reaction had reminded it of. It is now
+  told what every request is told, less a stage's own line.
+- **The closing request did not say a limit had been reached**, and a live model made the rest up.
+  Asked for five lookups and allowed two, gpt-4o-mini answered the closing request with
+  `[result of ledger] water: entry found`: a tool result it wrote itself, for a lookup never made,
+  handed back as the run's answer. Five runs of five. Told what had happened, none of five, and it
+  named the three lookups it had not got to. No scripted test could have found this.
+- **A run a person refused more budget said nothing about why.** Its answer was the model's last
+  words, which is an empty string when its last step was a call. Bud Agent Flow's engine named the
+  ceiling and the refusal, and that is now the rule above. The park records which ceiling stopped
+  the run (`Suspension.reached`), because working it out again afterwards can name another: a run
+  at `steps-at-most` and `tool-calls-at-most` together was stopped by one of them.
+
+### Still owed
+
+- **A closing answer that does not fit `answers-with:`.** Ruled with Bud Agent Flow: it is asked
+  for at most twice in all (`checks-at-most:`'s own default), no tool offered, and then the run
+  stops naming the ceiling. PACT's harness cannot hold this yet: it never checks an agent's answer
+  against its shape, so it makes one closing request and takes what comes.
+- **The transport for a served model does not show the model its own calls.** It sends each tool
+  result as a line of the user's (`[result of ledger] …`) and the model's own turn as `.`. On
+  gpt-4o-mini an agent with three steps and no ceiling on calls made the same five lookups in each
+  of its three steps. The requests should carry the calls and results in the provider's own form.
+- A shared case for claims.
+
 ## 2026-11 — `pact about`: the binary says which commit it was built from (13 November)
 
 A runtime pins PACT by commit and then runs whatever `pact` binary it finds. The binary could not

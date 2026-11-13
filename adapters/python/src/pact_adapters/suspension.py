@@ -670,6 +670,19 @@ class Suspension:
     #: […]}`. A teammate asked before the park is not asked again after it, so
     #: without this a resumed run reports that teammate's run as clean.
     from_members: dict[str, list[str]] = field(default_factory=dict)
+    #: The ceilings in force when the run parked, where a person's "keep
+    #: going" had raised them above the ones written: each `Limits` figure by
+    #: its attribute, and the step ceiling under `steps`. Empty when nobody
+    #: has. Without it a run that was told to keep going and then parked for
+    #: anything else — an approval — came back under the ceilings as written,
+    #: already past them, and ran out at once.
+    budget: dict[str, float] = field(default_factory=dict)
+    #: For a run parked because a limit ran out: which ceiling, and both
+    #: figures, as they were at that moment (`field`, `reads`, `limit`, `unit`,
+    #: `halted`, `default`, `at`). A person who says no is told which one, and
+    #: it has to be the one that stopped the run, not one worked out later.
+    #: Empty for every other wait.
+    reached: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         check_reason(self.reason)
@@ -751,6 +764,8 @@ class Suspension:
             claim_holder=self.claim_holder,
             reactions=dict(self.reactions),
             from_members={k: list(v) for k, v in self.from_members.items()},
+            budget=dict(self.budget),
+            reached=dict(self.reached),
         )
 
     # -- crossing a process boundary ---------------------------------------
@@ -802,6 +817,8 @@ class Suspension:
                 "request-digest": self.request_digest,
                 "reactions": self.reactions,
                 "from-members": self.from_members,
+                "budget": self.budget,
+                "reached": self.reached,
             },
             sort_keys=True,
         )
@@ -853,6 +870,8 @@ class Suspension:
             request_digest=str(d.get("request-digest") or ""),
             reactions=dict(d.get("reactions") or {}),
             from_members={str(k): list(v) for k, v in (d.get("from-members") or {}).items()},
+            budget={str(k): float(v) for k, v in (d.get("budget") or {}).items()},
+            reached=dict(d.get("reached") or {}),
         )
 
 
