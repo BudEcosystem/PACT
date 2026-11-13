@@ -110,6 +110,16 @@ question which-shelf
   asked-of: [clerks]
   answer-within: 1h
 
+question may-we-close
+  description: Asked of the leads before a fix is closed.
+  says: May this fix be closed?
+  answer:
+    close: yes or no
+  shows: [input.report]
+  asked-of: [leads]
+  answered-by: everyone
+  answer-within: 1h
+
 agent checker
   description: Gives a second opinion on which shelf a note belongs on.
   takes message: text
@@ -161,6 +171,15 @@ workflow classify-only
   description: Classify one defect report, and hand nothing back.
   takes report: text
   triage = call triager with report: input.report
+
+# A stage that waits for people. Who answered is a list, always: a question
+# can need several answers, and one name is a list of one.
+workflow sign-off
+  description: Ask whether a fix may be closed, and say who answered.
+  takes report: text
+  gives close: yes or no, by: list of text
+  approve = ask may-we-close
+  reply = answer with close: approve.close, by: approve.answered-by
 
 # A loop that is waiting for nothing: it runs its rounds and ends as any
 # stage does. `too-many-times` is for one whose `until:` never came to hold.

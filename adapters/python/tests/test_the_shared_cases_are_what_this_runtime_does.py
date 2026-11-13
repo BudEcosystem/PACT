@@ -113,6 +113,15 @@ def test_the_cases_say_the_things_they_are_there_to_say() -> None:
     asked = by_name["the-agent-is-not-sure-so-a-person-decides-and-is-shown-the-message"]
     assert asked["shown"] == [{"question": "which-desk", "shown": {"input.message": "The app crashes."}}]
 
+    one = by_name["who-answered-a-wait-is-a-list-of-one-when-one-person-did"]
+    # On a stage that waits for people, who answered is a list, also of one;
+    # and the person is shown what the question says to show.
+    assert one["answer"] == {"close": True, "by": ["dana"]}
+    assert one["shown"] == [
+        {"question": "may-we-close", "shown": {"input.report": "Seat 14C will not recline."}}
+    ]
+    both = by_name["who-answered-a-wait-is-everyone-who-did-in-the-order-they-answered"]
+    assert both["answer"]["by"] == ["lee", "dana"], "in the order they answered, not sorted"
     found = by_name["a-deciding-agent-is-given-what-an-earlier-stage-found-and-the-bound-name-wins"]
     # `kind` is triage's `engine`, not the `cabin` the report came in with; the
     # `secret` the assigner does not accept is not given to it.
