@@ -123,4 +123,27 @@ def test_a_name_the_stage_binds_is_never_filled_from_the_input_instead(tmp_path:
 def test_the_first_agent_that_is_sure_decides_and_the_next_is_not_asked(tmp_path: Path) -> None:
     out, given = place(tmp_path, {"amount": 5}, quick="fast")
     assert list(given) == ["quick"]
-    assert out.steps["where"] == {"label": "fast", "by": "quick"}
+    assert out.steps["where"] == {"label": "fast", "decided-by": "agent", "answered-by": "quick"}
+
+
+# ───────────────────────────────── what the model is shown of what it was given
+
+
+def test_a_model_is_shown_everything_it_was_given_and_nothing_else(tmp_path: Path) -> None:
+    from pact_adapters.workflow_runtime import worded
+
+    (tmp_path / "second-opinions.pact").write_text(WORKSPACE, encoding="utf-8")
+    doc = shown(tmp_path)
+    # `careful` takes message, amount, gist — in that order.
+    text = worded(doc, "careful", {"gist": "A burst pipe.", "amount": 900, "message": "Water damage."})
+    assert text == "Water damage.\n\namount: 900\ngist: A burst pipe."
+    # Nothing in front when there is no message: not the agent's description.
+    text = worded(doc, "quick", {"amount": 900})
+    assert text == "amount: 900"
+    assert "Sorts the easy ones" not in text
+    # A message alone is the message.
+    assert worded(doc, "careful", {"message": "Water damage."}) == "Water damage."
+    # A value that is not text is written so it can be read back.
+    assert worded(doc, "careful", {"amount": {"value": 900, "currency": "USD"}}) == (
+        'amount: {"currency": "USD", "value": 900}'
+    )

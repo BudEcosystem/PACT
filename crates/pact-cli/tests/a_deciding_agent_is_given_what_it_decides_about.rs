@@ -264,6 +264,74 @@ fn a_value_hidden_from_the_ai_and_bound_for_the_agent_that_decides_is_warned_abo
     );
 }
 
+// ─────────────────────────────────────────── a classifier reads no instruction
+
+const SECOND_OPINION: &str = "  where = decide with message: input.note\n    by:\n      - rules:";
+const SAYS_ONLY: &str =
+    "  where = decide\n    says: Say which shelf this note goes on.\n    by:\n      - rules:";
+const CHECKER: &str = "  description: Gives a second opinion on which shelf a note belongs on.\n";
+
+#[test]
+fn a_says_is_a_message_for_an_agent_that_reads_instructions() {
+    let (ok, text) = check("says-for-a-reader", &[(SECOND_OPINION, SAYS_ONLY)]);
+    assert!(ok, "{text}");
+}
+
+#[test]
+fn a_says_is_nothing_to_a_classifier_so_one_given_only_that_is_refused() {
+    // The same stage, and the second opinion is now a trained classifier: it
+    // follows no instruction, so the `says:` is not something it is given.
+    let text = refused(
+        "says-for-a-classifier",
+        &[
+            (SECOND_OPINION, SAYS_ONLY),
+            (
+                CHECKER,
+                "  description: Gives a second opinion on which shelf a note belongs on.\n  model: note-classifier\n",
+            ),
+        ],
+        "loader/a-deciding-agent-given-nothing",
+    );
+    assert!(
+        text.contains(
+            "'where' asks 'checker' to decide, and 'checker' needs 'message', which nothing \
+             here gives it (what is on offer here is `folder`, `note`)."
+        ),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_rung_whose_agent_is_a_classifier_and_a_language_model_at_once_is_warned_about() {
+    let (ok, text) = check(
+        "two-kinds",
+        &[(
+            "  model: note-classifier\n  takes message: text\n",
+            "  model: [note-classifier, qwen2.5-7b-instruct]\n  takes message: text\n  instructions: Say which shelf.\n",
+        )],
+    );
+    assert!(!ok, "a warning fails `--deny-warnings`:\n{text}");
+    assert!(
+        text.contains("rule: loader/a-rung-with-two-kinds-of-reader"),
+        "{text}"
+    );
+    assert!(
+        text.contains(
+            "'where' asks 'scorer' to decide, and 'scorer' runs on a trained classifier \
+             ('note-classifier') and on a language model ('qwen2.5-7b-instruct'). A `model:` \
+             list is tried in order only when a call fails, never because an answer was unsure"
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains(
+            "fix: Make them two agents on two rungs: one on 'note-classifier' with \
+             `if-unsure-below:`, then one on 'qwen2.5-7b-instruct' with `instructions:`."
+        ),
+        "{text}"
+    );
+}
+
 #[test]
 fn it_is_printed_back_as_it_was_written() {
     let out = Command::new(env!("CARGO_BIN_EXE_pact"))
