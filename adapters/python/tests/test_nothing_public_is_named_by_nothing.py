@@ -94,9 +94,19 @@ HOST_API: dict[str, str] = {
         "why a `may-start:` start is refused (`starts-at-most:`, `nests-at-most:`), "
         "for a runtime that brings agents in; the harness starts none"
     ),
-    "delegation.beyond_its_starter": (
-        "why a narrowed agent naming what its starter lacks is refused, for a "
-        "runtime that builds narrowed agents; the harness builds none"
+    # Law 8 at instantiation: the documents a run's own definitions are
+    # checked as. The reference harness instantiates none (it starts no
+    # helper, loads no skill a run wrote and runs a snippet in a room without
+    # a check); a runtime that does (Bud Meta Harness) builds these documents
+    # and holds them to `check_document`, so both check the same document.
+    "checking.with_helper": (
+        "the document a `narrowed-new` helper is checked as, for a runtime that starts one; the harness starts none"
+    ),
+    "checking.with_skill": (
+        "the document a skill a run wrote is checked as, for a runtime that loads one; the harness loads none"
+    ),
+    "checking.with_program": (
+        "the document a `run-code` snippet is checked as, for a runtime that checks one; the harness checks none"
     ),
     # The question a run-level wait puts, by its reason. The reference harness
     # asks through its own `Gate` (`asking.for_call`) and never needs the name;
