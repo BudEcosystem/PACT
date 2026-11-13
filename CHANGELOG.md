@@ -3,6 +3,18 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — the TypeScript port computes effects as the checker does
+
+`adapters/typescript/src/effects.ts` is `crates/pact-loader/src/effects.rs` (law 1) in TypeScript,
+function for function: an action's effect from its own lines, a tool's as its worst action's, an
+agent's as the worst of what it uses and its team's, a workflow's from its stages, and whether an
+`effect:` word in a `when-this` holds. A runtime that gates calls by effect, or builds an agent in
+code with no tree to `discover`, now has the checker's answer without the binary;
+`test_both_ports_compute_one_effect.py` holds the port to `pact discover` on every agent of the
+corpus. A tick is read with the five words `coerce.rs::yes_no` accepts; `workflows.rs::said_yes`
+takes three, so `reads-only: y` is a lookup to the port and a write to the checker until that
+reading follows `coerce.rs`.
+
 ## 2026-11 — an action that moves hardware is held like money
 
 `moves-hardware: yes` on an action says a call moves something in the physical world: a robot arm,
