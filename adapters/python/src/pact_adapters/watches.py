@@ -100,7 +100,27 @@ def derived_area(root: "str | Path | None") -> "Path | None":
     override = os.environ.get(DERIVED_DIR, "").strip()
     if override:
         return Path(override) / UNDER
-    return Path(root) / UNDER if root else None
+    return area(root) / UNDER.name if root else None
+
+
+def area(root: "str | Path") -> Path:
+    """A workspace's own `.pact/` area: where what a RUN writes is kept.
+
+    A folder keeps it inside itself: `<folder>/.pact/`. A workspace that is ONE
+    FILE (`team.pact`, docs/99 §4.4) has no inside — `team.pact/.pact/…` cannot
+    be made, and every record written there was lost without a word, a month's
+    learning spend among them, which is a ceiling. Its area is beside the file
+    and under the file's own name, `<folder>/.pact/team/`, so two `.pact` files
+    in one folder do not share a ledger.
+
+    The file on its own and the folder holding it are addressed as two
+    workspaces and keep two areas, as they are two answers to "which files is
+    this workspace": the folder is every `.pact` file in it, read as one.
+    """
+    path = Path(root)
+    if path.is_file():
+        return path.parent / UNDER.parent / path.stem
+    return path / UNDER.parent
 
 
 def can_be_written(area: "Path | None") -> bool:
@@ -202,6 +222,7 @@ EMITTED: tuple[str, ...] = (
     "step.message.completed",
     "step.model.completed",
     "step.model.requested",
+    "step.reaction.completed",
     "step.run.started",
     "step.stage.completed",
     "step.stage.started",

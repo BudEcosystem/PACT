@@ -1,0 +1,5 @@
+description: Keeps a note of every refund.
+instructions: |
+  You are told when a refund has gone out. Write one line saying what it was for.
+listens-for:
+  - { event: refund-issued, how: told-after }

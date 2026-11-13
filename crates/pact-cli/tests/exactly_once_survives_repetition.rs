@@ -144,8 +144,9 @@ fn once_is_fine_and_a_retry_is_not() {
 }
 
 #[test]
-fn a_branch_of_a_together_is_repetition_too() {
-    let t = tree("together");
+fn one_branch_of_a_together_is_one_call() {
+    // `left` writes, `right` reads: two different calls, each made once.
+    let t = tree("together-once");
     edit(
         &t,
         FLOW,
@@ -153,9 +154,49 @@ fn a_branch_of_a_together_is_repetition_too() {
         "      left:\n        does: call\n        call: ledger/stamp\n",
     );
     let (ok, said) = check(&t);
+    assert!(ok, "{said}");
+    assert!(!said.contains("loader/repeated-with-no-claim"), "{said}");
+}
+
+#[test]
+fn two_branches_calling_the_same_write_do_it_twice() {
+    let t = tree("together-twice");
+    edit(
+        &t,
+        FLOW,
+        "      left:\n        does: call\n        call: ledger/read-invoice\n",
+        "      left:\n        does: call\n        call: ledger/stamp\n",
+    );
+    edit(
+        &t,
+        FLOW,
+        "      right:\n        does: call\n        call: ledger/read-invoice\n",
+        "      right:\n        does: call\n        call: ledger/stamp\n",
+    );
+    let (ok, said) = check(&t);
     assert!(!ok, "{said}");
     assert!(said.contains("loader/repeated-with-no-claim"), "{said}");
-    assert!(said.contains("one branch of 'both'"), "{said}");
+    assert!(
+        said.contains("more than one branch of 'both' calls it"),
+        "{said}"
+    );
+}
+
+#[test]
+fn a_together_inside_a_repeat_still_runs_every_round() {
+    // The repeat's one stage becomes a together with one writing branch: no
+    // branch repeats another, but the repeat runs the together again.
+    let t = tree("together-in-repeat");
+    edit(
+        &t,
+        FLOW,
+        "      recheck:\n        does: call\n        call: recheck\n        bind:\n          invoice: input.attachments\n        waits-for-result: no\n        version: latest\n",
+        "      recheck:\n        does: together\n        steps:\n          once:\n            does: call\n            call: ledger/stamp\n            bind:\n              invoice: input.attachments\n          look:\n            does: call\n            call: ledger/read-invoice\n            bind:\n              invoice: input.attachments\n",
+    );
+    let (ok, said) = check(&t);
+    assert!(!ok, "{said}");
+    assert!(said.contains("loader/repeated-with-no-claim"), "{said}");
+    assert!(said.contains("every round of 'check-twice'"), "{said}");
 }
 
 #[test]
@@ -170,11 +211,28 @@ fn a_key_bound_from_the_round_itself_never_matches() {
         "        call: ledger/read-invoice\n        bind:\n          invoice: input.attachments\n        then:\n          answered: post\n      post:\n        does: call\n        call: ledger/post\n        bind:\n          invoice: steps.recheck.vendor\n",
     );
     let (ok, said) = check(&t);
-    assert!(!ok, "{said}");
+    // A warning: the author wrote a claim; whether rounds aim at one thing is
+    // theirs to say.
+    assert!(ok, "{said}");
     assert!(
         said.contains("rule: loader/a-key-that-changes-every-attempt"),
         "{said}"
     );
+    assert!(said.contains("warning:"), "{said}");
+}
+
+#[test]
+fn a_round_may_keep_what_it_learned() {
+    // `bud/remember` in a repeat is how a round leaves its memory for the next.
+    let t = tree("remember");
+    std::fs::write(
+        t.join("tools/bud.yaml"),
+        "description: The workspace's memory.\nactions:\n  remember:\n    description: Keep a value.\n    takes:\n      memory: text\n      value: text\n",
+    )
+    .unwrap();
+    in_the_repeat(&t, "bud/remember", "input.attachments");
+    let (_, said) = check(&t);
+    assert!(!said.contains("loader/repeated-with-no-claim"), "{said}");
 }
 
 #[test]
@@ -186,6 +244,15 @@ fn a_claim_across_runs_needs_somewhere_to_be_kept() {
         "    same-request-key: invoice\n",
         "    same-request-key: invoice\n    same-request-key-across: the-team\n",
     );
+    // Unwritten, `durability:` assumes nothing: no warning.
+    let (_, said) = check(&t);
+    assert!(!said.contains("a-claim-wider-than-what-keeps-it"), "{said}");
+    edit(
+        &t,
+        "workspace.yaml",
+        "allow-egress: []\n",
+        "allow-egress: []\ndurability: none\n",
+    );
     let (_, said) = check(&t);
     assert!(
         said.contains("rule: loader/a-claim-wider-than-what-keeps-it"),
@@ -195,9 +262,28 @@ fn a_claim_across_runs_needs_somewhere_to_be_kept() {
     edit(
         &t,
         "workspace.yaml",
-        "allow-egress: []\n",
-        "allow-egress: []\ndurability: checkpoint\n",
+        "durability: none\n",
+        "durability: checkpoint\n",
     );
     let (_, said) = check(&t);
     assert!(!said.contains("a-claim-wider-than-what-keeps-it"), "{said}");
+}
+
+#[test]
+fn the_call_is_a_claim_for_a_write_with_no_business_key() {
+    // A retried write the business gives no key: its place in the run is the claim.
+    let t = tree("the-call");
+    let ledger = t.join("tools/ledger.yaml");
+    let text = std::fs::read_to_string(&ledger).unwrap();
+    std::fs::write(&ledger, format!("{text}    same-request-key: the-call\n")).unwrap();
+    edit(
+        &t,
+        FLOW,
+        "        call: ledger/read-invoice\n        bind:\n          invoice: item.content-hash\n",
+        "        call: ledger/stamp\n        at-most: 3\n        bind:\n          invoice: item.content-hash\n",
+    );
+    let (ok, said) = check(&t);
+    assert!(ok, "{said}");
+    assert!(!said.contains("loader/repeated-with-no-claim"), "{said}");
+    assert!(!said.contains("loader/no-such-request-key"), "{said}");
 }

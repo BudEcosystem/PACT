@@ -27,7 +27,7 @@ pub struct Found {
 }
 
 /// Walk `root` for PACT workspaces. A directory is one if it holds a
-/// `workspace.yaml` (or `workspace.yml`); that single marker is the entire
+/// `workspace.yaml` (or `workspace.yml`), or a `.pact` file; that is the entire
 /// discovery contract, so a runtime never has to guess and an author never has
 /// to register — and it is the checker's marker too, read through the one
 /// predicate both of them call.
@@ -62,7 +62,11 @@ fn walk(
     // code as it stands and not one anything enforces: re-inlining the two names
     // here would pass the whole suite, because every tree the tests can build
     // uses a spelling both sides already know.
-    if crate::looks_like_a_workspace_root(dir) {
+    // …and a folder with a PACT-language file at the top of it, which is a
+    // workspace written the other way (`docs/99` §4.4). The checker's walk UP
+    // does not use this half on purpose: a lone `.pact` file in a folder of
+    // unrelated things is checked as itself, not as that whole folder.
+    if crate::looks_like_a_workspace_root(dir) || crate::holds_a_pact_file(dir, dir) {
         out.push(dir.to_owned());
         return; // a workspace is not nested inside another workspace
     }

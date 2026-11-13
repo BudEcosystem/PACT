@@ -212,6 +212,17 @@ export type AgentSpec = {
   // it, so both ports show the model the same tools; this port keeps no board,
   // so a call to one is refused and the line is reported (`notDoneHere`).
   boards?: Array<{ name: string; description: string }>;
+  // The reactions that cover this agent (docs/99), by name: the workspace's
+  // own, and every other agent's `listens-for:` line. This port carries none
+  // of them out and says so, one line each (`notDoneHere`). `workingOn` is the
+  // tool Python offers when a topic is the agent's own to say — its
+  // description and the topics it may name — offered here under the same name
+  // so both ports show the model the same tools; saying so is noted, and
+  // nobody is asked or told.
+  reactions?: {
+    names: string[];
+    workingOn?: { description: string; topics: string[] } | null;
+  };
 };
 
 //: Every key an `AgentSpec` declares. The conformance driver takes its payload
@@ -221,8 +232,11 @@ export const AGENT_SPEC_FIELDS = [
   "name", "instructions", "tools", "skills", "team", "maxSteps", "limits",
   "loop", "loops", "interceptors", "contextPolicy", "policy", "teamwork",
   "settings", "slo", "model", "watches", "answersWith", "answersWithMode",
-  "knowledge", "boards", "plugins",
+  "knowledge", "boards", "reactions", "plugins",
 ] as const;
+
+//: The tool an agent says its own topic with. The same name `reactions.py` uses.
+export const WORKING_ON = "working-on";
 
 //: Used when the payload carried no `maxSteps`. The same number `ir.py` uses,
 //: for the same reason: an unbounded loop is Eve's behaviour, and its
@@ -389,6 +403,13 @@ export function notDoneHere(spec: AgentSpec): string[] {
   }
   for (const key of Object.keys(spec.slo ?? {})) {
     out.push(`${key}: a latency promise nothing on this runtime measures.`);
+  }
+  for (const name of spec.reactions?.names ?? []) {
+    out.push(
+      `reactions: ${name} — read and not carried out on this runtime, so when it ` +
+        `happens nothing is reminded, nobody is asked or told, and nothing stops. ` +
+        `The Python harness carries reactions out; this port has no reactor.`,
+    );
   }
   for (const b of spec.boards ?? []) {
     out.push(
@@ -689,7 +710,28 @@ export async function run(
       },
     });
   }
-  const toolNames = toolDefs.map((d) => d.name).filter((n) => !boardNames.has(n));
+  // And the tool an agent says its own topic with (docs/99 §5), last — where
+  // `harness.py` appends it. Not a capability a stage narrows: it is added to
+  // whatever a stage offers, wherever the stage offers anything at all.
+  const workingOn = spec.reactions?.workingOn ?? null;
+  const saysSo = workingOn !== null && !toolDefs.some((d) => d.name === WORKING_ON);
+  // The topics the agent has said so far, which is what decides whether the
+  // tool is still offered.
+  const saidTopics = new Set<string>();
+  if (saysSo && workingOn) {
+    toolDefs.push({
+      name: WORKING_ON,
+      description: workingOn.description,
+      parameters: {
+        type: "object",
+        properties: { topic: { type: "string", enum: workingOn.topics } },
+        required: ["topic"],
+      },
+    });
+  }
+  const toolNames = toolDefs
+    .map((d) => d.name)
+    .filter((n) => !boardNames.has(n) && !(saysSo && n === WORKING_ON));
   const skills = (spec.skills ?? []).slice().sort((a, b) =>
     a.name < b.name ? -1 : a.name > b.name ? 1 : 0
   );
@@ -948,7 +990,18 @@ export async function run(
     // What exists in this stage. Eve resolves the tool set once per run, which
     // is why a planning step there can see the payment tool; here it is the
     // stage's own line.
-    const offered = new Set(toolsOffered(phase, [...reachable, ...boardNames]));
+    const offered = new Set(
+      toolsOffered(phase, [...reachable, ...boardNames, ...(saysSo ? [WORKING_ON] : [])]),
+    );
+    // Only while there is something left to say (`Reactor.more_to_say`): once
+    // every topic has been said the tool is not offered, on either port.
+    if (saysSo && workingOn) {
+      if (offered.size > 0 && workingOn.topics.some((t) => !saidTopics.has(t))) {
+        offered.add(WORKING_ON);
+      } else {
+        offered.delete(WORKING_ON);
+      }
+    }
     const stepTools = toolDefs.filter((d) => offered.has(d.name));
     const readable = new Set(skillsOffered(phase, skills.map((s) => s.name)));
     const stepSkills = skills.filter((s) => readable.has(s.name));
@@ -979,7 +1032,7 @@ export async function run(
     // model really took (T7); running it would make `may-use:` advisory. The two
     // refusals stay distinguishable because they call for opposite fixes: a name
     // to correct, or a `may-use:` line to widen.
-    const have = new Set([...toolNames, ...boardNames]);
+    const have = new Set([...toolNames, ...boardNames, ...(saysSo ? [WORKING_ON] : [])]);
     const refused: Record<string, string> = {};
     for (const c of calls) {
       if (!offered.has(c.name)) {
@@ -1024,6 +1077,21 @@ export async function run(
       if (outOfCalls) break;
       // Own property only: a model asking for `constructor` must reach the
       // `no tool named` refusal, not `Object.prototype.constructor`.
+      // Saying what the work has turned to is answered here, as Python
+      // answers it where a reaction would hold a call — it is not a tool call
+      // and is not counted as one. Nobody is asked on this port.
+      if (saysSo && workingOn && c.name === WORKING_ON) {
+        const topic = String((c.args as Record<string, unknown>)?.topic ?? "").trim();
+        if (workingOn.topics.includes(topic)) saidTopics.add(topic);
+        results.push(
+          workingOn.topics.includes(topic)
+            ? `noted: ${topic}`
+            : `error: '${topic}' is not one of the subjects to say: ` +
+              `${[...workingOn.topics].sort().join(", ") || "none"}`,
+        );
+        ran.push(c);
+        continue;
+      }
       const fn = Object.hasOwn(toolImpls, c.name) ? toolImpls[c.name] : undefined;
       meter.toolCalls += 1;
       results.push(

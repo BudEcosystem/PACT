@@ -1,0 +1,4 @@
+description: A refund has gone out.
+at: step.tool.completed
+when-this:
+  - { tool: billing/issue-refund }

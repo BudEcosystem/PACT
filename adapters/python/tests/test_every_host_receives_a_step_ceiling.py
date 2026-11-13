@@ -64,3 +64,20 @@ def test_unbounded_no_is_the_default() -> None:
     spec = _spec({"unbounded": "no"})
     assert not spec.unbounded
     assert usage_limits_for(spec).request_limit == DEFAULT_STEPS
+
+
+def test_a_default_ceiling_is_never_called_the_limit_you_set() -> None:
+    """A person told a run stopped at "the limit you set" goes looking for a line
+    nobody wrote. The default ceiling says it is PACT's, and how to set one."""
+    from pact_adapters.limits import Action, Limits, Meter, Reached, step_ceiling
+
+    said = Reached(step_ceiling(DEFAULT_STEPS, default=True), float(DEFAULT_STEPS), Action.STOP).sentence()
+    assert "you set" not in said
+    assert f"PACT's default limit, `steps-at-most` ({DEFAULT_STEPS} of {DEFAULT_STEPS} steps)" in said
+    assert "write one under `limits:`" in said
+    written = Reached(step_ceiling(3), 3.0, Action.STOP).sentence()
+    assert "the limit you set with `steps-at-most` (3 of 3 steps)" in written
+    meter = Meter(started=0.0)
+    meter.steps = DEFAULT_STEPS
+    reached = Limits().reached(meter, 0.0, DEFAULT_STEPS, steps_default=True)
+    assert reached is not None and reached.ceiling.default

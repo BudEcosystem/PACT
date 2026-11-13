@@ -16,6 +16,7 @@ action.same-request-key-across	one-of | S-EXEC | expert | optional
 action.spends-money	yes-no | S-EXEC | core | optional
 action.status-check	text | S-EXEC | expert | optional
 action.takes	map of answer-shape | S-CAP | core | optional
+action.topics	list of text | S-GOV | core | optional
 action.undone-by	text | S-EXEC | core | optional
 action.writes	list of text | S-EXEC | expert | optional
 agent.accepts	map of answer-shape | S-CAP | core | optional
@@ -30,6 +31,7 @@ agent.evals	text | S-GOV | core | optional
 agent.instructions	text | S-GEN | core | required
 agent.interceptors	list of text | S-EXEC | expert | optional
 agent.limits	group:limits | S-GOV | core | optional
+agent.listens-for	list of group:subscription | S-EXEC | core | optional
 agent.loop	text | S-CTRL | expert | optional
 agent.model	list of text | S-CAP | core | optional
 agent.model-for-checking	text | S-CAP | expert | optional
@@ -37,6 +39,7 @@ agent.name	text | S-GEN | core | optional
 agent.needs	group:needs | S-CAP | core | optional
 agent.plugins	list of text | S-EXEC | expert | optional
 agent.policy	text | S-EXEC | core | optional
+agent.reactions	list of text | S-EXEC | core | optional
 agent.remembers	map of group:state | S-GOV | core | optional
 agent.run-inputs	map of answer-shape | S-CAP | core | optional
 agent.settings	group:settings | S-CTRL | core | optional
@@ -108,6 +111,12 @@ evals.rules	list of group:eval-rule | S-GOV | core | optional
 evals.runs-every	text | S-GOV | core | optional
 evals.sample	percent | S-GOV | core | optional
 evals.sliced-by	list of text | S-GOV | core | optional
+event.at	event-address | S-CTRL | core | optional
+event.description	text | S-GEN | core | required
+event.judged	yes-no | S-EXEC | expert | optional
+event.more-than	integer | S-CTRL | core | optional
+event.topic	text | S-EXEC | core | optional
+event.when-this	list of group:when-this | S-EXEC | core | optional
 figure.provenance	group:provenance | S-GOV | expert | optional
 figure.value	text | S-CAP | expert | required
 if-it-fails.after-that	one-of | S-EXEC | core | required
@@ -137,6 +146,7 @@ knowledge.must-cite	yes-no | S-GOV | core | optional
 knowledge.passages-at-most	integer | S-GOV | core | optional
 knowledge.reranked-by	text | S-CAP | expert | optional
 knowledge.split-by	one-of | S-CTRL | expert | optional
+knowledge.topics	list of text | S-GOV | core | optional
 knowledge.use-when	text | S-ROUTE | core | optional
 learning-model.model	text | S-CAP | expert | optional
 learning-model.role	one-of | S-CAP | expert | required
@@ -315,6 +325,20 @@ question.says	text | S-EXEC | core | optional
 question.shows	list of text | S-EXEC | core | optional
 question.starts-with	map of text | S-EXEC | core | optional
 question.urgency	one-of | S-EXEC | core | optional
+reaction-step.consult	text | S-EXEC | core | optional
+reaction-step.remind	text | S-GEN | core | optional
+reaction-step.stop	text | S-EXEC | core | optional
+reaction-step.tell	text | S-EXEC | core | optional
+reaction.applies-to	one-of | S-EXEC | core | optional
+reaction.at	event-address | S-CTRL | core | optional
+reaction.description	text | S-GEN | core | required
+reaction.event	text | S-EXEC | core | optional
+reaction.fires	one-of | S-CTRL | expert | optional
+reaction.judged	yes-no | S-EXEC | expert | optional
+reaction.more-than	integer | S-CTRL | core | optional
+reaction.then	list of group:reaction-step | S-EXEC | core | required
+reaction.topic	text | S-EXEC | core | optional
+reaction.when-this	list of group:when-this | S-EXEC | core | optional
 redaction.description	text | S-GEN | core | optional
 redaction.hide	list of text | S-EXEC | core | required
 release.asks	text | S-GOV | core | optional
@@ -421,6 +445,9 @@ state.shared-with	one-of | S-EXEC | expert | optional
 state.starts-as	anything | S-GEN | expert | optional
 state.stops-being-true-when	list of text | S-EXEC | core | optional
 state.survives-shortening	yes-no | S-EXEC | core | optional
+subscription.event	text | S-EXEC | core | optional
+subscription.how	one-of | S-EXEC | core | required
+subscription.topic	text | S-EXEC | core | optional
 teamwork.asks	text | S-EXEC | core | optional
 teamwork.divides-the-budget	one-of | S-GOV | core | optional
 teamwork.enough-is	integer | S-TOPO | core | optional
@@ -447,8 +474,11 @@ tool.rests-after	integer | S-GOV | expert | optional
 tool.rests-for	duration | S-GOV | expert | optional
 tool.says	text | S-GEN | core | optional
 tool.schemas-from	one-of | S-CAP | expert | optional
+tool.topics	list of text | S-GOV | core | optional
 tool.unlisted-actions	one-of | S-EXEC | expert | optional
 tool.url	text | S-CAP | core | optional
+topic.description	text | S-GEN | core | required
+topic.noticed-by	list of one-of | S-GOV | core | optional
 turn.answer	anything | S-GEN | expert | optional
 turn.attaches	list of text | S-GEN | expert | optional
 turn.calls	text | S-GEN | expert | optional
@@ -515,6 +545,7 @@ workspace.description	text | S-GEN | core | optional
 workspace.detectors	map of group:detector | S-GOV | expert | optional
 workspace.durability	one-of | S-GOV | expert | optional
 workspace.evals	group:evals | S-GOV | core | optional
+workspace.events	map of group:event | S-EXEC | core | optional
 workspace.interceptors	map of group:interceptor | S-EXEC | expert | optional
 workspace.knowledge	map of group:knowledge | S-CAP | core | optional
 workspace.learning	group:learning | S-GOV | core | optional
@@ -530,6 +561,7 @@ workspace.ports	map of group:port | S-TOPO | core | optional
 workspace.profile	text | S-GOV | core | optional
 workspace.programs	map of group:program | S-EXEC | expert | optional
 workspace.questions	map of group:question | S-EXEC | core | optional
+workspace.reactions	map of group:reaction | S-EXEC | core | optional
 workspace.redaction	group:redaction | S-EXEC | core | optional
 workspace.release	group:release | S-GOV | core | optional
 workspace.remembers	map of group:state | S-GOV | core | optional
@@ -539,6 +571,7 @@ workspace.skills	map of group:skill | S-GEN | core | optional
 workspace.template-language	one-of | S-CTRL | expert | optional
 workspace.time-zone	text | S-GOV | core | optional
 workspace.tools	map of group:tool | S-CAP | core | optional
+workspace.topics	map of group:topic | S-GOV | core | optional
 workspace.values	map of group:value | S-GOV | core | optional
 workspace.watch	map of group:watch | S-GOV | core | optional
 workspace.workflows	map of group:workflow | S-TOPO | core | optional

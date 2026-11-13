@@ -309,6 +309,7 @@ fn arguments(
     }
     if let Some(key) = line.get("same-request-key")
         && let Some(a) = key.as_str()
+        && a.trim() != crate::exactly_once::THE_CALL
     {
         named.push((theirs(a.trim()), "same-request-key", key.span.clone()));
     }

@@ -24,6 +24,15 @@ is a queue's visibility timeout (`docs/92-SWARM.md` §6.3 asked for exactly this
 rather than an invented semantics). A claim with no lease lasts as long as the
 store keeps it.
 
+**The fencing token.** Every grant of a key to a holder that does not already
+hold it is numbered one higher than the key's grant before it; a renewal keeps
+the number. A lease bounds how long a claim lasts but cannot stop a call that is
+already running when it ends, so a worker that stalled past its lease and then
+writes would be a second writer nobody refused. The number is what the system it
+writes to refuses it with: a write carrying a token lower than one it has seen
+is stale. `Taken.fence` is the number, and an expired or released key keeps its
+count so the next grant is higher still.
+
 **What is deliberately not here.** Releasing a claim early is `release`, called
 by whoever holds it; nothing releases somebody else's. There is no "who holds
 this" query on the run's side: the refusal says the key is taken, and the
@@ -43,11 +52,13 @@ from typing import Callable, Protocol
 @dataclass(frozen=True)
 class Taken:
     """The answer to `take`: whether this caller now holds the key, and if not,
-    who does and until when (`None`: no lease)."""
+    who does and until when (`None`: no lease); and the fencing token of the
+    grant that holds it."""
 
     ok: bool
     holder: str = ""
     until: float | None = None
+    fence: int = 0
 
 
 class ClaimStore(Protocol):
@@ -57,7 +68,9 @@ class ClaimStore(Protocol):
         """Claim `key` for `holder` for `lease` seconds (`None`: no expiry).
 
         Taking a key you already hold succeeds and renews the lease — a worker
-        sending its heartbeat. Taking one somebody else holds, unexpired, fails.
+        sending its heartbeat — keeping its fencing token. Taking one somebody
+        else holds, unexpired, fails. Any other take is a new grant, numbered
+        one higher than the key's grant before it.
         """
         ...
 
@@ -75,6 +88,9 @@ class MemoryClaims:
 
     def __init__(self, clock: Callable[[], float] = time.time) -> None:
         self._held: dict[str, tuple[str, float | None]] = {}
+        # Kept when a claim expires or is released, so a later grant's token is
+        # higher than every token the key was granted with before.
+        self._fences: dict[str, int] = {}
         self._lock = threading.Lock()
         self._clock = clock
 
@@ -91,11 +107,15 @@ class MemoryClaims:
     def take(self, key: str, holder: str, lease: float | None) -> Taken:
         with self._lock:
             found = self._live(key)
+            fence = self._fences.get(key, 0)
             if found is not None and found[0] != holder:
-                return Taken(ok=False, holder=found[0], until=found[1])
+                return Taken(ok=False, holder=found[0], until=found[1], fence=fence)
+            if found is None:
+                fence += 1
+                self._fences[key] = fence
             until = None if lease is None else self._clock() + lease
             self._held[key] = (holder, until)
-            return Taken(ok=True, holder=holder, until=until)
+            return Taken(ok=True, holder=holder, until=until, fence=fence)
 
     def release(self, key: str, holder: str) -> bool:
         with self._lock:
@@ -120,8 +140,14 @@ class SqliteClaims:
         with self._connect() as db:
             db.execute(
                 "CREATE TABLE IF NOT EXISTS claims ("
-                " key TEXT PRIMARY KEY, holder TEXT NOT NULL, until REAL)"
+                " key TEXT PRIMARY KEY, holder TEXT NOT NULL, until REAL,"
+                " fence INTEGER NOT NULL DEFAULT 0)"
             )
+            # A file written before the fencing token gains the column; its
+            # rows count as never granted, so their next grant is token 1.
+            columns = {row[1] for row in db.execute("PRAGMA table_info(claims)")}
+            if "fence" not in columns:
+                db.execute("ALTER TABLE claims ADD COLUMN fence INTEGER NOT NULL DEFAULT 0")
 
     def _connect(self) -> sqlite3.Connection:
         # `isolation_level=None` so `BEGIN IMMEDIATE` below is the transaction,
@@ -134,19 +160,23 @@ class SqliteClaims:
         db = self._connect()
         try:
             db.execute("BEGIN IMMEDIATE")
-            db.execute("DELETE FROM claims WHERE until IS NOT NULL AND until <= ?", (now,))
-            row = db.execute("SELECT holder, until FROM claims WHERE key = ?", (key,)).fetchone()
-            if row is not None and row[0] != holder:
+            # An expired or released row is free but kept, so its fencing count
+            # survives; a released row's holder is empty.
+            row = db.execute("SELECT holder, until, fence FROM claims WHERE key = ?", (key,)).fetchone()
+            live = row is not None and row[0] != "" and (row[1] is None or row[1] > now)
+            if live and row[0] != holder:
                 db.execute("COMMIT")
-                return Taken(ok=False, holder=row[0], until=row[1])
+                return Taken(ok=False, holder=row[0], until=row[1], fence=row[2])
+            fence = row[2] if live else (0 if row is None else row[2]) + 1
             until = None if lease is None else now + lease
             db.execute(
-                "INSERT INTO claims (key, holder, until) VALUES (?, ?, ?)"
-                " ON CONFLICT(key) DO UPDATE SET holder = excluded.holder, until = excluded.until",
-                (key, holder, until),
+                "INSERT INTO claims (key, holder, until, fence) VALUES (?, ?, ?, ?)"
+                " ON CONFLICT(key) DO UPDATE SET holder = excluded.holder,"
+                " until = excluded.until, fence = excluded.fence",
+                (key, holder, until, fence),
             )
             db.execute("COMMIT")
-            return Taken(ok=True, holder=holder, until=until)
+            return Taken(ok=True, holder=holder, until=until, fence=fence)
         except BaseException:
             db.execute("ROLLBACK")
             raise
@@ -154,9 +184,14 @@ class SqliteClaims:
             db.close()
 
     def release(self, key: str, holder: str) -> bool:
+        now = self._clock()
         db = self._connect()
         try:
-            cur = db.execute("DELETE FROM claims WHERE key = ? AND holder = ?", (key, holder))
+            cur = db.execute(
+                "UPDATE claims SET holder = '', until = NULL WHERE key = ? AND holder = ?"
+                " AND (until IS NULL OR until > ?)",
+                (key, holder, now),
+            )
             return cur.rowcount > 0
         finally:
             db.close()
@@ -166,7 +201,8 @@ class SqliteClaims:
         db = self._connect()
         try:
             row = db.execute(
-                "SELECT holder FROM claims WHERE key = ? AND (until IS NULL OR until > ?)",
+                "SELECT holder FROM claims WHERE key = ? AND holder != ''"
+                " AND (until IS NULL OR until > ?)",
                 (key, now),
             ).fetchone()
             return None if row is None else row[0]
@@ -174,12 +210,19 @@ class SqliteClaims:
             db.close()
 
 
-def scoped(across: str, team: str, tool: str, action: str, value: str) -> str:
+def scoped(
+    across: str, team: str, tool: str, action: str, value: str, workspace: str = ""
+) -> str:
     """The store key for one claim: its scope, then `(tool, action, value)`.
 
     `the-team` is namespaced by the team the run belongs to — the agent at the
     root of the request — so two teams using the same tool do not refuse each
-    other. `the-workspace` is one namespace for everything here.
+    other. `the-workspace` is namespaced by the workspace's id when the host
+    names one, so two workspaces sharing one store do not refuse each other
+    either; without one it is one namespace for everything the store holds.
     """
-    space = f"team:{team}" if across == "the-team" else "workspace"
+    if across == "the-team":
+        space = f"team:{team}"
+    else:
+        space = f"workspace:{workspace}" if workspace else "workspace"
     return "\x1f".join((space, tool, action, value))

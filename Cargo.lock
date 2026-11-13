@@ -206,6 +206,7 @@ dependencies = [
  "camino",
  "pact-diag",
  "pact-doc",
+ "pact-lang",
  "pact-loader",
  "pact-schema",
  "serde_json",
@@ -234,6 +235,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "pact-lang"
+version = "0.1.0"
+dependencies = [
+ "camino",
+ "pact-diag",
+ "pact-doc",
+ "pact-schema",
+ "serde_json",
+]
+
+[[package]]
 name = "pact-loader"
 version = "0.1.0"
 dependencies = [
@@ -243,6 +255,7 @@ dependencies = [
  "nodejs-semver",
  "pact-diag",
  "pact-doc",
+ "pact-lang",
  "pact-schema",
  "pep440_rs",
  "serde_json",

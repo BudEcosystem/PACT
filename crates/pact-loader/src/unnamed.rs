@@ -103,6 +103,24 @@ const KINDS: &[Kind] = &[
         what: "carried program",
         attach: "`program: {}` on a tool's action",
     },
+    // docs/99. A reaction is attached the way an interceptor is; an event is
+    // named by the reaction or the `listens-for:` line that waits for it; a
+    // topic by a tag, an event or a subscription.
+    Kind {
+        section: "reactions",
+        what: "reaction",
+        attach: "`reactions:` with `- {}` under it, on an agent — or `applies-to: every-agent` in the reaction itself",
+    },
+    Kind {
+        section: "events",
+        what: "event",
+        attach: "`event: {}` in a reaction, or `- { event: {}, how: told-after }` under an agent's `listens-for:`",
+    },
+    Kind {
+        section: "topics",
+        what: "topic",
+        attach: "`topic: {}` in a reaction or an event, or `- { topic: {}, how: asked-first }` under an agent's `listens-for:`",
+    },
     Kind {
         section: "resources",
         what: "connected system",

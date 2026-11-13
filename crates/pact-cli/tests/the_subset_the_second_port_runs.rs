@@ -176,6 +176,9 @@ const REPORTED: &[(&str, &str, &str)] = &[
     ("knowledge", "knowledge/", "unretrieved"),
     // docs/98 WP-8: a team's shared board, offered and not kept.
     ("boards", "shared-with: the-team", "unenforced"),
+    // docs/99: the reactions that cover an agent — the workspace's and every
+    // other agent's `listens-for:` — named and not carried out.
+    ("reactions", "reactions:", "unenforced"),
 ];
 
 /// Rows of list B whose key is NOT a top-level `AgentSpec` field, because the
@@ -211,7 +214,7 @@ const REPORTED_INSIDE: &[(&str, &str)] = &[("asks:", "unenforced"), ("forks:", "
 fn word_for(n: usize) -> String {
     const WORDS: &[&str] = &[
         "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
-        "eleven", "twelve",
+        "eleven", "twelve", "thirteen", "fourteen",
     ];
     WORDS
         .get(n)

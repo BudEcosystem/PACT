@@ -714,10 +714,13 @@ def _area(root: "str | Path") -> Path:
     `$PACT_DERIVED_DIR` when that is set. One answer for reading and writing — the three
     readers below used to look beside the workspace while `_append` wrote under the override,
     so with the override set a cycle never saw what the last one had spent or refused."""
-    from .watches import DERIVED_DIR
+    from .watches import DERIVED_DIR, area
 
     override = os.environ.get(DERIVED_DIR, "").strip()
-    return (Path(override) if override else Path(root)) / UNDER
+    # `area`, and not `root / ".pact"`: a workspace that is one `.pact` file has
+    # no folder of its own, and a spend ledger that cannot be written is a
+    # monthly ceiling nothing holds.
+    return Path(override) / UNDER if override else area(root) / UNDER.name
 
 
 def _append(root: Path, name: str, row: dict) -> None:

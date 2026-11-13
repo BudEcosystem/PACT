@@ -178,6 +178,9 @@ pub enum FileKind {
     Structured,
     /// Markdown — front matter plus prose.
     Prose,
+    /// A PACT-language file (`docs/99` §4) — blocks of settings and sentences,
+    /// read into the same value tree a structured file is.
+    Language,
     /// Plain text — the whole file is a string value.
     PlainText,
     /// Anything else — referenced, never inlined.
@@ -368,6 +371,8 @@ impl Policy {
         let ext = path.extension().unwrap_or_default().to_ascii_lowercase();
         if STRUCTURED.contains(&ext.as_str()) {
             FileKind::Structured
+        } else if ext == pact_lang::EXTENSION {
+            FileKind::Language
         } else if PROSE.contains(&ext.as_str()) {
             FileKind::Prose
         } else if PLAIN_TEXT.contains(&ext.as_str()) {

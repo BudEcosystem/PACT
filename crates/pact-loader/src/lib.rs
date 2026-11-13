@@ -170,6 +170,7 @@ pub mod pots;
 pub mod programs;
 pub mod reach;
 pub mod reachability;
+pub mod reactions;
 pub mod redaction;
 pub mod remote;
 pub mod report;
@@ -660,6 +661,16 @@ impl Loader {
 
         match kind {
             FileKind::PlainText => Some(Node::str(text.clone(), whole(path, &text))),
+            // A file that could not be read line for line still comes back as
+            // a document — everything in it that COULD be read — so one bad
+            // line is one report and not a workspace with nothing in it.
+            FileKind::Language => {
+                let parsed = pact_lang::read(&text, path);
+                for d in parsed.diagnostics {
+                    diags.push(d);
+                }
+                Some(parsed.node)
+            }
             FileKind::Structured => match parse_yaml(&text, path) {
                 Ok(n) => Some(n),
                 Err(d) => {
@@ -749,7 +760,7 @@ impl Loader {
         }
 
         let dir_name = dir.file_name().unwrap_or_default().to_string();
-        let (candidates, self_file) = self.classify(dir, &dir_name, diags);
+        let (candidates, self_file, written) = self.classify(dir, &dir_name, diags);
 
         // Start from the self file's fields, if there is one.
         let mut base = match &self_file {
@@ -846,6 +857,40 @@ impl Loader {
                     base.insert(cand.key.clone(), cand.span.clone(), unloaded(&cand.span));
                 }
             }
+        }
+
+        // PACT-language files (`docs/99` §4.4). Each is a whole workspace's
+        // worth of blocks, so it is not a field named after the file: what it
+        // says is ADDED to what the folder says — an agent written in a block
+        // beside a knowledge set whose documents are files — and anything said
+        // in both places is refused, exactly as a field set in two files is.
+        let at_the_top =
+            dir.as_str().trim_end_matches('/') == self.root.as_str().trim_end_matches('/');
+        for (n, path) in written.iter().enumerate() {
+            if !at_the_top {
+                diags.push(Diagnostic::error(
+                    "loader/a-pact-file-below-the-top",
+                    Span::whole_file(path),
+                    format!(
+                        "'{path}' is a PACT-language file inside a folder of the workspace, \
+                         and such a file describes a whole workspace — so nothing says which \
+                         part of this one it is."
+                    ),
+                    "Move it to the top of the workspace, beside the folders. Everything in \
+                     it is added to what the folders say.",
+                ));
+                continue;
+            }
+            let Some(extra) = self.load_file(path, Position::Field, diags) else {
+                continue;
+            };
+            // With no settings file of its own, the folder's settings are the
+            // first `.pact` file's — so "a workspace must have a name" points
+            // at the file the name goes in.
+            if n == 0 && self_file.is_none() {
+                base.span = extra.span.clone();
+            }
+            add_to(&mut base, extra, diags);
         }
 
         stack.pop();
@@ -1197,7 +1242,7 @@ impl Loader {
         dir: &Utf8Path,
         dir_name: &str,
         diags: &mut Diagnostics,
-    ) -> (Vec<Candidate>, Option<Candidate>) {
+    ) -> (Vec<Candidate>, Option<Candidate>, Vec<Utf8PathBuf>) {
         let read = match entries_by_name(dir) {
             Ok(r) => r,
             Err(e) => {
@@ -1207,7 +1252,7 @@ impl Loader {
                     format!("Could not open folder '{dir}': {e}"),
                     "Check the folder exists and that you have permission to open it.",
                 ));
-                return (Vec::new(), None);
+                return (Vec::new(), None, Vec::new());
             }
         };
 
@@ -1229,6 +1274,8 @@ impl Loader {
 
         let mut candidates: Vec<Candidate> = Vec::new();
         let mut self_file: Option<Candidate> = None;
+        // PACT-language files, in name order (`entries_by_name`).
+        let mut written: Vec<Utf8PathBuf> = Vec::new();
 
         for entry in read {
             let Ok(name) = entry.file_name().into_string() else {
@@ -1417,6 +1464,11 @@ impl Loader {
                 continue;
             }
 
+            if !is_dir && self.policy.file_kind(&path) == FileKind::Language {
+                written.push(path);
+                continue;
+            }
+
             let stem = if is_dir {
                 name.as_str()
             } else {
@@ -1533,7 +1585,7 @@ impl Loader {
             (None, None) => a.key.cmp(&b.key),
         });
 
-        (ordered, self_file)
+        (ordered, self_file, written)
     }
 
     fn relative(&self, path: &Utf8Path) -> String {
@@ -1541,6 +1593,41 @@ impl Loader {
             .unwrap_or(path)
             .as_str()
             .replace('\\', "/")
+    }
+}
+
+/// Add what a PACT-language file says to what the folder already says.
+///
+/// Sets of settings are joined all the way down, so `knowledge handbook` in a
+/// `.pact` file and `knowledge/handbook/documents/` on disk are one entry. A
+/// setting both places give a value is refused: picking one would hide the
+/// other (thesis T7).
+fn add_to(base: &mut Node, extra: Node, diags: &mut Diagnostics) {
+    let Value::Map(new) = extra.value else {
+        return;
+    };
+    for (key, entry) in new {
+        let Some(existing) = base.as_map_mut().and_then(|m| m.get_mut(&key)) else {
+            base.insert(key, entry.key_span, entry.node);
+            continue;
+        };
+        if existing.node.as_map().is_some() && entry.node.as_map().is_some() {
+            add_to(&mut existing.node, entry.node, diags);
+            continue;
+        }
+        let prior = existing.key_span.clone();
+        diags.push(
+            Diagnostic::error(
+                "loader/ambiguous-field",
+                entry.key_span,
+                format!("'{key}' is set in two places: here, and in {}.", prior.file),
+                format!(
+                    "Keep only one. Either delete '{key}' here, or delete it from {}.",
+                    prior.file
+                ),
+            )
+            .with_related(prior, "also set here"),
+        );
     }
 }
 

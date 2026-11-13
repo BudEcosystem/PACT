@@ -1,6 +1,8 @@
 # Command line
 
-Five verbs. All are **read-only** — none of them ever executes author code.
+Seven verbs. None of them ever executes author code, and six are
+**read-only** — `pact build` is the one that writes, and only into a folder
+that is not there yet.
 
 !!! quote "Why the CLI cannot run your agent"
     *"Validation that runs the thing being validated is not validation, it is a
@@ -16,6 +18,10 @@ pact discover [PATH]  Find every PACT workspace under PATH and print an
                       inventory a runtime can index (no build step)
 pact card <agent> [PATH]
                       Print one agent's A2A Agent Card
+pact write    [PATH]  Print the workspace as one PACT-language file
+pact build <FILE> --to <FOLDER>
+                      Write the folder a PACT-language file stands for
+pact about            Say which commit this `pact` was built from
 pact help             Show this message
 ```
 
@@ -132,3 +138,44 @@ it **passes**.
 |---|---|
 | `--quiet` | only print problems, not the summary |
 | `--unsafe-spec` | validate against `$PACT_SPEC` instead of the compiled-in specification. Development builds only, and the source is named on every run that uses it |
+
+## `pact write`
+
+The workspace at `PATH`, as one file in the [PACT language](../guide/the-pact-language.md).
+The text goes to stdout and nothing is written anywhere. Settings that are
+files — a knowledge set's documents, a skill's scripts — are named on stderr
+and left where they are.
+
+## `pact build`
+
+The folder of YAML and Markdown that a `.pact` file stands for, written into
+`--to <folder>`, which must not exist yet or must be empty. What was written is
+read back and compared with the file before the command says it is done.
+
+---
+
+## `pact about`
+
+Says what this binary is, in three lines a script can read.
+
+```console
+$ pact about
+version: 0.1.0
+commit: 63a048bbbc5279feefcac453d38a8582090b29db
+uncommitted: no
+```
+
+| Line | Means |
+|---|---|
+| `version:` | the release this `pact` says it is |
+| `commit:` | the commit the binary was built from, or `unknown` when it was built with no repository around it (a source archive) |
+| `uncommitted:` | `no`, `yes` or `unknown`: whether anything the binary is built from — the crates, the specification, the model catalogue, the manifests — differed from that commit when it was built |
+
+Both are fixed when the binary is compiled. They describe the binary, not the
+folder you run it in.
+
+**What it is for.** A runtime that pins PACT by commit runs whatever `pact` it
+finds on the machine. Checking the source beside it does not check the binary:
+one built from an edited checkout, or left over from another commit, looks the
+same from outside. A pin check compares `commit:` with its pin and refuses
+anything but `uncommitted: no`.

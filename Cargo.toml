@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "crates/pact-diag",
     "crates/pact-doc",
+    "crates/pact-lang",
     "crates/pact-loader",
     "crates/pact-schema",
     "crates/pact-cli",
@@ -26,6 +27,7 @@ author wrote held by the runtime rather than by convention."""
 # was no install path at all, and this was the first of the reasons.
 pact-diag = { path = "crates/pact-diag", version = "0.1.0" }
 pact-doc = { path = "crates/pact-doc", version = "0.1.0" }
+pact-lang = { path = "crates/pact-lang", version = "0.1.0" }
 pact-loader = { path = "crates/pact-loader", version = "0.1.0" }
 pact-schema = { path = "crates/pact-schema", version = "0.1.0" }
 

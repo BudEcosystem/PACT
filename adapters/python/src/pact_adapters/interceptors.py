@@ -1653,8 +1653,13 @@ def _scanner(patterns: tuple[tuple[re.Pattern[str], str], ...]) -> re.Pattern[st
 
 
 def _thing_of(pattern: str) -> str:
-    """Which recogniser a pattern is, by name (`card number`), or `""`."""
-    return next((thing for thing, p in RECOGNISES.items() if p == pattern), "")
+    """Which recogniser a pattern is, by name (`card number`, or a workspace's own detector,
+    `order reference`, when its `detectors:` are in scope), or `""`. A placeholder is named for it,
+    so whoever reads `⟦order-reference-1⟧` knows what kind of value stands there."""
+    from .detectors import DECLARED
+
+    known = {**RECOGNISES, **DECLARED.get()}
+    return next((thing for thing, p in known.items() if p == pattern), "")
 
 
 def _substitute(text: str, patterns: Sequence[tuple[re.Pattern[str], str]]) -> str:

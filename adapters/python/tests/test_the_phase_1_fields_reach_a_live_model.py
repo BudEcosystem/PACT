@@ -17,7 +17,8 @@ code path:
 * A4 — the tool action's `answers-with:` is what the host holds the tool's
   result to (`return_schema_for`);
 * O7 — `checked-by:` holds the answer: it must name the shop;
-* and `usage_limits_for` passes no ceiling the author did not write.
+* and `usage_limits_for` passes the step ceiling every run has (law 2) and no
+  other the author did not write.
 """
 
 from __future__ import annotations
@@ -133,7 +134,12 @@ def test_holes_fallback_a_typed_action_and_a_checked_answer_on_a_live_model(tmp_
     )
     assert agent.description == "Answers order questions for Lumen Lamps."
     limits = usage_limits_for(spec)
-    assert limits.request_limit is None
+    # The author wrote no `steps-at-most:`, and every run has a step ceiling
+    # all the same (law 2, option A — docs/98 WP-3): `DEFAULT_STEPS`, on this
+    # host as on PACT's own loop. This line said `is None`, which was true
+    # until that law was built and was never run again — the file is opt-in —
+    # until the first live run after it.
+    assert limits.request_limit == spec.max_steps == 8
     result = asyncio.run(agent.run("Where is order 1042?", usage_limits=limits))
 
     assert results, "the model never called the typed action"

@@ -64,6 +64,20 @@ arm, which makes a divergence attributable to an adapter rather than to
 sampling) and an **Ollama** transport for running real local weights
 air-gapped.
 
+The Ollama transport speaks `/chat/completions`, so it also reaches a hosted
+server that speaks the same (give it an `api_key`). Two things about what it
+sends:
+
+- **A model is shown its own calls.** A turn that called tools is sent as
+  `tool_calls`, and each result as a `tool` message answering one of them. A
+  conversation recorded before a call's arguments were kept is sent as text
+  instead, because a result with no call before it is refused by the server.
+- **A field the server refuses is put right once.** A model that answers 400 to
+  `max_tokens` is sent the same figure as `max_completion_tokens`. A model that
+  refuses this transport's default temperature is asked again without one. A
+  `temperature:` the author wrote is never dropped: the refusal stands, so a
+  setting is not quietly unapplied.
+
 ## The second runtime
 
 The Vercel target runs in **Node**, so its harness is a second, independent port
