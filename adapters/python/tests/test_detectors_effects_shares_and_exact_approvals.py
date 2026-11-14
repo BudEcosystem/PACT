@@ -109,6 +109,36 @@ def test_a_policy_on_effect_stops_the_spending_action_and_not_the_lookup() -> No
     assert out.halted == "suspended" and not ran, (out.halted, ran)
 
 
+CELL = {
+    "agents": {"operator": {"description": "d", "instructions": "i", "uses": ["arm"], "policy": "moving"}},
+    "tools": {
+        "arm": {
+            "description": "The robot arm.",
+            "actions": {
+                "where": {"description": "Read the pose.", "reads-only": "yes", "takes": {"job": "text"}},
+                "move": {
+                    "description": "Move to a pose.",
+                    "takes": {"job": "text", "pose": "text"},
+                    "moves-hardware": "yes",
+                    "same-request-key": "job",
+                },
+            },
+        }
+    },
+    "questions": DESK["questions"],
+    "policies": {"moving": {"ask-a-person": [{"when": [{"tool": "arm", "effect": "moves-hardware"}], "question": "ok"}]}},
+}
+
+
+def test_a_policy_on_moves_hardware_stops_the_movement_and_not_the_reading() -> None:
+    spec = AgentSpec.from_document(CELL, "operator")
+    for action, halted in (("where", "final"), ("move", "suspended")):
+        ran: list[dict] = []
+        turns = [Turn("", (ToolCall("arm", {"action": action, "job": "J-1", "pose": "home"}),)), Turn("finished")]
+        out = asyncio.run(run(spec, ReferenceTransport(Script(turns)), "go", {"arm": lambda a: (ran.append(dict(a)), "done")[1]}))
+        assert out.halted == halted and bool(ran) == (halted == "final"), (action, out.halted, ran)
+
+
 def test_an_approval_does_not_apply_to_a_request_changed_after_it_was_seen() -> None:
     out, _ = _desk_run([ToolCall("payments", {"action": "refund", "order": "O-1", "amount": "10 USD"})])
     parked = out.suspension

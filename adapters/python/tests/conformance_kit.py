@@ -32,10 +32,38 @@ after a person said to keep going (`Reached.raised`): one text for each request
 that was told, which is one for each yes, the first request after it and no
 other.
 
+* **The clock** — a case runs on its own clock and never on the wall clock:
+  the first leg at 0 seconds, each resume at the number of parks so far, and a
+  `"nobody"` resume one second after the wait has run out. A replay on the
+  wall clock is a different run each day: a wait with `answer-within:` is
+  inside its time today and past it tomorrow.
 * **`people`** — one entry for each time the run parks, in order: `"yes"` or
   `"no"`, given to every question of that park. `"nobody"` means no answer is
   given and the time the question allows (`answer-within:`) passes: the run is
   resumed with no answer, at a moment after the wait has run out.
+
+A workflow's case has three more things it may say:
+
+* **`people`**, by question: an answer, or a list of answers in the order they
+  arrive, the last repeating. The text `"nobody"` in place of an answer means
+  the question's time passed with no answer. `null` for the whole of `people`
+  means nobody is there to ask, so the run parks at its first question.
+* **`ran-out`** — the agents that reached one of their limits in this run and
+  answered with what they had (`when-it-runs-out: answer-with-what-it-has`).
+  What each says is still under `agents`; it is the answer of a run that ran
+  out, and `steps.<stage>.ended` of the stage that called it is `ran-out`.
+* **`ends`** — something outside the run ends it: `{"before": <stage>, "port":
+  <port>}`. The arrival at that port, carrying this run's key, lands when the
+  run is about to begin that stage (written as `trace` writes it), so every
+  stage before it has finished and that one never starts. What the arrival
+  does is the port's own lines, read from the tree: `undo:`, `then-run:`.
+
+In a workflow's `expect`: **`why`** is the one word for why a `stopped` run
+stopped (`workflow_runtime.STOPPED_BECAUSE`), `""` for any other ending;
+**`cancelled-by`** is what ended a `cancelled` run, `{}` otherwise; and
+**`started`** is every run it started that nobody waits for, in order, with
+what each was given. An undo is a call like any other and is in `called`,
+in the order it was made.
 """
 
 from __future__ import annotations
@@ -49,7 +77,7 @@ from pact_adapters.harness import ToolCall, delegate_by_running, run
 from pact_adapters.ir import AgentSpec, WorkflowSpec
 from pact_adapters.script import Script, Turn
 from pact_adapters.transports.mock import ReferenceTransport
-from pact_adapters.workflow_runtime import Callers, run_workflow
+from pact_adapters.workflow_runtime import Callers, NobodyAnswered, RanOut, run_workflow
 from trees import shown
 
 REPO = Path(__file__).resolve().parents[3]
@@ -126,7 +154,12 @@ def replay_agent(case: dict[str, Any]) -> dict[str, Any]:
         kw["checking_transport"] = ReferenceTransport(Script([Turn(str(case["judge"]))]))
 
     parks: list[dict[str, Any]] = []
-    out = asyncio.run(run(spec, Lead(lead), case["says"], tools, **kw))
+    # The case's own clock, from 0. This leg ran on the wall clock while every
+    # resume below ran on the case's, so a park was stamped with today's time
+    # and resumed at second 1: a wait could then never run out. No case's
+    # result depended on it. Bud Agent Flow found the same mixture in its own
+    # replay, where it did change a result.
+    out = asyncio.run(run(spec, Lead(lead), case["says"], tools, now=0.0, **kw))
     for said in case.get("people") or ():
         if out.halted != "suspended":
             break
@@ -178,7 +211,7 @@ def replay_workflow(case: dict[str, Any]) -> dict[str, Any]:
     doc = shown(REPO / case["tree"])
     spec = WorkflowSpec.from_workflow(doc, case["workflow"])
     given: list[dict[str, Any]] = []
-    shown_to: list[dict[str, Any]] = []
+    handed: dict[str, int] = {}
     called: list[dict[str, Any]] = []
 
     def agent(name: str, inputs: dict[str, Any]) -> dict[str, Any]:
@@ -187,25 +220,56 @@ def replay_workflow(case: dict[str, Any]) -> dict[str, Any]:
         if isinstance(says, list):  # one answer for each time it is asked, the last repeating
             asked = sum(1 for g in given if g["agent"] == name)
             says = says[min(asked, len(says)) - 1]
-        return dict(says)
+        # An agent the case says ran out: its answer is one given on reaching
+        # a limit, which is how a host that runs agents hands it back.
+        return RanOut(dict(says)) if name in (case.get("ran-out") or ()) else dict(says)
 
     def tool(name: str, action: str, inputs: dict[str, Any]) -> dict[str, Any]:
         called.append({"tool": f"{name}/{action}", "given": dict(inputs)})
         return dict((case.get("tools") or {}).get(f"{name}/{action}", {}))
 
     def person(question: str, shown_: dict[str, Any]) -> dict[str, Any]:
-        shown_to.append({"question": question, "shown": dict(shown_)})
-        return dict((case.get("people") or {}).get(question, {}))
+        handed[question] = handed.get(question, 0) + 1
+        says = (case.get("people") or {}).get(question, {})
+        if isinstance(says, list):  # the answers as they arrive, the last repeating
+            says = says[min(handed[question], len(says)) - 1]
+        if says == "nobody":  # the question's time passed with no answer
+            raise NobodyAnswered(question)
+        return dict(says)
 
-    callers = Callers(agent=agent, tool=tool, person=person if case.get("people") is not None else None)
-    out = asyncio.run(run_workflow(spec, case["input"], callers, document=doc))
+    started: list[dict[str, Any]] = []
+
+    def start(workflow: str, inputs: dict[str, Any]) -> None:
+        # Starting a run nobody waits for is the host's. A case records that
+        # it was asked for, and with what.
+        started.append({"workflow": workflow, "given": dict(inputs)})
+
+    ends = case.get("ends") or {}
+
+    def ended(at: str) -> dict[str, Any] | None:
+        return {"port": ends["port"]} if ends and at == ends["before"] else None
+
+    callers = Callers(
+        agent=agent,
+        tool=tool,
+        person=person if case.get("people") is not None else None,
+        start=start,
+    )
+    out = asyncio.run(
+        run_workflow(spec, case["input"], callers, document=doc, ended=ended if ends else None)
+    )
+    assert started == [dict(s) for s in out.started], (started, out.started)
     return {
         "trace": list(out.trace),
         "given": given,
-        "shown": shown_to,
+        "shown": list(out.asked),
+        "refused": list(out.refused),
         "called": called,
         "answer": json.loads(json.dumps(out.answer, default=str)),
         "halted": out.halted,
+        "why": out.why,
+        "cancelled-by": dict(out.cancelled_by),
+        "started": list(out.started),
         "parked-at": out.parked_at,
         "question": out.question,
         "said": out.said,

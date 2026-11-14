@@ -377,8 +377,11 @@ zone computation and blob verification are new work.
 > it, `open` is gone from `Group` and from `from_doc`, and every field of the shipped
 > schema carries `surface:` and `tier:` — checked at startup by `governance_is_complete`,
 > which refuses to validate against a specification that leaves any field without them.
-> Point 2 (`spec/extensions/*.yaml`) is not built: there is no extension path at all, and
-> `x-` on a field is what an author has. Point 1's sha256 comparison against a compiled-in
+> Point 2 (`spec/extensions/*.yaml`) is not built: there is no extension path for the
+> schema, and `x-` on a field is what an author has — preserved in the IR and never emitted
+> into any substrate. The runtime extension path that does exist is `plugins:` (D29): a
+> named, versioned request for code the runtime loads, validated like every other kind and
+> never resolved, fetched or run by the checker. Point 1's sha256 comparison against a compiled-in
 > constant is deliberately NOT built — a constant compiled in beside the file it hashes can
 > only ever agree with itself, so the digest is COMPUTED and REPORTED instead, and the
 > property actually verified at startup is the one §8.2 depends on.
@@ -8947,6 +8950,7 @@ it would have *"nothing"* in the column headed *"what it decides"*.
 | `loop:` and `loops/` — `based-on`, `starts-at`, `does`, `says`, `may-use`, `then`, `at-most` | which stage runs at each step, what it is told, what it may reach (G1) | same, via `_loops_of` |
 | `limits:` — `steps-at-most`, `tool-calls-at-most`, `runs-for-at-most` / `finishes-within`, `cost-per-request-under`, `tokens-at-most`, `when-it-runs-out` | when the run stops, which of the three actions it takes, and the words a person reads (G2) | `test_the_typescript_port_stops_at_the_same_ceiling_and_says_the_same_words`, and `test_both_ports_read_every_way_a_spend_cap_is_written.py` for `cost-per-request-under`. **The second citation was missing for as long as this row existed, and the cell was false without it**: the first test sends the money cap written `<number> <CUR>` and no other way, so four of the six spellings `coerce::money` accepts — `USD 0.05`, `$0.05`, `0.05 usd` and `0.05<NEL>USD`, all `pact check` rc=0 — produced a different sentence in the two ports with this row reading as held. Nothing structural holds this column: the two tests below check `AGENT_SPEC_FIELDS` and list B, not the Held-by cell |
 | `answers-with:` | the shape the model is told its answer must have, appended last under one heading (A5) | `test_the_typescript_target_agrees_too` |
+| `plugins:` — `if-it-cannot-be-loaded` | whether the turn is refused before a model is called and in what words, and the line each plugin it starts without puts on `unenforced` (D29). Neither port loads a plugin, so the two agree by construction; only the reference port can be handed `loaded_plugins=` by a host that does | `test_a_plugin_nobody_loaded_stops_the_run_before_it_starts`, `test_a_plugin_the_agent_can_do_without_is_named_on_unenforced`, and `test_every_agent_runs_identically_on_the_typescript_target` over `examples/plugin-desk` |
 
 Agreement is on the INPUTS as well as the outputs, which is what makes the first four rows
 evidence rather than assertion: `run-trace.ts` records `told` and `offered` — the system

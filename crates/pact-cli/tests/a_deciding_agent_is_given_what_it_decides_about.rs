@@ -302,34 +302,70 @@ fn a_says_is_nothing_to_a_classifier_so_one_given_only_that_is_refused() {
 }
 
 #[test]
-fn a_rung_whose_agent_is_a_classifier_and_a_language_model_at_once_is_warned_about() {
-    let (ok, text) = check(
+fn a_rung_whose_agent_is_a_classifier_and_a_language_model_at_once_is_refused() {
+    // The tree as written is the control: `shelve-twice` asks `scorer` (the
+    // classifier, with `if-unsure-below:`) and then `reader` (a language
+    // model), two agents on two rungs, and loads clean
+    // (`a_decide_that_binds_what_an_earlier_stage_found_loads_clean`). Here
+    // the two are folded into one agent's `model:` list.
+    let text = refused(
         "two-kinds",
         &[(
             "  model: note-classifier\n  takes message: text\n",
             "  model: [note-classifier, qwen2.5-7b-instruct]\n  takes message: text\n  instructions: Say which shelf.\n",
         )],
+        "loader/a-rung-with-two-kinds-of-reader",
     );
-    assert!(!ok, "a warning fails `--deny-warnings`:\n{text}");
-    assert!(
-        text.contains("rule: loader/a-rung-with-two-kinds-of-reader"),
-        "{text}"
-    );
+    // An error, not a warning: `check` passes `--deny-warnings`, under which a
+    // warning fails too, so the summary line is what tells the two apart. A
+    // warning loads, and a tree that loads is run — by two runtimes, two ways.
+    assert!(text.contains("problem(s) found"), "{text}");
+    assert!(!text.contains("loaded with"), "{text}");
     assert!(
         text.contains(
-            "'where' asks 'scorer' to decide, and 'scorer' runs on a trained classifier \
-             ('note-classifier') and on a language model ('qwen2.5-7b-instruct'). A `model:` \
-             list is tried in order only when a call fails, never because an answer was unsure"
+            "'where' asks 'scorer' to decide, and 'scorer' lists a trained classifier \
+             ('note-classifier') and a language model ('qwen2.5-7b-instruct') under one \
+             `model:`. That list names fallbacks for a call that fails; it is never tried \
+             because an answer was unsure, which passes the decision to the next rung."
         ),
         "{text}"
     );
     assert!(
         text.contains(
-            "fix: Make them two agents on two rungs: one on 'note-classifier' with \
-             `if-unsure-below:`, then one on 'qwen2.5-7b-instruct' with `instructions:`."
+            "'qwen2.5-7b-instruct' would be asked only when the call to 'note-classifier' \
+             failed, and never for what the classifier was unsure of."
         ),
         "{text}"
     );
+    assert!(
+        text.contains(
+            "fix: Make them two agents on two rungs, the classifier first: one agent on \
+             'note-classifier' with `if-unsure-below:` on its rung, then one on \
+             'qwen2.5-7b-instruct' with `instructions:`, whose `one of` line may add \
+             `not-sure`. The record then says which of the two decided."
+        ),
+        "{text}"
+    );
+}
+
+#[test]
+fn two_classifiers_or_two_language_models_in_one_list_are_fallbacks_and_load() {
+    // The list still means what it meant: fallbacks of ONE kind, for a call
+    // that fails. Only the mix is refused.
+    let (ok, text) = check(
+        "two-of-a-kind",
+        &[
+            (
+                "    note-classifier:\n      description: A trained classifier that says which shelf a note belongs on.\n      kind: decision\n      served-by: [{runtime: systemone, endpoint: local}]\n",
+                "    note-classifier:\n      description: A trained classifier that says which shelf a note belongs on.\n      kind: decision\n      served-by: [{runtime: systemone, endpoint: local}]\n    note-classifier-spare:\n      description: The same classifier on a second server.\n      kind: decision\n      served-by: [{runtime: systemone, endpoint: local}]\n",
+            ),
+            (
+                "  model: note-classifier\n  takes message: text\n",
+                "  model: [note-classifier, note-classifier-spare]\n  takes message: text\n",
+            ),
+        ],
+    );
+    assert!(ok, "{text}");
 }
 
 #[test]

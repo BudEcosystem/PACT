@@ -225,13 +225,49 @@ is asked even though a rung above has decided.
 Passing on is always to the next rung. A `model:` list on the agent names
 fallbacks for a call that *fails*; it is not tried because an answer was
 unsure. To have a classifier and then a language model, write two agents on
-two rungs. `pact check` warns about one agent that lists both
-(`loader/a-rung-with-two-kinds-of-reader`).
+two rungs, the classifier first:
+
+```text
+      by:
+        - agent: scorer            # a trained classifier
+          if-unsure-below: 85%
+        - { agent: reader }        # a language model, which may answer not-sure
+        - { asks: which-shelf }
+```
+
+One agent that lists both under `model:` is refused
+(`loader/a-rung-with-two-kinds-of-reader`). It reads as "the classifier, then
+the language model for what it is unsure of", and a `model:` list does not do
+that: the language model would be asked only when the classifier's call
+failed. Two rungs do, and each has its own threshold, and the record says
+which of the two decided.
 
 Afterwards the step says who decided: `where.label`, `where.decided-by`
 (`rules`, `agent` or `person`) and `where.answered-by` (the agent's name, or
 the person). Every step also has `.outcome`, the word it ended in, and a
 `repeat` has `.rounds` and `.ended` (`passed` or `ran-out`).
+
+A step that an agent answered has `.ended` too: `finished`, or `ran-out` when
+the agent reached one of its limits and answered with what it had
+(`when it runs out: answer with what it has`). The step takes that answer and
+goes on like any other; `.ended` is how the workflow can tell. To have a
+person look at a part-done answer, read it in a rule:
+
+```text
+  write = call drafter with brief: input.brief
+  check = decide
+    by:
+      - rules:
+          - when:
+              - { value: steps.write.ended, is: ran-out }
+            choose: part-done
+          - choose: whole
+    if part-done: look
+    if whole: reply
+```
+
+A question can show it (`shows: [steps.write.ended]`) and an `answer` can hand
+it back. A step that calls a tool or another workflow has no `.ended`.
 
 A decision is one person's. A question that needs several answers
 (`answered-by: everyone`) cannot decide a branch, because nothing says which
@@ -245,6 +281,58 @@ label stands when people pick different ones; `pact check` refuses it
 
 On a step that asks people, `.answered-by` is a list, in the order they
 answered, also when one person did.
+
+`answered-by:` on the question counts the names under `asked-of:`. With
+`everyone`, each of them is asked and answers on their own, and one "no" is a
+no at once. A name there can be a person or a team; a team is answered for by
+one of its members, and who that was is what `.answered-by` keeps.
+
+## How a run ends
+
+A workflow's run ends in one of four words.
+
+| It ends | When |
+|---|---|
+| `final` | it reached an `answer`, or the end of its steps |
+| `parked` | it is waiting for a person, in one of its own steps or in a workflow it called and waits for |
+| `stopped` | its own steps ended it, and one more word says why |
+| `cancelled` | something outside it ended it |
+
+**`stopped` says why**, in one of eight words, so a person's no is never read
+as a broken call:
+
+| Why | What happened |
+|---|---|
+| `said-so` | it reached `stop-and-say-so`, an exit its author wrote |
+| `declined` | a person said no, and the step writes no `declined:` exit |
+| `nobody-answered` | a wait ran out, and the step writes no `nobody-answered:` exit |
+| `nobody-decided` | a `decide` ran out of rungs |
+| `a-call-failed` | a call failed and `if-it-fails:` did not cover it |
+| `reached-a-limit` | a ceiling was reached whose `when-it-runs-out:` stops |
+| `does-not-fit` | what it would hand back is not what the workflow says it gives |
+| `not-runnable` | the runtime cannot carry out what is written |
+
+**`cancelled` is a run that did nothing wrong.** A port ends an open run when
+an arrival carries the run's key and the port says `if-still-running: stop`
+(or `cancel-previous`, which replaces it with the new arrival's run):
+
+```text
+port visit-called-off
+  description: The customer calls the visit off.
+  kind: event
+  answers: book-visit
+  same-conversation-when: [visit]
+  if-still-running: stop
+  undo: yes
+  then-run: tell-the-clinic
+```
+
+The run ends between two steps. A step that has begun finishes, so what it
+wrote is on the record; the next one does not begin, and nobody it would have
+asked is asked. With `undo: yes`, what the run wrote is taken back, newest
+first, each by its action's `undone-by:`. With `then-run:`, that workflow is
+started afterwards and not waited for, with the ended run's own input, as much
+of it as it takes. A cancelled run hands back no answer.
 
 ## Things at once
 

@@ -28,6 +28,183 @@ changes what an author writes or what `pact check` accepts.
   given a keyword fewer primitives than its operations have (`agent.accepts` is a signature, so an
   Actor as well as a Shape).
 
+## 2026-11 — how a run ends, the egress boundary said out loud, and two things that read as one thing and did another (15 November)
+
+Four rulings, each made with Bud Agent Flow's engine and corpus in front of it.
+
+### A run something outside it ended is `cancelled`
+
+A workflow's run ended `final`, `parked` or `stopped`. A run that a port ended (an arrival with
+the run's key at a port that says `if-still-running: stop` or `cancel-previous`), or that a person
+at the host ended, had no word and was reported `stopped`, with the runs that failed.
+
+- **`cancelled`**, the fourth ending. `WorkflowResult.cancelled_by` says what ended it
+  (`{port: <name>}`, or `{by: <who>}` for a host). It hands back no answer.
+- **It ends between stages.** A stage that has begun finishes, so what it wrote is on the record;
+  the next does not begin, is not in the trace, and nobody it would ask is asked. Once ended, no
+  stage begins anywhere in the run (an item of an `each` still queued does not start).
+- **The port's own lines say what else happens.** `undo: yes`, beside `stop` or `cancel-previous`,
+  takes back what the run wrote, newest first, by each action's `undone-by:`; a write that could
+  not be taken back is said in `said` and `unenforced`, and the run is cancelled all the same.
+  `then-run:`, beside `stop`, starts a workflow afterwards and does not wait for it, with the ended
+  run's own input, as much of it as that workflow `accepts:` (`Callers.start`; with none, said).
+- **Never a branch failing.** No `if-it-fails:` plan and no `if-someone-fails: carry-on` takes it.
+- `run_workflow(..., ended=)` is how a host says so: asked before each stage begins.
+
+### `stopped` says why, in one word
+
+`halted: stopped` covered a person's no, a decision nobody could make, a server that was down and
+a ceiling that was reached, told apart only by `said`, which is prose. `WorkflowResult.why` is one
+of eight words (`workflow_runtime.STOPPED_BECAUSE`): `said-so`, `declined`, `nobody-answered`,
+`nobody-decided`, `a-call-failed`, `reached-a-limit`, `does-not-fit`, `not-runnable`. Empty for
+any other ending.
+
+### What was wrong in the reference
+
+- **A no, or silence, with no exit written for it ended the block instead of stopping the run.**
+  `outcome.declined` says "leave it out and the run stops and says so: a no is never quietly
+  carried past". A workflow that gives nothing finished `final` after a person had said no, and one
+  that gives something was told its answer "does not fit". It now stops: `why: declined`, or
+  `nobody-answered`.
+- **A run that calls a workflow that waits for a person was `stopped`** ("the workflow 'x'
+  parked"). It is `parked`: `parked-at` is the caller's own stage, where a host resumes it, and
+  `question` is the called run's. Who the called run asked is on the caller's record too.
+
+### A stage says how its agent ended
+
+An agent that reaches a limit with `when-it-runs-out: answer-with-what-it-has` gives an answer, the
+stage takes it and the workflow goes on. Nothing let the workflow tell that answer from a finished
+one.
+
+- **`steps.<stage>.ended`** is `ran-out` for such an answer and `finished` for any other, on a
+  `call` of an agent and on a `decide` an agent decided (its label counts either way). The word a
+  `repeat` has, with the same `ran-out`. A stage that calls a tool or a workflow has none.
+- **A word, not an exit under `then:`.** The stage did answer, so `answered` stays the true name of
+  how it ended; a word can be shown to a person and handed back, which an exit cannot; and no
+  workflow that exists changes. Branching on it is a `decide` with a written rule.
+- A host hands such an answer back as `workflow_runtime.RanOut(answer)`.
+
+### A classifier and a language model in one `model:` list are refused on a rung
+
+`loader/a-rung-with-two-kinds-of-reader` was a warning. It is an error.
+
+- **What it reads as, and what it is.** "The classifier, then the language model for what it is
+  unsure of." A `model:` list names fallbacks for a call that fails; unsure passes to the next
+  rung. So the language model would be asked only when the classifier's server was down.
+- **Why a warning was not enough.** Measured on Bud Agent Flow's corpus: 13 of 136 trees write it,
+  each meaning the cascade. A warning loads, and the same file then ran two ways: the framework
+  under that engine treats an unsure classifier as a failed call and goes on down the list;
+  PACT's reading does not.
+- **Why not give the list that meaning.** One agent would be two readers: `instructions:` and
+  `not-sure` apply to the language model only, `if-unsure-below:` to the classifier only, and the
+  record could not say which decided. The ladder already is the cascade: two agents on two rungs,
+  each with its own threshold and second-opinion line, and `.answered-by` names which decided.
+- Two models of one kind in a list are fallbacks as before.
+
+### `pact check` and `pact discover` say where the boundary is
+
+Leaving `allow-egress:` out draws no boundary (Q17). That is a choice, and it is also what a
+forgotten line looks like: both printed `OK — loaded cleanly`.
+
+- **`pact check`** prints one line after a check that finds no problems: no line written (every
+  part may talk outside), `[]` (nothing may), or the parts listed. It is on stdout and is not a
+  diagnostic: `--deny-warnings` is unaffected, because a warning would fail every workspace that
+  chose to be open. `--quiet` leaves it out. An agent checked on its own is told the boundary of
+  the workspace around it.
+- **`pact discover`** carries `egress: {boundary: open | closed | listed, allows: [...]}` on each
+  workspace.
+
+### What a runtime must match
+
+- Twelve new shared cases (`tests/conformance/workflows.json`, 43 in all), seven on
+  `trees/triaged-defects` and five on a new tree, `trees/booked-visits`. Every workflow case's
+  `expect` has three new keys: `why`, `cancelled-by`, `started`.
+- A case may now say `ran-out` (agents that answered on reaching a limit), `ends` (`{before,
+  port}`: an arrival that ends the run as it is about to begin that stage) and `"nobody"` in place
+  of a person's answer (the question's time passed).
+- `tests/conformance/digests.json`: `triaged-defects` moves (the tree was edited: three workflows
+  and a question added; every existing `contract-digest` is as it was), and `booked-visits` is new.
+
+### Still owed
+
+- A `decide` whose rung's agent cannot be reached: the reference lets the failure out of the run.
+- `pact check` does not hold a read of `.ended`, `.rounds` or `.answered-by` to a stage that has
+  one, so a rule reading `.ended` of a stage that calls a tool decides nothing.
+- A cancelled run that was parked, and what a called run's writes are to its caller's undo: ruled
+  for a host (the wait closes; a later answer is refused), with no case, because the reference
+  runtime does not resume.
+
+## 2026-11 — law 8 at the moment of instantiation: a helper, a skill and a snippet are checked as documents (13 November)
+
+Law 8 says anything a run creates passes the same checker before it can be asked, and names a
+`run-code` snippet, a `narrowed-new` helper and a skill a run wrote. The reference checked a
+learning proposal's `instructions:` and nothing a run instantiates. A second runtime (Bud Meta
+Harness) checks all three; the functions here are the rules it builds them by, so a definition
+checked there and here is the same document.
+
+- **`checking.with_helper(document, starter, instructions, description=, uses=)`**: the starter's
+  own entry under `<starter>-helper` (`-2`, `-3`… when taken), told `instructions`, on the
+  starter's model. `uses` may narrow it; anything the starter lacks raises `NotNarrower` with
+  `delegation.beyond_its_starter`'s sentence.
+- **`checking.with_skill(document, agent, name, description, content, use_when=)`**: a `skills:`
+  entry, named in the agent's `uses:` when it writes one.
+- **`checking.with_program(document, language, code, description=, runs_for_at_most_ms=)`**: a
+  nondeterministic program under `run-code-<12 hex of the code's sha256>`, its fuel the run's own
+  ceiling; a language with no engine raises `Uncheckable`. The code itself is recorded, never read.
+- **`checking.literal(text, document)`**: words a model wrote are checked as words. `{{` becomes
+  `\{{`; under `template-language: jinja` the text goes in raw blocks.
+- `check_document` on the result is the check.
+
+## 2026-11 — the TypeScript port computes effects as the checker does
+
+`adapters/typescript/src/effects.ts` is `crates/pact-loader/src/effects.rs` (law 1) in TypeScript,
+function for function: an action's effect from its own lines, a tool's as its worst action's, an
+agent's as the worst of what it uses and its team's, a workflow's from its stages, and whether an
+`effect:` word in a `when-this` holds. A runtime that gates calls by effect, or builds an agent in
+code with no tree to `discover`, now has the checker's answer without the binary;
+`test_both_ports_compute_one_effect.py` holds the port to `pact discover` on every agent of the
+corpus. A tick is read with the five words `coerce.rs::yes_no` accepts; `workflows.rs::said_yes`
+takes three, so `reads-only: y` is a lookup to the port and a write to the checker until that
+reading follows `coerce.rs`.
+
+## 2026-11 — an action that moves hardware is held like money
+
+`moves-hardware: yes` on an action says a call moves something in the physical world: a robot arm,
+a vehicle, a valve, any actuator. It is held the way `spends-money:` is: a same-request key is
+necessary (a repeated instruction never moves the machine twice), `pact discover` prints
+`moves-hardware` beside `moves-money` for every agent and workflow, `effect: moves-hardware` in a
+policy's `when-this` names every such action, and an MCP snapshot change to one always stops or
+asks. The Python adapter reads it the same way.
+
+## 2026-11 — an absent `allow-egress:` draws no boundary
+
+A workspace that writes no `allow-egress:` is no longer read as air-gapped: every part of it may
+talk outside, as `nothing_reaches_outside_the_box` and the meaning-search check already read it.
+`allow-egress: []` still means nothing may leave, and every list is held exactly as before. The
+binding check (`loader/leaves-the-box`), the Python adapter's `egress.admits` and `missing_for`
+(which `resolve` filters model candidates with), the judge check and a carried program's network
+follow the one reading. An author who wants the air-gapped desk of D17 writes `allow-egress: []`;
+constraining is a declaration, and leaving it out is not one.
+
+## 2026-11 — plugins under the eight laws (11 November)
+
+The plugins kind (D29), rebased onto the seven primitives, now holds the laws through the
+interfaces a plugin implements (D29 consequence 7).
+
+- **`plugin.implements:`** names the interfaces (`interface: yes` tools, procedures or sets of
+  documents) whose code the plugin supplies. A name that is not an interface is refused
+  (`loader/plugin-implements-what-is-not-an-interface`); a plugin counts as an implementation,
+  so `loader/an-interface-nothing-implements` no longer fires for one, and it may be a choice of
+  `chosen-by: run-inputs.<name>`. An agent using an interface only absent plugins implement is
+  warned (`loader/an-interface-only-an-absent-plugin-implements`).
+- **Law 1:** `pact discover`'s `effect` and `moves-money` for an agent include every interface its
+  plugins implement.
+- **Law 3:** an interface action a plugin implements that cannot be undone names
+  `same-request-key:` (`loader/a-plugin-action-with-no-claim`).
+- **Law 8:** `Learner.cycle` holds a `plugins` proposal to `pact check` before holding it for a
+  person (`checking.check_agent_field`); `explode` keeps a plugin's own `config:` whole, so a
+  package's camel-case setting names no longer make the document unexplodable.
+
 ## 2026-11 — a digest moves only when the tree does, and who answered a wait (13 November)
 
 Bud Agent Flow asked whether "a new version of PACT never moves the digest of a tree nobody
@@ -54,6 +231,23 @@ things were settled in the same exchange. Nothing here changes a field of the sc
   them nothing: it read the stage's `bind:`, which a waiting stage cannot write, and not the
   question's `shows:`, which a `decide` asking the same question did read. Found by the first
   shared case with a waiting stage in it.
+- **`everyone` means every entry of `asked-of:`, each answering separately.** The two cases for a
+  waiting stage merged in the entry above were wrong, and so was the reference: it took one answer
+  whatever `answered-by:` said, and the second case delivered one answer "from" two people, which
+  nothing could check. The schema's words are "how many of `asked-of:` must answer". Bud Agent
+  Flow, whose engine asks each entry, refused to build to the cases. Now: each entry is one
+  answerer (a person, or a team or channel one of whose members answers for it); all are asked at
+  once and each answers separately; one answer has one answerer; a second, different answer from
+  somebody who has answered, or one answer naming several people, is refused and recorded
+  (`refused` in a case's `expect`), changes nothing, and the wait stays open; the same answer
+  handed in again is a resend and counts once; one no is a no at once; the stage's fields are those of the answer that settled the wait (the
+  first no, or the answer that made it enough). Five cases replace the two (31 workflow cases, 55 cases of replayed
+  runs), on two workflows, `sign-off` and `sign-off-by-the-team`. In a case, a list under `people`
+  for a question is the answers as they arrive, and `shown` has one entry for each entry of
+  `asked-of:` that was asked.
+- **A shared case runs on its own clock.** The replay kit ran a case's first leg on the wall clock
+  and its resumes on the case's own, so a wait could never run out by itself. It starts at 0 now.
+  No case's expected result changed. (Bud Agent Flow found the same mixture in its replay.)
 - Ruled, with no case yet: a workflow run a port ended (`if-still-running: stop`,
   `cancel-previous`) ends as `cancelled`. `stopped` stays "could not go on, and says why".
 
@@ -835,6 +1029,32 @@ which also lists what is still pending at run time.
   server changed, and a change an approval rests on always stops it
   (`mcp_bridge.when_it_changed`). `tool.unlisted-actions: each-call-asks-a-person` offers what the
   server adds behind a person.
+### Plugins: code a runtime loads, named, versioned and governed (26 October)
+
+- **`plugins:` (D29, narrowing R17).** `plugins/<name>.yaml` asks whatever runs these agents
+  to load a package: `package:` with its registry (`npm:@acme/crm-tools`,
+  `pypi:acme-crm-tools`), `version:` as a range in that registry's own grammar, the plugin's
+  own `config:`, `if-it-cannot-be-loaded:` (`refuse-to-start`, the default, or
+  `run-without-it`) and `applies-to:` (`the-agents-that-name-it` or `every-agent`); an agent
+  names the plugins it needs on `plugins:`. `S-EXEC`, so adding one needs a person (D23).
+  `bundle.brings:` and `needs-a-person-to-approve:` gain `plugins`.
+- **`pact check` reads the request and never the package** (R5, D17;
+  `crates/pact-loader/src/plugins.rs`): `loader/plugin-package-has-no-registry`,
+  `loader/plugin-version-is-not-a-range` (npm ranges by `nodejs-semver`, pypi specifiers by
+  `pep440_rs`), `loader/plugin-secret-written-in-the-file` (a key naming a token, secret,
+  password or API key holds `{by-reference: …}`), and the note
+  `loader/plugin-runs-only-where-loaded` naming the agents a `refuse-to-start` plugin keeps
+  to the runtimes that can load it. A plugin nothing names is `loader/nothing-points-at-it`;
+  `plugins/<name>/plugin.yaml` is the folder form. `pact discover` lists each agent's plugins
+  with the default written out; a plugin moves the workspace digest and the doc-digest of a
+  workflow that reaches its agent, never the contract-digest.
+- **Both ports refuse or report what they did not load.** A missing `refuse-to-start`
+  plugin ends the turn before the first model call with `halted: plugins-not-loaded` and
+  `turn.run.failed`; a missing `run-without-it` one is named on `unenforced`. A host that
+  loads plugins passes `run(loaded_plugins=)`. Every lattice gains `plugins`, `unsupported`
+  on every shipped transport, so the conformance report states it before execution.
+  `examples/plugin-desk/` is the worked example; `tests/trees/a-desk-that-needs-a-plugin/`
+  and `tests/trees/a-plugin-with-no-registry/` the refusal and the error.
 
 ### Tests over recorded runs (18 October)
 

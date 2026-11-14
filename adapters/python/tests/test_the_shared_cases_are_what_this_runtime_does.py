@@ -113,15 +113,45 @@ def test_the_cases_say_the_things_they_are_there_to_say() -> None:
     asked = by_name["the-agent-is-not-sure-so-a-person-decides-and-is-shown-the-message"]
     assert asked["shown"] == [{"question": "which-desk", "shown": {"input.message": "The app crashes."}}]
 
-    one = by_name["who-answered-a-wait-is-a-list-of-one-when-one-person-did"]
-    # On a stage that waits for people, who answered is a list, also of one;
-    # and the person is shown what the question says to show.
-    assert one["answer"] == {"close": True, "by": ["dana"]}
-    assert one["shown"] == [
-        {"question": "may-we-close", "shown": {"input.report": "Seat 14C will not recline."}}
+    team = by_name["a-team-is-asked-and-who-answered-is-a-list-of-the-one-who-did"]
+    # A team is one entry of `asked-of:`. The first answer decides; who in the
+    # team gave it is a list of one, and not the name that was asked. The
+    # person is shown what the question says to show.
+    assert team["answer"] == {"close": True, "by": ["dana"]}
+    assert team["shown"] == [
+        {"question": "may-the-team-close", "shown": {"input.report": "Seat 14C will not recline."}}
     ]
-    both = by_name["who-answered-a-wait-is-everyone-who-did-in-the-order-they-answered"]
-    assert both["answer"]["by"] == ["lee", "dana"], "in the order they answered, not sorted"
+    both = by_name["everyone-asked-answers-separately-and-is-listed-in-the-order-they-answered"]
+    # `asked-of: [lee, dana]`, `answered-by: everyone`: both are asked, at
+    # once, and their answers are listed as they arrived, which is not the
+    # order they are written in.
+    assert len(both["shown"]) == 2 and both["answer"]["by"] == ["dana", "lee"]
+    assert both["refused"] == []
+    assert both["answer"]["outcome"] == "answered"
+    # Each gave a note. The stage's is the note of the answer that settled it:
+    # here the last yes that was needed, lee's.
+    assert both["answer"]["note"] == "Parts are logged."
+    said_no = by_name["one-no-from-everyone-asked-is-a-no-and-the-rest-are-not-waited-for"]
+    assert said_no["answer"] == {
+        "close": False, "by": ["dana"], "outcome": "declined",
+        "note": "The recline cable is still loose.",
+    }
+    # Both were asked. dana's no ended it, and lee's answer was not waited for.
+    assert len(said_no["shown"]) == 2
+    twice = by_name[
+        "a-second-answer-from-somebody-who-has-answered-is-refused-and-the-wait-stays-open"
+    ]
+    # dana said yes, then handed in a no: the second is refused, on the
+    # record, and changes nothing. The wait stays open until lee answers, and
+    # the answer is yes.
+    assert twice["refused"] == [
+        {"question": "may-we-close", "answered-by": "dana", "why": "already-answered"}
+    ]
+    assert twice["answer"]["by"] == ["dana", "lee"] and len(twice["shown"]) == 2
+    assert twice["answer"]["close"] is True and twice["answer"]["outcome"] == "answered"
+    resent = by_name["the-same-answer-handed-in-again-is-not-a-second-answer"]
+    # The same answer from dana again is a resend. Nothing is refused.
+    assert resent["refused"] == [] and resent["answer"]["by"] == ["dana", "lee"]
     found = by_name["a-deciding-agent-is-given-what-an-earlier-stage-found-and-the-bound-name-wins"]
     # `kind` is triage's `engine`, not the `cabin` the report came in with; the
     # `secret` the assigner does not accept is not given to it.
@@ -236,3 +266,58 @@ def test_the_cases_say_the_things_they_are_there_to_say() -> None:
 
     parked = by_name["nobody-is-there-to-ask-so-the-run-parks-at-the-decision"]
     assert parked["halted"] == "parked" and parked["parked-at"] == "where" and parked["question"] == "which-desk"
+
+    # ── how a run ends ──
+    called_off = by_name[
+        "a-port-ends-an-open-run-which-is-cancelled-undone-newest-first-and-followed-by-what-the-port-says"
+    ]
+    # Something outside ended it: `cancelled`, with no `why` (that word is for
+    # a run its own stages stopped), and no answer.
+    assert (called_off["halted"], called_off["why"]) == ("cancelled", "")
+    assert called_off["cancelled-by"] == {"port": "visit-called-off"} and called_off["answer"] == {}
+    # The stage it arrived at never began: not in the trace, nobody asked.
+    assert called_off["trace"] == ["hold", "file"] and called_off["shown"] == []
+    # The port says `undo: yes`: newest first, and an undo is a call.
+    assert [c["tool"] for c in called_off["called"]] == [
+        "calendar/hold-slot", "files/open-file", "files/close-file", "calendar/release-slot",
+    ]
+    # `then-run:`, given the cancelled run's input, as much as that workflow takes.
+    assert called_off["started"] == [{"workflow": "tell-the-clinic", "given": {"visit": "V-204"}}]
+    kept = by_name["a-port-that-does-not-say-undo-ends-the-run-and-leaves-what-it-did"]
+    assert [c["tool"] for c in kept["called"]] == ["calendar/hold-slot", "files/open-file"]
+    assert kept["started"] == [] and kept["halted"] == "cancelled"
+    replaced = by_name["a-newer-arrival-replaces-the-open-run-which-is-cancelled-as-any-other-is"]
+    assert replaced["cancelled-by"] == {"port": "visit-booked-again"} and replaced["trace"] == ["hold"]
+    booked = by_name["a-visit-nobody-calls-off-is-booked-and-confirmed"]
+    assert (booked["halted"], booked["cancelled-by"], booked["started"]) == ("final", {}, [])
+
+    said_no = by_name["a-no-with-no-exit-written-for-it-stops-the-run-and-says-so"]
+    assert (said_no["halted"], said_no["why"]) == ("stopped", "declined")
+    silence = by_name["silence-with-no-exit-written-for-it-stops-the-run-and-says-so"]
+    assert (silence["halted"], silence["why"]) == ("stopped", "nobody-answered")
+    misfit = by_name["an-answer-that-does-not-fit-what-the-workflow-gives-stops-the-run"]
+    assert (misfit["halted"], misfit["why"]) == ("stopped", "does-not-fit")
+    # `why` is for `stopped` and for nothing else.
+    for name, expect in by_name.items():
+        if "why" in expect:
+            assert bool(expect["why"]) == (expect["halted"] == "stopped"), name
+            assert bool(expect["cancelled-by"]) == (expect["halted"] == "cancelled"), name
+
+    waiting = by_name["a-run-that-calls-a-workflow-that-waits-is-waiting-too"]
+    # Waiting, not stopped; at a stage of ITS OWN, with the called run's question.
+    assert (waiting["halted"], waiting["parked-at"], waiting["question"]) == (
+        "parked", "close", "may-the-team-close",
+    )
+    went_on = by_name["a-run-that-calls-a-workflow-goes-on-once-that-one-is-answered"]
+    assert went_on["halted"] == "final" and went_on["answer"] == {"close": True, "kind": "cabin"}
+
+    # ── how a called agent ended ──
+    ran_out = by_name["an-agent-that-ran-out-says-so-on-the-stage-that-called-it"]
+    assert ran_out["halted"] == "final", "an answer given on running out is an answer"
+    assert ran_out["answer"] == {"draft": "Gate 4 opens on", "ended": "ran-out", "went": "part-done"}
+    assert ran_out["trace"] == ["write", "check", "look", "reply"]
+    assert ran_out["shown"][0]["shown"]["steps.write.ended"] == "ran-out"
+    finished = by_name["an-agent-that-finished-says-so-and-nobody-is-asked"]
+    assert finished["answer"]["ended"] == "finished" and finished["shown"] == []
+    label = by_name["a-label-from-an-agent-that-ran-out-counts-and-the-record-says-it-ran-out"]
+    assert label["answer"] == {"team": "powerplant", "ended": "ran-out"}

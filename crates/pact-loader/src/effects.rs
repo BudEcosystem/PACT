@@ -41,12 +41,15 @@ pub enum Level {
 pub struct Effect {
     pub level: Level,
     pub moves_money: bool,
+    /// Whether it moves something in the physical world (`moves-hardware:`).
+    pub moves_hardware: bool,
 }
 
 impl Effect {
     pub const NOTHING: Effect = Effect {
         level: Level::Nothing,
         moves_money: false,
+        moves_hardware: false,
     };
 
     /// The worse of two.
@@ -55,6 +58,7 @@ impl Effect {
         Effect {
             level: self.level.max(other.level),
             moves_money: self.moves_money || other.moves_money,
+            moves_hardware: self.moves_hardware || other.moves_hardware,
         }
     }
 
@@ -80,6 +84,7 @@ impl Effect {
             "writes" => self.level >= Level::Changes,
             "cannot-be-undone" => self.level == Level::CannotBeUndone,
             "spends" => self.moves_money,
+            "moves-hardware" => self.moves_hardware,
             _ => false,
         }
     }
@@ -89,6 +94,7 @@ impl Effect {
 #[must_use]
 pub fn of_action(action: &Node) -> Effect {
     let money = action.get("spends-money").is_some_and(said_yes);
+    let hardware = action.get("moves-hardware").is_some_and(said_yes);
     let level = if action.get("reads-only").is_some_and(said_yes) {
         Level::Reads
     } else if action.get("undone-by").is_some() {
@@ -99,6 +105,7 @@ pub fn of_action(action: &Node) -> Effect {
     Effect {
         level,
         moves_money: money,
+        moves_hardware: hardware,
     }
 }
 
@@ -138,7 +145,10 @@ pub fn of(document: &Node, target: &str, seen: &mut BTreeSet<String>) -> Effect 
     Effect::NOTHING
 }
 
-/// An agent: everything on `uses:` and everyone on `team:`.
+/// An agent: everything on `uses:`, everyone on `team:`, and every interface
+/// a plugin it is loaded with implements. The last is law 1 for code PACT
+/// never reads: the plugin is in the agent's runtime whether or not the agent
+/// names the interface, so the agent is never reported lighter than it.
 #[must_use]
 pub fn of_agent(document: &Node, agent: &Node, seen: &mut BTreeSet<String>) -> Effect {
     let used: Vec<String> = agent
@@ -154,6 +164,11 @@ pub fn of_agent(document: &Node, agent: &Node, seen: &mut BTreeSet<String>) -> E
                 .and_then(Node::as_map)
                 .into_iter()
                 .flat_map(|m| m.keys().cloned()),
+        )
+        .chain(
+            crate::plugins::interfaces_loaded_for(document, agent)
+                .into_iter()
+                .map(str::to_string),
         )
         .collect();
     used.iter()
