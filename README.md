@@ -650,8 +650,8 @@ never runs a line of yours.
 
 ## What you can express
 
-**54 kinds, 384 fields.** 262 are `core` — what a non-technical author writes.
-122 are `expert`, and none of them is required for any core capability.
+**64 kinds, 545 fields.** 327 are `core` — what a non-technical author writes.
+218 are `expert`, and none of them is required for any core capability.
 
 <table>
 <tr><th align="left">Capability</th><th align="left">You write</th><th align="left">What it buys</th></tr>
@@ -666,6 +666,7 @@ never runs a line of yours.
 <tr><td><b>Teams</b></td><td><code>team:</code>, <code>teamwork:</code></td><td>Delegation, quorum, races, budget shares — eight worked patterns ship</td></tr>
 <tr><td><b>Memory</b></td><td><code>remembers:</code></td><td>A variable a run reads into a call and writes back from one</td></tr>
 <tr><td><b>Exact logic</b></td><td><code>programs/</code></td><td>WebAssembly in a locked room, with fuel and a consent gate</td></tr>
+<tr><td><b>Runtime plugins</b></td><td><code>plugins/*.yaml</code>, <code>plugins:</code></td><td>Code your runtime loads, named with a version range — refused or reported where it cannot be loaded</td></tr>
 <tr><td><b>How you know</b></td><td><code>evals/</code></td><td>The correctness oracle for portability, model swaps and learning</td></tr>
 <tr><td><b>Self-improvement</b></td><td><code>learning.yaml</code></td><td>Changes arrive as reviewable diffs, class-gated, never silent</td></tr>
 </table>
@@ -760,8 +761,9 @@ note: 'refund-policy' holds 5 written rules under `## Rules` — lines a person
 One folder, loaded by the Rust CLI, executes over **all seven targets** and
 produces *byte-identical traces, tool sequences and model-call counts*. The claim
 is bounded and the bound is written down: it covers `instructions:`, `tools:`,
-`skills:`, `knowledge:`, `team:`, `answers-with:`, the `loop:` and the `limits:`
-ceilings — and **not** the thirteen governance keys the Node port reports on
+`skills:`, `knowledge:`, `team:`, `answers-with:`, the `loop:`, the `limits:`
+ceilings and whether a `plugins:` line stops the agent before it starts — and
+**not** the thirteen governance keys the Node port reports on
 `unenforced`, nor the documents under `knowledge/`, which nothing on that port
 can look anything up in and which it names on `unretrieved` for every set an
 answer did not come from. See
@@ -773,7 +775,7 @@ inside the claim and reported anyway, since the names are offered to the model
 and asking one only comes back as an error there — and every `limits:` key that
 port does not read gets its own line under a `limits.` prefix.
 
-The conformance suite compares 30 agents × 7 targets = **180 pairs, 0
+The conformance suite compares 31 agents × 7 targets = **186 pairs, 0
 divergences**, with every exclusion declared rather than discovered.
 
 Each target takes the framework's **lowest** seam, so none of them owns the loop:
@@ -865,8 +867,8 @@ for things a framework would have let you do. Declaring `spends-money: yes`
 obliges you to say what makes two calls the same call. That is the point, and it
 is still friction.
 
-**There is a vocabulary to learn.** Not code, but 54 kinds and 384 fields. The
-core is 185 of them and the diagnostics name the exact line to type, but "no
+**There is a vocabulary to learn.** Not code, but 64 kinds and 545 fields. The
+core is 327 of them and the diagnostics name the exact line to type, but "no
 code" is not "nothing to learn".
 
 **The eval suite is work, and it is not optional.** Every portability claim is
@@ -996,13 +998,13 @@ framework is an extra.
 
 | | |
 |---|---|
-| **Design** | Thesis, 28 binding decisions, FRD (120 requirements), 60-row refusal ledger — complete |
+| **Design** | Thesis, 29 binding decisions, FRD (120 requirements), 60-row refusal ledger — complete |
 | **Research** | 14 source-grounded studies, ~15,750 lines, over 140 repos (~15 GB) + 57 papers |
-| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **5033 tests (1648 Rust + 3385 adapter), clippy clean, TypeScript type-checked** |
+| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **5145 tests (1687 Rust + 3458 adapter), clippy clean, TypeScript type-checked** |
 | **Adapters** | **All 7 named targets**, proven against one shared conformance suite |
 
 ```bash
-./scripts/test-all.sh          # 5033 tests, Rust + 7 adapters, fully offline
+./scripts/test-all.sh          # 5145 tests, Rust + 7 adapters, fully offline
 ```
 
 **What is still owed** is not hidden — it lives in
@@ -1021,7 +1023,7 @@ SLOs **report**; they do not stop a run. That is deliberate and
 | | |
 |---|---|
 | [`docs/00-THESIS.md`](docs/00-THESIS.md) | The argument, goals, objectives, acceptance criteria |
-| [`docs/01-DECISIONS.md`](docs/01-DECISIONS.md) | 28 binding decisions — **read this before proposing anything** |
+| [`docs/01-DECISIONS.md`](docs/01-DECISIONS.md) | 29 binding decisions — **read this before proposing anything** |
 | [`docs/30-FRD.md`](docs/30-FRD.md) | 120 functional requirements, each traced to its justification |
 | [`docs/97-PRIMITIVES.md`](docs/97-PRIMITIVES.md) | The seven building blocks every keyword reduces to, and the eight laws |
 | [`docs/99-THE-PACT-LANGUAGE.md`](docs/99-THE-PACT-LANGUAGE.md) | The PACT language and reactions: the design, and where the build differs from it |

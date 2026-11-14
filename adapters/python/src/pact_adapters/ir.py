@@ -345,6 +345,42 @@ class KnowledgeSpec:
     reranked_by: str = ""
 
 
+#: What `if-it-cannot-be-loaded:` means when the author left it out.
+REFUSE_TO_START = "refuse-to-start"
+#: The other answer: the agent starts without the plugin and every run says so.
+#: Anything that is not this refuses, so a word the checker never let through
+#: cannot start an agent the author meant to stop.
+RUN_WITHOUT_IT = "run-without-it"
+
+
+@dataclass(frozen=True)
+class PluginSpec:
+    """One plugin this agent needs (D29): a request for code its runtime loads.
+
+    PACT loads nothing, so what reaches the harness is the request and never the
+    code — which package, which versions will do, and what the agent does where
+    it was not loaded. Whether it WAS loaded is a fact about the process, handed
+    in by the host as `run(loaded_plugins=)`, the way `retrieved_by` is.
+
+    The plugin's own `config:` is not carried: nothing in this harness loads a
+    plugin, so nothing here could hand the settings to one. A host that loads
+    plugins reads them off the document it was handed, beside this.
+    """
+
+    name: str
+    #: `<registry>:<name>` — `npm:@acme/crm-tools`, `pypi:acme-crm`.
+    package: str
+    #: A range in that registry's own grammar; `pact check` holds it there.
+    version: str
+    #: `refuse-to-start` or `run-without-it`, the default written out.
+    if_cannot_load: str = REFUSE_TO_START
+
+    @property
+    def registry(self) -> str:
+        """The word in front of the colon: which runtimes can load it at all."""
+        return self.package.split(":", 1)[0].strip()
+
+
 @dataclass(frozen=True)
 class ProgramSpec:
     """One carried program, as the run is told about it (P6/P7).
@@ -373,7 +409,8 @@ class ProgramSpec:
     #: The tool actions that reach it, `<tool>/<action>`, so the sentence a run
     #: reports can name where the author wrote it.
     reached_by: tuple[str, ...] = ()
-    #: Whether this workspace's `allow-egress:` names `programs`.
+    #: Whether this workspace's `allow-egress:` names `programs`, or is not
+    #: written, which draws no boundary.
     #:
     #: The eighth part of the boundary, and for a round it was decoration: no
     #: check read the word, no run reported it, and this class — the only thing a
@@ -736,7 +773,8 @@ class AgentSpec:
     #: another agent's tool reaches is not something this run could have called,
     #: so reporting it here would be a sentence about somebody else's document.
     programs: tuple[ProgramSpec, ...] = ()
-    #: Whether this workspace's `allow-egress:` names `programs`, as a fact about
+    #: Whether this workspace's `allow-egress:` names `programs` or is not
+    #: written, as a fact about
     #: the WORKSPACE rather than about one carried body.
     #:
     #: The same word `ProgramSpec.may_reach_outside` carries, read once and put in
@@ -803,6 +841,11 @@ class AgentSpec:
     #: same way `skills` is — off the agent's own `uses:` line — so a corpus
     #: nobody named reaches no run, exactly like a skill nobody named.
     knowledge: tuple[KnowledgeSpec, ...] = ()
+    #: The plugins this agent needs (D29): the ones its own `plugins:` line names
+    #: and every one whose `applies-to:` is `every-agent`, sorted like `tools`.
+    #: A run checks them against what its host loaded before the first model
+    #: call, and refuses or reports each one that is missing.
+    plugins: tuple[PluginSpec, ...] = ()
     #: The workflows this agent may start as tools (N2): the names on its own
     #: `uses:` line that are workflows, sorted like `tools`. `pact check` lets a
     #: workflow be named there only when its `published-as:` lists `tool`, so
@@ -980,6 +1023,7 @@ class AgentSpec:
             tools=tools,
             skills=skills,
             knowledge=knowledge,
+            plugins=_plugins_needed_by(doc, a),
             workflows=tuple(
                 n
                 for n in sorted((doc.get("workflows") or {}))
@@ -1095,6 +1139,27 @@ def available(agent: "AgentSpec", condition: str) -> bool:
     )
 
 
+def _plugins_needed_by(doc: dict[str, Any], agent: dict[str, Any]) -> tuple[PluginSpec, ...]:
+    """The plugins `agent` names, plus every one that applies to every agent.
+
+    The same reading `pact discover` publishes (`pact_loader::plugins::
+    needed_by`), so the inventory a runtime chose this agent by and the run it
+    then starts agree about what it needs.
+    """
+    named = set(_as_list(agent.get("plugins")))
+    return tuple(
+        PluginSpec(
+            name=n,
+            package=_text(p.get("package", "")),
+            version=_text(p.get("version", "")),
+            if_cannot_load=_text(p.get("if-it-cannot-be-loaded", "")) or REFUSE_TO_START,
+        )
+        for n, p in sorted((doc.get("plugins") or {}).items())
+        if isinstance(p, Mapping)
+        and (n in named or _text(p.get("applies-to", "")) == "every-agent")
+    )
+
+
 def _questions_this_agent_puts(doc: dict[str, Any], agent: dict[str, Any]) -> set[str]:
     """Every question name this agent can reach, by any line that names one.
 
@@ -1123,13 +1188,18 @@ def _questions_this_agent_puts(doc: dict[str, Any], agent: dict[str, Any]) -> se
 
 
 def _programs_may_reach_outside(doc: dict[str, Any]) -> bool:
-    """Does this workspace's `allow-egress:` name `programs`?
+    """Does this workspace's `allow-egress:` name `programs`, or not exist?
+
+    A workspace that writes no `allow-egress:` draws no boundary, so its
+    programs may reach outside as everything else may.
 
     One reader, two carriers: `ProgramSpec.may_reach_outside` for a host holding
     one body, and `AgentSpec.programs_may_reach_outside` for a `does: run-code`
     stage, which names no body and still has to know whether the room it is about
     to use may reach outside.
     """
+    if "allow-egress" not in doc:
+        return True
     return "programs" in [str(w).strip() for w in _as_list(doc.get("allow-egress"))]
 
 

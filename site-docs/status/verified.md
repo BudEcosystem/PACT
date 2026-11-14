@@ -12,20 +12,20 @@ from an earlier document.
 
 | Claim | Value | How to check |
 |---|---|---|
-| Rust tests | **1648** | `cargo test --workspace` |
-| Adapter tests | **3385** | `cd adapters/python && uv run pytest tests/ -q` |
-| Total | **5,033** | both of the above |
+| Rust tests | **1687** | `cargo test --workspace` |
+| Adapter tests | **3458** | `cd adapters/python && uv run pytest tests/ -q` |
+| Total | **5,145** | both of the above |
 | TypeScript type-checks | clean | `cd adapters/typescript && npx tsc --noEmit` |
 | Lints | clean | `cargo clippy --all-targets` |
 | Worked example loads | 498 settings | `cargo run -p pact-cli -- check examples/refund-desk` |
-| Schema kinds | **68** | `python3 -c "import yaml;print(len(yaml.safe_load(open('spec/schema.yaml'))['groups']))"` |
-| Fields that resolve a name | **76** | `grep -cE '^\s*names:' spec/schema.yaml` |
+| Schema kinds | **69** | `python3 -c "import yaml;print(len(yaml.safe_load(open('spec/schema.yaml'))['groups']))"` |
+| Fields that resolve a name | **78** | `grep -cE '^\s*names:' spec/schema.yaml` |
 
 ## What is proven, and what "proven" means
 
 ### Framework portability
 
-**58 agents across 27 workspaces**, loaded by the Rust CLI, execute over **seven
+**59 agents across 28 workspaces**, loaded by the Rust CLI, execute over **seven
 targets** across two language runtimes and produce byte-identical traces, tool
 sequences and model-call counts. The set is generated from `examples/`, so an
 agent added to the tree joins it by existing rather than by somebody remembering.

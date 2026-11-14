@@ -12,7 +12,7 @@
 //! | `loader/a-decide-that-can-run-out-of-rungs` | WF-16 (agent half) | the last rung is an agent that may pass the decision on: its `one of` line has `not-sure`, or it writes `if-unsure-below:` or `if-it-disagrees: go-on` |
 //! | `loader/sure-only-a-decision-model-can-be` | WF-17 | `if-unsure-below:` on an agent none of whose models has `kind: decision` |
 //! | `loader/a-decision-asked-of-several` | new | a person rung's question writes `answered-by: everyone` or `enough-of-them`: a decision is one label, from one person, and nothing says which label stands when several people pick different ones |
-//! | `loader/a-rung-with-two-kinds-of-reader` | new (a warning) | an agent on a rung names a decision model and a language model in one `model:` list: the list is a fallback for a failed call, not a cascade for an unsure answer, and both are given the same message |
+//! | `loader/a-rung-with-two-kinds-of-reader` | new | an agent on a rung names a decision model and a language model in one `model:` list: the list is a fallback for a failed call, not a cascade for an unsure answer, and no one agent can be both kinds of reader. Refused; the cascade is two agents on two rungs |
 //!
 //! And one thing the schema cannot know: an agent all of whose models are
 //! decision models needs no `instructions:` (`model.kind`'s own help), so the
@@ -296,11 +296,29 @@ impl<'a> Decide<'a> {
     }
 
     /// An agent on a rung whose `model:` list has a trained classifier and a
-    /// language model in it. The list is a fallback chain — the next model is
-    /// asked when a CALL fails, never because an answer was unsure — so the
-    /// cascade it looks like is not what it does; and both are given one
-    /// message, with the stage's `says:` in front of it, which a classifier
-    /// scores as if it were part of the text.
+    /// language model in it. Refused.
+    ///
+    /// It reads as a cascade: the classifier first, the language model for
+    /// what the classifier is unsure of. That is what the authors who wrote it
+    /// meant — it was measured on Bud Agent Flow's corpus, where 13 of 136
+    /// trees wrote one, each with a comment saying so. It is not what a
+    /// `model:` list is: the list names fallbacks for a CALL THAT FAILS
+    /// (`agent.model`'s own help), and an unsure answer passes the decision to
+    /// the next RUNG. So the language model would be asked only when the
+    /// classifier's server was down.
+    ///
+    /// It was a warning, and a warning loads. A tree that loads is run, and
+    /// here two runtimes ran it two ways: one framework treats an unsure
+    /// classifier as a failed call and goes on down the list, another does
+    /// not, so the same file gave different decisions on each. And no reading
+    /// makes one agent of the two: a classifier follows no `instructions:` and
+    /// answers with a score, a language model needs instructions and has no
+    /// honest score, so `if-unsure-below:`, `not-sure` and the stage's `says:`
+    /// each apply to half of it.
+    ///
+    /// The ladder is the cascade, and says more: each rung has its own
+    /// threshold and its own `if-it-disagrees:`, and `steps.<stage>.answered-by`
+    /// records WHICH of the two decided.
     fn two_kinds_of_reader(&self, name: &str, agent: &Node, at: &Node, diags: &mut Diagnostics) {
         let models = models_of(agent);
         let Some(classifier) = models.iter().find(|m| self.decision.contains(**m)) else {
@@ -310,20 +328,24 @@ impl<'a> Decide<'a> {
             return;
         };
         let stage = self.stage;
-        diags.push(Diagnostic::warning(
+        diags.push(Diagnostic::error(
             "loader/a-rung-with-two-kinds-of-reader",
             at.span.clone(),
             format!(
-                "'{stage}' asks '{name}' to decide, and '{name}' runs on a trained classifier \
-                 ('{classifier}') and on a language model ('{language}'). A `model:` list is \
-                 tried in order only when a call fails, never because an answer was unsure — \
-                 being unsure passes the decision to the next rung — and both are given the \
-                 same message, the stage's `says:` in front of it, which a classifier scores \
-                 as text."
+                "'{stage}' asks '{name}' to decide, and '{name}' lists a trained classifier \
+                 ('{classifier}') and a language model ('{language}') under one `model:`. That \
+                 list names fallbacks for a call that fails; it is never tried because an \
+                 answer was unsure, which passes the decision to the next rung. So \
+                 '{language}' would be asked only when the call to '{classifier}' failed, \
+                 and never for what the classifier was unsure of. Nor can one agent be both: \
+                 a classifier follows no `instructions:` and answers with a score, a language \
+                 model needs instructions and has no score."
             ),
             format!(
-                "Make them two agents on two rungs: one on '{classifier}' with \
-                 `if-unsure-below:`, then one on '{language}' with `instructions:`."
+                "Make them two agents on two rungs, the classifier first: one agent on \
+                 '{classifier}' with `if-unsure-below:` on its rung, then one on '{language}' \
+                 with `instructions:`, whose `one of` line may add `not-sure`. The record \
+                 then says which of the two decided."
             ),
         ));
     }

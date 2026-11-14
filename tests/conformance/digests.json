@@ -1,6 +1,19 @@
 {
   "about": "The digests `pact discover` prints for trees in this repository: the tree's own `digest`, and each workflow's `doc-digest` (what a waiting run is pinned to) and `contract-digest` (what its callers rely on), 02W §7.2. A digest is a function of the tree's files and of nothing else: a new version of PACT prints the same digest for the same files, or says in its changelog which trees move and why. Held by crates/pact-cli/tests/a_digest_moves_only_when_the_tree_does.rs. A runtime that pins PACT holds this file with one `pact discover` per tree, at every pin.",
   "trees": {
+    "tests/conformance/trees/booked-visits": {
+      "digest": "sha256:682a2d336987da594a761df26694bc74e189b7dabe5649d1ea628985a9acf710",
+      "workflows": {
+        "book-visit": {
+          "doc-digest": "sha256:7d0641dc25062ef8b8113ab3d6aa9fd718f08bea31ddf9f1a69e32cef0666666",
+          "contract-digest": "sha256:5ce26ba661786d02524ce6be4e4d0b674d348db5923320dccb4d0f508e47678c"
+        },
+        "tell-the-clinic": {
+          "doc-digest": "sha256:c36aea66390a4c82e7596a3525ec58f7c2a9d519cadf6352c0c0fae7377030df",
+          "contract-digest": "sha256:aafcab74c564cd299c072d4e37f044ee97a4f362abd1c36e7be7c6efc22feba1"
+        }
+      }
+    },
     "tests/conformance/trees/guarded-desk": {
       "digest": "sha256:96f2462be2e6bcef216efffa0cb93edd5b79beb681a22a66f94605ee3b6ba9bf",
       "workflows": {}
@@ -36,38 +49,54 @@
       }
     },
     "tests/conformance/trees/triaged-defects": {
-      "digest": "sha256:47a525825224e48e9637ba22a46cb48e07feeb54b1d1b63571bf8766240e5972",
+      "digest": "sha256:aa9c60b3f21f2ca98fe1f5a496199e83ee5a30cdc94f4b7c5d1426306c1f0915",
       "workflows": {
+        "assign-only": {
+          "doc-digest": "sha256:d7838340629b087a5f0e6676ec5df73bf94988f22d0905111252b652cda62111",
+          "contract-digest": "sha256:b352dd9a97d85f29d3d51f3f7d3b5996fb29212b1355b252c5f1d2e8060075d4"
+        },
         "classify-only": {
-          "doc-digest": "sha256:07030d8f5c2089fb62da1f59049cfb3302da7b002cf56356d93d8424a9f1853b",
+          "doc-digest": "sha256:ec01ee9167876c8270a9673622fbb52c11c5208a8aa0b0ce56064899f448e01c",
           "contract-digest": "sha256:373c3db55151ef337d72e5aa2f767e3e19b907188b7c5b7dfdd62c37bcb19dc1"
         },
+        "draft-once": {
+          "doc-digest": "sha256:72abf25ac8c702f7a1aacf6e17012664f44c182970417417ece12186f4603a4b",
+          "contract-digest": "sha256:4fdf2b23f9b2e49d8a6028c3a96c73c87532fc895e827d1118434528a377d460"
+        },
         "draft-three-times": {
-          "doc-digest": "sha256:de737c26d7a73f9cba63916fea00641d31517155a6fbf4bc2e65e954862f8df4",
+          "doc-digest": "sha256:1080b8567f812f7b60cdeb1b09600466d9aa332a3252b0f690d9171b2ca020c4",
           "contract-digest": "sha256:cc88efa5b071c1dd1763bdcc020c70abbb84103a922660589f4f2d80e24cc000"
         },
         "draft-until-good": {
-          "doc-digest": "sha256:6e4d49e30ab09d8c37781040db51ae67eafacfc4680d02eece8527dba48fa822",
+          "doc-digest": "sha256:6a184f3c911923d571ddeeea9c5c365adf97a6d45794e05a43527e4c51990c86",
           "contract-digest": "sha256:1b9f8469dbe518f30be0660c5e440629cf5e6ef218ce951862b9ba70c4e04e82"
         },
+        "fix-and-close": {
+          "doc-digest": "sha256:ad212498197994dd25b8cf83a0a9ce544d080db90c93135b44b2e40c963c8ae5",
+          "contract-digest": "sha256:90ee19112c40de4b76db860f50ffd9a48cb8c661a1bfdce7728e272f309f461f"
+        },
         "fix-item": {
-          "doc-digest": "sha256:56d8f0b3495c1ecc47f14ebd5e432fce6443477120923ece14e0cb195e87aaa7",
+          "doc-digest": "sha256:b8b5ea9ce02c33422f2e107b9dbc42487a62d330190781a4d7f5b88ec85e4c2e",
           "contract-digest": "sha256:8250dadd43a05efd7fb74f2704e1c072ac6d7de417a8b88e3fb5ebf8fe776936"
         },
         "shelve": {
-          "doc-digest": "sha256:ee4a8473396bdd50eee38b3af86c18944c9084cdf2d4859e66471e009eed392d",
+          "doc-digest": "sha256:99e016855d510bd32804c1ab9f84f3a40eb5d6710a61b02515b5d50f6fb5f34e",
           "contract-digest": "sha256:a3470d96b6e4b7c3ddc1b18e8673d70a81504ecbf800d71ad6adeda492ba84d5"
         },
         "shelve-checked": {
-          "doc-digest": "sha256:8d83068b0f795509c9bded471ad27b4678001694963b568ca2d857922c84c8d0",
+          "doc-digest": "sha256:6697da38f66738bf2c48528a2b221b0b04fbb78ed57bd909b5db745f0c19e19b",
           "contract-digest": "sha256:d5f0555af2f5a9565c92d6900490948d071d442da170f0e493ef63496422f057"
         },
         "shelve-twice": {
-          "doc-digest": "sha256:770476ad62ddc0c026521cc9d1565c053496373446c1bcbf3047e8251c10a830",
+          "doc-digest": "sha256:35a9987ea520bfbfb6ad415da7399d883b83cbfc20561202e71aa7a6c341245f",
           "contract-digest": "sha256:a3470d96b6e4b7c3ddc1b18e8673d70a81504ecbf800d71ad6adeda492ba84d5"
         },
         "sign-off": {
-          "doc-digest": "sha256:61c7e3c573c6603ecb99d820a072865beac733fcb4bf7b8630afdb44ac1f9a46",
+          "doc-digest": "sha256:7f40a980f3585315518208a10e329e2497aa0f29aaa1cd1dd807ee0abace989c",
+          "contract-digest": "sha256:43784b26caa17e0a651853fd8bf660ebc94dd00c32355fd5982ff1a3391d9a69"
+        },
+        "sign-off-by-the-team": {
+          "doc-digest": "sha256:2c96ea97f5392831a6d1e26960803a013e4b7c993cdc069c209fd619b7ce428a",
           "contract-digest": "sha256:e9594ce43d73dec2b1791b98eb1d6b433c5cf313957e421af97778fbc8225140"
         }
       }

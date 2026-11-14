@@ -204,6 +204,11 @@ pub fn inventory(found: &Found) -> J {
         let effect = pact_loader::effects::of_agent(doc, a, &mut std::collections::BTreeSet::new());
         o.insert("effect".into(), J::String(effect.word().into()));
         o.insert("moves-money".into(), J::Bool(effect.moves_money));
+        o.insert("moves-hardware".into(), J::Bool(effect.moves_hardware));
+        // D29. What this agent asks its runtime to load, and what happens where
+        // that cannot be done — the fact a runtime has to decide on BEFORE it
+        // takes the agent, so it is here rather than only in `pact show`.
+        o.insert("plugins".into(), plugins(doc, a));
         let runnable =
             a.get("instructions").is_some() || pact_loader::deciding::decides_alone(a, &decision);
         o.insert("runnable".into(), J::Bool(runnable));
@@ -221,6 +226,19 @@ pub fn inventory(found: &Found) -> J {
     // keys in the object that name a place, and a consumer joins them.
     root_obj.insert("root".into(), J::String(root.to_string()));
     root_obj.insert("agents".into(), J::Array(list));
+    // Where the workspace draws its boundary, in a word and the roles written:
+    // `open` when no `allow-egress:` line is written (everything may talk
+    // outside), `closed` for `[]`, `listed` otherwise. A consumer deciding
+    // whether to run this tree somewhere reads it here; an absent line and an
+    // empty list are opposite answers and were both simply not in the index.
+    let boundary = crate::egress::Boundary::read(doc);
+    let mut egress = Map::new();
+    egress.insert("boundary".into(), J::String(boundary.word().into()));
+    egress.insert(
+        "allows".into(),
+        J::Array(boundary.roles().iter().cloned().map(J::String).collect()),
+    );
+    root_obj.insert("egress".into(), J::Object(egress));
     root_obj.insert("digest".into(), J::String(pact_doc::digest(doc)));
     // Each workflow's two digests (02W §7.2): what a waiting run is pinned to,
     // so an edit elsewhere in the workspace leaves it free to resume.
@@ -366,6 +384,30 @@ fn governance(a: &Node) -> J {
     // whether the author wrote one — a runtime that needs the shares reads `show`.
     o.insert("teamwork".into(), J::Bool(a.get("teamwork").is_some()));
     J::Object(o)
+}
+
+/// The plugins an agent needs — the ones it names and the ones that apply to
+/// every agent — each with its package, its range and what happens on a
+/// runtime that cannot load it, the default written out.
+///
+/// `pact_loader::plugins::needed_by` decides which, so the inventory and the
+/// note `pact check` prints about the same agent cannot disagree.
+fn plugins(doc: &Node, a: &Node) -> J {
+    let list = pact_loader::plugins::needed_by(doc, a)
+        .into_iter()
+        .map(|(name, p)| {
+            let mut o = Map::new();
+            o.insert("name".into(), J::String(name.to_string()));
+            o.insert("package".into(), text(p, "package").unwrap_or(J::Null));
+            o.insert("version".into(), text(p, "version").unwrap_or(J::Null));
+            o.insert(
+                "if-it-cannot-be-loaded".into(),
+                J::String(pact_loader::plugins::if_it_cannot_be_loaded(p).to_string()),
+            );
+            J::Object(o)
+        })
+        .collect();
+    J::Array(list)
 }
 
 /// The latency half of `limits:`, and nothing else.
