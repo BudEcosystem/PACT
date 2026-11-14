@@ -143,6 +143,15 @@ class WorkflowResult:
     #: its reason (`because:`), by stage: the run's "why this path". It is not
     #: part of the stage's record, which a binding reads.
     because: dict[str, str] = field(default_factory=dict)
+    #: Every time a question was put to somebody, in order: `{question,
+    #: shown}`, one for each entry of the question's `asked-of:`. A question
+    #: asked of two people is put twice, at once, whoever answers first.
+    asked: list[dict[str, Any]] = field(default_factory=list)
+    #: Answers that were handed in and did not count, with why
+    #: (`already-answered`: that person had answered this wait;
+    #: `several-people`: one answer named more than one answerer). Whoever
+    #: handed one in is told no. It is never taken as if it had counted.
+    refused: list[dict[str, Any]] = field(default_factory=list)
 
 
 #: Who answered a question, where the host says: a person's answer may carry
@@ -496,7 +505,9 @@ class _Run:
             if rung.asks:
                 if standing is not None:
                     continue
-                answer = await self.person(rung.asks, self.shown_for(rung.asks, scope), stage.name)
+                shown = self.shown_for(rung.asks, scope)
+                self.put(rung.asks, shown, stage.name)
+                answer = await self.person(rung.asks, shown, stage.name)
                 who = answer.pop(ANSWERED_BY, None)
                 label = _one_of(answer, labels)
                 if label:
@@ -623,14 +634,18 @@ class _Run:
         rows = (self._catalogue.get(str(m).strip()) for m in models)
         return all(row is not None and row.kind == "decision" for row in rows)
 
+    def question(self, name: str) -> Mapping[str, Any]:
+        """The question of this name: the workflow's own, else the workspace's."""
+        mine = (self.document.get("workflows") or {}).get(self.spec.name) or {}
+        return (mine.get("questions") or {}).get(name) or (
+            (self.document.get("questions") or {}).get(name) or {}
+        )
+
     def shown_for(self, question: str, scope: _Scope) -> dict[str, Any]:
         """What a person who decides is shown: the question's own `shows:`
         lines, read — `shows: [input.message]`. It was `{}`, so the person was
         asked which desk should take a message nobody showed them."""
-        mine = (self.document.get("workflows") or {}).get(self.spec.name) or {}
-        asked = (mine.get("questions") or {}).get(question) or (
-            (self.document.get("questions") or {}).get(question) or {}
-        )
+        asked = self.question(question)
         shown: dict[str, Any] = {}
         for binding in asked.get("shows") or ():
             value = scope.read(str(binding))
@@ -638,32 +653,114 @@ class _Run:
                 shown[str(binding)] = value
         return shown
 
+    def put(self, question: str, shown: dict[str, Any], at: str) -> None:
+        """Put `question` to everybody it is `asked-of:`, and say so on the
+        result: once for each entry, because each entry is one answerer and
+        each is asked, whoever answers first. With nobody there to ask, the
+        run parks and nobody has been asked."""
+        if self.callers.person is None:
+            raise Parked(question, at)
+        entries = list(self.question(question).get("asked-of") or ()) or [None]
+        for _ in entries:
+            self.result.asked.append({"question": question, "shown": dict(shown)})
+
     async def person(self, question: str, shown: dict[str, Any], at: str) -> dict[str, Any]:
+        """One answer to a question that has been `put`."""
         if self.callers.person is None:
             raise Parked(question, at)
         return _as_answer(await _maybe(self.callers.person(question, shown)))
 
     async def ask(self, stage: StageSpec, scope: _Scope) -> tuple[str, Any]:
-        try:
-            # What the question's own `shows:` lists, as a `decide` asking the
-            # same question shows it. A stage that waits showed the person
-            # nothing: it passed its `bind:`, which a waiting stage cannot
-            # write, so "May this fix be closed?" arrived with no fix.
-            shown = {**self.shown_for(stage.asks, scope), **self.inputs(stage, scope)}
-            answer = await self.person(stage.asks, shown, stage.name)
-        except NobodyAnswered:
-            return "nobody-answered", {}
-        who = answer.pop(ANSWERED_BY, None)
-        if who:
-            # A LIST on a wait, always, in the order they answered: a question
-            # can need several answers (`answered-by: everyone`), and the
-            # shape of `steps.<stage>.answered-by` must not depend on how many
-            # people happened to answer. One name is a list of one. (On a
-            # `decide` it is one name: a decision is one person's.)
-            names = [str(w) for w in who] if isinstance(who, (list, tuple)) else [str(who)]
-            self.stage_words[id(stage)] = {ANSWERED_BY: names}
-        no = [k for k, v in answer.items() if isinstance(v, bool) and v is False]
-        return ("declined" if no else "answered"), answer
+        """A stage that waits for people.
+
+        `answered-by:` on the question says how many of `asked-of:` must
+        answer: the first (unwritten, or `anyone`), `enough-is:` of them, or
+        every one. The count is over the ENTRIES of `asked-of:`, each of which
+        is one answerer — a person, or a team or channel one of whose members
+        answers for it. So each is asked and answers separately, and one
+        answer has one answerer. This took a single answer whatever the
+        question said, and passed on whatever name or list of names a host
+        put beside it; the first shared cases for it then delivered one answer
+        "from" two people, which no runtime could check. Bud Agent Flow, whose
+        engine asks each entry, refused to build to them.
+
+        Everybody asked is asked at once (`put`), and the answers are taken
+        as they arrive. Any `no` is a no, at once: the rest are not waited
+        for. `steps.<stage>.answered-by` is who answered, in the order their
+        answers arrived, a list also when one person did.
+
+        An answer that does not count is REFUSED, and the wait stays open: a
+        second, different answer from somebody who has answered this wait
+        (nobody is "everyone" by answering for somebody else as well, and
+        nobody changes their answer by answering again), or one answer naming
+        several people. It is on the result as refused; it is never quietly
+        taken as if it had counted, because whoever handed it in would
+        believe it had.
+
+        The SAME answer from the same person, handed in again, is not a second
+        answer. Hosts resend: a file of answers passed whole at every resume,
+        a retry after a timeout. It counts once and nothing is refused.
+
+        The stage's fields are those of the answer that SETTLED the wait: the
+        first no, or the answer that made it enough. Several people can each
+        give a reason beside their yes, and one value has to be the stage's;
+        the one that settled it is the one the outcome came from.
+        """
+        asked = self.question(stage.asks)
+        entries = [str(e) for e in asked.get("asked-of") or ()]
+        needs = str(asked.get("answered-by") or "anyone").strip()
+        if needs == "everyone":
+            wanted = max(len(entries), 1)
+        elif needs == "enough-of-them":
+            wanted = max(int(asked.get("enough-is") or 1), 1)
+        else:
+            wanted = 1
+        # What the question's own `shows:` lists, as a `decide` asking the
+        # same question shows it. A stage that waits showed the person
+        # nothing: it passed its `bind:`, which a waiting stage cannot
+        # write, so "May this fix be closed?" arrived with no fix.
+        shown = {**self.shown_for(stage.asks, scope), **self.inputs(stage, scope)}
+        self.put(stage.asks, shown, stage.name)
+        names: list[str] = []
+        gave: dict[str, dict[str, Any]] = {}
+        fields: dict[str, Any] = {}
+        heard = 0
+        # Bounded, so a host that only ever hands in answers that do not
+        # count ends the run instead of spinning.
+        for _ in range(wanted + max(len(entries), 1) + 1):
+            if heard >= wanted:
+                break
+            try:
+                answer = await self.person(stage.asks, shown, stage.name)
+            except NobodyAnswered:
+                return "nobody-answered", {}
+            who = answer.pop(ANSWERED_BY, None)
+            if isinstance(who, (list, tuple)):
+                self.result.refused.append(
+                    {"question": stage.asks, "answered-by": [str(w) for w in who], "why": "several-people"}
+                )
+                continue
+            if who and str(who) in names:
+                if answer != gave[str(who)]:
+                    self.result.refused.append(
+                        {"question": stage.asks, "answered-by": str(who), "why": "already-answered"}
+                    )
+                continue
+            if who:
+                names.append(str(who))
+                gave[str(who)] = dict(answer)
+                self.stage_words[id(stage)] = {ANSWERED_BY: list(names)}
+            heard += 1
+            fields = answer
+            if any(isinstance(v, bool) and v is False for v in answer.values()):
+                return "declined", answer
+        if heard < wanted:
+            raise Stopped(
+                f"{stage.name!r} needs {wanted} of `asked-of:` to answer {stage.asks!r} and "
+                f"heard {heard}: every other answer handed in came from somebody who had "
+                f"answered already, or was refused ({len(self.result.refused)} refused)"
+            )
+        return "answered", fields
 
     async def each(self, stage: StageSpec, scope: _Scope, where: str) -> dict[str, Any]:
         items = (scope.read(stage.over))

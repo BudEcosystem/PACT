@@ -1,5 +1,5 @@
 {
- "about": "Workflows: stages in the order they run, what each called agent and each person was given, and the answer. Replayed as conformance_kit.replay_workflow does: `agents` is what each agent answers when called (a list is one answer for each time it is asked, the last repeating); `tools` is what each `<tool>/<action>` hands back; `people` is what a person answers to each question by name (absent: nobody is there to ask, and the run parks). In `expect`: `trace` is the stages that ran, nested ones as `outer/inner`; `given` is each agent called and its inputs, in order; `shown` is each question put to a person and what they were shown; `called` is each tool call. An agent a stage calls is an agent's run, under its own limits, approvals and reactions; here each is answered by the case, so what is compared is the workflow. A case expects only what the specification fixes: where the order things happen in is the runtime's to choose (an `each` with no `at-once-at-most:`), the tree a case runs on says `at-once-at-most: 1`. In `answer`, a field the run did not set is absent, not null; a run that stopped hands back an empty record, and why is in `said`. A trained classifier's answer carries `score` beside its label, a share of one: how sure it was of the label it picked, which `if-unsure-below:` is read against. A person's answer may carry `answered-by` beside the fields the question asks for: who answered, which the stage keeps as `steps.<stage>.answered-by` and does not leave in the answer. On a `decide` that is one name; on a stage that waits for people (`ask`) it is a list, always, in the order they answered, so one name is a list of one.",
+ "about": "Workflows: stages in the order they run, what each called agent and each person was given, and the answer. Replayed as conformance_kit.replay_workflow does: `agents` is what each agent answers when called (a list is one answer for each time it is asked, the last repeating); `tools` is what each `<tool>/<action>` hands back; `people` is what a person answers to each question by name (absent: nobody is there to ask, and the run parks). In `expect`: `trace` is the stages that ran, nested ones as `outer/inner`; `given` is each agent called and its inputs, in order; `shown` is each question put to somebody and what they were shown, once for each entry of the question's `asked-of:` (a question asked of two people is put twice, at once, whoever answers first; with nobody there to ask, nobody was asked); `refused` is each answer handed in that did not count, with who gave it and why (`already-answered`: that person had answered this wait; `several-people`: one answer named more than one answerer), and the wait stays open after one; the same answer from the same person handed in again is a resend, counts once, and is not refused; `called` is each tool call. An agent a stage calls is an agent's run, under its own limits, approvals and reactions; here each is answered by the case, so what is compared is the workflow. A case expects only what the specification fixes: where the order things happen in is the runtime's to choose (an `each` with no `at-once-at-most:`), the tree a case runs on says `at-once-at-most: 1`. In `answer`, a field the run did not set is absent, not null; a run that stopped hands back an empty record, and why is in `said`. A trained classifier's answer carries `score` beside its label, a share of one: how sure it was of the label it picked, which `if-unsure-below:` is read against. A person's answer may carry `answered-by` beside the fields the question asks for: who answered, which the stage keeps as `steps.<stage>.answered-by` and does not leave in the answer. On a `decide` that is one name; on a stage that waits for people (`ask`) it is a list, always, in the order they answered, so one name is a list of one. `answered-by:` on the question counts the entries of `asked-of:`: with `everyone` each of them is asked and answers separately, one answer has one answerer, a second, different answer from somebody who has answered is refused and changes nothing, and one no is a no at once; the stage's fields are those of the answer that settled the wait, the first no or the answer that made it enough. In `people`, a list for a question is the answers to it as they arrive, in order, the last repeating; each carries who gave it.",
  "cases": [
   {
    "name": "a-written-rule-decides-and-nobody-is-asked",
@@ -41,6 +41,7 @@
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [],
     "trace": [
@@ -97,6 +98,7 @@
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [],
     "trace": [
@@ -153,6 +155,7 @@
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [
      {
@@ -208,6 +211,7 @@
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [],
     "trace": [
@@ -250,6 +254,7 @@
     "halted": "parked",
     "parked-at": "where",
     "question": "which-desk",
+    "refused": [],
     "said": "waiting on 'which-desk' at 'where'",
     "shown": [],
     "trace": [
@@ -328,6 +333,7 @@
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [],
     "trace": [
@@ -386,6 +392,7 @@
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [],
     "trace": [
@@ -492,6 +499,7 @@
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [],
     "trace": [
@@ -545,6 +553,7 @@
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [],
     "trace": [
@@ -605,6 +614,7 @@
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [],
     "trace": [
@@ -665,6 +675,7 @@
     "halted": "stopped",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "the answer does not fit `answers-with:` — ideas: item 1 has 'idea', and idea has no part by that name\nitem 1 leaves out 'text', which should be some text",
     "shown": [],
     "trace": [
@@ -720,6 +731,7 @@
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [],
     "trace": [
@@ -772,6 +784,7 @@
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [],
     "trace": [
@@ -823,6 +836,7 @@
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [],
     "trace": [
@@ -873,6 +887,7 @@
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [],
     "trace": [
@@ -916,6 +931,7 @@
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [],
     "trace": [
@@ -964,6 +980,7 @@
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [],
     "trace": [
@@ -1010,6 +1027,7 @@
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [],
     "trace": [
@@ -1056,6 +1074,7 @@
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [
      {
@@ -1109,6 +1128,7 @@
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [
      {
@@ -1162,6 +1182,7 @@
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [],
     "trace": [
@@ -1199,6 +1220,7 @@
     "halted": "parked",
     "parked-at": "where",
     "question": "which-shelf",
+    "refused": [],
     "said": "waiting on 'which-shelf' at 'where'",
     "shown": [],
     "trace": [
@@ -1251,6 +1273,7 @@
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [],
     "trace": [
@@ -1308,6 +1331,7 @@
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [],
     "trace": [
@@ -1348,6 +1372,7 @@
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [],
     "trace": [
@@ -1399,6 +1424,7 @@
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [],
     "trace": [
@@ -1412,15 +1438,15 @@
    }
   },
   {
-   "name": "who-answered-a-wait-is-a-list-of-one-when-one-person-did",
+   "name": "a-team-is-asked-and-who-answered-is-a-list-of-the-one-who-did",
    "tree": "tests/conformance/trees/triaged-defects",
-   "workflow": "sign-off",
+   "workflow": "sign-off-by-the-team",
    "input": {
     "report": "Seat 14C will not recline."
    },
    "agents": {},
    "people": {
-    "may-we-close": {
+    "may-the-team-close": {
      "close": true,
      "answered-by": "dana"
     }
@@ -1437,8 +1463,69 @@
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [
+     {
+      "question": "may-the-team-close",
+      "shown": {
+       "input.report": "Seat 14C will not recline."
+      }
+     }
+    ],
+    "trace": [
+     "approve",
+     "reply"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "everyone-asked-answers-separately-and-is-listed-in-the-order-they-answered",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "sign-off",
+   "input": {
+    "report": "Seat 14C will not recline."
+   },
+   "agents": {},
+   "people": {
+    "may-we-close": [
+     {
+      "close": true,
+      "note": "Checked on the aircraft.",
+      "answered-by": "dana"
+     },
+     {
+      "close": true,
+      "note": "Parts are logged.",
+      "answered-by": "lee"
+     }
+    ]
+   },
+   "expect": {
+    "answer": {
+     "by": [
+      "dana",
+      "lee"
+     ],
+     "close": true,
+     "note": "Parts are logged.",
+     "outcome": "answered"
+    },
+    "called": [],
+    "given": [],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "refused": [],
+    "said": "",
+    "shown": [
+     {
+      "question": "may-we-close",
+      "shown": {
+       "input.report": "Seat 14C will not recline."
+      }
+     },
      {
       "question": "may-we-close",
       "shown": {
@@ -1454,7 +1541,7 @@
    }
   },
   {
-   "name": "who-answered-a-wait-is-everyone-who-did-in-the-order-they-answered",
+   "name": "one-no-from-everyone-asked-is-a-no-and-the-rest-are-not-waited-for",
    "tree": "tests/conformance/trees/triaged-defects",
    "workflow": "sign-off",
    "input": {
@@ -1462,29 +1549,171 @@
    },
    "agents": {},
    "people": {
-    "may-we-close": {
-     "close": true,
-     "answered-by": [
-      "lee",
-      "dana"
-     ]
-    }
+    "may-we-close": [
+     {
+      "close": false,
+      "note": "The recline cable is still loose.",
+      "answered-by": "dana"
+     },
+     {
+      "close": true,
+      "note": "Parts are logged.",
+      "answered-by": "lee"
+     }
+    ]
    },
    "expect": {
     "answer": {
      "by": [
-      "lee",
       "dana"
      ],
-     "close": true
+     "close": false,
+     "note": "The recline cable is still loose.",
+     "outcome": "declined"
     },
     "called": [],
     "given": [],
     "halted": "final",
     "parked-at": "",
     "question": "",
+    "refused": [],
     "said": "",
     "shown": [
+     {
+      "question": "may-we-close",
+      "shown": {
+       "input.report": "Seat 14C will not recline."
+      }
+     },
+     {
+      "question": "may-we-close",
+      "shown": {
+       "input.report": "Seat 14C will not recline."
+      }
+     }
+    ],
+    "trace": [
+     "approve",
+     "reply"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "a-second-answer-from-somebody-who-has-answered-is-refused-and-the-wait-stays-open",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "sign-off",
+   "input": {
+    "report": "Seat 14C will not recline."
+   },
+   "agents": {},
+   "people": {
+    "may-we-close": [
+     {
+      "close": true,
+      "answered-by": "dana"
+     },
+     {
+      "close": false,
+      "note": "On second thoughts, no.",
+      "answered-by": "dana"
+     },
+     {
+      "close": true,
+      "answered-by": "lee"
+     }
+    ]
+   },
+   "expect": {
+    "answer": {
+     "by": [
+      "dana",
+      "lee"
+     ],
+     "close": true,
+     "outcome": "answered"
+    },
+    "called": [],
+    "given": [],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "refused": [
+     {
+      "answered-by": "dana",
+      "question": "may-we-close",
+      "why": "already-answered"
+     }
+    ],
+    "said": "",
+    "shown": [
+     {
+      "question": "may-we-close",
+      "shown": {
+       "input.report": "Seat 14C will not recline."
+      }
+     },
+     {
+      "question": "may-we-close",
+      "shown": {
+       "input.report": "Seat 14C will not recline."
+      }
+     }
+    ],
+    "trace": [
+     "approve",
+     "reply"
+    ],
+    "unenforced": []
+   }
+  },
+  {
+   "name": "the-same-answer-handed-in-again-is-not-a-second-answer",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "sign-off",
+   "input": {
+    "report": "Seat 14C will not recline."
+   },
+   "agents": {},
+   "people": {
+    "may-we-close": [
+     {
+      "close": true,
+      "answered-by": "dana"
+     },
+     {
+      "close": true,
+      "answered-by": "dana"
+     },
+     {
+      "close": true,
+      "answered-by": "lee"
+     }
+    ]
+   },
+   "expect": {
+    "answer": {
+     "by": [
+      "dana",
+      "lee"
+     ],
+     "close": true,
+     "outcome": "answered"
+    },
+    "called": [],
+    "given": [],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "refused": [],
+    "said": "",
+    "shown": [
+     {
+      "question": "may-we-close",
+      "shown": {
+       "input.report": "Seat 14C will not recline."
+      }
+     },
      {
       "question": "may-we-close",
       "shown": {

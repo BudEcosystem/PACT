@@ -111,13 +111,23 @@ question which-shelf
   answer-within: 1h
 
 question may-we-close
-  description: Asked of the leads before a fix is closed.
+  description: Asked of both leads before a fix is closed.
+  says: May this fix be closed?
+  answer:
+    close: yes or no
+    note: text, optional
+  shows: [input.report]
+  asked-of: [lee, dana]
+  answered-by: everyone
+  answer-within: 1h
+
+question may-the-team-close
+  description: Asked of the leads' team before a fix is closed.
   says: May this fix be closed?
   answer:
     close: yes or no
   shows: [input.report]
   asked-of: [leads]
-  answered-by: everyone
   answer-within: 1h
 
 agent checker
@@ -172,13 +182,28 @@ workflow classify-only
   takes report: text
   triage = call triager with report: input.report
 
-# A stage that waits for people. Who answered is a list, always: a question
-# can need several answers, and one name is a list of one.
+# Stages that wait for people. Who answered is a list, always, in the order
+# their answers arrived.
+#
+# Everyone asked must answer: each of `asked-of:` answers separately, and one
+# no is a no. Each may add a note; the stage's note is that of the answer that
+# settled it (the first no, or the last yes needed).
 workflow sign-off
-  description: Ask whether a fix may be closed, and say who answered.
+  description: Ask both leads whether a fix may be closed, and say who answered.
+  takes report: text
+  gives close: yes or no, by: list of text, outcome: text, note: text, optional
+  approve = ask may-we-close
+    then:
+      declined: reply
+  reply = answer with close: approve.close, by: approve.answered-by, outcome: approve.outcome, note: approve.note
+
+# A team is asked and the first answer decides. Who in the team answered is
+# the host's to say, so the name kept is not the name that was asked.
+workflow sign-off-by-the-team
+  description: Ask the leads' team whether a fix may be closed, and say who answered.
   takes report: text
   gives close: yes or no, by: list of text
-  approve = ask may-we-close
+  approve = ask may-the-team-close
   reply = answer with close: approve.close, by: approve.answered-by
 
 # A loop that is waiting for nothing: it runs its rounds and ends as any

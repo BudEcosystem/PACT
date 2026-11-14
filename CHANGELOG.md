@@ -100,6 +100,23 @@ things were settled in the same exchange. Nothing here changes a field of the sc
   them nothing: it read the stage's `bind:`, which a waiting stage cannot write, and not the
   question's `shows:`, which a `decide` asking the same question did read. Found by the first
   shared case with a waiting stage in it.
+- **`everyone` means every entry of `asked-of:`, each answering separately.** The two cases for a
+  waiting stage merged in the entry above were wrong, and so was the reference: it took one answer
+  whatever `answered-by:` said, and the second case delivered one answer "from" two people, which
+  nothing could check. The schema's words are "how many of `asked-of:` must answer". Bud Agent
+  Flow, whose engine asks each entry, refused to build to the cases. Now: each entry is one
+  answerer (a person, or a team or channel one of whose members answers for it); all are asked at
+  once and each answers separately; one answer has one answerer; a second, different answer from
+  somebody who has answered, or one answer naming several people, is refused and recorded
+  (`refused` in a case's `expect`), changes nothing, and the wait stays open; the same answer
+  handed in again is a resend and counts once; one no is a no at once; the stage's fields are those of the answer that settled the wait (the
+  first no, or the answer that made it enough). Five cases replace the two (31 workflow cases, 55 cases of replayed
+  runs), on two workflows, `sign-off` and `sign-off-by-the-team`. In a case, a list under `people`
+  for a question is the answers as they arrive, and `shown` has one entry for each entry of
+  `asked-of:` that was asked.
+- **A shared case runs on its own clock.** The replay kit ran a case's first leg on the wall clock
+  and its resumes on the case's own, so a wait could never run out by itself. It starts at 0 now.
+  No case's expected result changed. (Bud Agent Flow found the same mixture in its replay.)
 - Ruled, with no case yet: a workflow run a port ended (`if-still-running: stop`,
   `cancel-previous`) ends as `cancelled`. `stopped` stays "could not go on, and says why".
 

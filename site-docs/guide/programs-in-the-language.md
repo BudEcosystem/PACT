@@ -246,6 +246,11 @@ label stands when people pick different ones; `pact check` refuses it
 On a step that asks people, `.answered-by` is a list, in the order they
 answered, also when one person did.
 
+`answered-by:` on the question counts the names under `asked-of:`. With
+`everyone`, each of them is asked and answers on their own, and one "no" is a
+no at once. A name there can be a person or a team; a team is answered for by
+one of its members, and who that was is what `.answered-by` keeps.
+
 ## Things at once
 
 ```text

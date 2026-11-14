@@ -32,6 +32,11 @@ after a person said to keep going (`Reached.raised`): one text for each request
 that was told, which is one for each yes, the first request after it and no
 other.
 
+* **The clock** — a case runs on its own clock and never on the wall clock:
+  the first leg at 0 seconds, each resume at the number of parks so far, and a
+  `"nobody"` resume one second after the wait has run out. A replay on the
+  wall clock is a different run each day: a wait with `answer-within:` is
+  inside its time today and past it tomorrow.
 * **`people`** — one entry for each time the run parks, in order: `"yes"` or
   `"no"`, given to every question of that park. `"nobody"` means no answer is
   given and the time the question allows (`answer-within:`) passes: the run is
@@ -126,7 +131,12 @@ def replay_agent(case: dict[str, Any]) -> dict[str, Any]:
         kw["checking_transport"] = ReferenceTransport(Script([Turn(str(case["judge"]))]))
 
     parks: list[dict[str, Any]] = []
-    out = asyncio.run(run(spec, Lead(lead), case["says"], tools, **kw))
+    # The case's own clock, from 0. This leg ran on the wall clock while every
+    # resume below ran on the case's, so a park was stamped with today's time
+    # and resumed at second 1: a wait could then never run out. No case's
+    # result depended on it. Bud Agent Flow found the same mixture in its own
+    # replay, where it did change a result.
+    out = asyncio.run(run(spec, Lead(lead), case["says"], tools, now=0.0, **kw))
     for said in case.get("people") or ():
         if out.halted != "suspended":
             break
@@ -178,7 +188,7 @@ def replay_workflow(case: dict[str, Any]) -> dict[str, Any]:
     doc = shown(REPO / case["tree"])
     spec = WorkflowSpec.from_workflow(doc, case["workflow"])
     given: list[dict[str, Any]] = []
-    shown_to: list[dict[str, Any]] = []
+    handed: dict[str, int] = {}
     called: list[dict[str, Any]] = []
 
     def agent(name: str, inputs: dict[str, Any]) -> dict[str, Any]:
@@ -194,15 +204,19 @@ def replay_workflow(case: dict[str, Any]) -> dict[str, Any]:
         return dict((case.get("tools") or {}).get(f"{name}/{action}", {}))
 
     def person(question: str, shown_: dict[str, Any]) -> dict[str, Any]:
-        shown_to.append({"question": question, "shown": dict(shown_)})
-        return dict((case.get("people") or {}).get(question, {}))
+        handed[question] = handed.get(question, 0) + 1
+        says = (case.get("people") or {}).get(question, {})
+        if isinstance(says, list):  # the answers as they arrive, the last repeating
+            says = says[min(handed[question], len(says)) - 1]
+        return dict(says)
 
     callers = Callers(agent=agent, tool=tool, person=person if case.get("people") is not None else None)
     out = asyncio.run(run_workflow(spec, case["input"], callers, document=doc))
     return {
         "trace": list(out.trace),
         "given": given,
-        "shown": shown_to,
+        "shown": list(out.asked),
+        "refused": list(out.refused),
         "called": called,
         "answer": json.loads(json.dumps(out.answer, default=str)),
         "halted": out.halted,

@@ -113,15 +113,45 @@ def test_the_cases_say_the_things_they_are_there_to_say() -> None:
     asked = by_name["the-agent-is-not-sure-so-a-person-decides-and-is-shown-the-message"]
     assert asked["shown"] == [{"question": "which-desk", "shown": {"input.message": "The app crashes."}}]
 
-    one = by_name["who-answered-a-wait-is-a-list-of-one-when-one-person-did"]
-    # On a stage that waits for people, who answered is a list, also of one;
-    # and the person is shown what the question says to show.
-    assert one["answer"] == {"close": True, "by": ["dana"]}
-    assert one["shown"] == [
-        {"question": "may-we-close", "shown": {"input.report": "Seat 14C will not recline."}}
+    team = by_name["a-team-is-asked-and-who-answered-is-a-list-of-the-one-who-did"]
+    # A team is one entry of `asked-of:`. The first answer decides; who in the
+    # team gave it is a list of one, and not the name that was asked. The
+    # person is shown what the question says to show.
+    assert team["answer"] == {"close": True, "by": ["dana"]}
+    assert team["shown"] == [
+        {"question": "may-the-team-close", "shown": {"input.report": "Seat 14C will not recline."}}
     ]
-    both = by_name["who-answered-a-wait-is-everyone-who-did-in-the-order-they-answered"]
-    assert both["answer"]["by"] == ["lee", "dana"], "in the order they answered, not sorted"
+    both = by_name["everyone-asked-answers-separately-and-is-listed-in-the-order-they-answered"]
+    # `asked-of: [lee, dana]`, `answered-by: everyone`: both are asked, at
+    # once, and their answers are listed as they arrived, which is not the
+    # order they are written in.
+    assert len(both["shown"]) == 2 and both["answer"]["by"] == ["dana", "lee"]
+    assert both["refused"] == []
+    assert both["answer"]["outcome"] == "answered"
+    # Each gave a note. The stage's is the note of the answer that settled it:
+    # here the last yes that was needed, lee's.
+    assert both["answer"]["note"] == "Parts are logged."
+    said_no = by_name["one-no-from-everyone-asked-is-a-no-and-the-rest-are-not-waited-for"]
+    assert said_no["answer"] == {
+        "close": False, "by": ["dana"], "outcome": "declined",
+        "note": "The recline cable is still loose.",
+    }
+    # Both were asked. dana's no ended it, and lee's answer was not waited for.
+    assert len(said_no["shown"]) == 2
+    twice = by_name[
+        "a-second-answer-from-somebody-who-has-answered-is-refused-and-the-wait-stays-open"
+    ]
+    # dana said yes, then handed in a no: the second is refused, on the
+    # record, and changes nothing. The wait stays open until lee answers, and
+    # the answer is yes.
+    assert twice["refused"] == [
+        {"question": "may-we-close", "answered-by": "dana", "why": "already-answered"}
+    ]
+    assert twice["answer"]["by"] == ["dana", "lee"] and len(twice["shown"]) == 2
+    assert twice["answer"]["close"] is True and twice["answer"]["outcome"] == "answered"
+    resent = by_name["the-same-answer-handed-in-again-is-not-a-second-answer"]
+    # The same answer from dana again is a resend. Nothing is refused.
+    assert resent["refused"] == [] and resent["answer"]["by"] == ["dana", "lee"]
     found = by_name["a-deciding-agent-is-given-what-an-earlier-stage-found-and-the-bound-name-wins"]
     # `kind` is triage's `engine`, not the `cabin` the report came in with; the
     # `secret` the assigner does not accept is not given to it.
