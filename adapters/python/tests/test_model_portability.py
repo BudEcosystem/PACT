@@ -31,6 +31,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from fitting import fits  # noqa: E402
 from pact_adapters.evals import Case, bar_of  # noqa: E402
 from pact_adapters.harness import ToolCall  # noqa: E402
 from pact_adapters.ir import AgentSpec  # noqa: E402
@@ -143,7 +144,7 @@ def transport_for(model: str, strategy: str):
     """Build the scripted executor for one (model, strategy) pair."""
 
     def make(prompt: str) -> Script:
-        good = Turn(_answer_for(prompt))
+        good = Turn(fits(_answer_for(prompt)))
         if model == FRONTIER:
             return Script([good])
         if model == MID:

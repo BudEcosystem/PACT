@@ -220,9 +220,9 @@ def test_a_spec_built_from_a_document_alone_runs(tmp_path: Path) -> None:
     }))
     spec = AgentSpec.from_document(document, "desk")
     out = asyncio.run(
-        run(spec, ReferenceTransport(Script([Turn("yes")])), "is this ok?")
+        run(spec, ReferenceTransport(Script([Turn("- decision: yes")])), "is this ok?")
     )
     assert out.halted == "final", out.halted
-    assert out.output == "yes"
+    assert out.output == "- decision: yes" and out.answer == {"decision": "yes"}
     # And the authored answer shape reached the model without a tree in sight.
     assert spec.answers_with == {"decision": "one of yes, no"}

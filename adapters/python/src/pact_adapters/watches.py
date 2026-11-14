@@ -234,6 +234,7 @@ EMITTED: tuple[str, ...] = (
     "turn.delegate.failed",
     "turn.limit.completed",
     "turn.message.completed",
+    "turn.message.failed",
     "turn.run.cancelled",
     "turn.run.completed",
     "turn.run.failed",

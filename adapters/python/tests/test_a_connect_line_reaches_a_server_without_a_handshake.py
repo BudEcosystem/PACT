@@ -58,6 +58,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from consenting import allowing_the_connection  # noqa: E402
+from fitting import fits  # noqa: E402
 from pact_adapters.harness import ToolCall  # noqa: E402
 from pact_adapters.ir import AgentSpec  # noqa: E402
 from pact_adapters.mcp.calling import tool_impls_for  # noqa: E402
@@ -781,7 +782,7 @@ def test_the_harness_runs_the_call_and_the_model_reads_what_the_server_said(
                         ),
                     ),
                 ),
-                Turn("Done."),
+                Turn(fits("Done.")),
             ]
         )
 

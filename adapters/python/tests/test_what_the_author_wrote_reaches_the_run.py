@@ -37,6 +37,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from consenting import allowing_the_connection  # noqa: E402
+from fitting import fits  # noqa: E402
 from pact_adapters.harness import ToolCall, _system_for, run  # noqa: E402
 from pact_adapters.ir import AgentSpec, SkillSpec, ToolSpec  # noqa: E402
 from pact_adapters.learning import (  # noqa: E402
@@ -139,7 +140,7 @@ def test_a_procedure_with_no_procedure_in_it_is_named_on_the_result() -> None:
         name="a", description="d", instructions="i",
         skills=(SkillSpec(name="refund-policy", description="The policy."),),
     )
-    out = asyncio.run(run(spec, ReferenceTransport(Script([Turn("done")])), "hello"))
+    out = asyncio.run(run(spec, ReferenceTransport(Script([Turn(fits("done"))])), "hello"))
     assert any("refund-policy" in u and "no body" in u for u in out.unenforced), out.unenforced
 
 
@@ -164,7 +165,7 @@ def test_an_argument_the_surrounding_system_supplies_reaches_the_tool(
                 "Looking it up.",
                 [ToolCall("payments", {"action": "look-up-order", "order-number": "O-9"})],
             ),
-            Turn("Done."),
+            Turn(fits("Done.")),
         ]))
 
     out = allowing_the_connection(
@@ -185,7 +186,7 @@ def test_a_bind_nothing_supplies_is_named_rather_than_filled_with_nothing(
     """An empty string in place of a customer id is worse than a run that says
     out loud that the identity never arrived."""
     spec = AgentSpec.from_document(document, "refund-desk")
-    out = asyncio.run(run(spec, ReferenceTransport(Script([Turn("hi")])), "hello"))
+    out = asyncio.run(run(spec, ReferenceTransport(Script([Turn(fits("hi"))])), "hello"))
     said = [u for u in out.unenforced if u.startswith("bind:")]
     assert said, out.unenforced
     assert all("customer-id" in u and "run-inputs.customer-id" in u for u in said), said
@@ -211,7 +212,7 @@ def test_a_later_step_calling_the_same_tool_really_calls_it_again() -> None:
     script = Script([
         Turn("one", [ToolCall("zendesk", {"ticket-id": "T-1"})]),
         Turn("two", [ToolCall("zendesk", {"ticket-id": "T-999"})]),
-        Turn("done"),
+        Turn(fits("done")),
     ])
     out = asyncio.run(
         run(
@@ -606,7 +607,7 @@ def test_the_authors_propose_only_line_holds_a_wording_change_for_a_person(
     outcome = learner.cycle(
         Proposal("instructions", spec.instructions, spec.instructions + "\n\nBe brief."),
         lambda _spec: ReferenceTransport(
-            Script([Turn("approved — 40 USD, the item arrived damaged")] * 40)
+            Script([Turn(fits("approved — 40 USD, the item arrived damaged"))] * 40)
         ),
     )
     assert not outcome.applied, "propose-only must not apply anything"
@@ -722,7 +723,7 @@ def test_a_mode_no_transport_can_deliver_is_reported_not_silently_downgraded(
         AgentSpec.from_document(document, "refund-desk", source=EXAMPLE),
         answers_with_mode="native-json-schema",
     )
-    out = asyncio.run(run(spec, ReferenceTransport(Script([Turn("ok")] * 8)), "hello"))
+    out = asyncio.run(run(spec, ReferenceTransport(Script([Turn(fits("ok"))] * 8)), "hello"))
     said = [u for u in out.unenforced if u.startswith("answers-with-mode:")]
     assert said, f"nothing reported the unhonoured mode: {out.unenforced}"
     assert "prompted" in said[0], "and it must name the mode that does work"
@@ -750,8 +751,8 @@ def test_a_better_model_for_checking_is_used_for_the_checking_stages(
         "this test needs the example's checking stage"
     )
 
-    doing = ReferenceTransport(Script([Turn("ok")] * 8))
-    checking = ReferenceTransport(Script([Turn("looks right")] * 8))
+    doing = ReferenceTransport(Script([Turn(fits("ok"))] * 8))
+    checking = ReferenceTransport(Script([Turn(fits("looks right"))] * 8))
     asked: dict[str, int] = {"doing": 0, "checking": 0}
     for name, t in (("doing", doing), ("checking", checking)):
         original = t.model_call
@@ -783,7 +784,7 @@ def test_asking_for_a_better_checking_model_nobody_serves_is_reported(
         AgentSpec.from_document(document, "refund-desk", source=EXAMPLE),
         model_for_checking="a-better-model",
     )
-    out = asyncio.run(run(spec, ReferenceTransport(Script([Turn("ok")] * 8)), "hello"))
+    out = asyncio.run(run(spec, ReferenceTransport(Script([Turn(fits("ok"))] * 8)), "hello"))
     said = [u for u in out.unenforced if u.startswith("model-for-checking:")]
     assert said, f"nothing reported the missing second model: {out.unenforced}"
     assert "a-better-model" in said[0]
@@ -898,7 +899,7 @@ def test_a_promoted_case_carries_what_the_rules_allowed_not_what_was_typed(
     spec = AgentSpec.from_document(document, "refund-desk", source=EXAMPLE)
     card = "refund card 4111 1111 1111 1111 please"
     out = asyncio.run(
-        run(spec, ReferenceTransport(Script([Turn("Approved.")] * 8)), card)
+        run(spec, ReferenceTransport(Script([Turn(fits("Approved."))] * 8)), card)
     )
 
     assert "4111" not in out.asked, out.asked
@@ -919,7 +920,7 @@ def test_a_promoted_case_leaves_the_right_answer_for_a_person(document: dict) ->
 
     spec = AgentSpec.from_document(document, "refund-desk", source=EXAMPLE)
     out = asyncio.run(
-        run(spec, ReferenceTransport(Script([Turn("Approved.")] * 8)), "a question")
+        run(spec, ReferenceTransport(Script([Turn(fits("Approved."))] * 8)), "a question")
     )
     case = case_from_a_run(out.as_record(), "went-wrong")
     assert case["expect"] == {}, case

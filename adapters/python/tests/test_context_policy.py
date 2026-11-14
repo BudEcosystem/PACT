@@ -23,6 +23,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from fitting import fits, fraud_says, policy_says  # noqa: E402
 from pact_adapters.context_policy import (  # noqa: E402
     CHARS_PER_TOKEN,
     ContextPolicy,
@@ -1170,7 +1171,7 @@ def a_refund_worth_checking() -> "Script":  # noqa: F821
         Turn("Checking the ticket.", (ToolCall("zendesk", {"ticket": "T-1"}),)),
         Turn("The ticket says the lamp arrived broken 6 days ago."),
         Turn("Rule 2 applies: faulty on arrival, and 6 days is inside the window."),
-        Turn("Approved: the item arrived damaged within 30 days."),
+        Turn(fits("Approved: the item arrived damaged within 30 days.")),
     ])
 
 
@@ -1203,9 +1204,13 @@ def a_refund_with_more_prose_than_shortening_can_fix(window: int) -> "Script":  
     said = _RAMBLE * ((window * CHARS_PER_TOKEN) // len(_RAMBLE) + 1)
     return Script([
         Turn("Checking the ticket.", (ToolCall("zendesk", {"ticket": "T-1"}),)),
-        Turn("The ticket says the lamp arrived broken 6 days ago. " + said),
-        Turn("Rule 2 applies: faulty on arrival, and 6 days is inside the window."),
-        Turn("Approved: the item arrived damaged within 30 days."),
+        # Every reply ends with what the agent gives, as the shape asks of
+        # every stage: shortening the conversation moves which of these a
+        # script keyed on the conversation says next, and whichever one lands
+        # in the last stage has to be an answer.
+        Turn(fits("The ticket says the lamp arrived broken 6 days ago. " + said)),
+        Turn(fits("Rule 2 applies: faulty on arrival, and 6 days is inside the window.")),
+        Turn(fits("Approved: the item arrived damaged within 30 days.")),
     ])
 
 
@@ -1882,19 +1887,19 @@ def test_a_delegate_that_summarises_does_not_stop_its_siblings_clock() -> None:
         Turn("Checking the ticket.", (ToolCall("zendesk", {"ticket": "T-1"}),)),
         Turn("The lamp arrived broken 6 days ago. " + said,
              (ToolCall("zendesk", {"ticket": "T-2"}),)),
-        Turn("Rule 2 applies, and 6 days is inside the window."),
+        Turn(policy_says("Rule 2 applies, and 6 days is inside the window.")),
     ])
 
     def transport_for(member: AgentSpec):
         if member.name == "Policy Checker":
             return Blocking(rambles)
-        return Unhurried(Script([Turn("nothing suspicious")]))
+        return Unhurried(Script([Turn(fraud_says("nothing suspicious"))]))
 
     asking_both = Script([
         Turn("Consulting the team.",
              (ToolCall("policy-checker", {"question": "is this covered?"}),
               ToolCall("fraud-checker", {"question": "does this look real?"}))),
-        Turn("Approved."),
+        Turn(fits("Approved.")),
     ])
 
     desk = AgentSpec.from_document(doc, "refund-desk", EXAMPLE)

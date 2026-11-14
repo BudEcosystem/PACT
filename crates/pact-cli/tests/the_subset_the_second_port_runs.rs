@@ -179,6 +179,15 @@ const REPORTED: &[(&str, &str, &str)] = &[
     // docs/99: the reactions that cover an agent — the workspace's and every
     // other agent's `listens-for:` — named and not carried out.
     ("reactions", "reactions:", "unenforced"),
+    // An answer is held to what the agent says it gives, and to the author's
+    // own rules for it, by the Python harness (`answers_fit.py`): asked again
+    // with the reason, `checks-at-most:` times in all, then `checks-failed`.
+    // This port asks once and returns the reply. `answers-with:` itself stays
+    // in list A — the shape is put to the model in the same words — so the
+    // rows here are the rules and the count, which is the line that governs
+    // the asking again.
+    ("checkedBy", "checked-by:", "unenforced"),
+    ("checksAtMost", "checks-at-most:", "unenforced"),
 ];
 
 /// Rows of list B whose key is NOT a top-level `AgentSpec` field, because the
@@ -214,7 +223,7 @@ const REPORTED_INSIDE: &[(&str, &str)] = &[("asks:", "unenforced"), ("forks:", "
 fn word_for(n: usize) -> String {
     const WORDS: &[&str] = &[
         "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
-        "eleven", "twelve", "thirteen", "fourteen",
+        "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen",
     ];
     WORDS
         .get(n)

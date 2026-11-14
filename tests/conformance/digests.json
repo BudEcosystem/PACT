@@ -14,6 +14,10 @@
         }
       }
     },
+    "tests/conformance/trees/decided-refunds": {
+      "digest": "sha256:abbbc6314cbbe93380130b92ce43e798ecf4fa49464d56d7e8c5b6e1dff4aebc",
+      "workflows": {}
+    },
     "tests/conformance/trees/guarded-desk": {
       "digest": "sha256:96f2462be2e6bcef216efffa0cb93edd5b79beb681a22a66f94605ee3b6ba9bf",
       "workflows": {}

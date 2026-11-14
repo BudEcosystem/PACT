@@ -60,6 +60,10 @@
 #                 own (`answer-within` no shorter than 30s, say), that is a new
 #                 attribute, not this one, because 30 here would have to mean
 #                 milliseconds and nobody would guess that.
+#   `needs-any-of:` at least one of these is written beside this field, or
+#                 nothing reads it. `needs-also:` names one companion and
+#                 `needs-one-of:` means exactly one; `checks-at-most:` is read
+#                 beside `answers-with:` or `checked-by:` or both.
 #   `needed-when:` the same as `needs-also:`, conditioned on a VALUE.
 #                 `needs-also:` fires on presence, which is right for a ceiling
 #                 (any ceiling needs an action) and wrong for the three pairings
@@ -836,7 +840,10 @@ groups:
         help: >
           what it hands back when it is done, one line per thing — for example
           `decision: one of approved, declined`. The same shapes `accepts:`
-          takes.
+          takes. The answer is held to it: one with a field missing, or a value
+          the line refuses, is asked for again with the reason, `checks-at-most:`
+          times in all, and is never handed back as it is. A field you did not
+          write here is dropped, not refused.
       answers-with-mode:
         type: one-of
         choices: [text, native-json-schema, tool, prompted]
@@ -862,15 +869,23 @@ groups:
           asks again with the reason; still failing after `checks-at-most:`
           attempts, the run stops and says which rule.
       checks-at-most:
+        # Was `needs-also: [checked-by]`. An answer is held to `answers-with:`
+        # as well (the owner's ruling, 14 November: "if there is a promised
+        # shape, it must be honored"), from the same count, so an agent with a
+        # shape and no rules of its own could not say how many tries it gets.
+        # Beside neither, it is still a line nothing reads, and still refused.
         type: integer
         at-least: 1
-        needs-also: [checked-by]
+        needs-any-of: [checked-by, answers-with]
         surface: S-GOV
         tier: core
         kernel-op: allowance.quantity
         help: >
-          how many attempts in all, asking again with the reason after each
-          failed check. Leave it out for 2; write `1` to fail at the first miss.
+          how many times in all this agent is asked for its answer. An answer
+          that does not fit `answers-with:`, or that breaks a `checked-by:`
+          rule, is asked for again with the reason; both count here. Leave it
+          out for 2; write `1` to fail at the first miss. Still failing, the
+          run stops (`checks-failed`) and hands back no answer.
       run-inputs:
         type: map of answer-shape
         shapes: *the-answer-shapes
@@ -7261,6 +7276,7 @@ groups:
           - turn.delegate.failed
           - turn.limit.completed
           - turn.message.completed
+          - turn.message.failed
           - turn.run.cancelled
           - turn.run.completed
           - turn.run.failed

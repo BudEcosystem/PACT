@@ -1529,7 +1529,7 @@ class PactAgent(AbstractAgent[dict, Any]):
         rather than being a second, quieter description of the same park.
         """
         if ran.halted == "final":
-            return self._declared(ran.output)
+            return self._declared(ran.output, ran.answer)
         parked = ran.suspension
         # `_pending` and not `awaiting`, because `awaiting` is the WHOLE batch of
         # the parked step and the calls the gate cleared have already run. A park
@@ -1555,7 +1555,7 @@ class PactAgent(AbstractAgent[dict, Any]):
             words=(parked.in_words if parked is not None else "") or ran.output,
         )
 
-    def _declared(self, said: str) -> Any:
+    def _declared(self, said: str, fields: "Mapping[str, Any] | None" = None) -> Any:
         """The answer in the shape the author declared, when they declared one.
 
         `answers-with:` makes `_output_type_for` a `StructuredDict`, so handing a
@@ -1563,12 +1563,22 @@ class PactAgent(AbstractAgent[dict, Any]):
         how they report a failure is exactly the divergence between two runtimes
         that PACT exists to remove.
 
-        Read and not VALIDATED, deliberately. The author's shape is put to the
-        model by the harness (`shape_to_ask_for`) and a second check here would be
-        the `same-setting-twice` mistake: two places deciding whether one answer
-        keeps one contract. Text that is not the declared shape comes back as the
-        text the run wrote, because inventing a parse failure at the door would
-        turn a bad answer into no answer.
+        HELD ONCE, by the harness, and read from there. The harness holds a
+        reply to `answers-with:` before it is the answer (`answers_fit`), asks
+        again when it does not fit, and ends the run `checks-failed` when it
+        never does — which arrives here as a `Halted`, not as an answer. So a
+        run that ended `final` has an answer that fits, and `fields` is what
+        the harness read off it: each declared field, and no other. A second
+        check here would be the `same-setting-twice` mistake, two places
+        deciding whether one answer keeps one contract; handing back what the
+        one check read is not a second check.
+
+        This used to read the reply itself, and "deliberately" handed back
+        text that was not the declared shape as the text the run wrote: the
+        harness asked for the shape and checked nothing, so there was no
+        verdict to pass on. The reading below is what is left of that, for a
+        run nothing held: a shape asked for in a mode this harness does not
+        put to the model.
         """
         declared = _output_type_for(self._spec)
         # `str` is what `_output_type_for` returns for `answers-with-mode: text`
@@ -1576,6 +1586,8 @@ class PactAgent(AbstractAgent[dict, Any]):
         # either would contradict the type this same object publishes.
         if isinstance(declared, type):
             return said
+        if fields:
+            return dict(fields)
         try:
             read = json.loads(said)
         except (TypeError, ValueError):

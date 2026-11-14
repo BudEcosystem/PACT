@@ -42,6 +42,19 @@ other.
   given and the time the question allows (`answer-within:`) passes: the run is
   resumed with no answer, at a moment after the wait has run out.
 
+**`asked-again`**, in an agent's `expect`, is what the model was told each time
+a reply that would have been the answer was not one (`answers_fit`): it did
+not fit what the agent says it gives, or broke one of its `checked-by:` rules.
+One text for each such reply that was asked for again, told at the request
+that follows it and at no other; a closing request asked again is told it
+after everything the closing request is told. **`said`** is what the model
+wrote at each step, in order, a reply that was not the answer included.
+**`answer`** is the fields of the answer for an agent that says what it gives:
+each declared field the reply carried, as it was written, and no field the
+agent does not declare; `{}` for an agent that declares none and for a run
+that did not end in an answer. A run that never got a fitting answer ends
+`checks-failed`, or keeps its ceiling's word when it had already run out.
+
 A workflow's case has three more things it may say:
 
 * **`people`**, by question: an answer, or a list of answers in the order they
@@ -73,6 +86,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from pact_adapters.answers_fit import CHECK_FAILED, DID_NOT_FIT
 from pact_adapters.harness import ToolCall, delegate_by_running, run
 from pact_adapters.ir import AgentSpec, WorkflowSpec
 from pact_adapters.script import Script, Turn
@@ -108,6 +122,7 @@ def replay_agent(case: dict[str, Any]) -> dict[str, Any]:
     offered: list[list[str]] = []
     closing: list[str] = []
     after_a_yes: list[str] = []
+    asked_again: list[str] = []
 
     class Lead(ReferenceTransport):
         async def model_call(self, system, history, tools):  # type: ignore[override]
@@ -121,6 +136,15 @@ def replay_agent(case: dict[str, Any]) -> dict[str, Any]:
             at = system.rfind(RAISED_BEGINS)
             if at >= 0:
                 after_a_yes.append(system[at:])
+            # What a request was told because the reply before it was not the
+            # answer: it did not fit `answers-with:`, or broke a rule.
+            at = max(system.rfind(DID_NOT_FIT), system.rfind(CHECK_FAILED))
+            if at >= 0:
+                asked_again.append(system[at:])
+                # A closing request asked again is the closing request, and
+                # then why: `closing` is what the limit told it, without that.
+                if closing and closing[-1].endswith(system[at:]):
+                    closing[-1] = closing[-1][: -len(system[at:])].rstrip("\n")
             return await super().model_call(system, history, tools)
 
     def tool(name: str):
@@ -193,8 +217,11 @@ def replay_agent(case: dict[str, Any]) -> dict[str, Any]:
             for s in out.steps
         ],
         "offered": offered,
-        "closing": closing[-1] if closing else "",
+        "closing": closing[0] if closing else "",
         "after-a-yes": after_a_yes,
+        "asked-again": asked_again,
+        "said": [s.text for s in out.steps],
+        "answer": json.loads(json.dumps(out.answer, default=str)),
         "executed": executed,
         "woken": woken,
         "parks": parks,

@@ -41,6 +41,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from fitting import fits  # noqa: E402
 from pact_adapters import providers  # noqa: E402
 from pact_adapters.evals import (  # noqa: E402
     Case,
@@ -145,8 +146,8 @@ class Deciding:
         asked = " ".join(str(m.get("content") or "") for m in history).lower()
         for marker, said in ANSWERS:
             if marker in asked:
-                return said, []
-        return "DECISION: declined. Nothing here matched a rule we hold.", []
+                return fits(said), []
+        return fits("DECISION: declined. Nothing here matched a rule we hold."), []
 
 
 def _answers(doc: dict) -> list[tuple[Case, RunResult]]:

@@ -63,6 +63,7 @@ from .facts import TURN_ENDS, Fact, Facts
 from .holes import fill
 from .interceptors import Chain
 from .ir import RUN_WITHOUT_IT, AgentSpec, PluginSpec, SkillSpec
+from .answers_fit import CHECKS_FAILED, Held, fields_of
 from .limits import RAN_OUT, Action, Ceiling, Limits, Meter, Reached, money, step_ceiling
 from .limits import _CEILING_FIELDS as CEILING_FIELDS
 from .loops import DONE, Does, Loop, LoopError, Phase
@@ -144,6 +145,12 @@ class RunResult:
     output: str
     steps: list[Step] = field(default_factory=list)
     halted: str = "final"
+    #: The fields of the answer, for an agent that says what it gives
+    #: (`answers-with:`): each declared field the answer carried, as it was
+    #: written, and no other. A field the agent does not declare is not here;
+    #: `output` is the reply as the model wrote it. Empty for an agent with no
+    #: `answers-with:`, and for a run that did not end in an answer.
+    answer: dict[str, Any] = field(default_factory=dict)
     suspension: "Suspension | None" = None
     #: One entry per step in which the team was asked. Kept because "two of the
     #: three agreed and the third was never waited for" is a fact about the run
@@ -1450,6 +1457,55 @@ async def run(
 
     def after_a_yes() -> str:
         return "\n\n" + told_once.pop() if told_once else ""
+
+    # What this run's answer is held to (`answers_fit`): the shape it was asked
+    # for, and the author's own `checked-by:` rules, `checks-at-most:` attempts
+    # in all. A `judged:` rule needs a grader and this loop is handed none, so
+    # it is said (`unenforced`) and not passed in silence, once.
+    unjudged: list[str] = []
+
+    def _breaks_a_rule(said: str) -> str:
+        from .evals import first_broken
+
+        noted: list[str] = []
+        broken = first_broken(
+            spec.checked_by, RunResult(output=said, steps=list(result.steps)),
+            unenforced=noted, run_program=run_program,
+        )
+        for line in noted:
+            if line not in unjudged:
+                unjudged.append(line)
+                result.unenforced = result.unenforced + (line,)
+        return broken
+
+    held = Held(
+        shape=dict(shape_to_ask_for),
+        shapes=spec.shapes,
+        rules=_breaks_a_rule if spec.checked_by else None,
+        at_most=max(1, spec.checks_at_most),
+        asked=int((resume.used or {}).get("answers-asked-for", 0)) if resume is not None else 0,
+    )
+
+    def hold(said: str, at: int, *, can_ask_again: bool = True) -> str:
+        """Hold a reply that would be the run's answer. `""` when it is the
+        answer; `"again"` when it is not and the model is asked once more (it
+        is told why at its next request, and at no other); `"failed"` when it
+        is not and the run has ended `checks-failed`, handing back nothing."""
+        why = held.wrong(said)
+        if not why:
+            result.answer = fields_of(said, held.shape) if held.shape else {}
+            return ""
+        # Across a pause with everything else the run has used.
+        result.used.answers = held.asked
+        bus.emit("turn.message.failed", at=(at,), attempt=held.asked, reason=why)
+        if can_ask_again and held.may_ask_again:
+            told_once.append(why)
+            return "again"
+        result.halted = CHECKS_FAILED
+        result.output = held.gave_up()
+        result.answer = {}
+        bus.emit("turn.run.failed", at=(at,), reason=CHECKS_FAILED)
+        return "failed"
     result.reaction_notes = reactor.notes
     result.reactions = reactor.log
     reports_usage = callable(getattr(transport, "usage", None))
@@ -2012,7 +2068,7 @@ async def run(
                 out, spec=spec, transport=transport, result=result, history=history,
                 already=already, bus=bus, meter=meter, now=now, clock=clock, at=i,
                 phase=phase_name, visits=visits, asking=asking, once=once, chain=chain, given=given,
-            closing_words=closing_words,
+            closing_words=closing_words, held=held,
             )
         # Which stage runs now. A stage that has used up its `at-most` is routed
         # past here rather than after the fact, so it never spends a model call
@@ -2023,6 +2079,10 @@ async def run(
             if gave_up:
                 result.halted = "stage-limit"
                 bus.emit("turn.run.failed", at=(i,), reason=gave_up)
+            # No stage is left to ask again in: these words are the answer, or
+            # there is none.
+            elif hold(result.output, i, can_ask_again=False):
+                pass
             else:
                 result.halted = "final"
                 bus.emit("turn.run.completed", at=(i,))
@@ -2334,6 +2394,13 @@ async def run(
                 if nxt is None:
                     return result
                 if nxt == DONE:
+                    verdict = hold(ran, i)
+                    if verdict == "again":
+                        # The same stage, once more: it is not another visit.
+                        visits[phase_name] -= 1
+                        continue
+                    if verdict == "failed":
+                        return _turn_ended(result, spec.facts)
                     return _finish(result, chain, bus, i, ran, spec.facts)
                 phase_name = nxt
                 continue
@@ -2369,7 +2436,7 @@ async def run(
                     out, spec=spec, transport=transport, result=result, history=history,
                     already=already, bus=bus, meter=meter, now=now, clock=clock, at=i,
                     phase=phase_name, visits=visits, asking=asking, once=once, chain=chain, given=given,
-            closing_words=closing_words,
+            closing_words=closing_words, held=held,
                 )
             # The reactions on what the agent just wrote (docs/99 §5) — AFTER
             # the step's own call has been metered. A judge may be the same
@@ -2420,10 +2487,29 @@ async def run(
             if nxt is None:
                 return result
             if nxt == DONE:
+                # THE ANSWER IS HELD BEFORE IT IS ONE (`answers_fit`). What the
+                # model wrote is what is held, before any rule rewrites it: a
+                # hiding rule that removed a field's value must not be what
+                # makes an answer stop fitting.
+                verdict = hold(text, i)
+                if verdict:
+                    # The reply is a step either way: it was written, and a
+                    # model asked again has to be able to see what it said.
+                    kept, decision = chain.run("step.message.after", {"content": text})
+                    shown = decision.stop if decision.stop is not None else kept["content"]
+                    result.steps.append(Step(index=i, text=shown))
+                    if verdict == "failed":
+                        return _turn_ended(result, spec.facts)
+                    history.append({"role": "assistant", "content": shown})
+                    bus.emit("step.message.completed", at=(i,), text=shown)
+                    # The same stage, once more: it is not another visit.
+                    visits[phase_name] -= 1
+                    continue
                 answered, decision = chain.run("turn.message.after", {"content": text})
                 if decision.stop is not None:
                     result.halted = "stopped-by-rule"
                     result.output = decision.stop
+                    result.answer = {}
                     bus.emit("turn.run.cancelled", at=(i,), reason=decision.stop)
                     return result
                 text = answered["content"]
@@ -3271,7 +3357,7 @@ async def run(
                 out_of_calls, spec=spec, transport=transport, result=result,
                 history=history, already=already, bus=bus, meter=meter, now=now,
                 clock=clock, at=i, phase=phase_name, visits=visits, asking=asking, once=once, chain=chain, given=given,
-            closing_words=closing_words, not_made=not_made,
+            closing_words=closing_words, held=held, not_made=not_made,
             )
 
         visits[phase_name] = visits.get(phase_name, 0) + 1
@@ -3344,7 +3430,7 @@ async def run(
         spec=spec, transport=transport, result=result, history=history,
         already=already, bus=bus, meter=meter, now=now, clock=clock, at=limit,
         phase=phase_name, visits=visits, asking=asking, once=once, chain=chain, given=given,
-            closing_words=closing_words,
+            closing_words=closing_words, held=held,
     )
 
 
@@ -3459,6 +3545,10 @@ async def _ran_out(
     #: it has been telling the model. Required for the reason `chain` is: a
     #: caller that forgets it sends the closing request less than every other.
     closing_words: "Callable[[Reached, tuple[ToolCall, ...]], str]",
+    #: What the run's answer is held to. Required for the reason `chain` is:
+    #: the closing answer is the one nobody planned for, and a caller that
+    #: forgets this hands it back unheld.
+    held: "Held",
     #: The calls of this reply that were not made because the ceiling was
     #: reached part-way through it. The closing request tells the model.
     not_made: "tuple[ToolCall, ...]" = (),
@@ -3574,6 +3664,25 @@ async def _ran_out(
         # answer must have, and without anything a reaction had reminded it
         # of.
         text, _ = await transport.model_call(closing_words(reached, not_made), history, [])
+        # THE CLOSING ANSWER IS HELD LIKE ANY OTHER, from the same count: the
+        # closing request is one more time the run asks for its answer. Asked
+        # again, it is told why, after everything the closing request is told.
+        # What never fits is not handed back: the run keeps the ceiling's word,
+        # because it did run out, and says it was left with no answer.
+        while why := held.wrong(text):
+            bus.emit("turn.message.failed", at=(at,), attempt=held.asked, reason=why)
+            kept, _ = chain.run("step.message.after", {"content": text})
+            result.steps.append(Step(index=at, text=kept["content"]))
+            if not held.may_ask_again:
+                result.output = reached.unanswered(held.asked)
+                result.answer = {}
+                bus.emit("turn.run.failed", at=(at,), reason=CHECKS_FAILED)
+                return result
+            history.append({"role": "assistant", "content": kept["content"]})
+            text, _ = await transport.model_call(
+                closing_words(reached, not_made) + "\n\n" + why, history, []
+            )
+        result.answer = fields_of(text, held.shape) if held.shape else {}
         # THE SAME RULES AS EVERY OTHER REPLY. `_finish`'s docstring states the
         # guarantee this used to break, word for word: "a redaction rule cannot
         # be escaped by finishing from a stage rather than by running out of
@@ -3591,6 +3700,7 @@ async def _ran_out(
             # survive in the trace: a redaction visible nowhere but the
             # transcript is a redaction in name only.
             result.output = decision.stop
+            result.answer = {}
             result.steps.append(Step(index=at, text=decision.stop))
             bus.emit("turn.run.cancelled", at=(at,), reason=decision.stop)
             return result
@@ -3809,22 +3919,14 @@ def _unchecked_answers(spec: AgentSpec) -> tuple[str, ...]:
 def _unheld(spec: AgentSpec) -> tuple[str, ...]:
     """The lines this loop reads nothing of, said rather than skipped.
 
-    `checked-by:`, `teamwork.may-start:` and a list under `model:` are checked
-    by `pact check` and carried by `ir`, and nothing in `run` holds any of them:
-    an answer is returned without being held to its rules, nobody can be
+    `teamwork.may-start:` and a list under `model:` are checked by `pact check`
+    and carried by `ir`, and nothing in `run` holds either: nobody can be
     started who is not on `team:`, and the one transport this run was handed is
-    the only model it will ever ask. Silence here let `pact-eval` score an agent
+    the only model it will ever ask. (`checked-by:` was a third, and is held:
+    `answers_fit`.) Silence here let `pact-eval` score an agent
     whose checks never ran as though they had.
     """
     out: list[str] = []
-    if spec.checked_by:
-        out.append(
-            f"checked-by: {spec.key or 'this agent'} holds an answer to "
-            f"{len(spec.checked_by)} rule(s) before it is the answer, and this "
-            "runtime returns the answer unchecked. fix: run it on a runtime that "
-            "holds `checked-by:`, or hold the answer yourself with "
-            "`evals.first_broken(spec.checked_by, result)`."
-        )
     if spec.teamwork.may_start:
         allowed = ", ".join(sorted(str(getattr(w, "value", w)) for w in spec.teamwork.may_start))
         out.append(
@@ -4601,6 +4703,7 @@ def _finish(
     if decision.stop is not None:
         result.halted = "stopped-by-rule"
         result.output = decision.stop
+        result.answer = {}
         bus.emit("turn.run.cancelled", at=(at,), reason=decision.stop)
         return result
     said = answered["content"]

@@ -33,6 +33,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from fitting import fits, policy_says  # noqa: E402
 from pact_adapters.events import Bus  # noqa: E402
 from pact_adapters.harness import ToolCall, delegate_by_running, run  # noqa: E402
 from pact_adapters.ir import AgentSpec  # noqa: E402
@@ -139,7 +140,7 @@ def test_the_window_a_policy_is_measured_against_is_the_model_the_author_pinned(
                 agent,
                 ReferenceTransport(Script([
                     Turn("Checking.", (ToolCall("zendesk", {"ticket": "T-1"}),)),
-                    Turn("Approved: the item arrived damaged within 30 days."),
+                    Turn(fits("Approved: the item arrived damaged within 30 days.")),
                 ])),
                 "my lamp arrived broken, please refund",
                 {"zendesk": lambda a: ticket, "payments": lambda a: "refunded"},
@@ -205,7 +206,7 @@ def test_a_workspace_may_add_a_model_the_distribution_has_never_heard_of(
             spec,
             ReferenceTransport(Script([
                 Turn("Checking.", (ToolCall("zendesk", {"ticket": "T-1"}),)),
-                Turn("Approved: the item arrived damaged within 30 days."),
+                Turn(fits("Approved: the item arrived damaged within 30 days.")),
             ])),
             "my lamp arrived broken, please refund",
             {
@@ -237,7 +238,7 @@ def test_a_pin_the_run_did_not_honour_is_reported_rather_than_measured_around(
     out = asyncio.run(
         run(
             spec,
-            PydanticAITransport(Script([Turn("Approved.")])),  # binds the default
+            PydanticAITransport(Script([Turn(fits("Approved."))])),  # binds the default
             "my lamp arrived broken, please refund",
             {"zendesk": lambda a: "broken on arrival", "payments": lambda a: "refunded"},
             bus=bus,
@@ -279,7 +280,7 @@ def test_a_team_members_pin_reaching_the_running_harness_is_honoured_or_reported
     def reads_the_pin(member: AgentSpec):
         honoured.append(member.model)
         return PydanticAITransport(
-            Script([Turn("Rule 2 applies.")]), model=member.model or None
+            Script([Turn(policy_says("Rule 2 applies."))]), model=member.model or None
         )
 
     asyncio.run(
@@ -292,7 +293,7 @@ def test_a_team_members_pin_reaching_the_running_harness_is_honoured_or_reported
     bus = Bus()
 
     def ignores_the_pin(member: AgentSpec):
-        return PydanticAITransport(Script([Turn("Rule 2 applies.")]))
+        return PydanticAITransport(Script([Turn(policy_says("Rule 2 applies."))]))
 
     asyncio.run(
         delegate_by_running(doc, ignores_the_pin, bus=bus)(
@@ -359,7 +360,7 @@ def test_a_model_this_workspace_added_itself_is_priced_like_any_other(
     # And through a transport, which is the hop that was missing: the row is
     # read by the thing that meters, not only by the thing that checks.
     made = PydanticAITransport(
-        Script([Turn("Approved.")]), model="our-own-model", workspace=ws
+        Script([Turn(fits("Approved."))]), model="our-own-model", workspace=ws
     )
     assert made.prices_money is True
     assert made.context_window() == 32768
@@ -399,7 +400,7 @@ def test_a_ceiling_measured_against_a_free_model_says_it_can_never_fire(
 
     script = lambda: Script([  # noqa: E731
         Turn("Checking.", (ToolCall("zendesk", {"ticket": "T-1"}),)),
-        Turn("Approved: the item arrived damaged within 30 days."),
+        Turn(fits("Approved: the item arrived damaged within 30 days.")),
     ])
     tools = {"zendesk": lambda a: "lamp, broken", "payments": lambda a: "refunded"}
     spec = AgentSpec.from_document(document, "refund-desk", EXAMPLE)

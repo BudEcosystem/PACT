@@ -46,6 +46,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from fitting import one_that_fits  # noqa: E402
 from pact_adapters.reactions import JUDGE_SYSTEM  # noqa: E402
 from pact_adapters.harness import run  # noqa: E402
 from pact_adapters.ir import AgentSpec  # noqa: E402
@@ -82,6 +83,19 @@ TRANSPORTS = {
 #: no tool calls — see the module note for why, and for what that leaves out.
 ASKED = "What do you make of this?"
 ANSWER = "Here is what I make of it."
+
+
+def _answer(spec: AgentSpec) -> str:
+    """What the model says back to THIS agent: `ANSWER`, and then each field
+    the agent says it gives, as the model is asked to end its reply.
+
+    One sentence was the answer for every agent, and an agent that gives a
+    decision and an amount was "answered" by it: the run ended `final` with an
+    answer that had none of what it promises. An answer is now held to
+    `answers-with:` (`answers_fit`), so a scripted one has to fit. The second
+    port does not hold it and says so (`notDoneHere`); handed the same fitting
+    answer, the two make the same single call, which is what is compared."""
+    return one_that_fits(spec.answers_with, spec.shapes, ANSWER)
 
 
 def _workspaces() -> list[Path]:
@@ -142,7 +156,7 @@ class Watching(ReferenceTransport):
 
 
 def _here(spec: AgentSpec, transport_cls: Any) -> dict[str, Any]:
-    s = Script([Turn(ANSWER)])
+    s = Script([Turn(_answer(spec))])
     transport = transport_cls(s)
     result = asyncio.run(run(spec, transport, ASKED, {}))
     # A judged reaction (docs/99) puts a yes-or-no question to a model, on this
@@ -234,6 +248,10 @@ def _there(spec: AgentSpec) -> dict[str, Any] | None:
         "loops": _loops_of(spec),
         "answersWith": dict(spec.answers_with),
         "answersWithMode": spec.answers_with_mode,
+        # What an answer is held to and how many tries it gets. This port holds
+        # it to neither and says so; sent so that it can.
+        "checkedBy": [r.kind for r in spec.checked_by],
+        "checksAtMost": spec.checks_at_most,
         # docs/98 WP-8: each memory shared with the team, which Python offers as
         # a tool named after it. Sent so the port offers the same names and says
         # it keeps no board, rather than offering fewer tools in silence.
@@ -259,7 +277,7 @@ def _there(spec: AgentSpec) -> dict[str, Any] | None:
     })
     out = subprocess.run(
         ["node", "--experimental-strip-types", "src/run-trace.ts",
-         payload, json.dumps({"turns": [{"text": ANSWER}]}), ASKED],
+         payload, json.dumps({"turns": [{"text": _answer(spec)}]}), ASKED],
         cwd=TS_DIR, capture_output=True, text=True,
     )
     if out.returncode != 0:

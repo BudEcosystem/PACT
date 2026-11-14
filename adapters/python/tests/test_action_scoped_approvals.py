@@ -42,6 +42,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from consenting import allowing_the_connection  # noqa: E402
+from fitting import fits  # noqa: E402
 from pact_adapters.harness import ToolCall  # noqa: E402
 from pact_adapters.ir import AgentSpec  # noqa: E402
 from pact_adapters.questions import questions_for  # noqa: E402
@@ -99,7 +100,7 @@ def desk(document: dict) -> AgentSpec:
 def one_call(name: str, args: dict):
     """A factory, not a script: a `Script` is a cursor and `ran` resumes."""
     return lambda: Script(
-        [Turn("working on it", (ToolCall(name, args),)), Turn("Approved.")]
+        [Turn("working on it", (ToolCall(name, args),)), Turn(fits("Approved."))]
     )
 
 
