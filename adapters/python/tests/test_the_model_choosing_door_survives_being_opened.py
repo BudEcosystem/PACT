@@ -186,6 +186,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from fitting import fits, fits_whoever_asks  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[3]
 PACT_BIN = REPO / "target" / "debug" / "pact"
 EXAMPLE = "examples/refund-desk"
@@ -910,7 +912,7 @@ class _Answers:
 
     async def model_call(self, system, history, tools):
         self.calls += 1
-        return "Approved. The lamp arrived damaged within 30 days, refund 40 USD.", []
+        return fits_whoever_asks("Approved. The lamp arrived damaged within 30 days, refund 40 USD."), []
 
 
 def test_a_teammate_the_agent_asks_is_run_rather_than_parked() -> None:
@@ -1438,6 +1440,10 @@ class _AnswersTheSuite(_Answering):
             )
         else:
             answer = "Approved. Sale items follow the same rules and this one was faulty."
+        if sent.get("model") == self.right_for:
+            # The model that gets it right ends its reply with what the agent
+            # says it gives; the other one never does, and never has an answer.
+            answer = fits(answer)
         self._send({
             "choices": [{"message": {"content": answer}, "finish_reason": "stop"}],
             "usage": {"prompt_tokens": 12, "completion_tokens": 8},

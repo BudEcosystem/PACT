@@ -24,6 +24,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from fitting import fits  # noqa: E402
 from pact_adapters.context_policy import CHARS_PER_TOKEN  # noqa: E402
 from pact_adapters.harness import ToolCall, run  # noqa: E402
 from pact_adapters.ir import AgentSpec, ToolSpec  # noqa: E402
@@ -182,10 +183,10 @@ def test_a_run_with_no_ceilings_declared_behaves_exactly_as_before() -> None:
     """The algebra must cost nothing when unused."""
     plain = asyncio.run(
         run(SPEC, ReferenceTransport(Script([Turn("checking", (ToolCall("zendesk", {}),)),
-                                             Turn("Approved.")])), "refund?", TOOLS)
+                                             Turn(fits("Approved."))])), "refund?", TOOLS)
     )
     assert plain.halted == "final"
-    assert plain.output == "Approved."
+    assert plain.output == fits("Approved.")
     assert plain.stopped_by is None
 
 
@@ -244,7 +245,7 @@ def test_the_declared_action_decides_what_happens_and_nothing_else_does() -> Non
 
 def test_a_run_that_finished_and_a_run_that_ran_out_are_never_reported_alike() -> None:
     finished = asyncio.run(
-        run(SPEC, ReferenceTransport(Script([Turn("Approved.")])), "refund?", TOOLS)
+        run(SPEC, ReferenceTransport(Script([Turn(fits("Approved."))])), "refund?", TOOLS)
     )
     ran_out = asyncio.run(
         run(replace(SPEC, max_steps=2), ReferenceTransport(never_finishes()), "refund?", TOOLS)
@@ -270,10 +271,10 @@ def test_a_ceiling_the_transport_cannot_measure_is_reported_not_silently_ignored
     """T7. An author who wrote a spend cap, got no enforcement, and was told
     nothing has been told something untrue — which is worse than having no cap."""
     spec = with_limits(cost_per_request_under=0.05, tokens_at_most=100)
-    r = asyncio.run(run(spec, ReferenceTransport(Script([Turn("done")])), "hello", TOOLS))
+    r = asyncio.run(run(spec, ReferenceTransport(Script([Turn(fits("done"))])), "hello", TOOLS))
     assert set(r.unmetered) == {"cost-per-request-under", "tokens-at-most"}
 
-    metered = asyncio.run(run(spec, Costing(Script([Turn("done")])), "hello", TOOLS))
+    metered = asyncio.run(run(spec, Costing(Script([Turn(fits("done"))])), "hello", TOOLS))
     assert metered.unmetered == (), "a transport that can measure is not warned about"
 
 
@@ -342,7 +343,7 @@ def test_an_unenforceable_ceiling_is_announced_before_any_work_is_done() -> None
 
     bus = Bus()
     spec = with_limits(cost_per_request_under=0.05)
-    asyncio.run(run(spec, ReferenceTransport(Script([Turn("done")])), "hello", TOOLS, bus=bus))
+    asyncio.run(run(spec, ReferenceTransport(Script([Turn(fits("done"))])), "hello", TOOLS, bus=bus))
     addresses = [str(e.address) for e in bus.log]
     assert "session.limit.failed" in addresses
     assert addresses.index("session.limit.failed") < addresses.index("step.model.requested")
@@ -407,9 +408,9 @@ def test_a_promise_with_no_separate_ceiling_is_enforced_as_the_ceiling(document:
 def a_refund_worth_four_turns() -> Script:
     return Script([
         Turn("Checking the ticket.", (ToolCall("zendesk", {"ticket": "T-1"}),)),
-        Turn("The ticket says the lamp arrived broken 6 days ago."),
-        Turn("Rule 2 applies: faulty on arrival, and 6 days is inside the window."),
-        Turn("Approved: the item arrived damaged within 30 days."),
+        Turn(fits("The ticket says the lamp arrived broken 6 days ago.")),
+        Turn(fits("Rule 2 applies: faulty on arrival, and 6 days is inside the window.")),
+        Turn(fits("Approved: the item arrived damaged within 30 days.")),
     ])
 
 
@@ -437,9 +438,9 @@ def talks_past_what_the_model_holds() -> Script:
     said = _SAYS_TOO_MUCH * ((window * CHARS_PER_TOKEN) // len(_SAYS_TOO_MUCH) + 1)
     return Script([
         Turn("Checking the ticket.", (ToolCall("zendesk", {"ticket": "T-1"}),)),
-        Turn("The ticket says the lamp arrived broken 6 days ago. " + said),
-        Turn("Rule 2 applies: faulty on arrival, and 6 days is inside the window."),
-        Turn("Approved: the item arrived damaged within 30 days."),
+        Turn(fits("The ticket says the lamp arrived broken 6 days ago. " + said)),
+        Turn(fits("Rule 2 applies: faulty on arrival, and 6 days is inside the window.")),
+        Turn(fits("Approved: the item arrived damaged within 30 days.")),
     ])
 
 
@@ -897,7 +898,7 @@ def test_both_ports_name_the_currency_the_author_wrote() -> None:
         limits=Limits.from_mapping(written),
     )
     mine = asyncio.run(
-        run(spec, ReferenceTransport(Script([Turn("done")])), "hello", {})
+        run(spec, ReferenceTransport(Script([Turn(fits("done"))])), "hello", {})
     )
 
     assert mine.halted == "cost-limit", mine.halted
@@ -941,7 +942,7 @@ def test_a_cap_with_no_currency_leaves_no_gap_where_one_would_go() -> None:
         limits=Limits.from_mapping(written),
     )
     mine = asyncio.run(
-        run(spec, ReferenceTransport(Script([Turn("done")])), "hello", {})
+        run(spec, ReferenceTransport(Script([Turn(fits("done"))])), "hello", {})
     )
     assert mine.stopped_by is not None
     said = mine.stopped_by.sentence()

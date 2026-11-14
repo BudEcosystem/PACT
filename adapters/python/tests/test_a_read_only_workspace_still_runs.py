@@ -37,6 +37,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from fitting import fits  # noqa: E402
 from pact_adapters.harness import ToolCall, run  # noqa: E402
 from pact_adapters.ir import AgentSpec  # noqa: E402
 from pact_adapters.script import Script, Turn  # noqa: E402
@@ -73,7 +74,7 @@ def _go(spec: AgentSpec) -> Any:
     """
     script = Script([
         Turn("Looking it up.", (ToolCall("zendesk", {"ticket": "T-1"}),)),
-        Turn("done"),
+        Turn(fits("done")),
     ])
     return asyncio.run(
         run(spec, ReferenceTransport(script), "hello", {"zendesk": lambda a: "a ticket"})

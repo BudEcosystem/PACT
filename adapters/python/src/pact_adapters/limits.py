@@ -153,6 +153,21 @@ class Reached:
         words = words.strip()
         return f"{said} {words}" if words else said
 
+    def unanswered(self, attempts: int) -> str:
+        """What a person is told when the run reached a ceiling whose action
+        is `answer-with-what-it-has`, and what it had was never an answer: the
+        closing reply did not fit what the agent says it gives
+        (`answers-with:`, `checked-by:`), however many times it was asked.
+
+        The run keeps the ceiling's own word (`halted`), because it did run
+        out; it hands back this and not the reply, because a reply that does
+        not fit is not what the agent gives."""
+        times = "once and it did not fit" if attempts == 1 else f"{attempts} times and none fit"
+        return (
+            f"Stopped before finishing: this run reached {self._whose()}. It was asked for "
+            f"its answer {times} what it says it gives."
+        )
+
     def closing(self, not_made: "tuple[str, ...]" = ()) -> str:
         """What the MODEL is told at the closing request of a run that answers
         with what it has.
@@ -241,6 +256,12 @@ class Meter:
     tool_calls: int = 0
     tokens: int = 0
     money: float = 0.0
+    #: How many times this run has asked for its answer and held what came
+    #: back (`answers_fit.Held`). Not a ceiling of `limits:`; it is here
+    #: because it has to cross a pause with the rest of what a run has used,
+    #: or a run that parks between two attempts is given `checks-at-most:`
+    #: more.
+    answers: int = 0
 
     def seconds(self, now: float) -> float:
         """Time spent WORKING. Time parked for a person is excluded on resume,
@@ -252,13 +273,18 @@ class Meter:
 
     def as_dict(self, now: float) -> dict[str, float]:
         """The shape that crosses a process boundary inside a pause."""
-        return {
+        used = {
             "seconds": self.seconds(now),
             "steps": float(self.steps),
             "tool_calls": float(self.tool_calls),
             "tokens": float(self.tokens),
             "money": self.money,
         }
+        # Written only once an answer has been held and found wanting, so a
+        # pause of a run that never was reads as it always did.
+        if self.answers:
+            used["answers-asked-for"] = float(self.answers)
+        return used
 
     @staticmethod
     def restored(used: dict[str, float], now: float, steps: int) -> "Meter":
@@ -272,6 +298,7 @@ class Meter:
             tool_calls=int(used.get("tool_calls", 0)),
             tokens=int(used.get("tokens", 0)),
             money=float(used.get("money", 0.0)),
+            answers=int(used.get("answers-asked-for", 0)),
         )
 
 

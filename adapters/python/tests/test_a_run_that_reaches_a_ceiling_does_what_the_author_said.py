@@ -369,10 +369,13 @@ def test_a_budget_once_granted_is_carried_by_the_park_and_across_a_process(tmp_p
 
 
 def test_the_closing_request_is_told_what_every_other_request_is_told(tmp_path: Path) -> None:
-    turns = [look("a"), look("b"), Turn("a and b are there.")]
+    # The closing answer is held to what the agent gives (`found: list of
+    # text`) like any other, so it ends with it.
+    closing_answer = 'a and b are there.\n- found: ["a", "b"]'
+    turns = [look("a"), look("b"), Turn(closing_answer)]
     out, _again, looked, told = go(tmp_path, "closes", turns)
     assert out.halted == "tool-call-limit" and looked == ["a", "b"]
-    assert out.output == "a and b are there."
+    assert out.output == closing_answer and out.answer == {"found": ["a", "b"]}
     closing = told[-1]
     assert closing.startswith("0 tools\n"), "the closing request offers no tool"
     # The agent's own instructions, the shape its answer must have, and what

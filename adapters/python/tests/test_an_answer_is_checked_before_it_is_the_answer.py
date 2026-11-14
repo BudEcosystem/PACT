@@ -86,10 +86,14 @@ def test_pacts_own_pydantic_ai_agent_asks_again_with_the_rule_it_broke() -> None
     assert retries and str(retries[0].content).startswith(CHECK_FAILED)
 
 
-def test_pacts_own_harness_says_it_holds_none_of_the_three_rather_than_staying_silent() -> None:
-    """`harness.run` has no reader for `checked-by:`, `may-start:` or a model
-    list. It returned a failing answer with nothing on `unenforced`, so
-    `pact-eval` scored an agent whose checks never ran as though they had."""
+def test_pacts_own_harness_holds_the_rules_and_says_the_two_lines_it_does_not_hold() -> None:
+    """`harness.run` had no reader for `checked-by:`, `may-start:` or a model
+    list. First it returned a failing answer with nothing on `unenforced`, so
+    `pact-eval` scored an agent whose checks never ran as though they had; then
+    it said all three were unheld. It holds the first now (`answers_fit`): an
+    answer that breaks a rule is asked for again, `checks-at-most:` times in
+    all, and is never returned. The other two it still does not hold, and
+    still says so."""
     import asyncio
 
     from pact_adapters.harness import run
@@ -103,12 +107,19 @@ def test_pacts_own_harness_says_it_holds_none_of_the_three_rather_than_staying_s
         "team": {"helper": "helps"},
         "teamwork": {"may-start": ["narrowed-new"]},
     })
-    out = asyncio.run(run(spec, ReferenceTransport(Script([Turn("Sorry about that.")])), "Refund?", {}))
-    assert out.output == "Sorry about that.", "the answer breaks the rule and is still returned"
+    sorry = Script([Turn("Sorry about that.")])
+    out = asyncio.run(run(spec, ReferenceTransport(sorry), "Refund?", {}))
+    assert out.halted == "checks-failed" and sorry.calls == 2, (out.halted, sorry.calls)
+    assert out.output != "Sorry about that.", "the answer breaks the rule and is not returned"
+    assert "does not say ['refund']" in out.output
     said = {u.split(":", 1)[0]: u for u in out.unenforced}
-    assert "returns the answer unchecked" in said["checked-by"], out.unenforced
+    assert "checked-by" not in said, "held, so there is nothing to report"
     assert "narrowed-new" in said["may-start"], out.unenforced
     assert "big-one" in said["model"] and "small-one" in said["model"], out.unenforced
+    # An answer that keeps the rule is the answer, at the first asking.
+    kept = Script([Turn("A refund is on its way.")])
+    out = asyncio.run(run(spec, ReferenceTransport(kept), "Refund?", {}))
+    assert out.halted == "final" and kept.calls == 1
     # And an agent that wrote none of them is told nothing about them.
     plain = asyncio.run(run(_spec({"name": "Desk"}), ReferenceTransport(Script([Turn("ok")])), "x", {}))
     assert not [u for u in plain.unenforced if u.startswith(("checked-by", "may-start", "model"))]

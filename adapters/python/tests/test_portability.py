@@ -25,6 +25,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from fitting import fits  # noqa: E402
 from pact_adapters.harness import ToolCall, run  # noqa: E402
 from pact_adapters.ir import AgentSpec  # noqa: E402
 from pact_adapters.loops import STANDARD, Loop  # noqa: E402
@@ -145,7 +146,7 @@ def script() -> Script:
     return Script(
         [
             Turn("Checking the ticket.", (ToolCall("zendesk", {"ticket": "T-1"}),)),
-            Turn("Approved: the item arrived damaged within 30 days."),
+            Turn(fits("Approved: the item arrived damaged within 30 days.")),
         ]
     )
 
@@ -243,7 +244,7 @@ def test_the_step_limit_is_reported_not_disguised(spec: AgentSpec) -> None:
 
 
 def test_an_unknown_tool_is_reported_to_the_model_not_swallowed(spec: AgentSpec) -> None:
-    s = Script([Turn("trying", (ToolCall("nonexistent", {}),)), Turn("done")])
+    s = Script([Turn("trying", (ToolCall("nonexistent", {}),)), Turn(fits("done"))])
     result = asyncio.run(run(spec, ReferenceTransport(s), "hello", TOOLS))
     assert "no tool named" in result.steps[0].tool_results[0]
 
@@ -288,7 +289,7 @@ def _ts_trace(spec: AgentSpec) -> dict:
         "turns": [
             {"text": "Checking the ticket.",
              "toolCalls": [{"name": "zendesk", "args": {"ticket": "T-1"}}]},
-            {"text": "Approved: the item arrived damaged within 30 days."},
+            {"text": fits("Approved: the item arrived damaged within 30 days.")},
         ]
     })
     out = subprocess.run(

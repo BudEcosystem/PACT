@@ -320,6 +320,15 @@ pub struct Field {
     /// siblings"* — which is the second use, already visible, that makes this an
     /// attribute rather than one more module.
     pub needs_one_of: Vec<String>,
+    /// AT LEAST one of these fields must be set whenever this one is.
+    ///
+    /// `needs_also` names one companion and `needs_one_of` means exactly one,
+    /// and neither says "this line is read beside either of those, or both".
+    /// `checks-at-most:` is that: how many times an agent is asked for its
+    /// answer, which is held to `answers-with:` and to `checked-by:`. Written
+    /// as `needs-one-of`, an agent with a shape AND rules of its own — the
+    /// most careful one in the tree — was refused for having both.
+    pub needs_any_of: Vec<String>,
     /// Whether this field's value is an amount of money WHEN the thing it
     /// compares is one.
     ///
@@ -446,6 +455,7 @@ impl Field {
             may_be_a_folder: false,
             reaches_outside: false,
             needs_one_of: Vec::new(),
+            needs_any_of: Vec::new(),
             may_be_money: false,
             names: Vec::new(),
             key_names: Vec::new(),
@@ -1521,6 +1531,28 @@ impl Schema {
                     ),
                     format!(
                         "Add one of them beside it: {}.",
+                        choices
+                            .iter()
+                            .map(|c| format!("`{c}: …`"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                ));
+                continue;
+            }
+            // The at-least-one-of set: either companion will do, and so will both.
+            if let Some(listed) = want.strip_prefix("__any_of__") {
+                let choices: Vec<&str> = listed.split("`, `").collect();
+                diags.push(Diagnostic::error(
+                    "schema/missing-any-of",
+                    first_span.clone(),
+                    format!(
+                        "'{first_name}' is set, and it is read only beside `{}` — none of \
+                         which is written, so nothing reads it.",
+                        choices.join("` or `")
+                    ),
+                    format!(
+                        "Add one of them beside it: {}. Or take '{first_name}' out.",
                         choices
                             .iter()
                             .map(|c| format!("`{c}: …`"))
@@ -3235,6 +3267,27 @@ fn note_companions(
         if written.len() != 1 {
             let listed = set.join("`, `");
             owed.entry(format!("__one_of__{listed}"))
+                .or_default()
+                .push((f.name.clone(), at.clone()));
+        }
+    }
+    // At least one of a set: the same reading of "is it written", and owed
+    // only when none of them is.
+    if !f.needs_any_of.is_empty() {
+        let any = f.needs_any_of.iter().any(|want| {
+            g.fields
+                .iter()
+                .find(|x| &x.name == want)
+                .map(|other| {
+                    std::iter::once(&other.name)
+                        .chain(other.aliases.iter())
+                        .any(|n| map.contains_key(n))
+                })
+                .unwrap_or(false)
+        });
+        if !any {
+            let listed = f.needs_any_of.join("`, `");
+            owed.entry(format!("__any_of__{listed}"))
                 .or_default()
                 .push((f.name.clone(), at.clone()));
         }

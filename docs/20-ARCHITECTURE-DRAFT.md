@@ -7065,7 +7065,7 @@ choose from.** All three, verbatim from `Address.parse`:
 | `tool` | `step.tool.started`, `step.tool.completed`, `step.tool.cancelled` |
 | `delegate` | `step.delegate.requested`, `step.delegate.started`, `step.delegate.completed`, `step.delegate.failed`, `step.delegate.cancelled`, `turn.delegate.completed`, `turn.delegate.failed` |
 | `approval` | `step.approval.requested`, `step.approval.completed`, `turn.approval.failed` |
-| `message` | `step.message.completed`, `turn.message.completed` |
+| `message` | `step.message.completed`, `turn.message.completed`, `turn.message.failed` (a reply that was to be the answer did not fit `answers-with:` or broke a `checked-by:` rule; `attempt` and `reason` say which try and why) |
 | `compaction` | `step.compaction.started`, `step.compaction.completed` |
 | `input` | `step.input.requested` |
 | `limit` | `session.limit.failed`, `turn.limit.completed` |

@@ -51,6 +51,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from consenting import allowing_the_connection  # noqa: E402
+from fitting import fits  # noqa: E402
 from pact_adapters.harness import ToolCall  # noqa: E402
 from pact_adapters.interceptors import (  # noqa: E402
     ON_ITS_OWN,
@@ -414,7 +415,7 @@ def test_an_email_address_out_of_a_ticket_never_reaches_the_payments_tool(
             Turn("paying", (ToolCall("payments", {
                 "order-number": "A-1182", "contact": {"email": EMAIL},
             }),)),
-            Turn(f"Refunded. We have written to {EMAIL}."),
+            Turn(fits(f"Refunded. We have written to {EMAIL}.")),
         ])
 
     result = allowing_the_connection(
@@ -458,7 +459,7 @@ def test_the_same_run_leaks_that_address_with_the_authors_file_taken_out(
             Turn("paying", (ToolCall("payments", {
                 "order-number": "A-1182", "contact": {"email": EMAIL},
             }),)),
-            Turn(f"Refunded. We have written to {EMAIL}."),
+            Turn(fits(f"Refunded. We have written to {EMAIL}.")),
         ])
 
     result = allowing_the_connection(

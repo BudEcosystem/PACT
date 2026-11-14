@@ -42,6 +42,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from fitting import fits  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[3]
 EXAMPLE = REPO / "examples" / "refund-desk"
 PACT_BIN = REPO / "target" / "debug" / "pact"
@@ -138,7 +140,7 @@ class _Runtime:
                     {"action": "issue-refund", "order-number": "A-1", "amount": "40 USD"},
                 )
             return _tool_call("payments", {"action": "look-up-order", "order-number": "A-1"})
-        return _text(_decides_from(said, self.wrong))
+        return _text(fits(_decides_from(said, self.wrong)))
 
 
 def _decides_from(ticket: str, wrong: str) -> str:

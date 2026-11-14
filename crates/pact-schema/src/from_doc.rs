@@ -138,6 +138,8 @@ impl Schema {
                 // `Field::needs_one_of` for the rule `needs-also:` could not
                 // state and the author it refused.
                 let needs_one_of = names(f, "needs-one-of");
+                // At least one of these. See `Field::needs_any_of`.
+                let needs_any_of = names(f, "needs-any-of");
                 // Carries an amount of money when what it compares is one. See
                 // `Field::may_be_money`.
                 let may_be_money = f.get("may-be-money").and_then(as_bool).unwrap_or(false);
@@ -251,6 +253,7 @@ impl Schema {
                         field.may_be_a_folder = may_be_a_folder;
                         field.reaches_outside = reaches_outside;
                         field.needs_one_of = needs_one_of;
+                        field.needs_any_of = needs_any_of;
                         field.may_be_money = may_be_money;
                         field.names = names_in;
                         field.key_names = key_names;

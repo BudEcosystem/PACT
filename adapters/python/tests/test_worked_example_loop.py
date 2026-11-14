@@ -44,6 +44,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from fitting import fits  # noqa: E402
 from pact_adapters.harness import RunResult, ToolCall, run  # noqa: E402
 from pact_adapters.ir import AgentSpec  # noqa: E402
 from pact_adapters.loops import DONE, Does, Loop  # noqa: E402
@@ -127,9 +128,9 @@ def a_refund_worth_checking() -> Script:
     """
     return Script([
         Turn("Checking the ticket.", (ToolCall("zendesk", {"ticket": "T-1"}),)),
-        Turn("The ticket says the lamp arrived broken 6 days ago."),
-        Turn("Rule 2 applies: faulty on arrival, and 6 days is inside the window."),
-        Turn("Approved: the item arrived damaged within 30 days."),
+        Turn(fits("The ticket says the lamp arrived broken 6 days ago.")),
+        Turn(fits("Rule 2 applies: faulty on arrival, and 6 days is inside the window.")),
+        Turn(fits("Approved: the item arrived damaged within 30 days.")),
     ])
 
 

@@ -995,31 +995,32 @@ def test_a_run_id_and_a_conversation_id_the_caller_gave_reach_the_result(
 
 
 @pytest.mark.parametrize(
-    "wrote,comes_back",
+    "wrote",
     [
-        ("just the words, no JSON at all", "just the words, no JSON at all"),
-        ("[1, 2]", "[1, 2]"),
-        ('{"decision": "approved"}', {"decision": "approved"}),
+        "just the words, no JSON at all",
+        "[1, 2]",
+        # A mapping, and still not what the agent gives: two fields are missing.
+        '{"decision": "approved"}',
+        '{"decision": "maybe", "reason": "r", "amount": "40 USD"}',
     ],
 )
-def test_an_answer_that_is_not_the_declared_shape_comes_back_as_what_the_run_wrote(
-    pact_agent: Any, spec: AgentSpec, wrote: str, comes_back: Any
+def test_an_answer_that_is_not_the_declared_shape_is_not_an_answer(
+    pact_agent: Any, halted_type: Any, spec: AgentSpec, wrote: str
 ) -> None:
-    """Read and not VALIDATED, deliberately — and a JSON list is not a mapping.
+    """Held ONCE, by the harness, and what it decided is what arrives here.
 
-    `answers-with:` makes `_output_type_for` a `StructuredDict`, so a caller
-    handed the JSON TEXT still has to parse it, and where they parse it and how
-    they report a failure is exactly the divergence between two runtimes PACT
-    exists to remove. But the shape is put to the model by the harness, and a
-    SECOND check here would be the `same-setting-twice` mistake: two places
-    deciding whether one answer keeps one contract. So text that is not the
-    declared shape comes back as the text the run wrote — inventing a parse
-    failure at the door turns a bad answer into no answer.
+    This test was `..._comes_back_as_what_the_run_wrote`, and held the opposite:
+    text that was not the declared shape came back as text, "deliberately",
+    because the harness put the shape to the model and checked nothing, and a
+    check at this door would have been a second place deciding one contract.
+    The reasoning stands and the conclusion moved with the harness: it now
+    holds a reply to `answers-with:` (`answers_fit`), so a run whose reply
+    never fits ends `checks-failed`, and that is a `Halted` here — a TYPE, the
+    way every other run that did not finish arrives — and never the text, and
+    never a mapping with fields missing.
 
-    The list is the case a bare `json.loads` gets wrong: it parses, so a
-    crossing that only catches `ValueError` hands a caller expecting a mapping
-    something with no keys at all, and the failure surfaces wherever they first
-    subscript it.
+    The JSON list is still the case a bare `json.loads` gets wrong, and it is
+    refused for the same reason the prose is: no field the agent gives is in it.
     """
     agent = pact_agent.for_spec(
         replace(spec, loop=Loop.from_library(STANDARD)),
@@ -1027,8 +1028,36 @@ def test_an_answer_that_is_not_the_declared_shape_comes_back_as_what_the_run_wro
         tool_impls={},
     )
     said = agent.run_sync(ASKED).output
-    assert said == comes_back
-    assert type(said) is type(comes_back)
+    assert isinstance(said, halted_type), said
+    assert said.halted == "checks-failed"
+    assert said.words.startswith(
+        "Stopped without an answer: it was asked for its answer 2 times and none fit "
+        "`answers-with:`."
+    )
+
+
+@pytest.mark.parametrize(
+    "wrote",
+    [
+        '{"decision": "approved", "reason": "damaged on arrival", "amount": "40 USD", "mood": "x"}',
+        "Approved.\n- decision: approved\n- reason: damaged on arrival\n- amount: 40 USD\n- mood: x",
+    ],
+)
+def test_an_answer_that_fits_comes_back_as_the_fields_the_agent_gives_and_no_others(
+    pact_agent: Any, spec: AgentSpec, wrote: str
+) -> None:
+    """One JSON record, or the fields one to a line the way the model is asked
+    to end its reply: either is the answer, and what a caller is handed is the
+    mapping of declared fields. `mood` is not something this agent gives, so it
+    is not a reason to ask again and it is not handed back."""
+    agent = pact_agent.for_spec(
+        replace(spec, loop=Loop.from_library(STANDARD)),
+        transport=PydanticAITransport(Script([Turn(wrote)])),
+        tool_impls={},
+    )
+    assert agent.run_sync(ASKED).output == {
+        "decision": "approved", "reason": "damaged on arrival", "amount": "40 USD",
+    }
 
 
 def test_an_agent_that_declares_no_shape_is_handed_its_answer_as_the_text_it_wrote(
