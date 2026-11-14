@@ -3,6 +3,26 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — one text and one fingerprint for a value, written down (13 November)
+
+What a condition reads out of a value, the share `in-share:` puts it in, the digest a person's yes
+is bound to and the digest `tool-snapshot-digest:` pins were defined by what the reference adapter
+happened to do, in three JSON spellings across three files. A second runtime could match them only
+by reading that code. Nothing here changes what any of them computes.
+
+- **`spec/fingerprints.yaml`** states the four, with 61 rows a port is held to: the text of a word,
+  a number, a record and a list (18), in-share fingerprints and answers (9), request digests (9),
+  snapshot digests (5), the five built-in detectors (11) and declared detector patterns as the
+  reference's regular expressions read them (9, including `$` before a final newline and `\s` on
+  U+001F). Every value is written as JSON text, so a row means the same thing in every language.
+- **`number-as-written: yes`** marks the six rows whose answer turns on how a number was written
+  (`1.0` against `1`, `1e+20`, an integer past 2^53). A port whose numbers are one type cannot
+  reproduce them: Bud Meta Harness's TypeScript port of the four agrees with the other 30 text,
+  share and digest rows and differs on exactly these six.
+- **`adapters/python/tests/test_one_fingerprint_in_every_port.py`** (64 tests) holds the reference
+  to every row through `conditions.holds`, `suspension.request_digest` and `mcp_bridge.digest_of`,
+  and fails if the markings drift from the rows.
+
 ## 2026-11 — how a run ends, the egress boundary said out loud, and two things that read as one thing and did another (15 November)
 
 Four rulings, each made with Bud Agent Flow's engine and corpus in front of it.
