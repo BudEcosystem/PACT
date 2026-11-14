@@ -3,6 +3,23 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — a hidden value belongs to the request, not the run (15 November)
+
+`gets-hidden-values: yes` put a card back only for an action of the agent whose own redaction hid
+it. A lead that hands the charge to a cashier hid the card one way, `[removed]`, because the lead
+uses no such action itself, so the cashier's action could never get the number back; and a
+placeholder the run's vault did not hold was sent to the tool as text.
+
+### What holds now
+
+- **The vault is the request's.** `AgentSpec.team_gets_hidden` says a member of the agent's team, at
+  any depth, uses such an action; such a lead keeps hidden values as placeholders, and the vault
+  rides the grant to every member (`run(vault=...)`, as `board=` does), so the member's action gets
+  back the card its lead hid.
+- **A placeholder the request does not hold is never sent.** The call is not made; the model reads
+  `not done: ⟦card-number-7⟧ stands for no value this request holds — use only the placeholders this
+  conversation showed you, exactly as written` (`Vault.unknown`).
+
 ## 2026-11 — an agent's answer is held to what the agent says it gives (15 November)
 
 `answers-with:` is a promise to whoever calls the agent. The reference harness put the shape to

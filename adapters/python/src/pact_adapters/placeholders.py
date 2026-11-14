@@ -57,6 +57,24 @@ class Vault:
         self._by_value[original] = placeholder
         return placeholder
 
+    def unknown(self, value: Any) -> list[str]:
+        """The placeholders in `value` this vault does not hold, sorted: another
+        request's, or one a model made up."""
+        found: set[str] = set()
+
+        def walk(item: Any) -> None:
+            if isinstance(item, str):
+                found.update(m for m in _TOKEN.findall(item) if m not in self.held)
+            elif isinstance(item, dict):
+                for v in item.values():
+                    walk(v)
+            elif isinstance(item, (list, tuple)):
+                for v in item:
+                    walk(v)
+
+        walk(value)
+        return sorted(found)
+
     def restored(self, value: Any) -> Any:
         """`value` with every placeholder this vault holds put back."""
         if isinstance(value, str):

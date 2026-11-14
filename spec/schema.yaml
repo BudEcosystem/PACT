@@ -3953,7 +3953,12 @@ groups:
           an agent uses such an action, a hidden value becomes a placeholder
           (`⟦card-number-1⟧`) instead of `[removed]`; the model, the logs and
           anybody approving see only the placeholder, and the real value is put
-          back in this action's arguments and nowhere else.
+          back in this action's arguments and nowhere else. The placeholders
+          belong to the request: a lead whose team member uses such an action
+          keeps hidden values as placeholders too, and the member's action gets
+          back what the lead hid. A placeholder the request does not hold —
+          another request's, or a guessed one — stops the call instead of being
+          sent as text.
       claim-lasts:
         # docs/98 WP-7. The lease `same-request-key-across:` was waiting for
         # (B13, docs/50-NOT-COPIED.md §6): a claim that expires frees the key,
