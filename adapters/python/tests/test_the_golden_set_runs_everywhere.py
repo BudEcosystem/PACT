@@ -248,6 +248,10 @@ def _there(spec: AgentSpec) -> dict[str, Any] | None:
         "loops": _loops_of(spec),
         "answersWith": dict(spec.answers_with),
         "answersWithMode": spec.answers_with_mode,
+        # What an answer is held to and how many tries it gets. This port holds
+        # it to neither and says so; sent so that it can.
+        "checkedBy": [r.kind for r in spec.checked_by],
+        "checksAtMost": spec.checks_at_most,
         # docs/98 WP-8: each memory shared with the team, which Python offers as
         # a tool named after it. Sent so the port offers the same names and says
         # it keeps no board, rather than offering fewer tools in silence.

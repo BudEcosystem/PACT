@@ -118,6 +118,10 @@ def _payload_for(spec: AgentSpec) -> str:
         # the model for the shape the author declared and nothing noticed.
         "answersWith": dict(spec.answers_with),
         "answersWithMode": spec.answers_with_mode,
+        # What an answer is held to and how many tries it gets. This port holds
+        # it to neither and says so; sent so that it can.
+        "checkedBy": [r.kind for r in spec.checked_by],
+        "checksAtMost": spec.checks_at_most,
     })
 
 

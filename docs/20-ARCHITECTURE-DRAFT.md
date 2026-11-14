@@ -8969,11 +8969,11 @@ declared on `AgentSpec` for one purpose: so the run can name it, one line at a t
 what does not happen. A run over this target carrying any of them is still a run whose trace
 matches — it is a run that *did less*, and said which less.
 
-Thirteen of the fourteen are named on `RunResult.unenforced`: **ten** by `notDoneHere`, which reads
-the `AgentSpec`'s own top-level keys, and **three** — a loop stage's `asks:` and `forks:`, and
-`answers-with-mode:` — by `run()` itself, for the two different reasons given at the end of
+Fifteen of the sixteen are named on `RunResult.unenforced`: **eleven** by `notDoneHere`, which reads
+the `AgentSpec`'s own top-level keys, and **four** — a loop stage's `asks:` and `forks:`,
+`answers-with-mode:` and `checks-at-most:` — by `run()` itself, for the two different reasons given at the end of
 this section. (`notDoneHere` returns one line more, for `team:`, but `team:` is a list A key and
-not a row here.) The fourteenth — the
+not a row here.) The sixteenth — the
 documents a corpus declares — is named on `RunResult.unretrieved`, which is the same fifth
 channel `harness.py` has carried since A7 and is a fifth for the same reason `never_reached`
 is not `unmetered`: *the rule could not be evaluated* sends the reader to the rule, *the
@@ -9004,6 +9004,8 @@ every shipped tree agreed anyway.
 | `reactions:` on an agent, and every other agent's `listens-for:` | docs/99 §5 | The Python harness stops at six moments of its own loop and carries out what a reaction says there — a reminder added to what the model is told, another agent asked first or told after, the run stopped. This port has no reactor: each reaction that covers the agent is named on `unenforced`, and nothing is reminded, asked, told or stopped. The `working-on` tool an agent says its own topic with IS offered, under the same name and description, so both ports show the model the same tools; a call to it is noted and nobody is asked. Carried on the payload as `reactions`. |
 | `forks:` on a loop stage | docs/98 WP-10 | Python starts each attempt of a forking stage from a copy of the conversation as the stage began; this port runs every attempt on the one conversation, so a later attempt reads the earlier ones and the samples are not independent. Like `asks:`, written inside a loop and named by `run()` once the loop is resolved, for every stage the loop declares. |
 | `answers-with-mode:` | A5 | Only `prompted` is deliverable anywhere — `native-json-schema` and `tool` constrain the answer at the provider, and no transport in either port does that. So the shape is asked for in the prompt (list A above) and the two stricter modes are named on `unenforced` rather than quietly served as prose, which would be the silent degradation T7 forbids. Both ports pick `prompted` when the line is absent, and both report the same sentence when it is not. |
+| `checked-by:` | 02P O7 | The Python harness holds a reply that would be the answer to the author's own rules before it is one (`answers_fit.py`, `evals.first_broken`): a reply that breaks a rule is asked for again with the reason, and is never returned. This port has no rule reader, so the rules are named and a reply that breaks one is returned as it is. |
+| `checks-at-most:` | 02P O7 | How many times in all an agent is asked for its answer — 2 when unwritten — held to `checked-by:` and to the shape it says it gives. Python asks again with the reason and ends the run `checks-failed` when none fits; this port asks once and returns the reply as written. The shape itself is list A: both ports put it to the model in the same words, and a reply that fits is the answer on both. Named by `run()` and not by `notDoneHere`, because it turns on whether a shape was asked for this turn. |
 
 **What list B counts, and what a run actually prints.** The thirteen is a count of list B's ROWS on
 `unenforced`, not of the lines a run comes back with. Two other things reach the same channel

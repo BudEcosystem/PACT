@@ -3,6 +3,77 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — an agent's answer is held to what the agent says it gives (15 November)
+
+`answers-with:` is a promise to whoever calls the agent. The reference harness put the shape to
+the model and handed back whatever came: *"Sure, I think we should refund them."* from an agent that
+gives a decision and an amount was the run's answer, `halted: final`. `checked-by:`, the author's
+own rules for an answer, was read by nothing in the loop; the run said so and returned the answer
+unchecked. The owner's ruling: *"if there is a promised shape, it must be honored."*
+
+### What holds now
+
+- **A reply that would be the answer is held before it is one** (`answers_fit`): to the shape the
+  agent was asked for, and, when it fits, to its `checked-by:` rules.
+- **Asked again, and told why.** A field left out (unless `, optional`) or a value its line refuses
+  is named in the author's own words; a broken rule is named with its `because:`. The model is told
+  at its next request and at no other, last in its system text, never in the person's voice.
+- **`checks-at-most:` times in all**, 2 unwritten: one count for the shape and the rules, and the
+  closing answer of a run that reached a limit spends from it too. An empty reply that arrived is a
+  try. The count crosses a pause with the rest of what a run has used.
+- **Still not the answer, the run ends `checks-failed`** and hands back none. Its `output` says how
+  many times it was asked and what was wrong with the last reply. A closing answer that never fits
+  keeps the ceiling's own word (`Reached.unanswered`).
+- **`RunResult.answer`**: each declared field the answer carried, as written, and no field the agent
+  does not declare. `output` stays the reply as the model wrote it. PACT's own agent facade
+  (`pact_agent`) hands back `answer`; a run that ended `checks-failed` arrives there as `Halted`.
+- **A field that streams** (`reply: stream of text`) is the reply itself, not a line in it.
+- **`turn.message.failed`** is emitted for each reply that was not the answer, with `attempt` and
+  `reason`; a watch may name it.
+
+### What `pact check` now says
+
+- **`checks-at-most:` is read beside `answers-with:`, `checked-by:` or both.** It needed
+  `checked-by:`. Beside neither it is refused as a line nothing reads (`schema/missing-any-of`).
+  `needs-any-of:` is a new attribute of the schema: `needs-one-of:` means exactly one, and refused an
+  agent that writes a shape and rules both.
+
+### What changed for whoever scripts a model
+
+A scripted answer has to be what the agent gives. 136 tests in 37 files scripted *"done"* or
+*"Approved."* for agents that promise fields; each now scripts an answer that fits
+(`tests/fitting.py`). One test documented the opposite rule and is rewritten: PACT's agent facade
+read a reply "and not validated, deliberately", because the harness checked nothing and a check at
+the door would have been a second one. The harness is now the one check, and the facade hands back
+what it read.
+
+### The second port
+
+The TypeScript port puts the same shape to the model and holds nothing: it asks once and returns
+the reply. It says so on every run where an answer is asked for in a shape or held to rules
+(`checks-at-most:`, `checked-by:` on `unenforced`; §7.28 list B, two rows, fifteen keys in all).
+
+### What a runtime must match
+
+- **`tests/conformance/answers.json`**, thirteen cases on a new tree `trees/decided-refunds`.
+- Every agent case's `expect` (reactions, limits, answers) has three new keys: `asked-again`,
+  `said`, `answer`. The 24 existing cases are otherwise unchanged.
+- `digests.json`: `decided-refunds` is new; no listed tree moved.
+
+### Checked live
+
+On gpt-4o-mini and gpt-5-nano: a desk ends its reply with the fields it gives; with its first
+reply replaced by one naming no field, told why, it answers again with every field; out of
+lookups, its closing answer has them too.
+
+### Still owed
+
+- The Pydantic AI path (`pydantic_ai_interop`) holds the shape with the SDK's own output retries
+  and `checked-by:` with `checks-at-most:`: two counts where the reference has one.
+- A workflow's stage that writes `checked-by:` is still held by nothing in the reference workflow
+  runtime.
+- The TypeScript port does not hold an answer; it has no shape reader.
+
 ## 2026-11 — the kernel's operations are a file, and each field says which it is (13 November)
 
 A runtime that runs PACT one operation at a time needs to know which fields reach each of the 76

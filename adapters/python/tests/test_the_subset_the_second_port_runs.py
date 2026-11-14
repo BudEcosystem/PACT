@@ -75,6 +75,9 @@ KEYS = (
     ("slo", "`slo.*`", {"first-reply-within": "2s"}, "first-reply-within:"),
     ("model", "`model:`", "claude-haiku-4-5", "model:"),
     ("watches", "`watch/`", ["everything"], "watch:"),
+    # The author's own rules for an answer. The Python harness holds a reply to
+    # them before it is the answer; this port names them and holds nothing.
+    ("checkedBy", "`checked-by:`", ["must-contain"], "checked-by:"),
 )
 
 #: A teammate, which is the one key on BOTH sides of the bound: the name is
@@ -104,6 +107,13 @@ DOCUMENTS = "`knowledge/`"
 #: governance line: it decides what somebody is shown and what answer is taken
 #: back. Both ports stop the run in that stage; only Python puts the question.
 STAGE_QUESTION = "`asks:`"
+
+#: How §7.28 list B spells the row for how many times an agent is asked for
+#: its answer. The Python harness holds a reply to the shape the agent says it
+#: gives and to its `checked-by:` rules, and asks again; this port asks once.
+#: Named by `run()` whenever a shape is asked for or rules are written, so it
+#: is in the report of a spec that writes `checked-by:` too.
+TRIES = "`checks-at-most:`"
 
 #: A loop whose first stage stops to ask a person, and names the question.
 #: `approve-refund` is an entry under `questions/` — which is §7.28 list C, a
@@ -303,8 +313,13 @@ def test_the_architecture_lists_exactly_the_keys_the_run_says_it_ignores() -> No
     # fifth: the sentence about a set of documents nobody looked in belongs on
     # `unretrieved`, and arriving here instead would be one fact in two channels
     # across the two ports and a ticket sent to an author with nothing to edit.
+    assert _named_by_a_row(section, TRIES), (
+        f"§7.28 list B has no row for {TRIES}.\n"
+        "  fix: add a row — the Python harness asks for an answer again when it does not "
+        "fit, that many times in all, and this port asks once and returns the reply."
+    )
     said = _run(_everything_written())["unenforced"]
-    accounted = tuple(starts for _, _, _, starts in KEYS) + ("team:",)
+    accounted = tuple(starts for _, _, _, starts in KEYS) + ("team:", "checks-at-most:")
     stray = [line for line in said if not line.startswith(accounted)]
     assert not stray, (
         "this port reports a line §7.28 list B does not account for:\n  "
@@ -480,3 +495,33 @@ def test_a_document_carrying_none_of_them_is_told_nothing() -> None:
         "a spec carrying no unenforced key was told about one anyway: "
         f"{quiet['unenforced']}"
     )
+
+
+def test_an_answer_this_port_does_not_hold_is_said_to_be_asked_for_once() -> None:
+    """The Python harness holds a reply to what the agent says it gives, and
+    this port does not: a reply with no field in it is `checks-failed` there
+    and the run's answer here. The shape is put to the model in the same words
+    on both (list A), so nothing in the instructions tells the two apart; the
+    run has to say it, on every run where an answer was asked for in a shape.
+    """
+    plain = {"name": "Refund Desk", "instructions": "Decide.", "tools": [], "maxSteps": 2}
+    shaped = _run({**plain, "answersWith": {"decision": "one of approved, declined"}})
+    tries = [u for u in shaped["unenforced"] if u.startswith("checks-at-most:")]
+    assert len(tries) == 1, shaped["unenforced"]
+    assert tries[0].startswith("checks-at-most: 2 — "), "2 when the author wrote none"
+    assert "asked once" in tries[0] and "`checks-failed`" in tries[0]
+    # The reply had no `decision` in it, and it is this port's answer all the same.
+    assert shaped["halted"] == "final" and shaped["output"] == "done"
+
+    written = _run({**plain, "answersWith": {"decision": "text"}, "checksAtMost": 3})
+    assert any(u.startswith("checks-at-most: 3 — ") for u in written["unenforced"])
+
+    # Rules alone: the rules are named, and so is the one asking.
+    ruled = _run({**plain, "checkedBy": ["must-contain"]})
+    starts = sorted(u.split(":", 1)[0] for u in ruled["unenforced"])
+    assert starts == ["checked-by", "checks-at-most"], ruled["unenforced"]
+
+    # A shape asked for in a mode this port cannot deliver is not asked for at
+    # all, which `answers-with-mode:` says; there is then no answer to hold.
+    unasked = _run({**plain, "answersWith": {"decision": "text"}, "answersWithMode": "tool"})
+    assert not [u for u in unasked["unenforced"] if u.startswith("checks-at-most:")]

@@ -763,7 +763,7 @@ produces *byte-identical traces, tool sequences and model-call counts*. The clai
 is bounded and the bound is written down: it covers `instructions:`, `tools:`,
 `skills:`, `knowledge:`, `team:`, `answers-with:`, the `loop:`, the `limits:`
 ceilings and whether a `plugins:` line stops the agent before it starts — and
-**not** the thirteen governance keys the Node port reports on
+**not** the fifteen governance keys the Node port reports on
 `unenforced`, nor the documents under `knowledge/`, which nothing on that port
 can look anything up in and which it names on `unretrieved` for every set an
 answer did not come from. See

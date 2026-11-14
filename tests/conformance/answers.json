@@ -1,0 +1,818 @@
+{
+ "about": "What an agent's answer is held to (`answers-with:`, `checked-by:`, `checks-at-most:`). Replayed as conformance_kit.replay_agent does: `model` is the lead agent's turns, turn N being what the model writes when the conversation it is sent holds N replies of its own, so a reply that was not the answer and was asked for again is followed by the next turn; `tools` is what each tool hands back. The rules these hold: a reply that would be the answer is held to the shape the agent says it gives (a field left out does not fit unless its line says `, optional`; a value its line refuses does not fit; a field the agent does not declare is not a reason to ask again and is not handed back) and, when it fits, to the agent's own `checked-by:` rules. One that is not the answer is asked for again, the model told why at its next request and at no other, last in its system text (`asked-again`). It is asked for at most `checks-at-most:` times in all, 2 when unwritten, the shape and the rules spending from one count; an empty reply that arrived is one of them. Still not the answer, the run ends `checks-failed`, its `output` says how many times it was asked and what was wrong with the last reply, and it hands back no `answer`. An agent that declares no shape and no rules is held to nothing. The closing answer of a run that reached a limit (`when-it-runs-out: answer-with-what-it-has`) is held the same way, from the same count: asked again, the closing request is the same request and then why; never fitting, the run keeps its ceiling's own word in `halted`, because it did run out, and its `output` says it was left with no answer. In `expect`: `said` is what the model wrote at each step, a reply that was not the answer included; `answer` is each declared field the answer carried, as written; `output` is the reply as the model wrote it, or what the run says when it has no answer.",
+ "cases": [
+  {
+   "name": "an-answer-that-fits-is-the-answer-and-only-the-fields-it-gives-are-handed-back",
+   "tree": "tests/conformance/trees/decided-refunds",
+   "agent": "desk",
+   "says": "Order 7 arrived broken. Refund it?",
+   "model": [
+    {
+     "text": "The item arrived broken.\n- decision: approved\n- amount: 45 USD\n- mood: cheerful"
+    }
+   ],
+   "tools": {
+    "orders": "order 7: 45 USD, delivered broken"
+   },
+   "expect": {
+    "after-a-yes": [],
+    "answer": {
+     "amount": "45 USD",
+     "decision": "approved"
+    },
+    "asked-again": [],
+    "closing": "",
+    "executed": [],
+    "halted": "final",
+    "offered": [
+     [
+      "orders"
+     ]
+    ],
+    "output": "The item arrived broken.\n- decision: approved\n- amount: 45 USD\n- mood: cheerful",
+    "parks": [],
+    "reactions": [],
+    "reminders": [],
+    "said": [
+     "The item arrived broken.\n- decision: approved\n- amount: 45 USD\n- mood: cheerful"
+    ],
+    "steps": [
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "an-answer-written-as-one-json-record-fits-too",
+   "tree": "tests/conformance/trees/decided-refunds",
+   "agent": "desk",
+   "says": "Order 7 arrived broken. Refund it?",
+   "model": [
+    {
+     "text": "{\"decision\": \"declined\", \"amount\": \"0 USD\", \"mood\": \"sorry\"}"
+    }
+   ],
+   "tools": {
+    "orders": "order 7: 45 USD, delivered broken"
+   },
+   "expect": {
+    "after-a-yes": [],
+    "answer": {
+     "amount": "0 USD",
+     "decision": "declined"
+    },
+    "asked-again": [],
+    "closing": "",
+    "executed": [],
+    "halted": "final",
+    "offered": [
+     [
+      "orders"
+     ]
+    ],
+    "output": "{\"decision\": \"declined\", \"amount\": \"0 USD\", \"mood\": \"sorry\"}",
+    "parks": [],
+    "reactions": [],
+    "reminders": [],
+    "said": [
+     "{\"decision\": \"declined\", \"amount\": \"0 USD\", \"mood\": \"sorry\"}"
+    ],
+    "steps": [
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "an-answer-that-does-not-fit-is-asked-for-again-and-told-why",
+   "tree": "tests/conformance/trees/decided-refunds",
+   "agent": "desk",
+   "says": "Order 7 arrived broken. Refund it?",
+   "model": [
+    {
+     "text": "Sure, I think we should refund them."
+    },
+    {
+     "text": "The item arrived broken.\n- decision: approved\n- amount: 45 USD"
+    }
+   ],
+   "tools": {
+    "orders": "order 7: 45 USD, delivered broken"
+   },
+   "expect": {
+    "after-a-yes": [],
+    "answer": {
+     "amount": "45 USD",
+     "decision": "approved"
+    },
+    "asked-again": [
+     "Your last answer did not fit what your answer must contain:\n- `decision` is missing. It should be: one of approved, declined.\n- `amount` is missing. It should be: money.\nAnswer again, with every field as it is asked for."
+    ],
+    "closing": "",
+    "executed": [],
+    "halted": "final",
+    "offered": [
+     [
+      "orders"
+     ],
+     [
+      "orders"
+     ]
+    ],
+    "output": "The item arrived broken.\n- decision: approved\n- amount: 45 USD",
+    "parks": [],
+    "reactions": [],
+    "reminders": [],
+    "said": [
+     "Sure, I think we should refund them.",
+     "The item arrived broken.\n- decision: approved\n- amount: 45 USD"
+    ],
+    "steps": [
+     {
+      "calls": [],
+      "results": []
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "a-value-the-shape-refuses-is-named-and-the-field-that-fit-is-not",
+   "tree": "tests/conformance/trees/decided-refunds",
+   "agent": "desk",
+   "says": "Order 7 arrived broken. Refund it?",
+   "model": [
+    {
+     "text": "- decision: maybe\n- amount: 45 USD"
+    },
+    {
+     "text": "The item arrived broken.\n- decision: approved\n- amount: 45 USD"
+    }
+   ],
+   "tools": {
+    "orders": "order 7: 45 USD, delivered broken"
+   },
+   "expect": {
+    "after-a-yes": [],
+    "answer": {
+     "amount": "45 USD",
+     "decision": "approved"
+    },
+    "asked-again": [
+     "Your last answer did not fit what your answer must contain:\n- `decision` should be one of: approved, declined, but it is 'maybe'.\nAnswer again, with every field as it is asked for."
+    ],
+    "closing": "",
+    "executed": [],
+    "halted": "final",
+    "offered": [
+     [
+      "orders"
+     ],
+     [
+      "orders"
+     ]
+    ],
+    "output": "The item arrived broken.\n- decision: approved\n- amount: 45 USD",
+    "parks": [],
+    "reactions": [],
+    "reminders": [],
+    "said": [
+     "- decision: maybe\n- amount: 45 USD",
+     "The item arrived broken.\n- decision: approved\n- amount: 45 USD"
+    ],
+    "steps": [
+     {
+      "calls": [],
+      "results": []
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "it-is-told-why-at-the-next-request-and-at-no-other",
+   "tree": "tests/conformance/trees/decided-refunds",
+   "agent": "desk",
+   "says": "Order 7 arrived broken. Refund it?",
+   "model": [
+    {
+     "text": "Sure, I think we should refund them."
+    },
+    {
+     "text": "",
+     "calls": [
+      {
+       "name": "orders",
+       "args": {
+        "action": "look",
+        "order": "7"
+       }
+      }
+     ]
+    },
+    {
+     "text": "The item arrived broken.\n- decision: approved\n- amount: 45 USD"
+    }
+   ],
+   "tools": {
+    "orders": "order 7: 45 USD, delivered broken"
+   },
+   "expect": {
+    "after-a-yes": [],
+    "answer": {
+     "amount": "45 USD",
+     "decision": "approved"
+    },
+    "asked-again": [
+     "Your last answer did not fit what your answer must contain:\n- `decision` is missing. It should be: one of approved, declined.\n- `amount` is missing. It should be: money.\nAnswer again, with every field as it is asked for."
+    ],
+    "closing": "",
+    "executed": [
+     [
+      "orders",
+      {
+       "action": "look",
+       "order": "7"
+      }
+     ]
+    ],
+    "halted": "final",
+    "offered": [
+     [
+      "orders"
+     ],
+     [
+      "orders"
+     ],
+     [
+      "orders"
+     ]
+    ],
+    "output": "The item arrived broken.\n- decision: approved\n- amount: 45 USD",
+    "parks": [],
+    "reactions": [],
+    "reminders": [],
+    "said": [
+     "Sure, I think we should refund them.",
+     "",
+     "The item arrived broken.\n- decision: approved\n- amount: 45 USD"
+    ],
+    "steps": [
+     {
+      "calls": [],
+      "results": []
+     },
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "order": "7"
+        },
+        "name": "orders"
+       }
+      ],
+      "results": [
+       "order 7: 45 USD, delivered broken"
+      ]
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "still-not-fitting-the-run-ends-checks-failed-and-hands-back-nothing",
+   "tree": "tests/conformance/trees/decided-refunds",
+   "agent": "desk",
+   "says": "Order 7 arrived broken. Refund it?",
+   "model": [
+    {
+     "text": "Sure, I think we should refund them."
+    },
+    {
+     "text": "Sure, I think we should refund them."
+    },
+    {
+     "text": "The item arrived broken.\n- decision: approved\n- amount: 45 USD"
+    }
+   ],
+   "tools": {
+    "orders": "order 7: 45 USD, delivered broken"
+   },
+   "expect": {
+    "after-a-yes": [],
+    "answer": {},
+    "asked-again": [
+     "Your last answer did not fit what your answer must contain:\n- `decision` is missing. It should be: one of approved, declined.\n- `amount` is missing. It should be: money.\nAnswer again, with every field as it is asked for."
+    ],
+    "closing": "",
+    "executed": [],
+    "halted": "checks-failed",
+    "offered": [
+     [
+      "orders"
+     ],
+     [
+      "orders"
+     ]
+    ],
+    "output": "Stopped without an answer: it was asked for its answer 2 times and none fit `answers-with:`. In the last one:\n- `decision` is missing. It should be: one of approved, declined.\n- `amount` is missing. It should be: money.",
+    "parks": [],
+    "reactions": [],
+    "reminders": [],
+    "said": [
+     "Sure, I think we should refund them.",
+     "Sure, I think we should refund them."
+    ],
+    "steps": [
+     {
+      "calls": [],
+      "results": []
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "with-one-try-an-empty-reply-is-that-try",
+   "tree": "tests/conformance/trees/decided-refunds",
+   "agent": "strict",
+   "says": "Order 7 arrived broken. Refund it?",
+   "model": [
+    {
+     "text": ""
+    },
+    {
+     "text": "- decision: approved"
+    }
+   ],
+   "tools": {
+    "orders": "order 7: 45 USD, delivered broken"
+   },
+   "expect": {
+    "after-a-yes": [],
+    "answer": {},
+    "asked-again": [],
+    "closing": "",
+    "executed": [],
+    "halted": "checks-failed",
+    "offered": [
+     []
+    ],
+    "output": "Stopped without an answer: it was asked for its answer once and it did not fit `answers-with:`. In the last one:\n- `decision` is missing. It should be: one of approved, declined.",
+    "parks": [],
+    "reactions": [],
+    "reminders": [],
+    "said": [
+     ""
+    ],
+    "steps": [
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "a-rule-the-answer-breaks-is-told-and-the-answer-asked-for-again",
+   "tree": "tests/conformance/trees/decided-refunds",
+   "agent": "ruled",
+   "says": "Order 7 arrived broken. Refund it?",
+   "model": [
+    {
+     "text": "- decision: approved"
+    },
+    {
+     "text": "A refund is on its way.\n- decision: approved"
+    }
+   ],
+   "tools": {
+    "orders": "order 7: 45 USD, delivered broken"
+   },
+   "expect": {
+    "after-a-yes": [],
+    "answer": {
+     "decision": "approved"
+    },
+    "asked-again": [
+     "Your answer breaks a rule it must keep: does not say ['refund'] (say what happens to the money). Answer again so that it keeps every rule."
+    ],
+    "closing": "",
+    "executed": [],
+    "halted": "final",
+    "offered": [
+     [],
+     []
+    ],
+    "output": "A refund is on its way.\n- decision: approved",
+    "parks": [],
+    "reactions": [],
+    "reminders": [],
+    "said": [
+     "- decision: approved",
+     "A refund is on its way.\n- decision: approved"
+    ],
+    "steps": [
+     {
+      "calls": [],
+      "results": []
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "the-shape-and-the-rules-spend-from-one-count",
+   "tree": "tests/conformance/trees/decided-refunds",
+   "agent": "ruled",
+   "says": "Order 7 arrived broken. Refund it?",
+   "model": [
+    {
+     "text": "Sure, I think we should refund them."
+    },
+    {
+     "text": "- decision: approved"
+    },
+    {
+     "text": "A refund is on its way.\n- decision: approved"
+    }
+   ],
+   "tools": {
+    "orders": "order 7: 45 USD, delivered broken"
+   },
+   "expect": {
+    "after-a-yes": [],
+    "answer": {},
+    "asked-again": [
+     "Your last answer did not fit what your answer must contain:\n- `decision` is missing. It should be: one of approved, declined.\nAnswer again, with every field as it is asked for."
+    ],
+    "closing": "",
+    "executed": [],
+    "halted": "checks-failed",
+    "offered": [
+     [],
+     []
+    ],
+    "output": "Stopped without an answer: it was asked for its answer 2 times and none kept its `checked-by:` rules. The last one does not say ['refund'] (say what happens to the money).",
+    "parks": [],
+    "reactions": [],
+    "reminders": [],
+    "said": [
+     "Sure, I think we should refund them.",
+     "- decision: approved"
+    ],
+    "steps": [
+     {
+      "calls": [],
+      "results": []
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "an-agent-that-promises-nothing-is-held-to-nothing",
+   "tree": "tests/conformance/trees/decided-refunds",
+   "agent": "free",
+   "says": "Order 7 arrived broken. Refund it?",
+   "model": [
+    {
+     "text": ""
+    }
+   ],
+   "tools": {
+    "orders": "order 7: 45 USD, delivered broken"
+   },
+   "expect": {
+    "after-a-yes": [],
+    "answer": {},
+    "asked-again": [],
+    "closing": "",
+    "executed": [],
+    "halted": "final",
+    "offered": [
+     []
+    ],
+    "output": "",
+    "parks": [],
+    "reactions": [],
+    "reminders": [],
+    "said": [
+     ""
+    ],
+    "steps": [
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "a-closing-answer-that-fits-is-the-answer-of-a-run-that-ran-out",
+   "tree": "tests/conformance/trees/decided-refunds",
+   "agent": "closes",
+   "says": "Order 7 arrived broken. Refund it?",
+   "model": [
+    {
+     "text": "",
+     "calls": [
+      {
+       "name": "orders",
+       "args": {
+        "action": "look",
+        "order": "7"
+       }
+      }
+     ]
+    },
+    {
+     "text": "- decision: approved"
+    }
+   ],
+   "tools": {
+    "orders": "order 7: 45 USD, delivered broken"
+   },
+   "expect": {
+    "after-a-yes": [],
+    "answer": {
+     "decision": "approved"
+    },
+    "asked-again": [],
+    "closing": "This run has reached its limit, `tool-calls-at-most` (1 of 1 tool calls). No tool can be called any more.\nAnswer now, from the results you already have. Say plainly what you did not get to. Never write a tool's result yourself.",
+    "executed": [
+     [
+      "orders",
+      {
+       "action": "look",
+       "order": "7"
+      }
+     ]
+    ],
+    "halted": "tool-call-limit",
+    "offered": [
+     [
+      "orders"
+     ],
+     []
+    ],
+    "output": "- decision: approved",
+    "parks": [],
+    "reactions": [],
+    "reminders": [],
+    "said": [
+     "",
+     "- decision: approved"
+    ],
+    "steps": [
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "order": "7"
+        },
+        "name": "orders"
+       }
+      ],
+      "results": [
+       "order 7: 45 USD, delivered broken"
+      ]
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "a-closing-answer-that-does-not-fit-is-asked-for-again",
+   "tree": "tests/conformance/trees/decided-refunds",
+   "agent": "closes",
+   "says": "Order 7 arrived broken. Refund it?",
+   "model": [
+    {
+     "text": "",
+     "calls": [
+      {
+       "name": "orders",
+       "args": {
+        "action": "look",
+        "order": "7"
+       }
+      }
+     ]
+    },
+    {
+     "text": "Sure, I think we should refund them."
+    },
+    {
+     "text": "- decision: declined"
+    }
+   ],
+   "tools": {
+    "orders": "order 7: 45 USD, delivered broken"
+   },
+   "expect": {
+    "after-a-yes": [],
+    "answer": {
+     "decision": "declined"
+    },
+    "asked-again": [
+     "Your last answer did not fit what your answer must contain:\n- `decision` is missing. It should be: one of approved, declined.\nAnswer again, with every field as it is asked for."
+    ],
+    "closing": "This run has reached its limit, `tool-calls-at-most` (1 of 1 tool calls). No tool can be called any more.\nAnswer now, from the results you already have. Say plainly what you did not get to. Never write a tool's result yourself.",
+    "executed": [
+     [
+      "orders",
+      {
+       "action": "look",
+       "order": "7"
+      }
+     ]
+    ],
+    "halted": "tool-call-limit",
+    "offered": [
+     [
+      "orders"
+     ],
+     [],
+     []
+    ],
+    "output": "- decision: declined",
+    "parks": [],
+    "reactions": [],
+    "reminders": [],
+    "said": [
+     "",
+     "Sure, I think we should refund them.",
+     "- decision: declined"
+    ],
+    "steps": [
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "order": "7"
+        },
+        "name": "orders"
+       }
+      ],
+      "results": [
+       "order 7: 45 USD, delivered broken"
+      ]
+     },
+     {
+      "calls": [],
+      "results": []
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  },
+  {
+   "name": "a-closing-answer-that-never-fits-is-not-handed-back-and-the-run-still-ran-out",
+   "tree": "tests/conformance/trees/decided-refunds",
+   "agent": "closes",
+   "says": "Order 7 arrived broken. Refund it?",
+   "model": [
+    {
+     "text": "",
+     "calls": [
+      {
+       "name": "orders",
+       "args": {
+        "action": "look",
+        "order": "7"
+       }
+      }
+     ]
+    },
+    {
+     "text": "Sure, I think we should refund them."
+    },
+    {
+     "text": "Sure, I think we should refund them."
+    },
+    {
+     "text": "- decision: declined"
+    }
+   ],
+   "tools": {
+    "orders": "order 7: 45 USD, delivered broken"
+   },
+   "expect": {
+    "after-a-yes": [],
+    "answer": {},
+    "asked-again": [
+     "Your last answer did not fit what your answer must contain:\n- `decision` is missing. It should be: one of approved, declined.\nAnswer again, with every field as it is asked for."
+    ],
+    "closing": "This run has reached its limit, `tool-calls-at-most` (1 of 1 tool calls). No tool can be called any more.\nAnswer now, from the results you already have. Say plainly what you did not get to. Never write a tool's result yourself.",
+    "executed": [
+     [
+      "orders",
+      {
+       "action": "look",
+       "order": "7"
+      }
+     ]
+    ],
+    "halted": "tool-call-limit",
+    "offered": [
+     [
+      "orders"
+     ],
+     [],
+     []
+    ],
+    "output": "Stopped before finishing: this run reached the limit you set with `tool-calls-at-most` (1 of 1 tool calls). It was asked for its answer 2 times and none fit what it says it gives.",
+    "parks": [],
+    "reactions": [],
+    "reminders": [],
+    "said": [
+     "",
+     "Sure, I think we should refund them.",
+     "Sure, I think we should refund them."
+    ],
+    "steps": [
+     {
+      "calls": [
+       {
+        "args": {
+         "action": "look",
+         "order": "7"
+        },
+        "name": "orders"
+       }
+      ],
+      "results": [
+       "order 7: 45 USD, delivered broken"
+      ]
+     },
+     {
+      "calls": [],
+      "results": []
+     },
+     {
+      "calls": [],
+      "results": []
+     }
+    ],
+    "unenforced": [],
+    "woken": []
+   }
+  }
+ ]
+}

@@ -174,6 +174,13 @@ export type AgentSpec = {
   // and PACT picks `prompted` — the one mode every target can honour and the
   // only one that needs nothing off this machine.
   answersWithMode?: string;
+  // The author's own rules for an answer (`checked-by:`), each by the kind of
+  // rule it is, and how many times in all the agent is asked for its answer
+  // (`checks-at-most:`, 2 when unwritten). Declared so the run can NAME them:
+  // the Python harness holds a reply to its shape and to these rules before it
+  // is the answer (`answers_fit.py`), and this port holds it to neither.
+  checkedBy?: string[];
+  checksAtMost?: number;
   // Teammates, by name, with what each is for.
   team?: Record<string, string>;
   // Absent means `ir.DEFAULT_STEPS`. A bound is never absent — but this port
@@ -232,7 +239,7 @@ export const AGENT_SPEC_FIELDS = [
   "name", "instructions", "tools", "skills", "team", "maxSteps", "limits",
   "loop", "loops", "interceptors", "contextPolicy", "policy", "teamwork",
   "settings", "slo", "model", "watches", "answersWith", "answersWithMode",
-  "knowledge", "boards", "reactions", "plugins",
+  "knowledge", "boards", "reactions", "plugins", "checkedBy", "checksAtMost",
 ] as const;
 
 //: The tool an agent says its own topic with. The same name `reactions.py` uses.
@@ -472,6 +479,14 @@ export function notDoneHere(spec: AgentSpec): string[] {
     out.push(
       `watch: ${(spec.watches ?? []).join(", ")} — read and not written here, so ` +
         `nothing on this runtime records what the run did.`,
+    );
+  }
+  if ((spec.checkedBy ?? []).length > 0) {
+    out.push(
+      `checked-by: ${(spec.checkedBy ?? []).length} rule(s) an answer must keep before ` +
+        `it is the answer (${(spec.checkedBy ?? []).join(", ")}) — read and not held on ` +
+        `this runtime, so a reply that breaks one is returned as it is. The Python ` +
+        `harness asks again with the reason and ends the run \`checks-failed\`.`,
     );
   }
   return out;
@@ -891,6 +906,24 @@ export async function run(
         `\`answers-with:\` held nothing on this run. fix: write ` +
         `\`answers-with-mode: ${CHOSEN_ANSWER_MODE}\`, which asks for the same shape ` +
         `in the instructions and works on every target.`,
+    );
+  }
+
+  // HOW MANY TIMES THE AGENT IS ASKED FOR ITS ANSWER: once, here. The Python
+  // harness holds a reply that would be the answer to the shape it was asked
+  // for and to the author's `checked-by:` rules, asks again with the reason,
+  // `checks-at-most:` times in all, and ends the run `checks-failed` when none
+  // fits. This port puts the same shape to the model (list A: the instructions
+  // are byte-identical) and returns whatever comes back. Said beside the call
+  // and not in `notDoneHere`, for the reason `answers-with-mode:` is: it turns
+  // on whether a shape was ASKED FOR this turn, which is a fact about the run.
+  if (Object.keys(shapeToAskFor).length > 0 || (spec.checkedBy ?? []).length > 0) {
+    unenforced.push(
+      `checks-at-most: ${spec.checksAtMost ?? 2} — how many times in all this agent is ` +
+        `asked for its answer, and on this runtime it is asked once: the reply is ` +
+        `returned as written, whether or not it is what \`answers-with:\` says it ` +
+        `gives. The Python harness asks again with the reason and ends the run ` +
+        `\`checks-failed\` when none fits.`,
     );
   }
 

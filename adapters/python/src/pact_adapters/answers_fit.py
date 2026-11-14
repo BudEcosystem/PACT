@@ -147,6 +147,9 @@ class Held:
     asked: int = 0
     #: Why the last reply held did not fit, as the model was (or would be) told.
     last: str = ""
+    #: The same, as its parts: the fields that did not fit, or the rule broken.
+    problems: tuple[str, ...] = ()
+    broken: str = ""
 
     @property
     def holds_anything(self) -> bool:
@@ -162,22 +165,29 @@ class Held:
         if not self.holds_anything:
             return ""
         self.asked += 1
-        self.last = ""
-        problems = does_not_fit(said, self.shape, self.shapes) if self.shape else ()
-        if problems:
-            self.last = ask_again(problems)
+        self.last, self.broken = "", ""
+        self.problems = does_not_fit(said, self.shape, self.shapes) if self.shape else ()
+        if self.problems:
+            self.last = ask_again(self.problems)
         elif self.rules is not None and (broken := self.rules(said)):
+            self.broken = broken
             self.last = rule_broken(broken)
         return self.last
 
     def gave_up(self) -> str:
         """What a run says when it ends `checks-failed`: how many times it was
-        asked, and what was wrong with the last answer."""
+        asked, and what was wrong with the last reply. Said to a person, so in
+        the third person: the words the MODEL was told (`last`) begin "Your
+        last answer", and whoever reads a run's ending is not the model."""
         times = "once" if self.asked == 1 else f"{self.asked} times"
-        none = "it did not fit" if self.asked == 1 else "none fit"
-        what = "`answers-with:`" if self.last.startswith(DID_NOT_FIT) else "its `checked-by:` rules"
-        why = self.last.rsplit("\nAnswer again", 1)[0].rsplit(". Answer again so that", 1)[0]
+        if self.broken:
+            kept = "it did not keep" if self.asked == 1 else "none kept"
+            return (
+                f"Stopped without an answer: it was asked for its answer {times} and {kept} "
+                f"its `checked-by:` rules. The last one {self.broken}."
+            )
+        fit = "it did not fit" if self.asked == 1 else "none fit"
         return (
-            f"Stopped without an answer: it was asked for its answer {times} and {none} "
-            f"{what}. {why}"
+            f"Stopped without an answer: it was asked for its answer {times} and {fit} "
+            f"`answers-with:`. In the last one:\n" + "\n".join(f"- {p}" for p in self.problems)
         )

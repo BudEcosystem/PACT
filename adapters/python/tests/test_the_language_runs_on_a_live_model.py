@@ -151,6 +151,63 @@ def test_out_of_lookups_it_answers_from_what_it_has_and_makes_nothing_up() -> No
     assert not made_up, f"the model reported lookups that were never made: {made_up}"
 
 
+# ── an answer held to what the agent says it gives ───────────────────────────
+
+REFUNDS = REPO / "tests/conformance/trees/decided-refunds"
+ORDER = "Order 7 was a lamp for 45 USD and it arrived broken. Refund it?"
+
+
+def _orders(args: dict[str, Any]) -> str:
+    return "order 7: one lamp, 45 USD, delivered broken, bought 6 days ago"
+
+
+def test_a_live_model_ends_its_reply_with_what_the_agent_gives() -> None:
+    """The shape is put to the model in the author's own words, and the answer
+    is held to it. A live model has to actually write the fields."""
+    spec = AgentSpec.from_document(shown(REFUNDS), "desk")
+    live = Live("desk")
+    out = asyncio.run(run(spec, live, ORDER, {"orders": _orders}))
+    assert out.halted == "final", said(out)
+    assert out.answer.get("decision") in ("approved", "declined"), said(out)
+    assert "amount" in out.answer, said(out)
+
+
+class Forgetful(Live):
+    """A live model whose FIRST reply is thrown away and replaced by one that is
+    not the answer. What follows is the live model's own doing: it is sent the
+    conversation with that reply in it as its own, told why it was not the
+    answer, and asked again."""
+
+    async def model_call(self, system, history, tools):  # type: ignore[override]
+        first = not self.told
+        text, calls = await super().model_call(system, history, tools)
+        return ("Sure, I think we should refund them.", []) if first else (text, calls)
+
+
+def test_a_live_model_told_why_its_answer_did_not_fit_answers_again_and_fits() -> None:
+    """The words a model is told when its reply was not the answer
+    (`answers_fit.ask_again`) are only any good if a model that reads them
+    then writes the fields. Scripted models prove the harness asks again;
+    this proves the asking works."""
+    spec = AgentSpec.from_document(shown(REFUNDS), "desk")
+    live = Forgetful("desk")
+    out = asyncio.run(run(spec, live, ORDER, {"orders": _orders}))
+    assert out.halted == "final", said(out)
+    assert out.steps[0].text == "Sure, I think we should refund them."
+    # Told at the request after the reply that did not fit, last in its system text.
+    assert "Your last answer did not fit what your answer must contain:" in live.told[1], live.told[1][-500:]
+    assert "`decision` is missing" in live.told[1] and "`amount` is missing" in live.told[1]
+    assert out.answer.get("decision") in ("approved", "declined"), said(out)
+    assert "amount" in out.answer, said(out)
+
+
+def test_a_live_model_out_of_lookups_still_ends_with_what_the_agent_gives() -> None:
+    """The closing answer of a run that reached a limit is held like any other."""
+    spec = AgentSpec.from_document(shown(REFUNDS), "closes")
+    out = asyncio.run(run(spec, Live("closes"), ORDER, {"orders": _orders}))
+    assert out.answer.get("decision") in ("approved", "declined"), said(out)
+
+
 def _ledger(looked: list[str]):
     def ledger(args: dict[str, Any]) -> str:
         looked.append(str(args.get("entry")))

@@ -228,7 +228,7 @@ def test_still_not_fitting_the_run_ends_checks_failed_and_hands_back_nothing(tmp
     assert out.answer == {}
     assert out.output == (
         "Stopped without an answer: it was asked for its answer 2 times and none fit "
-        "`answers-with:`. Your last answer did not fit what your answer must contain:\n"
+        "`answers-with:`. In the last one:\n"
         "- `decision` is missing. It should be: one of approved, declined.\n"
         "- `amount` is missing. It should be: money."
     )
@@ -276,11 +276,11 @@ def test_the_shape_and_the_rules_spend_from_one_count(tmp_path: Path) -> None:
     # all, so that is the end: it does not get two for each.
     out, _, script, _ = go(tmp_path, "ruled", [VAGUE, "- decision: approved", GOOD])
     assert out.halted == CHECKS_FAILED and script.calls == 2
-    assert out.output.startswith(
-        "Stopped without an answer: it was asked for its answer 2 times and none fit "
-        "its `checked-by:` rules."
+    assert out.output == (
+        "Stopped without an answer: it was asked for its answer 2 times and none kept its "
+        "`checked-by:` rules. The last one does not say ['refund'] (say what happens to the "
+        "money)."
     )
-    assert "does not say ['refund']" in out.output
 
 
 def test_rules_alone_hold_an_answer_that_promises_no_shape(tmp_path: Path) -> None:
