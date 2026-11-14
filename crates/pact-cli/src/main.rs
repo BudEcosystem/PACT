@@ -1515,13 +1515,16 @@ fn durability_matches_what_this_tree_does(
     ));
 }
 
-fn validate(
+fn validate_as(
     path: &Utf8PathBuf,
     unsafe_spec: bool,
 ) -> Result<(
     Option<pact_doc::Node>,
     Diagnostics,
     Vec<pact_loader::report::Substitution>,
+    // What it was validated as: `workspace`, `agent`, or `""` where it never
+    // got as far as being one or the other.
+    &'static str,
 )> {
     let (mut node, mut diags) = load(path)?;
 
@@ -1592,6 +1595,8 @@ fn validate(
         pact_loader::interfaces::inherit(root);
     }
 
+    // What the document was validated as, for a caller that asks.
+    let mut validated_as: &'static str = "";
     if let Some(root) = node.as_ref() {
         let schema = spec
             .knowing("models", models_known_here(node.as_ref()))
@@ -1646,7 +1651,7 @@ fn validate(
             && holds_self_file(&folder, &AGENT_SELF_FILES)
         {
             diags.sort();
-            return Ok((node, diags, substituted));
+            return Ok((node, diags, substituted, ""));
         }
 
         // A workspace is a workspace; anything else is a single agent. See
@@ -1657,6 +1662,7 @@ fn validate(
         } else {
             "agent"
         };
+        validated_as = kind;
         // ...and a folder that is neither is neither, which nothing said. A
         // directory holding only `agent.yaml` and `instructions.md` — Eve's
         // documented flat layout — printed "OK — loaded cleanly (3 settings)"
@@ -1675,7 +1681,7 @@ fn validate(
         // reader to add `description:` to a file that does not exist.
         if nothing_to_validate {
             diags.sort();
-            return Ok((node, diags, substituted));
+            return Ok((node, diags, substituted, kind));
         }
         match schema.group(kind) {
             Some(_) => schema.validate(root, kind, &mut diags),
@@ -1995,6 +2001,20 @@ fn validate(
         pact_loader::settings::check(root, BUILTIN_CATALOGUE, &mut diags);
         diags.sort();
     }
+    Ok((node, diags, substituted, validated_as))
+}
+
+/// [`validate_as`], for a caller that does not ask what kind of document it
+/// turned out to be.
+fn validate(
+    path: &Utf8PathBuf,
+    unsafe_spec: bool,
+) -> Result<(
+    Option<pact_doc::Node>,
+    Diagnostics,
+    Vec<pact_loader::report::Substitution>,
+)> {
+    let (node, diags, substituted, _) = validate_as(path, unsafe_spec)?;
     Ok((node, diags, substituted))
 }
 
@@ -2472,7 +2492,7 @@ fn check(path: &Utf8PathBuf, quiet: bool, unsafe_spec: bool, deny_warnings: bool
     if let Some(root) = enclosing_workspace(path) {
         return check_in_context(path, &root, quiet, unsafe_spec, deny_warnings);
     }
-    let (node, diags, _) = validate(path, unsafe_spec)?;
+    let (node, diags, _, kind) = validate_as(path, unsafe_spec)?;
 
     if !diags.is_empty() {
         out_raw!("{}", diags.render());
@@ -2491,6 +2511,7 @@ fn check(path: &Utf8PathBuf, quiet: bool, unsafe_spec: bool, deny_warnings: bool
             (e, 0) => out!("{e} problem(s) found in {path}. Nothing was run."),
             (e, w) => out!("{e} problem(s) and {w} warning(s) found in {path}."),
         }
+        say_the_boundary(node.as_ref().filter(|_| kind == "workspace"), errors);
     }
 
     // A warning is a heuristic cross-document judgement, and what makes those
@@ -2502,6 +2523,22 @@ fn check(path: &Utf8PathBuf, quiet: bool, unsafe_spec: bool, deny_warnings: bool
     } else {
         0
     })
+}
+
+/// Say where a workspace draws its egress boundary, after the result of a
+/// check. One line on stdout, never a diagnostic: it is a fact about a tree that
+/// loaded, not something wrong with it, so it fails no build and is not counted
+/// as a warning ([`egress::Boundary`]).
+///
+/// Said only of a tree with no problems. A tree that did not load has not said
+/// anything a runtime will act on, its `allow-egress:` line included.
+fn say_the_boundary(workspace: Option<&pact_doc::Node>, errors: usize) {
+    if errors > 0 {
+        return;
+    }
+    if let Some(root) = workspace {
+        out!("{}", egress::Boundary::read(root).in_words());
+    }
 }
 
 /// The workspace `path` is an agent inside, if it is one.
@@ -2542,7 +2579,7 @@ fn check_in_context(
     deny_warnings: bool,
 ) -> Result<i32> {
     let here = agent.canonicalize_utf8().unwrap_or_else(|_| agent.clone());
-    let (_, whole, _) = validate(root, unsafe_spec)?;
+    let (around, whole, _) = validate(root, unsafe_spec)?;
     let mut mine = Diagnostics::new();
     for d in whole.items() {
         let inside = camino::Utf8Path::new(d.span.file.as_str())
@@ -2608,6 +2645,9 @@ fn check_in_context(
             (e, 0) => out!("{e} problem(s) found in {agent}. Nothing was run."),
             (e, w) => out!("{e} problem(s) and {w} warning(s) found in {agent}."),
         }
+        // The boundary is the workspace's, and it is the one this agent runs
+        // inside: an agent's own folder has nowhere to write another.
+        say_the_boundary(around.as_ref(), errors + elsewhere);
     }
     // `--deny-warnings` is read HERE too. It was read only on the other branch,
     // so the one flag whose whole job is *"treat a warning as a refusal, this
