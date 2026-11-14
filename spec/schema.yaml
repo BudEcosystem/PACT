@@ -5332,13 +5332,17 @@ groups:
         type: yes-no
         surface: S-EXEC
         tier: core
-        help: with `stop`, undo what the open run did, newest first, before it ends
+        help: >
+          with `stop` or `cancel-previous`, undo what the open run did, newest
+          first, before it ends. Either way the run it ends is `cancelled`.
       then-run:
         type: text
         names: workflows
         surface: S-EXEC
         tier: core
-        help: with `stop`, a workflow to start afterwards with the run's data, not waited for
+        help: >
+          with `stop`, a workflow to start afterwards, not waited for. It is
+          given the ended run's own input, as much of it as it `accepts:`.
       who-can-reach-it:
         type: list of text
         surface: S-EXEC

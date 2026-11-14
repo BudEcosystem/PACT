@@ -3,6 +3,112 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — how a run ends, the egress boundary said out loud, and two things that read as one thing and did another (15 November)
+
+Four rulings, each made with Bud Agent Flow's engine and corpus in front of it.
+
+### A run something outside it ended is `cancelled`
+
+A workflow's run ended `final`, `parked` or `stopped`. A run that a port ended (an arrival with
+the run's key at a port that says `if-still-running: stop` or `cancel-previous`), or that a person
+at the host ended, had no word and was reported `stopped`, with the runs that failed.
+
+- **`cancelled`**, the fourth ending. `WorkflowResult.cancelled_by` says what ended it
+  (`{port: <name>}`, or `{by: <who>}` for a host). It hands back no answer.
+- **It ends between stages.** A stage that has begun finishes, so what it wrote is on the record;
+  the next does not begin, is not in the trace, and nobody it would ask is asked. Once ended, no
+  stage begins anywhere in the run (an item of an `each` still queued does not start).
+- **The port's own lines say what else happens.** `undo: yes`, beside `stop` or `cancel-previous`,
+  takes back what the run wrote, newest first, by each action's `undone-by:`; a write that could
+  not be taken back is said in `said` and `unenforced`, and the run is cancelled all the same.
+  `then-run:`, beside `stop`, starts a workflow afterwards and does not wait for it, with the ended
+  run's own input, as much of it as that workflow `accepts:` (`Callers.start`; with none, said).
+- **Never a branch failing.** No `if-it-fails:` plan and no `if-someone-fails: carry-on` takes it.
+- `run_workflow(..., ended=)` is how a host says so: asked before each stage begins.
+
+### `stopped` says why, in one word
+
+`halted: stopped` covered a person's no, a decision nobody could make, a server that was down and
+a ceiling that was reached, told apart only by `said`, which is prose. `WorkflowResult.why` is one
+of eight words (`workflow_runtime.STOPPED_BECAUSE`): `said-so`, `declined`, `nobody-answered`,
+`nobody-decided`, `a-call-failed`, `reached-a-limit`, `does-not-fit`, `not-runnable`. Empty for
+any other ending.
+
+### What was wrong in the reference
+
+- **A no, or silence, with no exit written for it ended the block instead of stopping the run.**
+  `outcome.declined` says "leave it out and the run stops and says so: a no is never quietly
+  carried past". A workflow that gives nothing finished `final` after a person had said no, and one
+  that gives something was told its answer "does not fit". It now stops: `why: declined`, or
+  `nobody-answered`.
+- **A run that calls a workflow that waits for a person was `stopped`** ("the workflow 'x'
+  parked"). It is `parked`: `parked-at` is the caller's own stage, where a host resumes it, and
+  `question` is the called run's. Who the called run asked is on the caller's record too.
+
+### A stage says how its agent ended
+
+An agent that reaches a limit with `when-it-runs-out: answer-with-what-it-has` gives an answer, the
+stage takes it and the workflow goes on. Nothing let the workflow tell that answer from a finished
+one.
+
+- **`steps.<stage>.ended`** is `ran-out` for such an answer and `finished` for any other, on a
+  `call` of an agent and on a `decide` an agent decided (its label counts either way). The word a
+  `repeat` has, with the same `ran-out`. A stage that calls a tool or a workflow has none.
+- **A word, not an exit under `then:`.** The stage did answer, so `answered` stays the true name of
+  how it ended; a word can be shown to a person and handed back, which an exit cannot; and no
+  workflow that exists changes. Branching on it is a `decide` with a written rule.
+- A host hands such an answer back as `workflow_runtime.RanOut(answer)`.
+
+### A classifier and a language model in one `model:` list are refused on a rung
+
+`loader/a-rung-with-two-kinds-of-reader` was a warning. It is an error.
+
+- **What it reads as, and what it is.** "The classifier, then the language model for what it is
+  unsure of." A `model:` list names fallbacks for a call that fails; unsure passes to the next
+  rung. So the language model would be asked only when the classifier's server was down.
+- **Why a warning was not enough.** Measured on Bud Agent Flow's corpus: 13 of 136 trees write it,
+  each meaning the cascade. A warning loads, and the same file then ran two ways: the framework
+  under that engine treats an unsure classifier as a failed call and goes on down the list;
+  PACT's reading does not.
+- **Why not give the list that meaning.** One agent would be two readers: `instructions:` and
+  `not-sure` apply to the language model only, `if-unsure-below:` to the classifier only, and the
+  record could not say which decided. The ladder already is the cascade: two agents on two rungs,
+  each with its own threshold and second-opinion line, and `.answered-by` names which decided.
+- Two models of one kind in a list are fallbacks as before.
+
+### `pact check` and `pact discover` say where the boundary is
+
+Leaving `allow-egress:` out draws no boundary (Q17). That is a choice, and it is also what a
+forgotten line looks like: both printed `OK — loaded cleanly`.
+
+- **`pact check`** prints one line after a check that finds no problems: no line written (every
+  part may talk outside), `[]` (nothing may), or the parts listed. It is on stdout and is not a
+  diagnostic: `--deny-warnings` is unaffected, because a warning would fail every workspace that
+  chose to be open. `--quiet` leaves it out. An agent checked on its own is told the boundary of
+  the workspace around it.
+- **`pact discover`** carries `egress: {boundary: open | closed | listed, allows: [...]}` on each
+  workspace.
+
+### What a runtime must match
+
+- Twelve new shared cases (`tests/conformance/workflows.json`, 43 in all), seven on
+  `trees/triaged-defects` and five on a new tree, `trees/booked-visits`. Every workflow case's
+  `expect` has three new keys: `why`, `cancelled-by`, `started`.
+- A case may now say `ran-out` (agents that answered on reaching a limit), `ends` (`{before,
+  port}`: an arrival that ends the run as it is about to begin that stage) and `"nobody"` in place
+  of a person's answer (the question's time passed).
+- `tests/conformance/digests.json`: `triaged-defects` moves (the tree was edited: three workflows
+  and a question added; every existing `contract-digest` is as it was), and `booked-visits` is new.
+
+### Still owed
+
+- A `decide` whose rung's agent cannot be reached: the reference lets the failure out of the run.
+- `pact check` does not hold a read of `.ended`, `.rounds` or `.answered-by` to a stage that has
+  one, so a rule reading `.ended` of a stage that calls a tool decides nothing.
+- A cancelled run that was parked, and what a called run's writes are to its caller's undo: ruled
+  for a host (the wait closes; a later answer is refused), with no case, because the reference
+  runtime does not resume.
+
 ## 2026-11 — law 8 at the moment of instantiation: a helper, a skill and a snippet are checked as documents (13 November)
 
 Law 8 says anything a run creates passes the same checker before it can be asked, and names a

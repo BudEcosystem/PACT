@@ -29,6 +29,19 @@ has (`tool_impls`, `transport`), one level up.
 `done` ends the block it is in, `stop-and-say-so` ends the run. A stage with no
 line for its outcome ends its block (inside an `each`, a `repeat` or a
 `together`, that is the end of one item, round or branch).
+
+**How a run ends.** In one of four words (`WorkflowResult.halted`):
+
+* `final` — it reached an `answer`, or the end of its stages.
+* `parked` — it waits for a person, here or in a workflow it called and waits
+  for.
+* `stopped` — its OWN stages or rules ended it, and `WorkflowResult.why` says
+  which of eight things happened (`STOPPED_BECAUSE`), so "a person said no"
+  is never read as "a call failed".
+* `cancelled` — something OUTSIDE it ended it: a port whose arrival has this
+  run's key and says `if-still-running: stop` or `cancel-previous`, or the
+  host. It was `stopped`, which made a run a customer withdrew look like one
+  that broke.
 """
 
 from __future__ import annotations
@@ -53,26 +66,92 @@ CallAgent = Callable[[str, dict[str, Any]], Any]
 CallProgram = Callable[[str, dict[str, Any]], Any]
 #: `person(question, shown) -> answer`, or raise `Parked` to wait.
 AskPerson = Callable[[str, dict[str, Any]], Any]
+#: `start(workflow, inputs)` — begin a run nobody waits for (a port's
+#: `then-run:`). Which run that is, and when it goes, is the host's.
+StartRun = Callable[[str, dict[str, Any]], Any]
+#: `ended(at) -> None | {"port": <name>}` — asked before each stage begins,
+#: with the stage about to run as `trace` writes it: whether something outside
+#: the run has ended it. A port is named and its own lines are read from the
+#: document (`undo:`, `then-run:`); a host that ends a run itself answers
+#: `{"by": <who, in words>, "undo": <bool>}`.
+EndedBy = Callable[[str], "Mapping[str, Any] | None"]
 
 DONE = "done"
 STOP = "stop-and-say-so"
 
 
 class Parked(Exception):
-    """A person (or the clock) has not answered yet: the run waits here."""
+    """A person (or the clock) has not answered yet: the run waits here.
 
-    def __init__(self, question: str, stage: str) -> None:
-        super().__init__(f"waiting on {question!r} at {stage!r}")
+    `inside` is where the wait is when it is in a workflow this run called and
+    waits for: `<workflow>/<its stage>`. `stage` is always a stage of THIS
+    run, the one a host resumes it at."""
+
+    def __init__(self, question: str, stage: str, inside: str = "") -> None:
+        super().__init__(question, stage, inside)
         self.question = question
         self.stage = stage
+        self.inside = inside
+
+    def __str__(self) -> str:
+        said = f"waiting on {self.question!r} at {self.stage!r}"
+        return f"{said} (asked inside {self.inside!r})" if self.inside else said
 
 
 class NobodyAnswered(Exception):
     """The question's time ran out with no answer."""
 
 
+#: Why a run that `stopped` did, in one word (`WorkflowResult.why`). One word
+#: for the ending and words for the reason was all there was: `halted:
+#: stopped` covered a person's no, a decision nobody could make and a server
+#: that was down, and only `said`, which is prose, told them apart.
+STOPPED_BECAUSE = (
+    "said-so",          # it reached `stop-and-say-so`, an exit its author wrote
+    "declined",         # a person said no, and the stage wrote no `declined:` exit
+    "nobody-answered",  # a wait ran out, and the stage wrote no `nobody-answered:` exit
+    "nobody-decided",   # a `decide` ran out of rungs
+    "a-call-failed",    # a call failed and `if-it-fails:` did not cover it
+    "reached-a-limit",  # a ceiling was reached whose `when-it-runs-out:` stops
+    "does-not-fit",     # what it would hand back is not what it says it gives
+    "not-runnable",     # this runtime cannot carry out what is written
+)
+
+
 class Stopped(Exception):
-    """The run stopped and said why (`stop-and-say-so`, or a failure with no plan)."""
+    """The run's own stages ended it, and said why. `because` is one of
+    `STOPPED_BECAUSE`."""
+
+    def __init__(self, said: str, because: str = "not-runnable") -> None:
+        super().__init__(said)
+        assert because in STOPPED_BECAUSE, because
+        self.because = because
+
+
+class Cancelled(Exception):
+    """Something outside the run ended it (`EndedBy`). Never a failure of the
+    stage it arrived at: no `if-it-fails:` plan and no `if-someone-fails:
+    carry-on` takes it."""
+
+    def __init__(self, by: Mapping[str, Any]) -> None:
+        super().__init__(f"cancelled by {dict(by)}")
+        self.by = dict(by)
+
+
+@dataclass(frozen=True)
+class RanOut:
+    """An agent's answer, given because it reached one of its limits and its
+    `when-it-runs-out:` says `answer-with-what-it-has`.
+
+    It IS an answer: the stage that called the agent takes it and goes on as
+    it would with any other (`answered`). What changes is the record:
+    `steps.<stage>.ended` is `ran-out` where it is otherwise `finished`, so a
+    later `decide` can send a part-done answer to a person, a question can
+    show somebody that it is one, and the workflow can hand the fact back. A
+    host that runs agents (`Callers.agent`) hands back the answer wrapped in
+    this when the run says a ceiling ended it (`RunResult.stopped_by`)."""
+
+    answer: Mapping[str, Any]
 
 
 @dataclass
@@ -92,6 +171,7 @@ class Callers:
     agent: CallAgent | None = None
     program: CallProgram | None = None
     person: AskPerson | None = None
+    start: StartRun | None = None
 
 
 @dataclass
@@ -119,9 +199,19 @@ class Written:
 class WorkflowResult:
     """How a workflow run ended, and what it handed back."""
 
-    #: `final` (an `answer` stage, or the end), `stopped` (stop-and-say-so, or a
-    #: failure nothing planned for), `parked` (a person has not answered).
+    #: `final` (an `answer` stage, or the end), `parked` (a person has not
+    #: answered), `stopped` (its own stages ended it: `why` says which of
+    #: `STOPPED_BECAUSE`), `cancelled` (something outside it did:
+    #: `cancelled_by` says what).
     halted: str = "final"
+    #: Why a `stopped` run stopped, one of `STOPPED_BECAUSE`. Empty otherwise.
+    why: str = ""
+    #: What ended a `cancelled` run: `{"port": <name>}`, or `{"by": <who>}`
+    #: for a host. Empty otherwise.
+    cancelled_by: dict[str, Any] = field(default_factory=dict)
+    #: Runs this one started that nobody waits for (a port's `then-run:` after
+    #: it was cancelled), in order: `{workflow, given}`.
+    started: list[dict[str, Any]] = field(default_factory=list)
     answer: dict[str, Any] = field(default_factory=dict)
     #: Every stage's answer, by name, as `steps.<name>` reads it.
     steps: dict[str, Any] = field(default_factory=dict)
@@ -164,6 +254,11 @@ ANSWERED_BY = "answered-by"
 
 async def _maybe(value: Any) -> Any:
     return await value if inspect.isawaitable(value) else value
+
+
+def _yes(written: Any) -> bool:
+    """A `yes-no` line, as a document read from YAML or handed in holds it."""
+    return written is True or str(written).strip().lower() in ("yes", "true")
 
 
 @dataclass
@@ -232,9 +327,13 @@ class _Run:
         callers: Callers,
         document: Mapping[str, Any] | None,
         result: WorkflowResult,
+        ended: EndedBy | None = None,
     ) -> None:
         self.spec = spec
         self.callers = callers
+        self.ended = ended
+        #: What ended the run, from the first moment the host said so.
+        self.ended_already: Mapping[str, Any] | None = None
         self.document = document or {}
         self.result = result
         self.agents = set((self.document.get("agents") or {}).keys())
@@ -266,14 +365,24 @@ class _Run:
         last: dict[str, Any] | None = None
         while at and at != DONE:
             if at == STOP:
-                raise Stopped(f"the run reached `stop-and-say-so` in {where or 'the workflow'}")
+                raise Stopped(
+                    f"the run reached `stop-and-say-so` in {where or 'the workflow'}", "said-so"
+                )
             stage = by_name.get(at)
             if stage is None:
                 raise Stopped(f"{where or 'the workflow'} has no stage {at!r}")
             ran += 1
             if ran > 10_000:  # the checker refuses circles outside a repeat (WF-8)
                 raise Stopped(f"{where} went round more than 10000 stages")
-            self.result.trace.append(f"{where}/{stage.name}".lstrip("/"))
+            here = f"{where}/{stage.name}".lstrip("/")
+            # Something outside may have ended the run. It is asked BETWEEN
+            # stages: a stage that has begun finishes, so what it wrote is on
+            # the record and can be undone, and the one about to begin does
+            # not (it is not in the trace, and nobody it would ask is asked).
+            by = self.ended_by(here)
+            if by:
+                raise Cancelled(by)
+            self.result.trace.append(here)
             outcome, answer = await self.stage(stage, scope, where)
             if stage.does == "answer":
                 if not where:
@@ -291,12 +400,46 @@ class _Run:
             nxt = stage.then.get(outcome)
             if nxt is None and outcome == "too-many-times":
                 nxt = stage.then.get("answered")
+            # A no, or silence, with no exit written for it stops the run and
+            # says so (`outcome.declined`, `outcome.nobody-answered`: "a no is
+            # never quietly carried past"). This ended the block instead, as
+            # an unwritten `answered:` does: a workflow that gives nothing
+            # then finished `final` after a person had said no, and one that
+            # gives something was told its answer "does not fit".
+            if nxt is None and outcome == "declined":
+                raise Stopped(
+                    f"{stage.name!r} asked {stage.asks!r} and the answer was no; the stage "
+                    f"writes no `declined:` exit, so the run stops here",
+                    "declined",
+                )
+            if nxt is None and outcome == "nobody-answered":
+                raise Stopped(
+                    f"{stage.name!r} asked {stage.asks!r} and nobody answered in time; the "
+                    f"stage writes no `nobody-answered:` exit, so the run stops here",
+                    "nobody-answered",
+                )
             if isinstance(nxt, Mapping):  # `heard:` — port to stage
                 nxt = next(iter(nxt.values()), None)
             if stage.does == "decide":
                 nxt = stage.chooses_between.get(outcome)
             at = str(nxt).strip() if nxt is not None else ""
         return last
+
+    def ended_by(self, here: str) -> Mapping[str, Any] | None:
+        """What has ended this run from outside, if anything has, asked as the
+        stage `here` is about to begin.
+
+        Once the host has said so, it stays so: no stage begins anywhere in
+        the run after that, whatever the host answers when asked again. Items
+        of an `each` and branches of a `together` run side by side, and the
+        ones still queued ask after the one that was told; a host that
+        answers for a moment and not for a run would otherwise have had one
+        item stopped and the next one started."""
+        if self.ended_already is None and self.ended is not None:
+            by = self.ended(here)
+            if by:
+                self.ended_already = dict(by)
+        return self.ended_already
 
     # ───────────────────────────────────────────────────────────── stages
 
@@ -359,8 +502,17 @@ class _Run:
         if name in self.workflows:
             inner = WorkflowSpec.from_workflow(self.document, name)
             out = await run_workflow(inner, inputs, self.callers, document=self.document)
+            # Everybody it asked was asked, and this run's record says so.
+            self.result.asked.extend(out.asked)
+            self.result.refused.extend(out.refused)
+            if out.halted == "parked":
+                # A run that waits for a workflow that waits for a person is
+                # WAITING. It was `stopped`: "the workflow 'x' parked", read
+                # by every caller as a failure. `call` names its own stage as
+                # where this run waits; the question is the called run's.
+                raise Parked(out.question, "", inside=f"{name}/{out.parked_at}")
             if out.halted != "final":
-                raise Stopped(f"the workflow {name!r} {out.halted}: {out.said}")
+                raise Stopped(f"the workflow {name!r} {out.halted}: {out.said}", "a-call-failed")
             return out.answer
         if name in self.programs:
             if self.callers.program is None:
@@ -384,16 +536,46 @@ class _Run:
         for _ in range(attempts):
             try:
                 answer = await self.invoke(name, inputs)
-            except (Stopped, Parked):
+            except Parked as parked:
+                if not parked.stage:  # the wait is in a workflow this stage called
+                    parked.stage = stage.name
+                raise
+            except (Stopped, Cancelled):
                 raise
             except Exception as err:  # a call that failed is data for the plan
                 failure = err
                 continue
+            answer = self.how_it_ended(stage, name, answer)
             undo = stage.undone_by or self._action_undo(name)
             if undo:
                 self.result.written.append(Written(stage.name, undo, inputs, answer))
             return "answered", _as_answer(answer)
         return await self.failed(stage, scope, name, inputs, failure, where)
+
+    def is_agent(self, name: str) -> bool:
+        """Whether `invoke` hands `name` to `Callers.agent`."""
+        return (
+            "/" not in name
+            and name not in self.workflows
+            and name not in self.programs
+            and (name in self.agents or self.callers.agent is not None)
+        )
+
+    def how_it_ended(self, stage: StageSpec, name: str, answer: Any) -> Any:
+        """A called agent's answer, unwrapped, and `steps.<stage>.ended` set
+        for it: `ran-out` when the agent reached a limit and answered with
+        what it had (`RanOut`), `finished` otherwise. A stage that calls
+        anything else has no `.ended`: only an agent has limits of its own to
+        run out of. The same two-valued word a `repeat` has, and the same
+        `ran-out`."""
+        ran_out = isinstance(answer, RanOut)
+        if ran_out:
+            answer = answer.answer
+        if self.is_agent(name):
+            self.stage_words.setdefault(id(stage), {})["ended"] = (
+                "ran-out" if ran_out else "finished"
+            )
+        return answer
 
     def _action_undo(self, name: str) -> str:
         if "/" not in name:
@@ -414,14 +596,17 @@ class _Run:
         plan = stage.if_it_fails
         why = f"{stage.name!r} failed calling {name!r}: {failure}"
         if plan is None or plan.after_that == "stop-and-say-so":
-            raise Stopped(why)
+            raise Stopped(why, "a-call-failed")
         if plan.after_that == "use-a-backup":
             try:
-                return "answered", _as_answer(await self.invoke(plan.backup, inputs))
-            except (Stopped, Parked):
+                backup = await self.invoke(plan.backup, inputs)
+                return "answered", _as_answer(self.how_it_ended(stage, plan.backup, backup))
+            except (Stopped, Parked, Cancelled):
                 raise
             except Exception as err:
-                raise Stopped(f"{why}; the backup {plan.backup!r} failed too: {err}") from None
+                raise Stopped(
+                    f"{why}; the backup {plan.backup!r} failed too: {err}", "a-call-failed"
+                ) from None
         if plan.after_that == "carry-on":
             return "answered", {k: (scope.read(v)) for k, v in plan.carry_on_with.items()}
         if plan.after_that == "ask-a-person":
@@ -429,8 +614,13 @@ class _Run:
             return "answered", answer
         if plan.after_that == "undo":
             await self.undo(plan.undo)
-            raise Stopped(f"{why}; what {plan.undo or 'the run'!r} did was undone, newest first")
-        raise Stopped(f"{why}; `{plan.after_that}` needs the host (a new version, a person)")
+            raise Stopped(
+                f"{why}; what {plan.undo or 'the run'!r} did was undone, newest first",
+                "a-call-failed",
+            )
+        raise Stopped(
+            f"{why}; `{plan.after_that}` needs the host (a new version, a person)", "a-call-failed"
+        )
 
     async def undo(self, stage_name: str = "") -> list[str]:
         """Take back what was written, newest first: everything, or one stage's."""
@@ -444,6 +634,83 @@ class _Run:
             w for w in self.result.written if stage_name and w.stage != stage_name
         ]
         return undone
+
+    async def cancelled(self, by: Mapping[str, Any], inputs: dict[str, Any]) -> None:
+        """End the run because something outside it did (`EndedBy`).
+
+        **`cancelled`, and never `stopped`.** `stopped` is the run's own
+        stages ending it. A run a customer withdrew, or that a newer arrival
+        replaced, did nothing wrong and reached no exit of its own; counted
+        with the runs that failed, it makes a quiet week look like a bad one.
+
+        **Named by a port, its lines are the port's** (`ports.<name>`):
+        `undo: yes` takes back what the run wrote, newest first, before it
+        ends (beside `stop` and beside `cancel-previous`); `then-run:`, a
+        `stop` port's line, starts a workflow afterwards, not waited for,
+        with the cancelled run's own input, as much of it as that workflow
+        `accepts:`. A host that ends a run itself says both in `by`.
+
+        **It hands back nothing.** Whatever its stages answered is in `steps`;
+        a cancelled run has no answer, as a stopped one has none.
+
+        A write that could not be undone is SAID, in `said` and in
+        `unenforced`: the run is cancelled all the same, and somebody now has
+        to take that write back by hand."""
+        port = str(by.get("port") or "").strip()
+        lines: Mapping[str, Any] = by
+        who = str(by.get("by") or "the host").strip()
+        if port:
+            lines = (self.document.get("ports") or {}).get(port) or {}
+            who = f"the port `{port}`"
+        self.result.halted = "cancelled"
+        self.result.cancelled_by = {"port": port} if port else {"by": who}
+        self.result.answer = {}
+        said = f"Cancelled by {who}."
+        if _yes(lines.get("undo")):
+            undone: list[str] = []
+            left: list[str] = []
+            for w in reversed(self.result.written):
+                try:
+                    await self.invoke(w.undo, dict(w.inputs))
+                    undone.append(w.stage)
+                except Exception as err:  # the run is cancelled all the same
+                    left.append(f"{w.stage} ({w.undo}: {err})")
+            self.result.written = []
+            if undone:
+                said += f" What it did was undone, newest first: {', '.join(undone)}."
+            elif not left:
+                said += " It had done nothing that needed undoing."
+            if left:
+                not_undone = f"Could not be undone: {'; '.join(left)}."
+                said += f" {not_undone}"
+                self.result.unenforced.append(
+                    f"undo: {who} asked for what this run did to be undone, and some of it "
+                    f"was not. {not_undone} fix: take those back by hand."
+                )
+        then = str(lines.get("then-run") or "").strip()
+        # `then-run:` is a `stop` port's line (`port.then-run`): what follows a
+        # `cancel-previous` is the arrival's own run, which the host starts.
+        if then and port and str(lines.get("if-still-running") or "").strip() != "stop":
+            self.result.unenforced.append(
+                f"then-run: the port `{port}` names `{then}` to start after it ends a run, and "
+                f"that line is read only beside `if-still-running: stop`, so nothing was "
+                f"started. fix: write `if-still-running: stop`, or take `then-run:` off."
+            )
+            then = ""
+        if then:
+            takes = ((self.document.get("workflows") or {}).get(then) or {}).get("accepts")
+            given = {k: v for k, v in inputs.items() if takes is None or k in takes}
+            self.result.started.append({"workflow": then, "given": given})
+            if self.callers.start is None:
+                self.result.unenforced.append(
+                    f"then-run: `{then}` was to start after {who} ended this run, and nothing "
+                    f"here can start a run (no `Callers.start`). fix: run it on a host that "
+                    f"starts runs, or start `{then}` yourself with what is under `started`."
+                )
+            else:
+                await _maybe(self.callers.start(then, dict(given)))
+                said += f" `{then}` was started after it."
+        self.result.said = said
 
     async def decide(self, stage: StageSpec, scope: _Scope) -> tuple[str, Any]:
         """Try the rungs in order and hand back the label that stands at the
@@ -471,6 +738,8 @@ class _Run:
         """
         labels = tuple(stage.chooses_between)
         standing: dict[str, Any] | None = None
+        #: How the agent whose label stands ended (`.ended`), when one does.
+        ended = ""
         for rung in stage.by:
             if rung.rules:
                 if standing is not None:
@@ -488,7 +757,11 @@ class _Run:
                 if standing is not None and not second:
                     continue
                 given = self.given_to(rung.agent, scope, stage.says, stage.bind)
-                answer = _as_answer(await self.invoke(rung.agent, given))
+                said = await self.invoke(rung.agent, given)
+                # An answer given on running out is an answer here as it is
+                # everywhere: its label counts. The record says it ran out.
+                ran_out = isinstance(said, RanOut)
+                answer = _as_answer(said.answer if ran_out else said)
                 label = _one_of(answer, labels)
                 if label and rung.if_unsure_below is not None:
                     score = _score(answer)
@@ -501,6 +774,7 @@ class _Run:
                     continue
                 if label:
                     standing = {"label": label, "decided-by": "agent", "answered-by": rung.agent}
+                    ended = "ran-out" if ran_out else "finished"
                 continue
             if rung.asks:
                 if standing is not None:
@@ -516,8 +790,13 @@ class _Run:
                     if who:
                         standing[ANSWERED_BY] = who
         if standing is not None:
+            if standing["decided-by"] == "agent" and ended:
+                self.stage_words.setdefault(id(stage), {})["ended"] = ended
             return standing["label"], standing
-        raise Stopped(f"{stage.name!r} ran out of ways to decide between {', '.join(labels)}")
+        raise Stopped(
+            f"{stage.name!r} ran out of ways to decide between {', '.join(labels)}",
+            "nobody-decided",
+        )
 
     def given_to(
         self,
@@ -769,7 +1048,8 @@ class _Run:
         if ceiling is not None and len(items) > ceiling:
             raise Stopped(
                 f"{stage.name!r} was given {len(items)} items and may take {ceiling} "
-                f"(`items-at-most:`)"
+                f"(`items-at-most:`)",
+                "reached-a-limit",
             )
         if stage.identified_by:
             seen: set[tuple[Any, ...]] = set()
@@ -831,7 +1111,8 @@ class _Run:
                     continue
                 if ceiling is not None and len(taken) >= ceiling:
                     raise Stopped(
-                        f"{stage.name!r} has taken {ceiling} items, all its `items-at-most:` allows"
+                        f"{stage.name!r} has taken {ceiling} items, all its `items-at-most:` allows",
+                        "reached-a-limit",
                     )
                 taken.add(key(it))
                 running.add(asyncio.ensure_future(one(it)))
@@ -866,11 +1147,17 @@ class _Run:
                         continue
                     err = t.exception()
                     if err is not None:
+                        # The RUN was ended, not this branch: no `carry-on`
+                        # carries on past it.
+                        if isinstance(err, Cancelled):
+                            raise err
                         if isinstance(err, (Stopped, Parked)) and on_failure != "carry-on":
                             raise err
                         got[i] = {"failed": str(err)}
                         if on_failure == "stop-the-others":
-                            raise Stopped(f"a branch of {stage.name!r} failed: {err}")
+                            raise Stopped(
+                                f"a branch of {stage.name!r} failed: {err}", "a-call-failed"
+                            )
                         continue
                     got[i] = t.result()
                     good += 1
@@ -968,18 +1255,23 @@ async def run_workflow(
     *,
     document: Mapping[str, Any] | None = None,
     remembered: Mapping[str, Any] | None = None,
+    ended: EndedBy | None = None,
 ) -> WorkflowResult:
     """Run `spec` with `inputs`, reaching what it calls through `callers`.
 
     `remembered` is what the workspace and the workflow already remember, by
     name — the host's store, as `harness.run`'s `remembered=` is. A stage reads
-    it as `remembers.<name>`; a `repeat` adds its own round's memory on top."""
+    it as `remembers.<name>`; a `repeat` adds its own round's memory on top.
+
+    `ended` is how the host says something outside the run has ended it
+    (`EndedBy`): a port's arrival, or a person at a console. The run is then
+    `cancelled` (`_Run.cancelled`)."""
     result = WorkflowResult()
     values = {name: v.value for name, v in spec.values.items()}
     scope = _Scope(
         input=dict(inputs), steps={}, remembers=dict(remembered or {}), values=values
     )
-    run = _Run(spec, callers, document, result)
+    run = _Run(spec, callers, document, result, ended)
     # The workspace's own `detectors:`, for `looks-like:` (docs/98 WP-12).
     held = DECLARED.set(declared_in(document or {}))
     try:
@@ -992,7 +1284,11 @@ async def run_workflow(
         return result
     except Stopped as stopped:
         result.halted = "stopped"
+        result.why = stopped.because
         result.said = str(stopped)
+        return result
+    except Cancelled as cancelled:
+        await run.cancelled(cancelled.by, dict(inputs))
         return result
     finally:
         DECLARED.reset(held)
@@ -1007,6 +1303,7 @@ async def run_workflow(
     wrong = _does_not_fit(spec, result.answer)
     if wrong:
         result.halted = "stopped"
+        result.why = "does-not-fit"
         result.said = f"the answer does not fit `answers-with:` — {wrong}"
         # And it is not handed back. A value that fails the workflow's own
         # contract, returned beside the word `stopped`, is a value a caller can

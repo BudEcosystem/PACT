@@ -266,3 +266,58 @@ def test_the_cases_say_the_things_they_are_there_to_say() -> None:
 
     parked = by_name["nobody-is-there-to-ask-so-the-run-parks-at-the-decision"]
     assert parked["halted"] == "parked" and parked["parked-at"] == "where" and parked["question"] == "which-desk"
+
+    # ── how a run ends ──
+    called_off = by_name[
+        "a-port-ends-an-open-run-which-is-cancelled-undone-newest-first-and-followed-by-what-the-port-says"
+    ]
+    # Something outside ended it: `cancelled`, with no `why` (that word is for
+    # a run its own stages stopped), and no answer.
+    assert (called_off["halted"], called_off["why"]) == ("cancelled", "")
+    assert called_off["cancelled-by"] == {"port": "visit-called-off"} and called_off["answer"] == {}
+    # The stage it arrived at never began: not in the trace, nobody asked.
+    assert called_off["trace"] == ["hold", "file"] and called_off["shown"] == []
+    # The port says `undo: yes`: newest first, and an undo is a call.
+    assert [c["tool"] for c in called_off["called"]] == [
+        "calendar/hold-slot", "files/open-file", "files/close-file", "calendar/release-slot",
+    ]
+    # `then-run:`, given the cancelled run's input, as much as that workflow takes.
+    assert called_off["started"] == [{"workflow": "tell-the-clinic", "given": {"visit": "V-204"}}]
+    kept = by_name["a-port-that-does-not-say-undo-ends-the-run-and-leaves-what-it-did"]
+    assert [c["tool"] for c in kept["called"]] == ["calendar/hold-slot", "files/open-file"]
+    assert kept["started"] == [] and kept["halted"] == "cancelled"
+    replaced = by_name["a-newer-arrival-replaces-the-open-run-which-is-cancelled-as-any-other-is"]
+    assert replaced["cancelled-by"] == {"port": "visit-booked-again"} and replaced["trace"] == ["hold"]
+    booked = by_name["a-visit-nobody-calls-off-is-booked-and-confirmed"]
+    assert (booked["halted"], booked["cancelled-by"], booked["started"]) == ("final", {}, [])
+
+    said_no = by_name["a-no-with-no-exit-written-for-it-stops-the-run-and-says-so"]
+    assert (said_no["halted"], said_no["why"]) == ("stopped", "declined")
+    silence = by_name["silence-with-no-exit-written-for-it-stops-the-run-and-says-so"]
+    assert (silence["halted"], silence["why"]) == ("stopped", "nobody-answered")
+    misfit = by_name["an-answer-that-does-not-fit-what-the-workflow-gives-stops-the-run"]
+    assert (misfit["halted"], misfit["why"]) == ("stopped", "does-not-fit")
+    # `why` is for `stopped` and for nothing else.
+    for name, expect in by_name.items():
+        if "why" in expect:
+            assert bool(expect["why"]) == (expect["halted"] == "stopped"), name
+            assert bool(expect["cancelled-by"]) == (expect["halted"] == "cancelled"), name
+
+    waiting = by_name["a-run-that-calls-a-workflow-that-waits-is-waiting-too"]
+    # Waiting, not stopped; at a stage of ITS OWN, with the called run's question.
+    assert (waiting["halted"], waiting["parked-at"], waiting["question"]) == (
+        "parked", "close", "may-the-team-close",
+    )
+    went_on = by_name["a-run-that-calls-a-workflow-goes-on-once-that-one-is-answered"]
+    assert went_on["halted"] == "final" and went_on["answer"] == {"close": True, "kind": "cabin"}
+
+    # ── how a called agent ended ──
+    ran_out = by_name["an-agent-that-ran-out-says-so-on-the-stage-that-called-it"]
+    assert ran_out["halted"] == "final", "an answer given on running out is an answer"
+    assert ran_out["answer"] == {"draft": "Gate 4 opens on", "ended": "ran-out", "went": "part-done"}
+    assert ran_out["trace"] == ["write", "check", "look", "reply"]
+    assert ran_out["shown"][0]["shown"]["steps.write.ended"] == "ran-out"
+    finished = by_name["an-agent-that-finished-says-so-and-nobody-is-asked"]
+    assert finished["answer"]["ended"] == "finished" and finished["shown"] == []
+    label = by_name["a-label-from-an-agent-that-ran-out-counts-and-the-record-says-it-ran-out"]
+    assert label["answer"] == {"team": "powerplant", "ended": "ran-out"}

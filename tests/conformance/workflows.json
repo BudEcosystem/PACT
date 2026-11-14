@@ -1,5 +1,5 @@
 {
- "about": "Workflows: stages in the order they run, what each called agent and each person was given, and the answer. Replayed as conformance_kit.replay_workflow does: `agents` is what each agent answers when called (a list is one answer for each time it is asked, the last repeating); `tools` is what each `<tool>/<action>` hands back; `people` is what a person answers to each question by name (absent: nobody is there to ask, and the run parks). In `expect`: `trace` is the stages that ran, nested ones as `outer/inner`; `given` is each agent called and its inputs, in order; `shown` is each question put to somebody and what they were shown, once for each entry of the question's `asked-of:` (a question asked of two people is put twice, at once, whoever answers first; with nobody there to ask, nobody was asked); `refused` is each answer handed in that did not count, with who gave it and why (`already-answered`: that person had answered this wait; `several-people`: one answer named more than one answerer), and the wait stays open after one; the same answer from the same person handed in again is a resend, counts once, and is not refused; `called` is each tool call. An agent a stage calls is an agent's run, under its own limits, approvals and reactions; here each is answered by the case, so what is compared is the workflow. A case expects only what the specification fixes: where the order things happen in is the runtime's to choose (an `each` with no `at-once-at-most:`), the tree a case runs on says `at-once-at-most: 1`. In `answer`, a field the run did not set is absent, not null; a run that stopped hands back an empty record, and why is in `said`. A trained classifier's answer carries `score` beside its label, a share of one: how sure it was of the label it picked, which `if-unsure-below:` is read against. A person's answer may carry `answered-by` beside the fields the question asks for: who answered, which the stage keeps as `steps.<stage>.answered-by` and does not leave in the answer. On a `decide` that is one name; on a stage that waits for people (`ask`) it is a list, always, in the order they answered, so one name is a list of one. `answered-by:` on the question counts the entries of `asked-of:`: with `everyone` each of them is asked and answers separately, one answer has one answerer, a second, different answer from somebody who has answered is refused and changes nothing, and one no is a no at once; the stage's fields are those of the answer that settled the wait, the first no or the answer that made it enough. In `people`, a list for a question is the answers to it as they arrive, in order, the last repeating; each carries who gave it.",
+ "about": "Workflows: stages in the order they run, what each called agent and each person was given, and the answer. Replayed as conformance_kit.replay_workflow does: `agents` is what each agent answers when called (a list is one answer for each time it is asked, the last repeating); `tools` is what each `<tool>/<action>` hands back; `people` is what a person answers to each question by name (absent: nobody is there to ask, and the run parks). The text `nobody` in place of an answer means the question's time passed with none. `ran-out` names the agents that reached one of their limits in this run and answered with what they had: what each says is still under `agents`, and `steps.<stage>.ended` of the stage that called one is `ran-out` (`finished` for an agent that did not; a stage that calls anything but an agent has no `.ended`). `ends` is something outside the run ending it, `{before: <stage>, port: <port>}`: the arrival at that port, with this run's key, lands when the run is about to begin that stage, so every stage before it has finished and that one never starts; what the arrival does is the port's own lines in the tree (`undo:`, `then-run:`). In `expect`: `trace` is the stages that ran, nested ones as `outer/inner`; `given` is each agent called and its inputs, in order; `shown` is each question put to somebody and what they were shown, once for each entry of the question's `asked-of:` (a question asked of two people is put twice, at once, whoever answers first; with nobody there to ask, nobody was asked); `refused` is each answer handed in that did not count, with who gave it and why (`already-answered`: that person had answered this wait; `several-people`: one answer named more than one answerer), and the wait stays open after one; the same answer from the same person handed in again is a resend, counts once, and is not refused; `called` is each tool call, an undo among them, in the order they were made. `halted` is how the run ended, one of four words: `final`, `parked` (it waits for a person, here or in a workflow it called and waits for; `parked-at` is always a stage of this run), `stopped` (its own stages ended it) and `cancelled` (something outside it did). `why` is the one word for why a `stopped` run stopped: `said-so` (it reached `stop-and-say-so`), `declined` (a person said no and the stage writes no `declined:` exit), `nobody-answered` (a wait ran out and the stage writes no `nobody-answered:` exit), `nobody-decided` (a `decide` ran out of rungs), `a-call-failed`, `reached-a-limit`, `does-not-fit` (what it would hand back is not what the workflow says it gives) or `not-runnable`; `\"\"` for any other ending. `cancelled-by` is what ended a `cancelled` run (`{port: <name>}`), `{}` otherwise; a cancelled run hands back no answer. `started` is each run it started that nobody waits for (a port's `then-run:`), with what it was given: the cancelled run's own input, as much of it as that workflow `accepts:`. An agent a stage calls is an agent's run, under its own limits, approvals and reactions; here each is answered by the case, so what is compared is the workflow. A case expects only what the specification fixes: where the order things happen in is the runtime's to choose (an `each` with no `at-once-at-most:`), the tree a case runs on says `at-once-at-most: 1`. In `answer`, a field the run did not set is absent, not null; a run that stopped hands back an empty record, and why is in `said`. A trained classifier's answer carries `score` beside its label, a share of one: how sure it was of the label it picked, which `if-unsure-below:` is read against. A person's answer may carry `answered-by` beside the fields the question asks for: who answered, which the stage keeps as `steps.<stage>.answered-by` and does not leave in the answer. On a `decide` that is one name; on a stage that waits for people (`ask`) it is a list, always, in the order they answered, so one name is a list of one. `answered-by:` on the question counts the entries of `asked-of:`: with `everyone` each of them is asked and answers separately, one answer has one answerer, a second, different answer from somebody who has answered is refused and changes nothing, and one no is a no at once; the stage's fields are those of the answer that settled the wait, the first no or the answer that made it enough. In `people`, a list for a question is the answers to it as they arrive, in order, the last repeating; each carries who gave it.",
  "cases": [
   {
    "name": "a-written-rule-decides-and-nobody-is-asked",
@@ -30,6 +30,7 @@
      "reply": "billing-desk answered"
     },
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "billing-desk",
@@ -44,12 +45,14 @@
     "refused": [],
     "said": "",
     "shown": [],
+    "started": [],
     "trace": [
      "where",
      "bill",
      "reply-bill"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -81,6 +84,7 @@
      "reply": "tech-desk answered"
     },
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "sorter",
@@ -101,12 +105,14 @@
     "refused": [],
     "said": "",
     "shown": [],
+    "started": [],
     "trace": [
      "where",
      "fix",
      "reply-fix"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -138,6 +144,7 @@
      "reply": "tech-desk answered"
     },
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "sorter",
@@ -165,12 +172,14 @@
       }
      }
     ],
+    "started": [],
     "trace": [
      "where",
      "fix",
      "reply-fix"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -200,6 +209,7 @@
    "expect": {
     "answer": {},
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "sorter",
@@ -214,11 +224,13 @@
     "refused": [],
     "said": "",
     "shown": [],
+    "started": [],
     "trace": [
      "where",
      "decline"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -243,6 +255,7 @@
    "expect": {
     "answer": {},
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "sorter",
@@ -257,10 +270,12 @@
     "refused": [],
     "said": "waiting on 'which-desk' at 'where'",
     "shown": [],
+    "started": [],
     "trace": [
      "where"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -310,6 +325,7 @@
      ]
     },
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "billing-desk",
@@ -336,13 +352,15 @@
     "refused": [],
     "said": "",
     "shown": [],
+    "started": [],
     "trace": [
      "every",
      "every/one",
      "every/one",
      "done-all"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -368,6 +386,7 @@
      "result": "The page is built."
     },
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "researcher",
@@ -395,13 +414,15 @@
     "refused": [],
     "said": "",
     "shown": [],
+    "started": [],
     "trace": [
      "research",
      "plan",
      "make",
      "reply"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -460,6 +481,7 @@
      ]
     },
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "proposer",
@@ -502,6 +524,7 @@
     "refused": [],
     "said": "",
     "shown": [],
+    "started": [],
     "trace": [
      "rounds",
      "rounds/propose",
@@ -510,7 +533,8 @@
      "rounds/score",
      "reply"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -536,6 +560,7 @@
    "expect": {
     "answer": {},
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "sorter",
@@ -556,13 +581,15 @@
     "refused": [],
     "said": "",
     "shown": [],
+    "started": [],
     "trace": [
      "every",
      "every/where",
      "every/where",
      "answer"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -597,6 +624,7 @@
    "expect": {
     "answer": {},
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "sorter",
@@ -617,13 +645,15 @@
     "refused": [],
     "said": "",
     "shown": [],
+    "started": [],
     "trace": [
      "every",
      "every/where",
      "every/where",
      "answer"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -656,6 +686,7 @@
    "expect": {
     "answer": {},
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "proposer",
@@ -678,13 +709,15 @@
     "refused": [],
     "said": "the answer does not fit `answers-with:` — ideas: item 1 has 'idea', and idea has no part by that name\nitem 1 leaves out 'text', which should be some text",
     "shown": [],
+    "started": [],
     "trace": [
      "rounds",
      "rounds/propose",
      "rounds/score",
      "reply"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": "does-not-fit"
    }
   },
   {
@@ -712,6 +745,7 @@
      "team": "powerplant"
     },
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "triager",
@@ -734,12 +768,14 @@
     "refused": [],
     "said": "",
     "shown": [],
+    "started": [],
     "trace": [
      "triage",
      "assign",
      "reply"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -766,6 +802,7 @@
      "team": "interiors"
     },
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "triager",
@@ -787,12 +824,14 @@
     "refused": [],
     "said": "",
     "shown": [],
+    "started": [],
     "trace": [
      "triage",
      "assign",
      "reply"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -819,6 +858,7 @@
    "expect": {
     "answer": {},
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "shelver",
@@ -839,13 +879,15 @@
     "refused": [],
     "said": "",
     "shown": [],
+    "started": [],
     "trace": [
      "every",
      "every/where",
      "every/where",
      "answer"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -870,6 +912,7 @@
    "expect": {
     "answer": {},
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "scorer",
@@ -890,12 +933,14 @@
     "refused": [],
     "said": "",
     "shown": [],
+    "started": [],
     "trace": [
      "every",
      "every/where",
      "answer"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -920,6 +965,7 @@
    "expect": {
     "answer": {},
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "scorer",
@@ -934,12 +980,14 @@
     "refused": [],
     "said": "",
     "shown": [],
+    "started": [],
     "trace": [
      "every",
      "every/where",
      "answer"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -963,6 +1011,7 @@
    "expect": {
     "answer": {},
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "scorer",
@@ -983,12 +1032,14 @@
     "refused": [],
     "said": "",
     "shown": [],
+    "started": [],
     "trace": [
      "every",
      "every/where",
      "answer"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -1016,6 +1067,7 @@
      "shelf": "bills"
     },
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "checker",
@@ -1030,11 +1082,13 @@
     "refused": [],
     "said": "",
     "shown": [],
+    "started": [],
     "trace": [
      "where",
      "reply"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -1063,6 +1117,7 @@
      "who": "dana"
     },
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "checker",
@@ -1084,11 +1139,13 @@
       }
      }
     ],
+    "started": [],
     "trace": [
      "where",
      "reply"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -1117,6 +1174,7 @@
      "who": "dana"
     },
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "checker",
@@ -1138,11 +1196,13 @@
       }
      }
     ],
+    "started": [],
     "trace": [
      "where",
      "reply"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -1171,6 +1231,7 @@
      "who": "checker"
     },
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "checker",
@@ -1185,11 +1246,13 @@
     "refused": [],
     "said": "",
     "shown": [],
+    "started": [],
     "trace": [
      "where",
      "reply"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -1209,6 +1272,7 @@
    "expect": {
     "answer": {},
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "checker",
@@ -1223,10 +1287,12 @@
     "refused": [],
     "said": "waiting on 'which-shelf' at 'where'",
     "shown": [],
+    "started": [],
     "trace": [
      "where"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -1256,6 +1322,7 @@
      "rounds": 2
     },
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "drafter",
@@ -1276,13 +1343,15 @@
     "refused": [],
     "said": "",
     "shown": [],
+    "started": [],
     "trace": [
      "polish",
      "polish/write",
      "polish/write",
      "reply"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -1308,6 +1377,7 @@
      "rounds": 3
     },
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "drafter",
@@ -1334,6 +1404,7 @@
     "refused": [],
     "said": "",
     "shown": [],
+    "started": [],
     "trace": [
      "polish",
      "polish/write",
@@ -1341,7 +1412,8 @@
      "polish/write",
      "reply"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -1361,6 +1433,7 @@
    "expect": {
     "answer": {},
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "triager",
@@ -1375,10 +1448,12 @@
     "refused": [],
     "said": "",
     "shown": [],
+    "started": [],
     "trace": [
      "triage"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -1401,6 +1476,7 @@
      "rounds": 3
     },
     "called": [],
+    "cancelled-by": {},
     "given": [
      {
       "agent": "drafter",
@@ -1427,6 +1503,7 @@
     "refused": [],
     "said": "",
     "shown": [],
+    "started": [],
     "trace": [
      "polish",
      "polish/write",
@@ -1434,7 +1511,8 @@
      "polish/write",
      "reply"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -1459,6 +1537,7 @@
      "close": true
     },
     "called": [],
+    "cancelled-by": {},
     "given": [],
     "halted": "final",
     "parked-at": "",
@@ -1473,11 +1552,13 @@
       }
      }
     ],
+    "started": [],
     "trace": [
      "approve",
      "reply"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -1513,6 +1594,7 @@
      "outcome": "answered"
     },
     "called": [],
+    "cancelled-by": {},
     "given": [],
     "halted": "final",
     "parked-at": "",
@@ -1533,11 +1615,13 @@
       }
      }
     ],
+    "started": [],
     "trace": [
      "approve",
      "reply"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -1572,6 +1656,7 @@
      "outcome": "declined"
     },
     "called": [],
+    "cancelled-by": {},
     "given": [],
     "halted": "final",
     "parked-at": "",
@@ -1592,11 +1677,13 @@
       }
      }
     ],
+    "started": [],
     "trace": [
      "approve",
      "reply"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -1634,6 +1721,7 @@
      "outcome": "answered"
     },
     "called": [],
+    "cancelled-by": {},
     "given": [],
     "halted": "final",
     "parked-at": "",
@@ -1660,11 +1748,13 @@
       }
      }
     ],
+    "started": [],
     "trace": [
      "approve",
      "reply"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
    }
   },
   {
@@ -1701,6 +1791,7 @@
      "outcome": "answered"
     },
     "called": [],
+    "cancelled-by": {},
     "given": [],
     "halted": "final",
     "parked-at": "",
@@ -1721,11 +1812,717 @@
       }
      }
     ],
+    "started": [],
     "trace": [
      "approve",
      "reply"
     ],
-    "unenforced": []
+    "unenforced": [],
+    "why": ""
+   }
+  },
+  {
+   "name": "an-agent-that-ran-out-says-so-on-the-stage-that-called-it",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "draft-once",
+   "input": {
+    "brief": "A notice about the new gate."
+   },
+   "agents": {
+    "drafter": {
+     "draft": "Gate 4 opens on",
+     "good": false
+    }
+   },
+   "ran-out": [
+    "drafter"
+   ],
+   "people": {
+    "is-this-draft-enough": {
+     "send": true,
+     "answered-by": "ed"
+    }
+   },
+   "expect": {
+    "answer": {
+     "draft": "Gate 4 opens on",
+     "ended": "ran-out",
+     "went": "part-done"
+    },
+    "called": [],
+    "cancelled-by": {},
+    "given": [
+     {
+      "agent": "drafter",
+      "given": {
+       "brief": "A notice about the new gate."
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "refused": [],
+    "said": "",
+    "shown": [
+     {
+      "question": "is-this-draft-enough",
+      "shown": {
+       "steps.write.draft": "Gate 4 opens on",
+       "steps.write.ended": "ran-out"
+      }
+     }
+    ],
+    "started": [],
+    "trace": [
+     "write",
+     "check",
+     "look",
+     "reply"
+    ],
+    "unenforced": [],
+    "why": ""
+   }
+  },
+  {
+   "name": "an-agent-that-finished-says-so-and-nobody-is-asked",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "draft-once",
+   "input": {
+    "brief": "A notice about the new gate."
+   },
+   "agents": {
+    "drafter": {
+     "draft": "Gate 4 opens on Monday.",
+     "good": true
+    }
+   },
+   "people": {
+    "is-this-draft-enough": {
+     "send": true,
+     "answered-by": "ed"
+    }
+   },
+   "expect": {
+    "answer": {
+     "draft": "Gate 4 opens on Monday.",
+     "ended": "finished",
+     "went": "whole"
+    },
+    "called": [],
+    "cancelled-by": {},
+    "given": [
+     {
+      "agent": "drafter",
+      "given": {
+       "brief": "A notice about the new gate."
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "refused": [],
+    "said": "",
+    "shown": [],
+    "started": [],
+    "trace": [
+     "write",
+     "check",
+     "reply"
+    ],
+    "unenforced": [],
+    "why": ""
+   }
+  },
+  {
+   "name": "a-label-from-an-agent-that-ran-out-counts-and-the-record-says-it-ran-out",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "assign-only",
+   "input": {
+    "kind": "engine",
+    "summary": "Oil pressure low on engine 2."
+   },
+   "agents": {
+    "assigner": {
+     "team": "powerplant"
+    }
+   },
+   "ran-out": [
+    "assigner"
+   ],
+   "expect": {
+    "answer": {
+     "ended": "ran-out",
+     "team": "powerplant"
+    },
+    "called": [],
+    "cancelled-by": {},
+    "given": [
+     {
+      "agent": "assigner",
+      "given": {
+       "kind": "engine",
+       "summary": "Oil pressure low on engine 2."
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "refused": [],
+    "said": "",
+    "shown": [],
+    "started": [],
+    "trace": [
+     "assign",
+     "reply"
+    ],
+    "unenforced": [],
+    "why": ""
+   }
+  },
+  {
+   "name": "a-run-that-calls-a-workflow-that-waits-is-waiting-too",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "fix-and-close",
+   "input": {
+    "report": "Seat 14C will not recline."
+   },
+   "agents": {
+    "triager": {
+     "kind": "cabin",
+     "summary": "A seat is stuck."
+    }
+   },
+   "expect": {
+    "answer": {},
+    "called": [],
+    "cancelled-by": {},
+    "given": [
+     {
+      "agent": "triager",
+      "given": {
+       "report": "Seat 14C will not recline."
+      }
+     }
+    ],
+    "halted": "parked",
+    "parked-at": "close",
+    "question": "may-the-team-close",
+    "refused": [],
+    "said": "waiting on 'may-the-team-close' at 'close' (asked inside 'sign-off-by-the-team/approve')",
+    "shown": [],
+    "started": [],
+    "trace": [
+     "triage",
+     "close"
+    ],
+    "unenforced": [],
+    "why": ""
+   }
+  },
+  {
+   "name": "a-run-that-calls-a-workflow-goes-on-once-that-one-is-answered",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "fix-and-close",
+   "input": {
+    "report": "Seat 14C will not recline."
+   },
+   "agents": {
+    "triager": {
+     "kind": "cabin",
+     "summary": "A seat is stuck."
+    }
+   },
+   "people": {
+    "may-the-team-close": {
+     "close": true,
+     "answered-by": "dana"
+    }
+   },
+   "expect": {
+    "answer": {
+     "close": true,
+     "kind": "cabin"
+    },
+    "called": [],
+    "cancelled-by": {},
+    "given": [
+     {
+      "agent": "triager",
+      "given": {
+       "report": "Seat 14C will not recline."
+      }
+     }
+    ],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "refused": [],
+    "said": "",
+    "shown": [
+     {
+      "question": "may-the-team-close",
+      "shown": {
+       "input.report": "Seat 14C will not recline."
+      }
+     }
+    ],
+    "started": [],
+    "trace": [
+     "triage",
+     "close",
+     "reply"
+    ],
+    "unenforced": [],
+    "why": ""
+   }
+  },
+  {
+   "name": "a-no-with-no-exit-written-for-it-stops-the-run-and-says-so",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "sign-off-by-the-team",
+   "input": {
+    "report": "Seat 14C will not recline."
+   },
+   "agents": {},
+   "people": {
+    "may-the-team-close": {
+     "close": false,
+     "answered-by": "dana"
+    }
+   },
+   "expect": {
+    "answer": {},
+    "called": [],
+    "cancelled-by": {},
+    "given": [],
+    "halted": "stopped",
+    "parked-at": "",
+    "question": "",
+    "refused": [],
+    "said": "'approve' asked 'may-the-team-close' and the answer was no; the stage writes no `declined:` exit, so the run stops here",
+    "shown": [
+     {
+      "question": "may-the-team-close",
+      "shown": {
+       "input.report": "Seat 14C will not recline."
+      }
+     }
+    ],
+    "started": [],
+    "trace": [
+     "approve"
+    ],
+    "unenforced": [],
+    "why": "declined"
+   }
+  },
+  {
+   "name": "silence-with-no-exit-written-for-it-stops-the-run-and-says-so",
+   "tree": "tests/conformance/trees/triaged-defects",
+   "workflow": "sign-off-by-the-team",
+   "input": {
+    "report": "Seat 14C will not recline."
+   },
+   "agents": {},
+   "people": {
+    "may-the-team-close": "nobody"
+   },
+   "expect": {
+    "answer": {},
+    "called": [],
+    "cancelled-by": {},
+    "given": [],
+    "halted": "stopped",
+    "parked-at": "",
+    "question": "",
+    "refused": [],
+    "said": "'approve' asked 'may-the-team-close' and nobody answered in time; the stage writes no `nobody-answered:` exit, so the run stops here",
+    "shown": [
+     {
+      "question": "may-the-team-close",
+      "shown": {
+       "input.report": "Seat 14C will not recline."
+      }
+     }
+    ],
+    "started": [],
+    "trace": [
+     "approve"
+    ],
+    "unenforced": [],
+    "why": "nobody-answered"
+   }
+  },
+  {
+   "name": "a-visit-nobody-calls-off-is-booked-and-confirmed",
+   "tree": "tests/conformance/trees/booked-visits",
+   "workflow": "book-visit",
+   "input": {
+    "visit": "V-204",
+    "customer": "Ms Okafor"
+   },
+   "agents": {},
+   "tools": {
+    "calendar/hold-slot": {
+     "slot": "Tuesday 10:00"
+    },
+    "files/open-file": {
+     "file": "F-7"
+    },
+    "calendar/release-slot": {
+     "released": true
+    },
+    "files/close-file": {
+     "closed": true
+    },
+    "files/note": {
+     "noted": true
+    }
+   },
+   "people": {
+    "is-the-visit-confirmed": {
+     "confirmed": true,
+     "answered-by": "sam"
+    }
+   },
+   "expect": {
+    "answer": {
+     "confirmed": true
+    },
+    "called": [
+     {
+      "given": {
+       "visit": "V-204"
+      },
+      "tool": "calendar/hold-slot"
+     },
+     {
+      "given": {
+       "visit": "V-204"
+      },
+      "tool": "files/open-file"
+     }
+    ],
+    "cancelled-by": {},
+    "given": [],
+    "halted": "final",
+    "parked-at": "",
+    "question": "",
+    "refused": [],
+    "said": "",
+    "shown": [
+     {
+      "question": "is-the-visit-confirmed",
+      "shown": {
+       "input.visit": "V-204"
+      }
+     }
+    ],
+    "started": [],
+    "trace": [
+     "hold",
+     "file",
+     "confirm",
+     "reply"
+    ],
+    "unenforced": [],
+    "why": ""
+   }
+  },
+  {
+   "name": "a-port-ends-an-open-run-which-is-cancelled-undone-newest-first-and-followed-by-what-the-port-says",
+   "tree": "tests/conformance/trees/booked-visits",
+   "workflow": "book-visit",
+   "input": {
+    "visit": "V-204",
+    "customer": "Ms Okafor"
+   },
+   "agents": {},
+   "tools": {
+    "calendar/hold-slot": {
+     "slot": "Tuesday 10:00"
+    },
+    "files/open-file": {
+     "file": "F-7"
+    },
+    "calendar/release-slot": {
+     "released": true
+    },
+    "files/close-file": {
+     "closed": true
+    },
+    "files/note": {
+     "noted": true
+    }
+   },
+   "people": {
+    "is-the-visit-confirmed": {
+     "confirmed": true,
+     "answered-by": "sam"
+    }
+   },
+   "ends": {
+    "before": "confirm",
+    "port": "visit-called-off"
+   },
+   "expect": {
+    "answer": {},
+    "called": [
+     {
+      "given": {
+       "visit": "V-204"
+      },
+      "tool": "calendar/hold-slot"
+     },
+     {
+      "given": {
+       "visit": "V-204"
+      },
+      "tool": "files/open-file"
+     },
+     {
+      "given": {
+       "visit": "V-204"
+      },
+      "tool": "files/close-file"
+     },
+     {
+      "given": {
+       "visit": "V-204"
+      },
+      "tool": "calendar/release-slot"
+     }
+    ],
+    "cancelled-by": {
+     "port": "visit-called-off"
+    },
+    "given": [],
+    "halted": "cancelled",
+    "parked-at": "",
+    "question": "",
+    "refused": [],
+    "said": "Cancelled by the port `visit-called-off`. What it did was undone, newest first: file, hold. `tell-the-clinic` was started after it.",
+    "shown": [],
+    "started": [
+     {
+      "given": {
+       "visit": "V-204"
+      },
+      "workflow": "tell-the-clinic"
+     }
+    ],
+    "trace": [
+     "hold",
+     "file"
+    ],
+    "unenforced": [],
+    "why": ""
+   }
+  },
+  {
+   "name": "a-port-that-does-not-say-undo-ends-the-run-and-leaves-what-it-did",
+   "tree": "tests/conformance/trees/booked-visits",
+   "workflow": "book-visit",
+   "input": {
+    "visit": "V-204",
+    "customer": "Ms Okafor"
+   },
+   "agents": {},
+   "tools": {
+    "calendar/hold-slot": {
+     "slot": "Tuesday 10:00"
+    },
+    "files/open-file": {
+     "file": "F-7"
+    },
+    "calendar/release-slot": {
+     "released": true
+    },
+    "files/close-file": {
+     "closed": true
+    },
+    "files/note": {
+     "noted": true
+    }
+   },
+   "people": {
+    "is-the-visit-confirmed": {
+     "confirmed": true,
+     "answered-by": "sam"
+    }
+   },
+   "ends": {
+    "before": "confirm",
+    "port": "visit-withdrawn"
+   },
+   "expect": {
+    "answer": {},
+    "called": [
+     {
+      "given": {
+       "visit": "V-204"
+      },
+      "tool": "calendar/hold-slot"
+     },
+     {
+      "given": {
+       "visit": "V-204"
+      },
+      "tool": "files/open-file"
+     }
+    ],
+    "cancelled-by": {
+     "port": "visit-withdrawn"
+    },
+    "given": [],
+    "halted": "cancelled",
+    "parked-at": "",
+    "question": "",
+    "refused": [],
+    "said": "Cancelled by the port `visit-withdrawn`.",
+    "shown": [],
+    "started": [],
+    "trace": [
+     "hold",
+     "file"
+    ],
+    "unenforced": [],
+    "why": ""
+   }
+  },
+  {
+   "name": "a-newer-arrival-replaces-the-open-run-which-is-cancelled-as-any-other-is",
+   "tree": "tests/conformance/trees/booked-visits",
+   "workflow": "book-visit",
+   "input": {
+    "visit": "V-204",
+    "customer": "Ms Okafor"
+   },
+   "agents": {},
+   "tools": {
+    "calendar/hold-slot": {
+     "slot": "Tuesday 10:00"
+    },
+    "files/open-file": {
+     "file": "F-7"
+    },
+    "calendar/release-slot": {
+     "released": true
+    },
+    "files/close-file": {
+     "closed": true
+    },
+    "files/note": {
+     "noted": true
+    }
+   },
+   "people": {
+    "is-the-visit-confirmed": {
+     "confirmed": true,
+     "answered-by": "sam"
+    }
+   },
+   "ends": {
+    "before": "file",
+    "port": "visit-booked-again"
+   },
+   "expect": {
+    "answer": {},
+    "called": [
+     {
+      "given": {
+       "visit": "V-204"
+      },
+      "tool": "calendar/hold-slot"
+     },
+     {
+      "given": {
+       "visit": "V-204"
+      },
+      "tool": "calendar/release-slot"
+     }
+    ],
+    "cancelled-by": {
+     "port": "visit-booked-again"
+    },
+    "given": [],
+    "halted": "cancelled",
+    "parked-at": "",
+    "question": "",
+    "refused": [],
+    "said": "Cancelled by the port `visit-booked-again`. What it did was undone, newest first: hold.",
+    "shown": [],
+    "started": [],
+    "trace": [
+     "hold"
+    ],
+    "unenforced": [],
+    "why": ""
+   }
+  },
+  {
+   "name": "a-run-ended-before-its-first-stage-has-nothing-to-undo-and-is-still-followed",
+   "tree": "tests/conformance/trees/booked-visits",
+   "workflow": "book-visit",
+   "input": {
+    "visit": "V-204",
+    "customer": "Ms Okafor"
+   },
+   "agents": {},
+   "tools": {
+    "calendar/hold-slot": {
+     "slot": "Tuesday 10:00"
+    },
+    "files/open-file": {
+     "file": "F-7"
+    },
+    "calendar/release-slot": {
+     "released": true
+    },
+    "files/close-file": {
+     "closed": true
+    },
+    "files/note": {
+     "noted": true
+    }
+   },
+   "people": {
+    "is-the-visit-confirmed": {
+     "confirmed": true,
+     "answered-by": "sam"
+    }
+   },
+   "ends": {
+    "before": "hold",
+    "port": "visit-called-off"
+   },
+   "expect": {
+    "answer": {},
+    "called": [],
+    "cancelled-by": {
+     "port": "visit-called-off"
+    },
+    "given": [],
+    "halted": "cancelled",
+    "parked-at": "",
+    "question": "",
+    "refused": [],
+    "said": "Cancelled by the port `visit-called-off`. It had done nothing that needed undoing. `tell-the-clinic` was started after it.",
+    "shown": [],
+    "started": [
+     {
+      "given": {
+       "visit": "V-204"
+      },
+      "workflow": "tell-the-clinic"
+     }
+    ],
+    "trace": [],
+    "unenforced": [],
+    "why": ""
    }
   }
  ]
