@@ -799,6 +799,11 @@ class AgentSpec:
     #: `gets-hidden-values: yes` (docs/98 WP-11): the only calls a hidden
     #: value's placeholder is turned back into the value for.
     gets_hidden: frozenset[tuple[str, str]] = frozenset()
+    #: Whether an action a member of this agent's team uses, at any depth, says
+    #: `gets-hidden-values: yes`. Such a lead keeps hidden values as
+    #: placeholders too, because the member's action can only get back a value
+    #: the lead's redaction kept: the vault belongs to the request, not the run.
+    team_gets_hidden: bool = False
     #: The workspace's `detectors:`, each as one pattern (docs/98 WP-12), for a
     #: `looks-like:` read inside this agent's run (a board's admission lines).
     detectors: Mapping[str, str] = field(default_factory=dict)
@@ -1077,6 +1082,7 @@ class AgentSpec:
                 for act, line in ((body.get("actions") or {}).items())
                 if isinstance(line, Mapping) and said_yes(line.get("gets-hidden-values"))
             ),
+            team_gets_hidden=_team_gets_hidden(doc, agent_key),
             facts=Facts.from_document(doc, agent_key),
             workspace_remembers=Facts.of(doc.get("remembers")),
             template_language=_text(doc.get("template-language", "")) or "holes",
@@ -1610,6 +1616,37 @@ def _text(v: Any) -> str:
 def _figure_as_text(v: Any) -> Any:
     """A number written where text is read (`version: 2`), as the author wrote it."""
     return str(v) if isinstance(v, int | float) and not isinstance(v, bool) else v
+
+
+def _team_gets_hidden(doc: Mapping[str, Any], agent_key: str) -> bool:
+    """Whether a member of `agent_key`'s team, at any depth, uses an action that
+    says `gets-hidden-values: yes`."""
+    agents = doc.get("agents") or {}
+    tools = doc.get("tools") or {}
+
+    def gets(key: str) -> bool:
+        body = agents.get(key) if isinstance(agents, Mapping) else None
+        uses = set(_as_list(body.get("uses"))) if isinstance(body, Mapping) else set()
+        return any(
+            isinstance(line, Mapping) and said_yes(line.get("gets-hidden-values"))
+            for t, tool in (tools.items() if isinstance(tools, Mapping) else ())
+            if t in uses and isinstance(tool, Mapping)
+            for line in (tool.get("actions") or {}).values()
+        )
+
+    seen: set[str] = set()
+    body = agents.get(agent_key) if isinstance(agents, Mapping) else None
+    pending = list((body.get("team") or {}) if isinstance(body, Mapping) else ())
+    while pending:
+        key = str(pending.pop())
+        if key in seen:
+            continue
+        seen.add(key)
+        if gets(key):
+            return True
+        member = agents.get(key) if isinstance(agents, Mapping) else None
+        pending.extend((member.get("team") or {}) if isinstance(member, Mapping) else ())
+    return False
 
 
 def _as_list(v: Any) -> list[str]:

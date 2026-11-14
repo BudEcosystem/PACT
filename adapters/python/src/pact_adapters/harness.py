@@ -604,6 +604,10 @@ SUPPLIED_BY_THE_HOST: frozenset[str] = frozenset({
     # authored (`shared-with:`, `admitted-when:`, `admitted-by:`); the entries
     # written during a request, and running the admitting agent, are the host's.
     "board", "board_facts", "admit",
+    # The request's hidden values (docs/98 WP-11). WHICH actions get them back is
+    # authored (`gets-hidden-values:`); the values a request hid are its own, and
+    # a lead hands its vault to its members as it does the board.
+    "vault",
     # The circuit breaker's record (docs/98 WP-13). The RULE is authored
     # (`rests-after:`, `rests-for:`); which tools failed lately is the host's.
     "rests",
@@ -792,6 +796,11 @@ async def run(
     #: Facts the LEAD shares that this member may read and write, handed down
     #: with the board. A member does not declare them; the lead does.
     board_facts: "tuple[Fact, ...]" = (),
+    #: The request's hidden values (docs/98 WP-11). The root run makes one when
+    #: an action it, or a member of its team, uses gets hidden values; every
+    #: member it starts gets the same object, riding the grant as the board
+    #: does, so a member's action restores the placeholder its lead minted.
+    vault: "Vault | None" = None,
     #: Who judges an entry before it is written, when a fact says `admitted-by:`:
     #: `admit(judge, fact, entry) -> (yes, because)`. The host's, because the
     #: judge is a run and a run needs a transport. `None` refuses every such
@@ -1017,6 +1026,8 @@ async def run(
             # its teammates do (docs/98 WP-8).
             grant.board = board
             grant.board_facts = shared
+            # The request's vault rides the same way (docs/98 WP-11).
+            grant.vault = chain.vault
             # HOW this member was reached, which is what decides whether it owes
             # a figure of its own (P4). It rides the grant for the reason the
             # meter does: `Asker` takes one argument, and the check belongs
@@ -1046,11 +1057,14 @@ async def run(
     # documents in the worked example loaded, validated and did nothing, and
     # the card numbers they say they stop reached the model.
     chain = spec.chain if chain is None else chain
-    # A vault of this run's own, when an action it uses gets hidden values back
-    # (docs/98 WP-11). A copy of the chain, so one run's placeholders are never
+    # The request's vault, when an action it or a member of its team uses gets
+    # hidden values back (docs/98 WP-11): the one a lead handed down, else a
+    # new one. A copy of the chain, so one request's placeholders are never
     # another's: the spec's chain is shared by every run of the agent.
-    if spec.gets_hidden:
-        chain = dataclasses.replace(chain, vault=Vault())
+    if vault is None and (spec.gets_hidden or spec.team_gets_hidden):
+        vault = Vault()
+    if vault is not None:
+        chain = dataclasses.replace(chain, vault=vault)
     # AND THE RUNNER THE CHAIN COULD NOT HAVE BEEN BUILT WITH. `AgentSpec.
     # from_document` is handed a loaded document and nothing else (P-1), so it
     # has no host to ask for one; `run()` has one and never passed it on. Through
@@ -3238,12 +3252,23 @@ async def run(
             # The one place a hidden value comes back (docs/98 WP-11): in the
             # arguments of an action that says it gets them, after every rule
             # ran, so the trace and any approval saw only the placeholder.
+            # A placeholder the request's vault does not hold (another request's,
+            # or one the model made up) never reaches the tool as text: the call
+            # is not made, and the model is told which placeholder it used.
+            unheld: list[str] = []
             if chain.vault is not None and (call.name, str(sent.args.get("action") or "")) in spec.gets_hidden:
-                sent = ToolCall(sent.name, chain.vault.restored(sent.args))
+                unheld = chain.vault.unknown(sent.args)
+                if not unheld:
+                    sent = ToolCall(sent.name, chain.vault.restored(sent.args))
             # A tool resting after failing too often is not called (docs/98
             # WP-13); the model is told until when, and can do something else.
             back = rested.resting(call.name, clock()) if call.name in spec.rests else None
-            if back is not None:
+            if unheld:
+                out = (
+                    f"not done: {', '.join(unheld)} {'stands' if len(unheld) == 1 else 'stand'} for no value "
+                    f"this request holds — use only the placeholders this conversation showed you, exactly as written"
+                )
+            elif back is not None:
                 out = (
                     f"not done: {call.name!r} failed too often in a row and is resting "
                     f"for another {round(back - clock())}s — do without it for now"
@@ -4466,6 +4491,7 @@ def delegate_by_running(
             claims_workspace=claims_workspace,
             board=getattr(grant, "board", None),
             board_facts=tuple(getattr(grant, "board_facts", ()) or ()),
+            vault=getattr(grant, "vault", None),
             admit=admit,
             reacting=frozenset(getattr(grant, "reacting", ()) or ()),
         )
