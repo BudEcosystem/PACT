@@ -204,6 +204,7 @@ pub fn inventory(found: &Found) -> J {
         let effect = pact_loader::effects::of_agent(doc, a, &mut std::collections::BTreeSet::new());
         o.insert("effect".into(), J::String(effect.word().into()));
         o.insert("moves-money".into(), J::Bool(effect.moves_money));
+        o.insert("moves-hardware".into(), J::Bool(effect.moves_hardware));
         // D29. What this agent asks its runtime to load, and what happens where
         // that cannot be done — the fact a runtime has to decide on BEFORE it
         // takes the agent, so it is here rather than only in `pact show`.

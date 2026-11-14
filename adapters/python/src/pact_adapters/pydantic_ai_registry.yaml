@@ -304,6 +304,10 @@ fields:
     construct: "nothing: PACT requires a same-request-key beside it at check time"
     outcome: loss
     rows: [T4]
+  action.moves-hardware:
+    construct: "nothing: PACT requires a same-request-key beside it at check time, as for spends-money"
+    outcome: loss
+    rows: [T4]
   action.same-request-key:
     construct: "nothing: the host fills the named argument with the call's effect key and withholds a second call carrying the same value (at_most_once.claim)"
     outcome: loss

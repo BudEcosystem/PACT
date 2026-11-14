@@ -1662,7 +1662,7 @@ def effects_of(doc: Mapping[str, Any]) -> dict[tuple[str, str], frozenset[str]]:
     """Each action's effect words, from its own lines — the Python reading of
     `pact-loader`'s `effects.rs` (docs/98 WP-2): `reads` for `reads-only: yes`,
     else `writes`; `cannot-be-undone` for a write with no `undone-by:`; and
-    `spends` for `spends-money: yes`."""
+    `spends` for `spends-money: yes`; `moves-hardware` for `moves-hardware: yes`."""
     out: dict[tuple[str, str], frozenset[str]] = {}
     for tool, body in (doc.get("tools") or {}).items():
         if not isinstance(body, Mapping):
@@ -1679,6 +1679,8 @@ def effects_of(doc: Mapping[str, Any]) -> dict[tuple[str, str], frozenset[str]]:
                     words.add("cannot-be-undone")
             if said_yes(line.get("spends-money")):
                 words.add("spends")
+            if said_yes(line.get("moves-hardware")):
+                words.add("moves-hardware")
             out[(str(tool), str(action))] = frozenset(words)
     return out
 
