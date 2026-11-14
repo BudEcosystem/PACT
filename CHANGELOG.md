@@ -3,6 +3,27 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — law 8 at the moment of instantiation: a helper, a skill and a snippet are checked as documents (13 November)
+
+Law 8 says anything a run creates passes the same checker before it can be asked, and names a
+`run-code` snippet, a `narrowed-new` helper and a skill a run wrote. The reference checked a
+learning proposal's `instructions:` and nothing a run instantiates. A second runtime (Bud Meta
+Harness) checks all three; the functions here are the rules it builds them by, so a definition
+checked there and here is the same document.
+
+- **`checking.with_helper(document, starter, instructions, description=, uses=)`**: the starter's
+  own entry under `<starter>-helper` (`-2`, `-3`… when taken), told `instructions`, on the
+  starter's model. `uses` may narrow it; anything the starter lacks raises `NotNarrower` with
+  `delegation.beyond_its_starter`'s sentence.
+- **`checking.with_skill(document, agent, name, description, content, use_when=)`**: a `skills:`
+  entry, named in the agent's `uses:` when it writes one.
+- **`checking.with_program(document, language, code, description=, runs_for_at_most_ms=)`**: a
+  nondeterministic program under `run-code-<12 hex of the code's sha256>`, its fuel the run's own
+  ceiling; a language with no engine raises `Uncheckable`. The code itself is recorded, never read.
+- **`checking.literal(text, document)`**: words a model wrote are checked as words. `{{` becomes
+  `\{{`; under `template-language: jinja` the text goes in raw blocks.
+- `check_document` on the result is the check.
+
 ## 2026-11 — the TypeScript port computes effects as the checker does
 
 `adapters/typescript/src/effects.ts` is `crates/pact-loader/src/effects.rs` (law 1) in TypeScript,

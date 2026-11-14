@@ -15,6 +15,7 @@ errors in the checker's own words, empty when the change is sound.
 from __future__ import annotations
 
 import copy
+import hashlib
 import shutil
 import subprocess
 import tempfile
@@ -252,4 +253,168 @@ def with_field(document: Mapping[str, Any], agent: str, field: str, value: Any) 
     entry = dict(agents.get(agent) or {})
     entry[field] = value
     agents[agent] = entry
+    return proposed
+
+
+# ------------------------------------------------- what a run instantiates
+#
+# Law 8 is "anything created during a run must pass the *same* checker at the
+# moment it is instantiated" (97 §4, law 8): a `narrowed-new` helper, a skill
+# the run wrote, a `run-code` snippet. Each is put in front of the checker the
+# same way a proposal is: as the document it would make, the starter's own
+# closure with the one new definition added. The functions below build those
+# documents, and the same rules are what a second runtime builds them by, so a
+# definition checked here and one checked there are the same document.
+
+
+class NotNarrower(ValueError):
+    """A helper was described with something its starter does not have. The
+    message is `delegation.beyond_its_starter`'s, so the model reads the same
+    sentence whichever runtime refused it."""
+
+
+def _free_key(entries: Mapping[str, Any] | None, base: str) -> str:
+    """`base`, or `base-2`, `base-3`… the first key `entries` does not hold."""
+    taken = entries or {}
+    if base not in taken:
+        return base
+    n = 2
+    while f"{base}-{n}" in taken:
+        n += 1
+    return f"{base}-{n}"
+
+
+_END_RAW = "{% endraw %}"
+
+
+def literal(text: str, document: Mapping[str, Any]) -> str:
+    """Words a model wrote, as the checker must read them: literally.
+
+    A model's `{{ order }}` is an order number it typed, not a hole the run
+    fills. Under the default template language that is `\\{{`; under
+    `template-language: jinja` it is a raw block, and an `{% endraw %}` inside
+    the words is written between two raw blocks as a string.
+    """
+    if document.get("template-language") != "jinja":
+        out, i = [], 0
+        while True:
+            j = text.find("{{", i)
+            if j < 0:
+                out.append(text[i:])
+                return "".join(out)
+            out.append(text[i:j])
+            out.append("{{" if j > 0 and text[j - 1] == "\\" else "\\{{")
+            i = j + 2
+    if not any(mark in text for mark in ("{{", "{%", "{#")):
+        return text
+    between = "{{ '" + _END_RAW + "' }}"
+    return between.join("{% raw %}" + part + _END_RAW for part in text.split(_END_RAW))
+
+
+def _listed(raw: Any) -> list[str]:
+    if raw is None:
+        return []
+    return [str(x) for x in raw] if isinstance(raw, (list, tuple)) else [str(raw)]
+
+
+def with_helper(
+    document: Mapping[str, Any],
+    starter: str,
+    instructions: str,
+    *,
+    description: str | None = None,
+    uses: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """The document a `narrowed-new` helper makes: `starter`'s own entry under
+    the key `<starter>-helper`, told `instructions`, running with the
+    starter's `uses:` or the narrower `uses` given, on the starter's model.
+
+    Raises `NotNarrower` when `uses` names anything the starter lacks.
+    """
+    from .delegation import beyond_its_starter
+
+    agents = dict(document.get("agents") or {})
+    entry = {k: v for k, v in dict(agents.get(starter) or {}).items() if k != "name"}
+    if uses is not None:
+        refused = beyond_its_starter(starter, _listed(entry.get("uses")), list(uses))
+        if refused:
+            raise NotNarrower(refused)
+        entry["uses"] = list(uses)
+    said = description.strip() if description and description.strip() else entry.get("description")
+    if said is not None:
+        entry["description"] = literal(str(said), document)
+    entry["instructions"] = literal(instructions, document)
+    agents[_free_key(agents, f"{starter}-helper")] = entry
+    proposed = copy.deepcopy(dict(document))
+    proposed["agents"] = agents
+    return proposed
+
+
+def with_skill(
+    document: Mapping[str, Any],
+    agent: str,
+    name: str,
+    description: str,
+    content: str,
+    *,
+    use_when: str | None = None,
+) -> dict[str, Any]:
+    """The document a skill a run wrote makes: a `skills:` entry, named in
+    `agent`'s `uses:` when the agent writes one (an agent without `uses:`
+    reaches every skill already)."""
+    proposed = copy.deepcopy(dict(document))
+    skills = dict(proposed.get("skills") or {})
+    key = _free_key(skills, name)
+    skill: dict[str, Any] = {"name": name, "description": literal(description, document)}
+    if use_when is not None:
+        skill["use-when"] = literal(use_when, document)
+    skill["content"] = literal(content, document)
+    skills[key] = skill
+    proposed["skills"] = skills
+    agents = dict(proposed.get("agents") or {})
+    entry = agents.get(agent)
+    if isinstance(entry, Mapping) and entry.get("uses") is not None:
+        agents[agent] = {**entry, "uses": [*_listed(entry.get("uses")), key]}
+        proposed["agents"] = agents
+    return proposed
+
+
+#: The engine a snippet in each language runs as. A language with no engine
+#: here cannot be put in front of the checker, so it is not run.
+ENGINES = {"python": "python", "typescript": "typescript"}
+
+
+def with_program(
+    document: Mapping[str, Any],
+    language: str,
+    code: str,
+    *,
+    description: str | None = None,
+    runs_for_at_most_ms: int | None = None,
+) -> dict[str, Any]:
+    """The document a `run-code` snippet makes: a nondeterministic
+    `programs:` entry under `run-code-<first 12 hex of the code's sha256>`,
+    its ceiling the run's own. The body is recorded, never opened, by PACT,
+    so the snippet's words are not part of what is checked.
+
+    Raises `Uncheckable` for a language PACT has no engine for.
+    """
+    engine = ENGINES.get(language)
+    if engine is None:
+        raise Uncheckable(f"programs here run as {language!r}, which PACT has no engine for")
+    digest = hashlib.sha256(code.encode()).hexdigest()[:12]
+    said = (description or "").strip() or "A program the agent wrote during the run."
+    fuel: dict[str, Any] = {}
+    if runs_for_at_most_ms is not None:
+        fuel["runs-for-at-most"] = f"{runs_for_at_most_ms}ms"
+    fuel["when-it-runs-out"] = "stop-and-say-so"
+    proposed = copy.deepcopy(dict(document))
+    programs = dict(proposed.get("programs") or {})
+    programs[_free_key(programs, f"run-code-{digest}")] = {
+        "description": literal(said, document),
+        "engine": engine,
+        "determinism": "nondeterministic",
+        "fuel": fuel,
+    }
+    proposed["programs"] = programs
     return proposed
