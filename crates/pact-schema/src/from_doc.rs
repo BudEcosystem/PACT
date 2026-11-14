@@ -273,6 +273,8 @@ impl Schema {
                             .trim()
                             .to_string();
                         field.template = f.get("template").and_then(as_bool).unwrap_or(false);
+                        // docs/97 §5.4 — see `Field::kernel_ops`.
+                        field.kernel_ops = names(f, "kernel-op");
                         group.fields.push(field);
                     }
                     None => diags.push(Diagnostic::error(

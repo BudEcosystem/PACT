@@ -417,6 +417,18 @@ pub struct Field {
     /// template, may appear in (96 §C). Read by `pact_loader::holes`, which
     /// kept the same list as a Rust const of two field names.
     pub template: bool,
+    /// The kernel operations this field is (docs/97 §2 and §5.4), as
+    /// `spec/kernel.yaml` names them — `store.claim` on
+    /// `action.same-request-key`, `allowance.reach` on `agent.uses`. Empty on a
+    /// field that is no operation: a description, a name, a `because:`.
+    ///
+    /// Data for the reason `template` is: a runtime that keeps one
+    /// implementation per operation reads which fields reach it from here,
+    /// rather than by matching an operation's keyword prose against field
+    /// names, where `limits` is a group, two fields and every field inside
+    /// them. `tests/every_kernel_operation_is_written_somewhere.rs` holds the
+    /// names to `spec/kernel.yaml`.
+    pub kernel_ops: Vec<String>,
 }
 
 impl Field {
@@ -444,6 +456,7 @@ impl Field {
             model_kind: Vec::new(),
             plays_role: String::new(),
             template: false,
+            kernel_ops: Vec::new(),
         }
     }
 
