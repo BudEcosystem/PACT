@@ -254,13 +254,19 @@ workflow draft-once
 
 # The same word on a `decide` an agent decided: its label counts whether or
 # not it ran out, and the record says which.
+agent team-picker
+  description: Says which team takes a defect, and may run out of steps doing it.
+  takes kind: text, summary: text
+  gives team: one of powerplant, interiors
+  instructions: Pick the team for this kind of defect.
+
 workflow assign-only
   description: Pick the team for a defect of a known kind, and say how the agent that picked ended.
   takes kind: text, summary: text
   gives team: text, ended: text
   assign = decide
     by:
-      - { agent: assigner }
+      - { agent: team-picker }
     if powerplant: reply
     if interiors: reply
   reply = answer with team: assign.label, ended: assign.ended

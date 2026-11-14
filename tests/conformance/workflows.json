@@ -1944,12 +1944,12 @@
     "summary": "Oil pressure low on engine 2."
    },
    "agents": {
-    "assigner": {
+    "team-picker": {
      "team": "powerplant"
     }
    },
    "ran-out": [
-    "assigner"
+    "team-picker"
    ],
    "expect": {
     "answer": {
@@ -1960,7 +1960,7 @@
     "cancelled-by": {},
     "given": [
      {
-      "agent": "assigner",
+      "agent": "team-picker",
       "given": {
        "kind": "engine",
        "summary": "Oil pressure low on engine 2."
