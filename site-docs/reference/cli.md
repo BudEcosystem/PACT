@@ -36,7 +36,24 @@ The one you run constantly.
 ```console
 $ pact check examples/refund-desk
 OK — examples/refund-desk loaded cleanly (498 settings).
+Egress: `allow-egress: []`, so nothing here may talk to anything outside this box.
 ```
+
+The second line says where the workspace draws its boundary: which parts of it
+may talk to something outside the machine. It is printed after every check that
+finds no problems, and it has three forms:
+
+| `workspace.yaml` writes | The line says |
+|---|---|
+| no `allow-egress:` line | no boundary is drawn, so every part may talk outside |
+| `allow-egress: []` | nothing may |
+| `allow-egress: [llm, tools]` | only those parts may |
+
+Leaving the line out is a choice an author may make, and it is also what a
+forgotten line looks like, so the tool says which one it read. It is not a
+warning: it does not count as one and `--deny-warnings` does not fail on it.
+`--quiet` leaves it out. An agent checked on its own (`pact check
+agents/desk`) is told the boundary of the workspace around it.
 
 Every problem it reports names the file, the line, what is wrong, and a fix you
 can type:
@@ -83,6 +100,12 @@ pinned to:
 - `contract-digest` moves only with what its callers rely on: `accepts:`,
   `answers-with:`, `published-as:`, and each port that answers it with its
   `same-conversation-when:` and `if-still-running:`.
+
+Each workspace also carries `egress`, the same boundary `pact check` states,
+for a runtime deciding whether to take the tree: `boundary` is `open` (no
+`allow-egress:` line, so everything may talk outside), `closed` (`[]`) or
+`listed`, and `allows` is the parts written. An absent line and an empty list
+are opposite answers, and `allows` is empty for both: read `boundary`.
 
 ```console
 $ pact discover tests/trees/workflows-16-trial-booking

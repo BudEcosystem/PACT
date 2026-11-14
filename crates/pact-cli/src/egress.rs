@@ -251,6 +251,79 @@ pub fn listed(root: &Node) -> String {
     format!("[{}]", granted(root).join(", "))
 }
 
+/// Where this workspace draws its boundary, for whoever reads the result of a
+/// check or an inventory.
+///
+/// Leaving `allow-egress:` out draws no boundary, so every part may talk to
+/// something outside the box (decision Q17). That is a choice an author may
+/// make, and it is also what a forgotten line looks like: the two trees are the
+/// same tree, and nothing said which one a reader was looking at. So it is
+/// SAID, every time, in one line — and never as a warning, because a warning
+/// fails the build of everybody who runs `--deny-warnings`, which would turn
+/// "open unless you say otherwise" back into "write the line or fail".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Boundary {
+    /// No `allow-egress:` line: no boundary is drawn, and everything may leave.
+    Open,
+    /// `allow-egress: []`: nothing may talk to anything outside the box.
+    Closed,
+    /// `allow-egress: [llm, tools]`: only the roles written may.
+    Listed(Vec<String>),
+}
+
+impl Boundary {
+    /// The boundary a workspace's own document draws. Asked only of a
+    /// workspace: `allow-egress:` is a workspace's line, and a lone agent file
+    /// has nowhere to write one.
+    pub fn read(root: &Node) -> Self {
+        if root.get("allow-egress").is_none() {
+            return Self::Open;
+        }
+        let roles = granted(root);
+        if roles.is_empty() {
+            Self::Closed
+        } else {
+            Self::Listed(roles.into_iter().map(str::to_string).collect())
+        }
+    }
+
+    /// The one word an inventory carries: `open`, `closed` or `listed`.
+    pub fn word(&self) -> &'static str {
+        match self {
+            Self::Open => "open",
+            Self::Closed => "closed",
+            Self::Listed(_) => "listed",
+        }
+    }
+
+    /// The roles that may talk outside, as written. Empty for `open` as well
+    /// as for `closed`: read [`Boundary::word`] to tell them apart.
+    pub fn roles(&self) -> &[String] {
+        match self {
+            Self::Listed(roles) => roles,
+            _ => &[],
+        }
+    }
+
+    /// The boundary in one sentence, as `pact check` says it.
+    pub fn in_words(&self) -> String {
+        match self {
+            Self::Open => "Egress: no `allow-egress:` line is written, so this workspace draws \
+                           no boundary and every part of it may talk to something outside this \
+                           box. Write `allow-egress: []` to let nothing out."
+                .to_string(),
+            Self::Closed => "Egress: `allow-egress: []`, so nothing here may talk to anything \
+                             outside this box."
+                .to_string(),
+            Self::Listed(roles) => format!(
+                "Egress: `allow-egress: [{}]`, so only {} may talk to something outside this box.",
+                roles.join(", "),
+                if roles.len() == 1 { "that part" } else { "those parts" }
+            ),
+        }
+    }
+}
+
 /// Does this workspace let a binding playing `role` talk outside the box?
 fn admits(root: &Node, role: &str) -> bool {
     let listed = granted(root);

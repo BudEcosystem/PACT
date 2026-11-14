@@ -218,3 +218,65 @@ workflow draft-three-times
     write = call drafter with brief: input.brief
   reply = answer with rounds: polish.rounds, outcome: polish.outcome, ended: polish.ended
   gave-up = answer with rounds: polish.rounds, outcome: polish.outcome
+
+# An agent that reaches one of its limits may answer with what it has. The
+# stage that called it takes that answer and goes on, and says how the agent
+# ended: `.ended` is `ran-out`, and `finished` otherwise. Here a person looks
+# at a draft only when the drafter ran out before it was done.
+question is-this-draft-enough
+  description: Asked when the drafter ran out before it finished.
+  says: The drafter ran out before it finished. Is this draft enough to send?
+  answer:
+    send: yes or no
+  shows: [steps.write.draft, steps.write.ended]
+  asked-of: [editors]
+  answer-within: 1h
+
+workflow draft-once
+  description: Write one draft, and have a person look at it only when the drafter ran out.
+  takes brief: text
+  gives draft: text, ended: text, went: text
+  write = call drafter with brief: input.brief
+  check = decide
+    by:
+      - rules:
+          - when:
+              - { value: steps.write.ended, is: ran-out }
+            choose: part-done
+            because: The drafter ran out before it finished.
+          - choose: whole
+    if part-done: look
+    if whole: reply
+  look = ask is-this-draft-enough
+    then:
+      declined: reply
+  reply = answer with draft: write.draft, ended: write.ended, went: check.label
+
+# The same word on a `decide` an agent decided: its label counts whether or
+# not it ran out, and the record says which.
+agent team-picker
+  description: Says which team takes a defect, and may run out of steps doing it.
+  takes kind: text, summary: text
+  gives team: one of powerplant, interiors
+  instructions: Pick the team for this kind of defect.
+
+workflow assign-only
+  description: Pick the team for a defect of a known kind, and say how the agent that picked ended.
+  takes kind: text, summary: text
+  gives team: text, ended: text
+  assign = decide
+    by:
+      - { agent: team-picker }
+    if powerplant: reply
+    if interiors: reply
+  reply = answer with team: assign.label, ended: assign.ended
+
+# A workflow that calls one that waits for a person is waiting too, at the
+# stage that made the call.
+workflow fix-and-close
+  description: Classify a defect, then have the leads' team close it.
+  takes report: text
+  gives close: yes or no, kind: text
+  triage = call triager with report: input.report
+  close = call sign-off-by-the-team with report: input.report
+  reply = answer with close: close.close, kind: triage.kind
