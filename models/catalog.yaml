@@ -830,3 +830,114 @@ models:
     # `prices.input_mtok` and `prices.output_mtok`. Published 2026-07-22,
     # checked 2026-07-28 by jithinvg@bud.studio.
     cost: { input-per-mtok: 2.00 USD, output-per-mtok: 6.00 USD }
+
+  # ───────────────────────────────────────────── DeepSeek (hosted)
+  #
+  # Every fact below is read from DeepSeek's own API documentation on
+  # 2026-11-11: the pricing page (https://api-docs.deepseek.com/quick_start/pricing)
+  # and the thinking-mode guide (https://api-docs.deepseek.com/guides/thinking_mode).
+  # Neither page carries a revision date, so `date:` is the day it was read.
+  #
+  # PRICE: DeepSeek publishes two rates, peak (01:00–04:00 and 06:00–10:00 UTC,
+  # Monday to Friday) and off-peak at half of peak, plus a cache-hit input rate.
+  # A row holds one price, and `cost <` lines must never pass on a figure a run
+  # can exceed, so `cost:` records the PEAK cache-miss rates; off-peak and
+  # cache-hit rates are written beside it for a runtime that meters them.
+
+  deepseek-flash:
+    family: deepseek-v4
+    tier: small
+    # `deepseek-v4-flash` and `deepseek-v4-flash-vision-exp` are the legacy names
+    # the pricing page says are still accepted and routed to this model.
+    also-known-as:
+      - "deepseek-flash"
+      - "deepseek/deepseek-flash"
+      - "deepseek-v4-flash"
+      - "deepseek-v4-flash-vision-exp"
+    served-by:
+      - { runtime: deepseek-api }
+    capabilities:
+      # Tool use is what the API is for and is sourced by its OpenAI- and
+      # Anthropic-compatible formats; neither page says several calls come back
+      # at once, so `single`, the same rule as the Gemini and Grok rows.
+      tool-calling: single
+      # The pricing page: vision is supported on `deepseek-flash`.
+      modality-in: [text, image]
+      modality-out: [text]
+      # Thinking-mode guide: "Thinking mode does not support the `temperature`,
+      # `presence_penalty`, or `frequency_penalty` parameters" — setting them
+      # "will not trigger an error but will also have no effect". `top-p` is not
+      # listed: on this model it takes effect only WHILE thinking (range
+      # 0.95–1.0) and is ignored otherwise, a case `ignores-while-thinking`
+      # cannot say, so it is left to the runtime rather than mis-stated.
+      ignores-while-thinking: [temperature, presence-penalty, frequency-penalty]
+      # "Thinking mode is enabled by default, with the default effort being `high`."
+      thinks-unless-told: yes
+      context-window:
+        value: 1048576
+        provenance:
+          source: >
+            DeepSeek pricing page, context length "1M" for `deepseek-flash`
+            (DeepSeek-V4.1-Flash-1017); the exact token count is the one the
+            DeepSeek `/models` listing declares for both official models.
+          date: 2026-11-11
+          as-of: 2026-11-11
+          recorded-by: jithinvg@bud.studio
+    reasoning:
+      value: unknown
+      provenance:
+        source: >
+          No positioning statement maps onto the four-rung ladder and no
+          benchmark figure has been measured on this distribution. Written
+          `unknown`: Y12 makes UNKNOWN bind and rank last.
+        harness: none
+        as-of: 2026-11-11
+        recorded-by: jithinvg@bud.studio
+    # Peak cache-miss input 0.30 USD and output 1.20 USD per million tokens.
+    # Off-peak: 0.15 USD in, 0.60 USD out. Cache-hit input: 0.006 USD peak,
+    # 0.003 USD off-peak. Read 2026-11-11 by jithinvg@bud.studio.
+    cost: { input-per-mtok: 0.30 USD, output-per-mtok: 1.20 USD }
+
+  deepseek-v4-pro:
+    family: deepseek-v4
+    tier: frontier
+    also-known-as:
+      - "deepseek-v4-pro"
+      - "deepseek/deepseek-v4-pro"
+    served-by:
+      - { runtime: deepseek-api }
+    capabilities:
+      # Same source and rule as `deepseek-flash`.
+      tool-calling: single
+      # The pricing page: vision is not supported on `deepseek-v4-pro`.
+      modality-in: [text]
+      modality-out: [text]
+      # Thinking-mode guide: temperature and both penalties have no effect while
+      # thinking, and for `deepseek-v4-pro` "in thinking mode your value is
+      # ignored" for `top_p`.
+      ignores-while-thinking: [temperature, top-p, presence-penalty, frequency-penalty]
+      thinks-unless-told: yes
+      context-window:
+        value: 1048576
+        provenance:
+          source: >
+            DeepSeek pricing page, context length "1M" for `deepseek-v4-pro`
+            (DeepSeek-V4-Pro-0813); the exact token count is the one the
+            DeepSeek `/models` listing declares for both official models.
+          date: 2026-11-11
+          as-of: 2026-11-11
+          recorded-by: jithinvg@bud.studio
+    reasoning:
+      value: unknown
+      provenance:
+        source: >
+          No positioning statement maps onto the four-rung ladder and no
+          benchmark figure has been measured on this distribution. Written
+          `unknown`: Y12 makes UNKNOWN bind and rank last.
+        harness: none
+        as-of: 2026-11-11
+        recorded-by: jithinvg@bud.studio
+    # Peak cache-miss input 1.32 USD and output 3.96 USD per million tokens.
+    # Off-peak: 0.66 USD in, 1.98 USD out. Cache-hit input: 0.044 USD peak,
+    # 0.022 USD off-peak. Read 2026-11-11 by jithinvg@bud.studio.
+    cost: { input-per-mtok: 1.32 USD, output-per-mtok: 3.96 USD }
