@@ -44,6 +44,24 @@ SRC = Path(__file__).resolve().parents[1] / "src" / "pact_adapters"
 #: _gained_a_caller` deletes it again when one appears — a list of what must stay
 #: uncalled cannot notice a fix.
 HOST_API: dict[str, str] = {
+    # A workflow hands an agent a set of fields; what turns them into what a
+    # model reads is whoever runs the agent. The reference workflow runtime
+    # runs none (`Callers.agent` is the host's), so nothing in `src/` words a
+    # set of fields; a host that does (the live suite here, budflow-core's
+    # `sending.sent`) is held to the one rule this states.
+    "workflow_runtime.worded": (
+        "what a model is shown of the fields an agent was given — all of them and nothing "
+        "else, in `accepts:` order — for a host that runs a workflow's agents; the "
+        "reference workflow runtime runs none"
+    ),
+    # docs/96 §D: `turns:` lowered to Pydantic AI's own messages. The reference
+    # harness keeps a conversation in its own dialect and has no Pydantic AI
+    # history to put them in (pact_agent refuses `message_history=`); a host on
+    # Pydantic AI (budflow-core's `authored_turns`) sends them as `message_history`.
+    "pydantic_ai_turns.messages_of": (
+        "an agent's, a variant's or a case's turns as Pydantic AI messages, for a host on "
+        "Pydantic AI to send as `message_history`"
+    ),
     # 02W §2.13: a sampled frame is drawn from finished LIVE runs. The reference
     # harness keeps no runs, so nothing in `src/` samples; a runtime that keeps
     # them (budflow-core's `budflow test --population sampled-frame`) asks this
@@ -76,9 +94,19 @@ HOST_API: dict[str, str] = {
         "why a `may-start:` start is refused (`starts-at-most:`, `nests-at-most:`), "
         "for a runtime that brings agents in; the harness starts none"
     ),
-    "delegation.beyond_its_starter": (
-        "why a narrowed agent naming what its starter lacks is refused, for a "
-        "runtime that builds narrowed agents; the harness builds none"
+    # Law 8 at instantiation: the documents a run's own definitions are
+    # checked as. The reference harness instantiates none (it starts no
+    # helper, loads no skill a run wrote and runs a snippet in a room without
+    # a check); a runtime that does (Bud Meta Harness) builds these documents
+    # and holds them to `check_document`, so both check the same document.
+    "checking.with_helper": (
+        "the document a `narrowed-new` helper is checked as, for a runtime that starts one; the harness starts none"
+    ),
+    "checking.with_skill": (
+        "the document a skill a run wrote is checked as, for a runtime that loads one; the harness loads none"
+    ),
+    "checking.with_program": (
+        "the document a `run-code` snippet is checked as, for a runtime that checks one; the harness checks none"
     ),
     # The question a run-level wait puts, by its reason. The reference harness
     # asks through its own `Gate` (`asking.for_call`) and never needs the name;

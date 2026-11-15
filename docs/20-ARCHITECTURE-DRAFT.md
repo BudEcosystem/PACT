@@ -377,8 +377,11 @@ zone computation and blob verification are new work.
 > it, `open` is gone from `Group` and from `from_doc`, and every field of the shipped
 > schema carries `surface:` and `tier:` — checked at startup by `governance_is_complete`,
 > which refuses to validate against a specification that leaves any field without them.
-> Point 2 (`spec/extensions/*.yaml`) is not built: there is no extension path at all, and
-> `x-` on a field is what an author has. Point 1's sha256 comparison against a compiled-in
+> Point 2 (`spec/extensions/*.yaml`) is not built: there is no extension path for the
+> schema, and `x-` on a field is what an author has — preserved in the IR and never emitted
+> into any substrate. The runtime extension path that does exist is `plugins:` (D29): a
+> named, versioned request for code the runtime loads, validated like every other kind and
+> never resolved, fetched or run by the checker. Point 1's sha256 comparison against a compiled-in
 > constant is deliberately NOT built — a constant compiled in beside the file it hashes can
 > only ever agree with itself, so the digest is COMPUTED and REPORTED instead, and the
 > property actually verified at startup is the one §8.2 depends on.
@@ -7062,7 +7065,7 @@ choose from.** All three, verbatim from `Address.parse`:
 | `tool` | `step.tool.started`, `step.tool.completed`, `step.tool.cancelled` |
 | `delegate` | `step.delegate.requested`, `step.delegate.started`, `step.delegate.completed`, `step.delegate.failed`, `step.delegate.cancelled`, `turn.delegate.completed`, `turn.delegate.failed` |
 | `approval` | `step.approval.requested`, `step.approval.completed`, `turn.approval.failed` |
-| `message` | `step.message.completed`, `turn.message.completed` |
+| `message` | `step.message.completed`, `turn.message.completed`, `turn.message.failed` (a reply that was to be the answer did not fit `answers-with:` or broke a `checked-by:` rule; `attempt` and `reason` say which try and why) |
 | `compaction` | `step.compaction.started`, `step.compaction.completed` |
 | `input` | `step.input.requested` |
 | `limit` | `session.limit.failed`, `turn.limit.completed` |
@@ -8947,6 +8950,7 @@ it would have *"nothing"* in the column headed *"what it decides"*.
 | `loop:` and `loops/` — `based-on`, `starts-at`, `does`, `says`, `may-use`, `then`, `at-most` | which stage runs at each step, what it is told, what it may reach (G1) | same, via `_loops_of` |
 | `limits:` — `steps-at-most`, `tool-calls-at-most`, `runs-for-at-most` / `finishes-within`, `cost-per-request-under`, `tokens-at-most`, `when-it-runs-out` | when the run stops, which of the three actions it takes, and the words a person reads (G2) | `test_the_typescript_port_stops_at_the_same_ceiling_and_says_the_same_words`, and `test_both_ports_read_every_way_a_spend_cap_is_written.py` for `cost-per-request-under`. **The second citation was missing for as long as this row existed, and the cell was false without it**: the first test sends the money cap written `<number> <CUR>` and no other way, so four of the six spellings `coerce::money` accepts — `USD 0.05`, `$0.05`, `0.05 usd` and `0.05<NEL>USD`, all `pact check` rc=0 — produced a different sentence in the two ports with this row reading as held. Nothing structural holds this column: the two tests below check `AGENT_SPEC_FIELDS` and list B, not the Held-by cell |
 | `answers-with:` | the shape the model is told its answer must have, appended last under one heading (A5) | `test_the_typescript_target_agrees_too` |
+| `plugins:` — `if-it-cannot-be-loaded` | whether the turn is refused before a model is called and in what words, and the line each plugin it starts without puts on `unenforced` (D29). Neither port loads a plugin, so the two agree by construction; only the reference port can be handed `loaded_plugins=` by a host that does | `test_a_plugin_nobody_loaded_stops_the_run_before_it_starts`, `test_a_plugin_the_agent_can_do_without_is_named_on_unenforced`, and `test_every_agent_runs_identically_on_the_typescript_target` over `examples/plugin-desk` |
 
 Agreement is on the INPUTS as well as the outputs, which is what makes the first four rows
 evidence rather than assertion: `run-trace.ts` records `told` and `offered` — the system
@@ -8965,11 +8969,11 @@ declared on `AgentSpec` for one purpose: so the run can name it, one line at a t
 what does not happen. A run over this target carrying any of them is still a run whose trace
 matches — it is a run that *did less*, and said which less.
 
-Twelve of the thirteen are named on `RunResult.unenforced`: **nine** by `notDoneHere`, which reads
-the `AgentSpec`'s own top-level keys, and **three** — a loop stage's `asks:` and `forks:`, and
-`answers-with-mode:` — by `run()` itself, for the two different reasons given at the end of
-this section. (`notDoneHere` returns a ninth line, for `team:`, but `team:` is a list A key and
-not a row here.) The eleventh — the
+Fifteen of the sixteen are named on `RunResult.unenforced`: **eleven** by `notDoneHere`, which reads
+the `AgentSpec`'s own top-level keys, and **four** — a loop stage's `asks:` and `forks:`,
+`answers-with-mode:` and `checks-at-most:` — by `run()` itself, for the two different reasons given at the end of
+this section. (`notDoneHere` returns one line more, for `team:`, but `team:` is a list A key and
+not a row here.) The sixteenth — the
 documents a corpus declares — is named on `RunResult.unretrieved`, which is the same fifth
 channel `harness.py` has carried since A7 and is a fifth for the same reason `never_reached`
 is not `unmetered`: *the rule could not be evaluated* sends the reader to the rule, *the
@@ -8997,10 +9001,13 @@ every shipped tree agreed anyway.
 | `knowledge/` (the documents themselves) | A7 | PACT retrieves nothing anywhere, and this port has nowhere to be handed a retrieval either, so every declared set is one this run never looked in. **The other row on both sides of the bound**, like `team:`: `must-cite:` is in list A — the turn is refused before a model call, in the same words as the reference port — and a corpus *without* it answers out of the model's own memory, which is named on `unretrieved` rather than `unenforced`. Held by `test_a_corpus_the_second_port_never_looked_in_is_not_silent.py`. |
 | `asks:` on a `does: ask-someone` stage | G1 / G7 | The stage stops the run on both ports, at the same stage of the same path, with `halted: "suspended"` — and only Python then puts the author's typed question, with its shape, its audience and its deadline (`x-asked-a-person`, §7.14). This port has no durable suspension to put a question into, so the line is read and nobody is asked it. **The only row in list B whose key is not a top-level one**: it is written inside a loop, and the loop is in list A. `loops.ts` parses it into `Phase.asks`; `run()` names it once `resolve` has run, for every asking stage the loop DECLARES rather than for the ones a particular run reaches — a line that appeared only on the branch that took it would tell an author their file was fine on every other run — and in the conditional (*"a run that reaches that stage"*) for the same reason. A stage that does `ask-someone` and names no question at all is reported too, as `asks: (none named)`: `spec/schema.yaml` refuses that document, but `run()` is a library entry point and does not run `pact check`, so its report may not depend on one having been run. Not to be confused with `limits.asks`, which is the question a *ceiling* puts and which this port reports under `limits.`. |
 | `shared-with: the-team` on a `remembers` entry | docs/98 WP-8 | A team's shared board is offered to the model under the name and description `boards.py` gives it, so both ports show the same tools — and this port keeps no board, so reading or writing it comes back as an error. The Python harness keeps one board per request behind its admission gate (`admitted-when:`, `admitted-by:`). Carried on the payload as `boards`. |
+| `reactions:` on an agent, and every other agent's `listens-for:` | docs/99 §5 | The Python harness stops at six moments of its own loop and carries out what a reaction says there — a reminder added to what the model is told, another agent asked first or told after, the run stopped. This port has no reactor: each reaction that covers the agent is named on `unenforced`, and nothing is reminded, asked, told or stopped. The `working-on` tool an agent says its own topic with IS offered, under the same name and description, so both ports show the model the same tools; a call to it is noted and nobody is asked. Carried on the payload as `reactions`. |
 | `forks:` on a loop stage | docs/98 WP-10 | Python starts each attempt of a forking stage from a copy of the conversation as the stage began; this port runs every attempt on the one conversation, so a later attempt reads the earlier ones and the samples are not independent. Like `asks:`, written inside a loop and named by `run()` once the loop is resolved, for every stage the loop declares. |
 | `answers-with-mode:` | A5 | Only `prompted` is deliverable anywhere — `native-json-schema` and `tool` constrain the answer at the provider, and no transport in either port does that. So the shape is asked for in the prompt (list A above) and the two stricter modes are named on `unenforced` rather than quietly served as prose, which would be the silent degradation T7 forbids. Both ports pick `prompted` when the line is absent, and both report the same sentence when it is not. |
+| `checked-by:` | 02P O7 | The Python harness holds a reply that would be the answer to the author's own rules before it is one (`answers_fit.py`, `evals.first_broken`): a reply that breaks a rule is asked for again with the reason, and is never returned. This port has no rule reader, so the rules are named and a reply that breaks one is returned as it is. |
+| `checks-at-most:` | 02P O7 | How many times in all an agent is asked for its answer — 2 when unwritten — held to `checked-by:` and to the shape it says it gives. Python asks again with the reason and ends the run `checks-failed` when none fits; this port asks once and returns the reply as written. The shape itself is list A: both ports put it to the model in the same words, and a reply that fits is the answer on both. Named by `run()` and not by `notDoneHere`, because it turns on whether a shape was asked for this turn. |
 
-**What list B counts, and what a run actually prints.** The twelve is a count of list B's ROWS on
+**What list B counts, and what a run actually prints.** The thirteen is a count of list B's ROWS on
 `unenforced`, not of the lines a run comes back with. Two other things reach the same channel
 and are deliberately not rows here. `team:` is in list A — the names *are* offered to the model
 — and its line says only that asking one comes back as an error rather than parking, which is

@@ -3,7 +3,7 @@
 //!
 //! | Rule | Severity | Fires when |
 //! |---|---|---|
-//! | `loader/three-things-that-make-a-leak` | error | an agent can reach — itself or through its team — tools that carry `private-data`, `untrusted-content` and `a-way-out`, and an action of a way-out tool writes with no person's yes before it |
+//! | `loader/three-things-that-make-a-leak` | error | an agent can reach — itself, through its team, or through an agent its work wakes (`docs/99`) — tools that carry `private-data`, `untrusted-content` and `a-way-out`, and an action of a way-out tool writes with no person's yes before it |
 //! | `loader/two-branches-write-the-same-place` | warning | two branches of a `together`, or the items of an `each`, call actions that `writes:` the same place, with no `same-request-key:` making them one call |
 //!
 //! # The leak
@@ -41,9 +41,56 @@ fn carries(tool: &Node) -> Vec<String> {
         .collect()
 }
 
-/// Every `(agent, tool)` an agent reaches: its own `uses:`, and its team's.
+/// The agents each agent's work WAKES (`docs/99` §2): the ones a reaction that
+/// covers it consults or tells, and every other agent that `listens-for:`
+/// something. What the first agent read is put in front of the second, so for
+/// a leak the second is reached exactly as a teammate is — and it is the edge
+/// nobody wrote in the first agent's own file.
+fn woken<'a>(root: &'a Node, agents: &'a Map) -> std::collections::BTreeMap<&'a str, Vec<&'a str>> {
+    let listeners: Vec<&str> = agents
+        .iter()
+        .filter(|(_, a)| a.node.get("listens-for").map(list).is_some_and(|l| !l.is_empty()))
+        .map(|(name, _)| name.as_str())
+        .collect();
+    let reactions = root.get("reactions").and_then(Node::as_map);
+    let mut out = std::collections::BTreeMap::new();
+    for (name, agent) in agents {
+        let mut wakes: Vec<&str> = listeners.iter().copied().filter(|l| *l != name).collect();
+        let named: Vec<&str> = agent
+            .node
+            .get("reactions")
+            .map(list)
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(Node::as_str)
+            .map(str::trim)
+            .collect();
+        for (id, reaction) in reactions.into_iter().flatten() {
+            let everyone = reaction.node.get("applies-to").and_then(Node::as_str).map(str::trim)
+                == Some("every-agent");
+            if !everyone && !named.contains(&id.as_str()) {
+                continue;
+            }
+            for step in reaction.node.get("then").map(list).unwrap_or_default() {
+                for verb in ["consult", "tell"] {
+                    if let Some(who) = step.get(verb).and_then(Node::as_str).map(str::trim)
+                        && who != name
+                    {
+                        wakes.push(who);
+                    }
+                }
+            }
+        }
+        out.insert(name.as_str(), wakes);
+    }
+    out
+}
+
+/// Every `(agent, tool)` an agent reaches: its own `uses:`, its team's, and
+/// those of every agent its work wakes.
 fn reached<'a>(
     agents: &'a Map,
+    wakes: &std::collections::BTreeMap<&'a str, Vec<&'a str>>,
     name: &'a str,
     seen: &mut BTreeSet<&'a str>,
     out: &mut Vec<(&'a str, String)>,
@@ -71,7 +118,10 @@ fn reached<'a>(
         .into_iter()
         .flat_map(|m| m.keys())
     {
-        reached(agents, member, seen, out);
+        reached(agents, wakes, member, seen, out);
+    }
+    for woken in wakes.get(name).into_iter().flatten() {
+        reached(agents, wakes, woken, seen, out);
     }
 }
 
@@ -80,13 +130,14 @@ fn leaks(root: &Node, diags: &mut Diagnostics) {
         return;
     };
     let policies = root.get("policies").and_then(Node::as_map);
+    let wakes = woken(root, agents);
     for (name, entry) in agents {
         if says_yes(entry.node.get("base")) {
             continue;
         }
         let mut seen = BTreeSet::new();
         let mut uses = Vec::new();
-        reached(agents, name, &mut seen, &mut uses);
+        reached(agents, &wakes, name, &mut seen, &mut uses);
         let mut found: BTreeSet<String> = BTreeSet::new();
         let mut by_what: Vec<(String, String)> = Vec::new();
         for (_, tool) in &uses {
@@ -163,7 +214,7 @@ fn leaks(root: &Node, diags: &mut Diagnostics) {
             ),
             "Put a person at the door out — `needs-a-person: yes` on each of those actions, or \
              an approval rule in `policies/` naming them — or take one of the three tools away \
-             from this agent and its team."
+             from this agent, its team, and the agents that are asked or told about its work."
                 .to_string(),
         ));
     }

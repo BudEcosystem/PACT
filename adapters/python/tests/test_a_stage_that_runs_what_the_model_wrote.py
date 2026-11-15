@@ -213,9 +213,12 @@ def test_a_run_code_stage_with_no_room_says_so() -> None:
 
 #: The same desk with the workspace's one redaction file beside it. `hide:` is
 #: the workspace-wide spelling of the same act an interceptor's `rules:` writes,
-#: and its own promise is *"what must never leave this workspace"*.
+#: and its own promise is *"what must never leave this workspace"*. It writes
+#: `allow-egress: []`, so the room is inside the boundary: a workspace that
+#: writes no `allow-egress:` draws none, and its room may reach outside.
 def _guarded() -> dict:
     doc = {k: dict(v) if isinstance(v, dict) else v for k, v in CODEACT.items()}
+    doc["allow-egress"] = []
     doc["redaction"] = {
         "description": "Never let a card number out.",
         "hide": ["anything that looks like a card number"],
@@ -380,3 +383,22 @@ def test_a_workspace_with_no_hiding_rules_hands_the_room_exactly_what_was_writte
     result = _run(run_program=lambda name, args: got.append(args["code"]) or "45.0")
     assert got and got[0] == "total = 40.00 + 5.00\nprint(total)", got
     assert not any("hiding rule changed it" in u for u in result.unenforced), result.unenforced
+
+
+def test_where_no_boundary_is_written_the_masked_snippet_is_what_runs() -> None:
+    """A workspace that writes no `allow-egress:` draws no boundary.
+
+    So its room may reach outside exactly as under `allow-egress: [programs]`:
+    the masked text is what runs, and the report says why.
+    """
+    doc = _guarded()
+    del doc["allow-egress"]
+    got: list[str] = []
+    result = asyncio.run(
+        run(AgentSpec.from_document(doc, "desk"),
+            ReferenceTransport(Script([Turn('x = 9780306406157\nprint(x)'), Turn("Done.")])),
+            "how much do we refund?", {},
+            run_program=lambda name, args: got.append(args["code"]) or "0")
+    )
+    assert got and "9780306406157" not in got[0], got
+    assert "is not written" in " ".join(result.unenforced), result.unenforced

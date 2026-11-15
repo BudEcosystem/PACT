@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from consenting import allowing_the_connection  # noqa: E402
+from fitting import fits  # noqa: E402
 from pact_adapters.harness import Step, ToolCall, run  # noqa: E402
 from pact_adapters.ir import AgentSpec, ToolSpec  # noqa: E402
 from pact_adapters.questions import ANYTHING, Shape  # noqa: E402
@@ -65,7 +66,7 @@ def desk(**kw) -> AgentSpec:
 def pay_script() -> Script:
     return Script([
         Turn("Issuing the refund.", (ToolCall("payments", {"amount": 40}),)),
-        Turn("Approved: refunded 40 USD."),
+        Turn(fits("Approved: refunded 40 USD.")),
     ])
 
 
@@ -413,7 +414,7 @@ def test_approval_and_delegation_park_the_same_way() -> None:
 
     delegating = AgentSpec(name="a", description="d", instructions="i",
                            team={"policy-checker": "checks the policy"})
-    asks_teammate = Script([Turn("asking", (ToolCall("policy-checker", {}),)), Turn("done")])
+    asks_teammate = Script([Turn("asking", (ToolCall("policy-checker", {}),)), Turn(fits("done"))])
     parked_for[WAITING_FOR_ANOTHER_AGENT] = asyncio.run(
         run(delegating, ReferenceTransport(asks_teammate), "refund me", {})
     )
@@ -431,7 +432,7 @@ def test_a_teammate_who_is_not_here_is_waited_for_rather_than_reported_missing()
     spec = AgentSpec(name="a", description="d", instructions="i",
                      team={"policy-checker": "checks the policy"})
     script = Script([Turn("asking", (ToolCall("policy-checker", {}),)),
-                     Turn("Approved, the policy allows it.")])
+                     Turn(fits("Approved, the policy allows it."))])
 
     first = asyncio.run(run(spec, ReferenceTransport(script), "refund me", {}))
     assert first.halted == "suspended"
@@ -542,7 +543,7 @@ def a_refund_that_reaches_payments() -> Script:
     return Script([
         Turn("Issuing the refund.",
              (ToolCall("payments", {"order-number": "A-1182", "amount": "40.00 USD"}),)),
-        Turn("Approved: refunded 40.00 USD."),
+        Turn(fits("Approved: refunded 40.00 USD.")),
     ])
 
 
@@ -770,7 +771,7 @@ def test_a_wait_for_another_agent_borrows_nobodys_audience_or_deadline() -> None
     spec = AgentSpec.from_document(doc, "refund-desk")
     asks_teammate = Script([
         Turn("Asking the fraud team.", (ToolCall("fraud-checker", {}),)),
-        Turn("Done."),
+        Turn(fits("Done.")),
     ])
     waiting = asyncio.run(
         run(spec, ReferenceTransport(asks_teammate), "refund A-1182", TOOLS, now=0.0)
@@ -830,7 +831,7 @@ def test_two_calls_to_one_tool_in_one_step_are_two_waits_with_two_screens() -> N
                 ToolCall("payments", {"order-number": "A-300", "amount": "300.00 USD"}),
                 ToolCall("payments", {"order-number": "A-250", "amount": "250.00 USD"}),
             ]),
-            Turn("done"),
+            Turn(fits("done")),
         ])
 
     # Two calls over one connection are ONE consent — the question's own file

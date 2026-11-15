@@ -27,6 +27,7 @@ from .loops import STANDARD, Loop
 from .moments import FailurePlan, Moment, RegionLimits
 from .detectors import declared_in
 from .rests import rules_of as rests_of
+from .reactions import Reactions
 from .questions import Gate, Rejected, Shape, questions_for
 from .suspension import PauseRule
 from .watches import Watches
@@ -336,6 +337,48 @@ class KnowledgeSpec:
     #: The file names the payload walker found, for a runtime that needs to know
     #: what it is indexing without re-walking the tree.
     documents: tuple[str, ...] = ()
+    #: `embedded-by:` and `reranked-by:` (96 §A7): the catalogue ids of the model
+    #: that turns these documents and every question about them into numbers,
+    #: and of the one that orders what was found. `""` when not written: the
+    #: runtime's own embedder, and the order the passages were found in.
+    embedded_by: str = ""
+    reranked_by: str = ""
+
+
+#: What `if-it-cannot-be-loaded:` means when the author left it out.
+REFUSE_TO_START = "refuse-to-start"
+#: The other answer: the agent starts without the plugin and every run says so.
+#: Anything that is not this refuses, so a word the checker never let through
+#: cannot start an agent the author meant to stop.
+RUN_WITHOUT_IT = "run-without-it"
+
+
+@dataclass(frozen=True)
+class PluginSpec:
+    """One plugin this agent needs (D29): a request for code its runtime loads.
+
+    PACT loads nothing, so what reaches the harness is the request and never the
+    code — which package, which versions will do, and what the agent does where
+    it was not loaded. Whether it WAS loaded is a fact about the process, handed
+    in by the host as `run(loaded_plugins=)`, the way `retrieved_by` is.
+
+    The plugin's own `config:` is not carried: nothing in this harness loads a
+    plugin, so nothing here could hand the settings to one. A host that loads
+    plugins reads them off the document it was handed, beside this.
+    """
+
+    name: str
+    #: `<registry>:<name>` — `npm:@acme/crm-tools`, `pypi:acme-crm`.
+    package: str
+    #: A range in that registry's own grammar; `pact check` holds it there.
+    version: str
+    #: `refuse-to-start` or `run-without-it`, the default written out.
+    if_cannot_load: str = REFUSE_TO_START
+
+    @property
+    def registry(self) -> str:
+        """The word in front of the colon: which runtimes can load it at all."""
+        return self.package.split(":", 1)[0].strip()
 
 
 @dataclass(frozen=True)
@@ -366,7 +409,8 @@ class ProgramSpec:
     #: The tool actions that reach it, `<tool>/<action>`, so the sentence a run
     #: reports can name where the author wrote it.
     reached_by: tuple[str, ...] = ()
-    #: Whether this workspace's `allow-egress:` names `programs`.
+    #: Whether this workspace's `allow-egress:` names `programs`, or is not
+    #: written, which draws no boundary.
     #:
     #: The eighth part of the boundary, and for a round it was decoration: no
     #: check read the word, no run reported it, and this class — the only thing a
@@ -628,6 +672,11 @@ class AgentSpec:
     #: watch changes nothing, so making somebody name it twice would buy nothing
     #: and would let an agent quietly stop being watched by deleting one line.
     watches: Watches = field(default_factory=Watches)
+    #: Every reaction that covers this agent (docs/99): the workspace's that say
+    #: `every-agent`, the ones this agent names, and every OTHER agent's
+    #: `listens-for:` line — a subscription is a reaction written from the
+    #: other side. Resolved here for the reason `chain` is.
+    reactions: Reactions = field(default_factory=Reactions)
     #: How this agent waits for its team and how it shares out what it may spend
     #: on them, read from the author's `teamwork.yaml`. Resolved here for the
     #: same reason `loop`, `context_policy` and `chain` are, and it was the last
@@ -724,7 +773,8 @@ class AgentSpec:
     #: another agent's tool reaches is not something this run could have called,
     #: so reporting it here would be a sentence about somebody else's document.
     programs: tuple[ProgramSpec, ...] = ()
-    #: Whether this workspace's `allow-egress:` names `programs`, as a fact about
+    #: Whether this workspace's `allow-egress:` names `programs` or is not
+    #: written, as a fact about
     #: the WORKSPACE rather than about one carried body.
     #:
     #: The same word `ProgramSpec.may_reach_outside` carries, read once and put in
@@ -749,6 +799,11 @@ class AgentSpec:
     #: `gets-hidden-values: yes` (docs/98 WP-11): the only calls a hidden
     #: value's placeholder is turned back into the value for.
     gets_hidden: frozenset[tuple[str, str]] = frozenset()
+    #: Whether an action a member of this agent's team uses, at any depth, says
+    #: `gets-hidden-values: yes`. Such a lead keeps hidden values as
+    #: placeholders too, because the member's action can only get back a value
+    #: the lead's redaction kept: the vault belongs to the request, not the run.
+    team_gets_hidden: bool = False
     #: The workspace's `detectors:`, each as one pattern (docs/98 WP-12), for a
     #: `looks-like:` read inside this agent's run (a board's admission lines).
     detectors: Mapping[str, str] = field(default_factory=dict)
@@ -791,6 +846,11 @@ class AgentSpec:
     #: same way `skills` is — off the agent's own `uses:` line — so a corpus
     #: nobody named reaches no run, exactly like a skill nobody named.
     knowledge: tuple[KnowledgeSpec, ...] = ()
+    #: The plugins this agent needs (D29): the ones its own `plugins:` line names
+    #: and every one whose `applies-to:` is `every-agent`, sorted like `tools`.
+    #: A run checks them against what its host loaded before the first model
+    #: call, and refuses or reports each one that is missing.
+    plugins: tuple[PluginSpec, ...] = ()
     #: The workflows this agent may start as tools (N2): the names on its own
     #: `uses:` line that are workflows, sorted like `tools`. `pact check` lets a
     #: workflow be named there only when its `published-as:` lists `tool`, so
@@ -948,6 +1008,8 @@ class AgentSpec:
                 do_not_use_when=_text(k.get("do-not-use-when", "")),
                 if_unsure=_text(k.get("if-unsure", "")),
                 documents=_document_names(k.get("documents")),
+                embedded_by=_text(k.get("embedded-by", "")),
+                reranked_by=_text(k.get("reranked-by", "")),
             )
             for n, k in sorted((doc.get("knowledge") or {}).items())
             if n in set(_as_list(a.get("uses"))) and isinstance(k, Mapping)
@@ -966,6 +1028,7 @@ class AgentSpec:
             tools=tools,
             skills=skills,
             knowledge=knowledge,
+            plugins=_plugins_needed_by(doc, a),
             workflows=tuple(
                 n
                 for n in sorted((doc.get("workflows") or {}))
@@ -1001,6 +1064,7 @@ class AgentSpec:
             ),
             chain=Chain.from_document(doc, agent_key, root),
             watches=Watches.from_document(doc, root),
+            reactions=Reactions.from_document(doc, agent_key),
             # A bad `teamwork.yaml` now raises `BadTeamwork` here, at spec-build
             # time — the same shape `Loop.resolve` already has one line up, and
             # the reason `check()` was written to run at load rather than
@@ -1018,6 +1082,7 @@ class AgentSpec:
                 for act, line in ((body.get("actions") or {}).items())
                 if isinstance(line, Mapping) and said_yes(line.get("gets-hidden-values"))
             ),
+            team_gets_hidden=_team_gets_hidden(doc, agent_key),
             facts=Facts.from_document(doc, agent_key),
             workspace_remembers=Facts.of(doc.get("remembers")),
             template_language=_text(doc.get("template-language", "")) or "holes",
@@ -1080,6 +1145,27 @@ def available(agent: "AgentSpec", condition: str) -> bool:
     )
 
 
+def _plugins_needed_by(doc: dict[str, Any], agent: dict[str, Any]) -> tuple[PluginSpec, ...]:
+    """The plugins `agent` names, plus every one that applies to every agent.
+
+    The same reading `pact discover` publishes (`pact_loader::plugins::
+    needed_by`), so the inventory a runtime chose this agent by and the run it
+    then starts agree about what it needs.
+    """
+    named = set(_as_list(agent.get("plugins")))
+    return tuple(
+        PluginSpec(
+            name=n,
+            package=_text(p.get("package", "")),
+            version=_text(p.get("version", "")),
+            if_cannot_load=_text(p.get("if-it-cannot-be-loaded", "")) or REFUSE_TO_START,
+        )
+        for n, p in sorted((doc.get("plugins") or {}).items())
+        if isinstance(p, Mapping)
+        and (n in named or _text(p.get("applies-to", "")) == "every-agent")
+    )
+
+
 def _questions_this_agent_puts(doc: dict[str, Any], agent: dict[str, Any]) -> set[str]:
     """Every question name this agent can reach, by any line that names one.
 
@@ -1108,13 +1194,18 @@ def _questions_this_agent_puts(doc: dict[str, Any], agent: dict[str, Any]) -> se
 
 
 def _programs_may_reach_outside(doc: dict[str, Any]) -> bool:
-    """Does this workspace's `allow-egress:` name `programs`?
+    """Does this workspace's `allow-egress:` name `programs`, or not exist?
+
+    A workspace that writes no `allow-egress:` draws no boundary, so its
+    programs may reach outside as everything else may.
 
     One reader, two carriers: `ProgramSpec.may_reach_outside` for a host holding
     one body, and `AgentSpec.programs_may_reach_outside` for a `does: run-code`
     stage, which names no body and still has to know whether the room it is about
     to use may reach outside.
     """
+    if "allow-egress" not in doc:
+        return True
     return "programs" in [str(w).strip() for w in _as_list(doc.get("allow-egress"))]
 
 
@@ -1525,6 +1616,37 @@ def _text(v: Any) -> str:
 def _figure_as_text(v: Any) -> Any:
     """A number written where text is read (`version: 2`), as the author wrote it."""
     return str(v) if isinstance(v, int | float) and not isinstance(v, bool) else v
+
+
+def _team_gets_hidden(doc: Mapping[str, Any], agent_key: str) -> bool:
+    """Whether a member of `agent_key`'s team, at any depth, uses an action that
+    says `gets-hidden-values: yes`."""
+    agents = doc.get("agents") or {}
+    tools = doc.get("tools") or {}
+
+    def gets(key: str) -> bool:
+        body = agents.get(key) if isinstance(agents, Mapping) else None
+        uses = set(_as_list(body.get("uses"))) if isinstance(body, Mapping) else set()
+        return any(
+            isinstance(line, Mapping) and said_yes(line.get("gets-hidden-values"))
+            for t, tool in (tools.items() if isinstance(tools, Mapping) else ())
+            if t in uses and isinstance(tool, Mapping)
+            for line in (tool.get("actions") or {}).values()
+        )
+
+    seen: set[str] = set()
+    body = agents.get(agent_key) if isinstance(agents, Mapping) else None
+    pending = list((body.get("team") or {}) if isinstance(body, Mapping) else ())
+    while pending:
+        key = str(pending.pop())
+        if key in seen:
+            continue
+        seen.add(key)
+        if gets(key):
+            return True
+        member = agents.get(key) if isinstance(agents, Mapping) else None
+        pending.extend((member.get("team") or {}) if isinstance(member, Mapping) else ())
+    return False
 
 
 def _as_list(v: Any) -> list[str]:

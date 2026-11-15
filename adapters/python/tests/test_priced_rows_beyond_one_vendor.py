@@ -43,6 +43,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from fitting import fits  # noqa: E402
 from pact_adapters.harness import run  # noqa: E402
 from pact_adapters.ir import AgentSpec  # noqa: E402
 from pact_adapters.resolve import load_catalogue, price_of, window_of  # noqa: E402
@@ -193,7 +194,7 @@ def test_a_spend_cap_stops_a_run_bound_to_a_vendor_no_anthropic_key_can_reach(
     after the author's figure was crossed.
     """
     spec = pinned_to(document, OPENAI_ROW)
-    script = Script([Turn(TALKS_PAST_THE_CAP)])
+    script = Script([Turn(fits(TALKS_PAST_THE_CAP))])
     transport = OpenAIAgentsTransport(script, model=spec.model or None)
     assert transport.model == OPENAI_ROW, "the pin is what the transport bound"
     assert transport.prices_money is True, "the catalogue prices this row"
@@ -226,7 +227,7 @@ def test_the_same_run_on_the_row_nobody_can_price_refuses_nothing(
     list was empty.
     """
     spec = pinned_to(document, UNPRICED_ROW)
-    script = Script([Turn(TALKS_PAST_THE_CAP)])
+    script = Script([Turn(fits(TALKS_PAST_THE_CAP))])
     transport = OpenAIAgentsTransport(script, model=spec.model or None)
     assert transport.prices_money is False
 
@@ -253,7 +254,7 @@ def test_a_second_vendor_stops_at_the_same_ceiling_on_a_different_framework(
     happened to run (D12).
     """
     spec = pinned_to(document, XAI_ROW)
-    script = Script([Turn(TALKS_PAST_THE_CAP)])
+    script = Script([Turn(fits(TALKS_PAST_THE_CAP))])
     transport = AutoGenTransport(script, model=spec.model or None)
     assert transport.model == XAI_ROW
     assert transport.prices_money is True
@@ -284,7 +285,7 @@ def test_a_hosted_row_outside_anthropic_can_now_say_what_it_holds(
     along. The control is the same run pinned to an id nothing has a row for.
     """
     spec = pinned_to(document, UNPRICED_ROW)
-    transport = OpenAIAgentsTransport(Script([Turn("Approved.")]), model=spec.model)
+    transport = OpenAIAgentsTransport(Script([Turn(fits("Approved."))]), model=spec.model)
     assert transport.context_window() == 1_050_000, (
         "the window comes off the row, through the transport the run uses"
     )
@@ -297,7 +298,7 @@ def test_a_hosted_row_outside_anthropic_can_now_say_what_it_holds(
     assert r.tidyings == []
 
     nowhere = pinned_to(document, NOT_IN_THE_CATALOGUE)
-    blind = OpenAIAgentsTransport(Script([Turn("Approved.")]), model=nowhere.model)
+    blind = OpenAIAgentsTransport(Script([Turn(fits("Approved."))]), model=nowhere.model)
     assert blind.context_window() is None
     out = asyncio.run(
         run(nowhere, blind, "my lamp arrived broken, please refund", TOOLS)

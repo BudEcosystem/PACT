@@ -8,8 +8,10 @@ either reader disagrees with fails in that reader's own suite.
 from __future__ import annotations
 
 import datetime as dt
+import enum
 import sys
 from pathlib import Path
+from typing import List, Optional
 
 import pytest
 import yaml
@@ -169,3 +171,50 @@ def test_a_bound_model_says_which_of_an_agents_settings_it_would_throw_away() ->
     assert rows["gpt-5.4"].ignored_settings({"thinking": "high", "temperature": 0.2})
     assert "at all" in rows["claude-opus-5"].ignored_settings({"temperature": 0.2})[0]
     assert rows["qwen2.5-7b-instruct"].ignored_settings({"top-k": 40}) == []
+
+
+# ───────────── 96 §B4: a benchmark's `with:` read into the types DeepEval takes
+
+
+class _Task(enum.Enum):
+    HIGH_SCHOOL_COMPUTER_SCIENCE = "high_school_computer_science"
+    ASTRONOMY = "astronomy"
+
+
+class _Bench:  # the shape of DeepEval's `MMLU.__init__`
+    def __init__(self, tasks: Optional[List[_Task]] = None, n_shots: int = 5,
+                 n_problems_per_task: Optional[int] = None) -> None: ...
+
+
+def test_a_benchmarks_settings_are_read_into_the_enum_its_constructor_names() -> None:
+    from pact_adapters.benchmarks import Unrecordable, _settings_for
+
+    read = _settings_for(_Bench, {"tasks": ["high_school_computer_science", "ASTRONOMY"], "n_shots": 0,
+                                  "n_problems_per_task": 20})
+    assert read == {"tasks": [_Task.HIGH_SCHOOL_COMPUTER_SCIENCE, _Task.ASTRONOMY], "n_shots": 0,
+                    "n_problems_per_task": 20}
+    with pytest.raises(Unrecordable, match=r"`with: tasks:` names 'cooking', which _Task does not have"):
+        _settings_for(_Bench, {"tasks": ["cooking"]})
+
+
+def test_a_benchmarks_one_field_answer_is_read_off_a_bare_reply() -> None:
+    """DeepEval's MMLU asks for a letter with `MultipleChoiceSchema(answer: Literal[...])`, and a
+    model that obeys the prompt answers `B` or `The answer is B.`, never JSON (seen live on
+    gpt-4o-mini, 2026-11-12: every question raised `answer Field required`)."""
+    from typing import Literal
+
+    from pydantic import BaseModel
+
+    from pact_adapters.providers import AskModel
+
+    class Choice(BaseModel):
+        answer: Literal["A", "B", "C", "D"]
+
+    class Free(BaseModel):
+        reason: str
+
+    for said, read in (("B", "B"), ("The answer is C.", "C"), ('{"answer": "D"}', "D")):
+        assert AskModel("m", lambda system, user, s=said: s).generate("Which?", schema=Choice).answer == read
+    assert AskModel("m", lambda system, user: "  because  ").generate("Why?", schema=Free).reason == "because"
+    with pytest.raises(Exception, match="answer"):  # no letter at all: nothing to read, as before
+        AskModel("m", lambda system, user: "I am not sure").generate("Which?", schema=Choice)

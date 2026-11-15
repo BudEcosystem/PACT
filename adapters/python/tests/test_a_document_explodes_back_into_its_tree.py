@@ -40,6 +40,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from pact_adapters.exploding import (  # noqa: E402
+    OPAQUE,
     CarriesPayloads,
     ExplodeRefused,
     explode,
@@ -118,6 +119,48 @@ def test_every_payload_free_example_survives_the_round_trip(
             indent=2,
         )
     )
+
+
+def test_a_plugins_own_settings_survive_the_round_trip_whole(tmp_path: Path) -> None:
+    """A plugin's `config:` keys are the package's names (`searchMaxResults`),
+    not PACT field keys, so they are neither refused nor split into folders —
+    which is what lets law 8 hold a proposal about the plugin-desk to `pact
+    check` at all."""
+    import copy
+
+    original = load(EXAMPLES / "plugin-desk")
+    nested = copy.deepcopy(original)
+    nested["plugins"]["web-search"]["config"] = {
+        "searchMaxResults": 5,
+        "fetch": {"timeoutMs": 3000},
+        "Ranking": {"boostRecent": True},
+    }
+    for document in (original, nested):
+        root = tmp_path / f"exploded-{len(str(document))}"
+        explode(document, root)
+        assert not (root / "plugins" / "web-search" / "config").exists()
+        accepted = subprocess.run(
+            [str(PACT_BIN), "check", str(root)], capture_output=True, text=True
+        )
+        assert accepted.returncode == 0, f"{accepted.stdout}{accepted.stderr}"
+        assert _settled(load(root)) == _settled(document)
+
+
+def test_every_opaque_value_is_one_the_schema_leaves_open() -> None:
+    """`OPAQUE` names only fields `spec/schema.yaml` types `map of anything`,
+    under the collection whose entries are that kind."""
+    import yaml
+
+    schema = yaml.safe_load((REPO / "spec" / "schema.yaml").read_text())
+    groups = schema["groups"]
+    collections = {
+        field: definition["type"].split("group:", 1)[1]
+        for field, definition in groups["workspace"]["fields"].items()
+        if str(definition.get("type", "")).startswith("map of group:")
+    }
+    for collection, field in OPAQUE:
+        kind = collections[collection]
+        assert groups[kind]["fields"][field]["type"] == "map of anything", (collection, field)
 
 
 def test_the_residual_is_exactly_trailing_whitespace_on_prose(

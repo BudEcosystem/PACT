@@ -98,6 +98,17 @@ export type KnowledgeSpec = {
   "split-by"?: string;
 };
 
+// One plugin the agent needs (D29), in the author's own field names like
+// `SkillSpec`: the request for code a runtime loads, and never the code. This
+// port loads no plugin, so each one is missing here — refused before a model
+// call, or named on `unenforced` — in the reference port's own words.
+export type PluginSpec = {
+  name: string;
+  package: string;
+  version: string;
+  "if-it-cannot-be-loaded": string;
+};
+
 export type AgentSpec = {
   name: string;
   instructions: string;
@@ -151,6 +162,9 @@ export type AgentSpec = {
   // driver exists to catch: the Python run refused a `must-cite:` corpus it
   // could not read, and this one answered.
   knowledge?: KnowledgeSpec[];
+  // The plugins it needs: the ones it names and every one that applies to
+  // every agent, as `ir.AgentSpec.plugins` carries them.
+  plugins?: PluginSpec[];
   // What the agent hands back when it is done, as the author wrote it. Read by
   // nothing in EITHER port for a round, while `tier: core` and present in the
   // worked example — so every scripted answer in the eval suite hand-writes
@@ -160,6 +174,13 @@ export type AgentSpec = {
   // and PACT picks `prompted` — the one mode every target can honour and the
   // only one that needs nothing off this machine.
   answersWithMode?: string;
+  // The author's own rules for an answer (`checked-by:`), each by the kind of
+  // rule it is, and how many times in all the agent is asked for its answer
+  // (`checks-at-most:`, 2 when unwritten). Declared so the run can NAME them:
+  // the Python harness holds a reply to its shape and to these rules before it
+  // is the answer (`answers_fit.py`), and this port holds it to neither.
+  checkedBy?: string[];
+  checksAtMost?: number;
   // Teammates, by name, with what each is for.
   team?: Record<string, string>;
   // Absent means `ir.DEFAULT_STEPS`. A bound is never absent — but this port
@@ -198,6 +219,17 @@ export type AgentSpec = {
   // it, so both ports show the model the same tools; this port keeps no board,
   // so a call to one is refused and the line is reported (`notDoneHere`).
   boards?: Array<{ name: string; description: string }>;
+  // The reactions that cover this agent (docs/99), by name: the workspace's
+  // own, and every other agent's `listens-for:` line. This port carries none
+  // of them out and says so, one line each (`notDoneHere`). `workingOn` is the
+  // tool Python offers when a topic is the agent's own to say — its
+  // description and the topics it may name — offered here under the same name
+  // so both ports show the model the same tools; saying so is noted, and
+  // nobody is asked or told.
+  reactions?: {
+    names: string[];
+    workingOn?: { description: string; topics: string[] } | null;
+  };
 };
 
 //: Every key an `AgentSpec` declares. The conformance driver takes its payload
@@ -207,8 +239,11 @@ export const AGENT_SPEC_FIELDS = [
   "name", "instructions", "tools", "skills", "team", "maxSteps", "limits",
   "loop", "loops", "interceptors", "contextPolicy", "policy", "teamwork",
   "settings", "slo", "model", "watches", "answersWith", "answersWithMode",
-  "knowledge", "boards",
+  "knowledge", "boards", "reactions", "plugins", "checkedBy", "checksAtMost",
 ] as const;
+
+//: The tool an agent says its own topic with. The same name `reactions.py` uses.
+export const WORKING_ON = "working-on";
 
 //: Used when the payload carried no `maxSteps`. The same number `ir.py` uses,
 //: for the same reason: an unbounded loop is Eve's behaviour, and its
@@ -376,6 +411,13 @@ export function notDoneHere(spec: AgentSpec): string[] {
   for (const key of Object.keys(spec.slo ?? {})) {
     out.push(`${key}: a latency promise nothing on this runtime measures.`);
   }
+  for (const name of spec.reactions?.names ?? []) {
+    out.push(
+      `reactions: ${name} — read and not carried out on this runtime, so when it ` +
+        `happens nothing is reminded, nobody is asked or told, and nothing stops. ` +
+        `The Python harness carries reactions out; this port has no reactor.`,
+    );
+  }
   for (const b of spec.boards ?? []) {
     out.push(
       `remembers.${b.name}: shared-with: the-team — offered to the model here and ` +
@@ -439,6 +481,14 @@ export function notDoneHere(spec: AgentSpec): string[] {
         `nothing on this runtime records what the run did.`,
     );
   }
+  if ((spec.checkedBy ?? []).length > 0) {
+    out.push(
+      `checked-by: ${(spec.checkedBy ?? []).length} rule(s) an answer must keep before ` +
+        `it is the answer (${(spec.checkedBy ?? []).join(", ")}) — read and not held on ` +
+        `this runtime, so a reply that breaks one is returned as it is. The Python ` +
+        `harness asks again with the reason and ends the run \`checks-failed\`.`,
+    );
+  }
   return out;
 }
 
@@ -477,6 +527,50 @@ export function neverLookedIn(spec: AgentSpec): string[] {
   );
 }
 
+//: The one `if-it-cannot-be-loaded:` answer that lets the agent start without
+//: the plugin — `ir.RUN_WITHOUT_IT`. Anything else refuses, `refuse-to-start`
+//: and an absent line alike, as in the reference port.
+export const RUN_WITHOUT_IT = "run-without-it";
+
+function pluginNamed(p: PluginSpec): string {
+  return `'${p.name}' (\`${p.package}\`, versions \`${p.version}\`)`;
+}
+
+function registryOf(p: PluginSpec): string {
+  return p.package.split(":", 1)[0].trim();
+}
+
+function refusesToStart(p: PluginSpec): boolean {
+  return p["if-it-cannot-be-loaded"] !== RUN_WITHOUT_IT;
+}
+
+//: Why the turn ended before it began. Word for word `harness._cannot_start_without`
+//: — the fix is true here too, because this port loads nothing and so runs no
+//: plugin anywhere.
+export function cannotStartWithout(needed: PluginSpec[]): string {
+  const named = needed.map(pluginNamed);
+  const listed = named.length === 1
+    ? named[0]
+    : `${named.slice(0, -1).join(", ")} and ${named[named.length - 1]}`;
+  const registries = [...new Set(needed.map((p) => `\`${registryOf(p)}:\``))].join(" or ");
+  return (
+    `This agent cannot start: it needs ${listed}, and nothing running it loaded ` +
+    `${needed.length === 1 ? "it" : "them"}. fix: run it where a runtime loads ` +
+    `${registries} packages, or write \`if-it-cannot-be-loaded: run-without-it\` in ` +
+    `the plugin's file under \`plugins/\` if the agent can do its job without it.`
+  );
+}
+
+//: The `unenforced` line for a plugin the agent started without — word for word
+//: `harness._ran_without`.
+export function ranWithout(p: PluginSpec): string {
+  return (
+    `plugin ${pluginNamed(p)} was not loaded by whatever runs this agent, so ` +
+    `nothing it adds is here and the agent ran without it. fix: run it where a ` +
+    `runtime loads \`${registryOf(p)}:\` packages.`
+  );
+}
+
 export async function run(
   spec: AgentSpec,
   transport: Transport,
@@ -498,6 +592,25 @@ export async function run(
         `AGENT_SPEC_FIELDS — a field that arrives and is silently dropped is ` +
         `neither honoured nor reported.`,
     );
+  }
+  // D29. No plugin is loaded here, so every one the agent needs is missing: one
+  // it may run without is named on `unenforced`, and one it may not ends the
+  // turn before a model call. Decided first, in the same place and the same
+  // order as the reference port, so a document needing both a plugin and a
+  // `must-cite:` corpus ends the same way on both.
+  const withoutPlugins = (spec.plugins ?? []).filter((p) => !refusesToStart(p)).map(ranWithout);
+  const needed = (spec.plugins ?? []).filter(refusesToStart);
+  if (needed.length > 0) {
+    return {
+      output: cannotStartWithout(needed),
+      steps: [],
+      halted: "plugins-not-loaded",
+      stoppedBy: null,
+      unmetered: [],
+      unenforced: withoutPlugins,
+      unretrieved: [],
+      phases: [],
+    };
   }
   // A7. Every declared set, named before anything else happens. PACT retrieves
   // nothing and this port has nowhere to be handed a retrieval either, so a set
@@ -612,7 +725,28 @@ export async function run(
       },
     });
   }
-  const toolNames = toolDefs.map((d) => d.name).filter((n) => !boardNames.has(n));
+  // And the tool an agent says its own topic with (docs/99 §5), last — where
+  // `harness.py` appends it. Not a capability a stage narrows: it is added to
+  // whatever a stage offers, wherever the stage offers anything at all.
+  const workingOn = spec.reactions?.workingOn ?? null;
+  const saysSo = workingOn !== null && !toolDefs.some((d) => d.name === WORKING_ON);
+  // The topics the agent has said so far, which is what decides whether the
+  // tool is still offered.
+  const saidTopics = new Set<string>();
+  if (saysSo && workingOn) {
+    toolDefs.push({
+      name: WORKING_ON,
+      description: workingOn.description,
+      parameters: {
+        type: "object",
+        properties: { topic: { type: "string", enum: workingOn.topics } },
+        required: ["topic"],
+      },
+    });
+  }
+  const toolNames = toolDefs
+    .map((d) => d.name)
+    .filter((n) => !boardNames.has(n) && !(saysSo && n === WORKING_ON));
   const skills = (spec.skills ?? []).slice().sort((a, b) =>
     a.name < b.name ? -1 : a.name > b.name ? 1 : 0
   );
@@ -669,7 +803,7 @@ export async function run(
   // Named one field at a time, with the sentence a person can act on, because
   // "this runtime is smaller" is not something a reader can check against their
   // own file.
-  const unenforced = notDoneHere(spec);
+  const unenforced = [...notDoneHere(spec), ...withoutPlugins];
   // The one line `notDoneHere` cannot see, appended where it can be: a stage's
   // `asks:`. It names WHICH question a person is put, which is a governance line
   // and not a wording choice — and it was parsed by `loops.ts` into `Phase.asks`
@@ -775,6 +909,24 @@ export async function run(
     );
   }
 
+  // HOW MANY TIMES THE AGENT IS ASKED FOR ITS ANSWER: once, here. The Python
+  // harness holds a reply that would be the answer to the shape it was asked
+  // for and to the author's `checked-by:` rules, asks again with the reason,
+  // `checks-at-most:` times in all, and ends the run `checks-failed` when none
+  // fits. This port puts the same shape to the model (list A: the instructions
+  // are byte-identical) and returns whatever comes back. Said beside the call
+  // and not in `notDoneHere`, for the reason `answers-with-mode:` is: it turns
+  // on whether a shape was ASKED FOR this turn, which is a fact about the run.
+  if (Object.keys(shapeToAskFor).length > 0 || (spec.checkedBy ?? []).length > 0) {
+    unenforced.push(
+      `checks-at-most: ${spec.checksAtMost ?? 2} — how many times in all this agent is ` +
+        `asked for its answer, and on this runtime it is asked once: the reply is ` +
+        `returned as written, whether or not it is what \`answers-with:\` says it ` +
+        `gives. The Python harness asks again with the reason and ends the run ` +
+        `\`checks-failed\` when none fits.`,
+    );
+  }
+
   // An outcome the author routed nowhere. The run ends carrying the message
   // `route` composed — which names the stage, the outcome and the line to add —
   // and the steps already taken stay on the result, because a run that got eight
@@ -871,7 +1023,18 @@ export async function run(
     // What exists in this stage. Eve resolves the tool set once per run, which
     // is why a planning step there can see the payment tool; here it is the
     // stage's own line.
-    const offered = new Set(toolsOffered(phase, [...reachable, ...boardNames]));
+    const offered = new Set(
+      toolsOffered(phase, [...reachable, ...boardNames, ...(saysSo ? [WORKING_ON] : [])]),
+    );
+    // Only while there is something left to say (`Reactor.more_to_say`): once
+    // every topic has been said the tool is not offered, on either port.
+    if (saysSo && workingOn) {
+      if (offered.size > 0 && workingOn.topics.some((t) => !saidTopics.has(t))) {
+        offered.add(WORKING_ON);
+      } else {
+        offered.delete(WORKING_ON);
+      }
+    }
     const stepTools = toolDefs.filter((d) => offered.has(d.name));
     const readable = new Set(skillsOffered(phase, skills.map((s) => s.name)));
     const stepSkills = skills.filter((s) => readable.has(s.name));
@@ -902,7 +1065,7 @@ export async function run(
     // model really took (T7); running it would make `may-use:` advisory. The two
     // refusals stay distinguishable because they call for opposite fixes: a name
     // to correct, or a `may-use:` line to widen.
-    const have = new Set([...toolNames, ...boardNames]);
+    const have = new Set([...toolNames, ...boardNames, ...(saysSo ? [WORKING_ON] : [])]);
     const refused: Record<string, string> = {};
     for (const c of calls) {
       if (!offered.has(c.name)) {
@@ -947,6 +1110,21 @@ export async function run(
       if (outOfCalls) break;
       // Own property only: a model asking for `constructor` must reach the
       // `no tool named` refusal, not `Object.prototype.constructor`.
+      // Saying what the work has turned to is answered here, as Python
+      // answers it where a reaction would hold a call — it is not a tool call
+      // and is not counted as one. Nobody is asked on this port.
+      if (saysSo && workingOn && c.name === WORKING_ON) {
+        const topic = String((c.args as Record<string, unknown>)?.topic ?? "").trim();
+        if (workingOn.topics.includes(topic)) saidTopics.add(topic);
+        results.push(
+          workingOn.topics.includes(topic)
+            ? `noted: ${topic}`
+            : `error: '${topic}' is not one of the subjects to say: ` +
+              `${[...workingOn.topics].sort().join(", ") || "none"}`,
+        );
+        ran.push(c);
+        continue;
+      }
       const fn = Object.hasOwn(toolImpls, c.name) ? toolImpls[c.name] : undefined;
       meter.toolCalls += 1;
       results.push(

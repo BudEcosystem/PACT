@@ -4,7 +4,7 @@
 //! | Rule | Severity | Fires when |
 //! |---|---|---|
 //! | `loader/written-from-a-source-it-refuses` | error | a workflow's remembered fact `comes-from:` a value whose origin its own `never-from:` lists — the run's input (`the customer`), a tool's answer (`tool output`), an agent's answer (`a teammate`) |
-//! | `loader/hidden-from-the-ai-but-handed-to-it` | error | a workflow `hides:` a value from `the-ai` and a stage binds that value into a call to an agent |
+//! | `loader/hidden-from-the-ai-but-handed-to-it` | warning | a workflow `hides:` a value from `the-ai` and a stage binds that value into a call to an agent, or a `decide` binds it for the agent on its rung: the agent is handed the placeholder, never the value, which is right for an agent that only carries it to a write (`hides:` puts the original back there) and wrong for one asked to judge it |
 //! | `loader/a-model-outside-the-region` | error | a workflow says `data-stays-in: <region>` and calls an agent pinned to a model the workspace's catalogue records as served somewhere else |
 //!
 //! # What the run adds
@@ -183,7 +183,18 @@ fn hidden_from_the_ai(
         return;
     }
     for (stage, fields) in stages {
-        let Some(target) = fields.get("call").and_then(Node::as_str).map(str::trim) else {
+        // An agent a stage calls, or the first agent on a `decide`'s rungs
+        // that the stage's `bind:` hands the value to: either way a model is
+        // given the placeholder.
+        let called = fields.get("call").and_then(Node::as_str).map(str::trim);
+        let deciding = fields
+            .get("by")
+            .map(list)
+            .unwrap_or_default()
+            .into_iter()
+            .find_map(|rung| rung.get("agent").and_then(Node::as_str))
+            .map(str::trim);
+        let Some(target) = called.or(deciding) else {
             continue;
         };
         if entry_in(root, "agents", target).is_none() {
@@ -202,16 +213,19 @@ fn hidden_from_the_ai(
             else {
                 continue;
             };
-            diags.push(Diagnostic::error(
+            diags.push(Diagnostic::warning(
                 "loader/hidden-from-the-ai-but-handed-to-it",
                 value.node.span.clone(),
                 format!(
                     "'{workflow}' hides `{hidden}` from `the-ai`, and '{stage}' hands it to the \
-                     agent '{target}' as `{input}` — the one reader it is hidden from."
+                     agent '{target}' as `{input}`: the agent is given the placeholder, never \
+                     the value. That is right when it only carries it to a write, where `hides:` \
+                     puts the original back, and wrong when it has to read or judge it."
                 ),
                 format!(
-                    "Hand '{target}' something that is not `{hidden}`, take `the-ai` off its \
-                     line under `hides:`, or call a tool or a program instead of an agent here."
+                    "Nothing to do if '{target}' only passes `{input}` on to a write. If it has \
+                     to read it, take `the-ai` off `{hidden}`'s line under `hides:`, or call a \
+                     tool or a program instead of an agent here."
                 ),
             ));
         }

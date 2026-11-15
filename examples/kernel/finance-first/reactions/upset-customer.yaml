@@ -1,0 +1,7 @@
+# The description is the question the judge answers, about what the customer
+# wrote. A guess, so it advises and does not stop.
+description: The customer is angry or upset.
+judged: yes
+at: turn.run.started
+then:
+  - remind: The customer is upset. Apologise once, plainly, before anything else.

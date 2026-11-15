@@ -91,10 +91,35 @@ const KINDS: &[Kind] = &[
     // named by nobody, `pact check` printed "OK — loaded cleanly", and `pact
     // waits` silently lost the whole `needs-permission` entry: a human consent
     // gate on money, gone, from the list §9.4 G14 obliges a runtime to walk.
+    // D29. A plugin no agent names and that does not apply to every agent is
+    // loaded for nobody, and the author who wrote it believes some agent has it.
+    Kind {
+        section: "plugins",
+        what: "plugin",
+        attach: "`plugins:` with `- {}` under it, on an agent — or `applies-to: every-agent` in the plugin itself",
+    },
     Kind {
         section: "programs",
         what: "carried program",
         attach: "`program: {}` on a tool's action",
+    },
+    // docs/99. A reaction is attached the way an interceptor is; an event is
+    // named by the reaction or the `listens-for:` line that waits for it; a
+    // topic by a tag, an event or a subscription.
+    Kind {
+        section: "reactions",
+        what: "reaction",
+        attach: "`reactions:` with `- {}` under it, on an agent — or `applies-to: every-agent` in the reaction itself",
+    },
+    Kind {
+        section: "events",
+        what: "event",
+        attach: "`event: {}` in a reaction, or `- { event: {}, how: told-after }` under an agent's `listens-for:`",
+    },
+    Kind {
+        section: "topics",
+        what: "topic",
+        attach: "`topic: {}` in a reaction or an event, or `- { topic: {}, how: asked-first }` under an agent's `listens-for:`",
     },
     Kind {
         section: "resources",

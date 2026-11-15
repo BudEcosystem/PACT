@@ -107,7 +107,7 @@ it.
 | 1 Closure | `loader/declared-lighter-than-it-does` — an action `reads-only: yes` whose `program:`/`calls:` writes; effect class (reads < writes < spends < cannot-be-undone) computed for every action, agent, team and workflow and printed by `pact discover` | error | `workflows::writes` (`workflows.rs:612-694`), `money::moves_money` |
 | 2 Termination | `loader/unbounded-without-an-owner`; `loader/this-tree-may-not-stop` (note); the workflow call graph gains `team:`, loop `may-use:`, port `then-run:` and reminder `runs:` edges | error, note | `calls_go_round` (`workflows.rs:863-898`), `teams::walk` |
 | 2 runtime | every host receives a step ceiling: the author's, or `DEFAULT_STEPS`; `unbounded: yes` is the only way to receive none | — | `ir.py:36`, `pydantic_ai_interop.py:1320` |
-| 3 Exactly-once | `loader/repeated-with-no-claim` (an action that cannot be undone, reached inside a retry, `repeat`, `each`, `together`, a fork or a team, with no `same-request-key`); `loader/a-key-that-changes-every-attempt` (the key's binding is produced inside the repeated body); `loader/a-claim-wider-than-what-keeps-it` | error, error, warning | `failures::cannot_be_undone_unasked`, `bindings::Graph` |
+| 3 Exactly-once | `loader/repeated-with-no-claim` (an action that cannot be undone, reached inside a retry, `repeat`, `each`, `together`, a fork or a team, with no `same-request-key`); `loader/a-key-that-changes-every-attempt` (the key's binding is produced inside the repeated body); `loader/a-claim-wider-than-what-keeps-it` | error, warning (since 11 November; §9), warning | `failures::cannot_be_undone_unasked`, `bindings::Graph` |
 | 4 Closed world | `loader/a-stage-may-use-what-the-agent-cannot`; `loader/a-program-may-pick-a-stage-not-listed` | error | `programs.rs`, `reachability.rs` |
 | 5 Attenuation | `loader/a-locked-part-changed-below` (`locked: here-and-below` honoured across `based-on:`); `loader/a-helper-allowed-more-than-its-caller` (a teammate's money or step ceiling above its caller's); `loader/a-copy-wider-than-its-template` | error, error, warning | `derive.rs`, `teamwork.rs` |
 | 6 Decisions | the `walkable` defect fixed: `may-go-to:` lists are edges, `decided-by:` is not a stage | — | `reachability.rs:531` |
@@ -227,6 +227,9 @@ One workspace per pattern a new keyword unlocks, each checked by the gate's
 
 Said here so nobody reads §2 to §6 as a description of the code where it is not.
 
+- **Law 3, narrowed on 11 November.** A `together` is repetition only where two of its
+  branches call the same action; the stock memory tools are not held; a key bound from a round's
+  own output is a warning. Bud Agent Flow's corpus found all three (CHANGELOG, 11 November).
 - **Where the examples live.** The fifteen pattern workspaces of this plan and
   of the first round sit in `examples/kernel/`, not `examples/patterns/`. The
   census test for `examples/patterns/` holds every workspace there to the

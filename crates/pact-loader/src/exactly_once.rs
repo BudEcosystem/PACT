@@ -3,9 +3,9 @@
 //!
 //! | Rule | Severity | Fires when |
 //! |---|---|---|
-//! | `loader/repeated-with-no-claim` | error | a workflow stage calls a tool action that cannot be undone, with no `same-request-key`, where the call can happen more than once: a retry (`at-most:` above 1 on the call), the body of a `repeat`, or a branch of a `together` |
-//! | `loader/a-key-that-changes-every-attempt` | error | inside a `repeat`, the argument a call's `same-request-key` names is bound from something the round itself produces — a stage inside the same `repeat`, or what the `repeat` remembers — so every round's key is new and the claim never matches |
-//! | `loader/a-claim-wider-than-what-keeps-it` | warning | `same-request-key-across: the-team` or `the-workspace` in a workspace whose `durability:` keeps nothing outside one run |
+//! | `loader/repeated-with-no-claim` | error | a workflow stage calls a tool action that cannot be undone, with no `same-request-key`, where the call can happen more than once: a retry (`at-most:` above 1 on the call), the body of a `repeat`, or two branches of one `together` that call the same action |
+//! | `loader/a-key-that-changes-every-attempt` | warning | inside a `repeat`, the argument a call's `same-request-key` names is bound from something the round itself produces — a stage inside the same `repeat`, or what the `repeat` remembers — so every round's key is new and the claim never matches |
+//! | `loader/a-claim-wider-than-what-keeps-it` | warning | `same-request-key-across: the-team` or `the-workspace` in a workspace that says `durability: none` (an unwritten `durability:` assumes nothing, so it is not read as `none`) |
 //!
 //! # Why
 //!
@@ -17,9 +17,29 @@
 //! where `draft` runs again each round, it is a fresh key every round, and the
 //! claim it seems to make never matches anything.
 //!
+//! A key bound from the round's own output is a warning, not an error: the
+//! author has written a claim, and a retry of the same round produces the same
+//! output, so the same key, in any host that keeps what a round did. Whether two
+//! *different* rounds aim at the same thing (and so should share a key) is an
+//! intent the checker cannot see; a rolling plan whose every round posts a new
+//! update is the other reading, and it is common.
+//!
+//! The stock memory tools, `bud/remember` and `bud/forget`, are not held by
+//! the first rule: a round keeping what it learned for the next one is what a
+//! `repeat`'s memory is for, and the memory is the workspace's own, not a
+//! write into somebody's system.
+//!
+//! `same-request-key: the-call` is a claim like any other: the call's own place in
+//! the run, which the host sends as the request's idempotency key ([`THE_CALL`]).
+//!
 //! An `each` is not repetition here: its items are different things on
 //! purpose, and `identified-by:` (`loader/items-told-apart-by-position`)
-//! is what makes a retried item the same item.
+//! is what makes a retried item the same item. Nor is a `together` by itself:
+//! its branches are different stages, each run once, so an email in one branch
+//! and a chat message in the other are two calls, not one call twice. What a
+//! `together` can do is call the *same* action from two branches, side by side,
+//! and that is repetition. A `together` inside a `repeat` still runs again
+//! every round.
 
 use std::collections::BTreeSet;
 
@@ -39,8 +59,13 @@ enum Again<'a> {
         name: &'a str,
         inside: BTreeSet<&'a str>,
     },
-    /// A branch of a `together`.
-    Together(&'a str),
+    /// Inside a `together`: the actions two or more of its branches call,
+    /// and what was repeating around the `together` itself.
+    Together {
+        name: &'a str,
+        twice: BTreeSet<String>,
+        around: Box<Again<'a>>,
+    },
 }
 
 /// Every rule, over the loaded document.
@@ -72,7 +97,11 @@ fn walk(root: &Node, workflow: &str, steps: &Map, again: &Again, diags: &mut Dia
                 name: stage.as_str(),
                 inside: inner.keys().map(String::as_str).collect(),
             },
-            Some("together") => Again::Together(stage.as_str()),
+            Some("together") => Again::Together {
+                name: stage.as_str(),
+                twice: called_from_two_branches(inner),
+                around: Box::new(again.clone()),
+            },
             _ => again.clone(),
         };
         walk(root, workflow, inner, &inside, diags);
@@ -93,6 +122,9 @@ fn call(
     let Some((tool, action_name)) = target.split_once('/') else {
         return;
     };
+    if MEMORY_TOOLS.contains(&target) {
+        return;
+    }
     let Some(action) = entry_in(root, "tools", tool)
         .and_then(|t| t.get("actions"))
         .and_then(|a| a.get(action_name))
@@ -108,13 +140,7 @@ fn call(
         pact_doc::Value::Str(s) => s.trim().parse::<i64>().is_ok_and(|i| i > 1),
         _ => false,
     });
-    let why = match again {
-        Again::Once if retries => Some("it may be tried again (`at-most:` above 1)".to_string()),
-        Again::Once => None,
-        Again::Repeat { name, .. } => Some(format!("it runs again every round of '{name}'")),
-        Again::Together(name) => Some(format!("it is one branch of '{name}', run side by side")),
-    };
-    let Some(why) = why else {
+    let Some(why) = repeated_because(again, target, retries) else {
         return;
     };
     let effect = of_action(action);
@@ -137,7 +163,7 @@ fn call(
             ),
         ));
     }
-    if let (Some(key), Again::Repeat { name, inside }) = (key, again)
+    if let (Some(key), Again::Repeat { name, inside }) = (key, innermost_repeat(again))
         && let Some(bound) = fields.get("bind").and_then(|b| b.get(key))
         && let Some(from) = bound.as_str().map(str::trim)
         && changes_every_round(from, inside)
@@ -151,6 +177,78 @@ fn call(
             name,
             bound.span.clone(),
         ));
+    }
+}
+
+/// `same-request-key: the-call`: the call's own place in the run (its stage, its
+/// round, its item, never its attempt) is its identity. A host sends it to the
+/// server as the request's idempotency key, so a retry carries the same one and
+/// every other call a new one. It is the claim for a write the business gives no
+/// key of its own, or one a flow means to repeat with the same arguments (a
+/// reminder, a second notice on a new event).
+pub const THE_CALL: &str = "the-call";
+
+/// The stock memory tools: their writes are the workspace's own memory, which a
+/// round is meant to update (module docs).
+const MEMORY_TOOLS: [&str; 2] = ["bud/remember", "bud/forget"];
+
+/// Why a call to `target` here may happen more than once, or `None`.
+fn repeated_because(again: &Again, target: &str, retries: bool) -> Option<String> {
+    match again {
+        Again::Once if retries => Some("it may be tried again (`at-most:` above 1)".to_string()),
+        Again::Once => None,
+        Again::Repeat { name, .. } => Some(format!("it runs again every round of '{name}'")),
+        Again::Together {
+            name,
+            twice,
+            around,
+        } => {
+            if twice.contains(target) {
+                Some(format!(
+                    "more than one branch of '{name}' calls it, side by side"
+                ))
+            } else {
+                repeated_because(around, target, retries)
+            }
+        }
+    }
+}
+
+/// The `repeat` a call sits in, looking through any `together` between them.
+fn innermost_repeat<'b, 'a>(again: &'b Again<'a>) -> &'b Again<'a> {
+    match again {
+        Again::Together { around, .. } => innermost_repeat(around),
+        other => other,
+    }
+}
+
+/// The `tool/action`s that two or more branches of a `together` call, anywhere
+/// inside each branch.
+fn called_from_two_branches(branches: &Map) -> BTreeSet<String> {
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut twice: BTreeSet<String> = BTreeSet::new();
+    for entry in branches.values() {
+        let mut here: BTreeSet<String> = BTreeSet::new();
+        calls_in(&entry.node, &mut here);
+        for target in here {
+            if !seen.insert(target.clone()) {
+                twice.insert(target);
+            }
+        }
+    }
+    twice
+}
+
+fn calls_in(stage: &Node, found: &mut BTreeSet<String>) {
+    if does(stage) == Some("call")
+        && let Some(target) = stage.get("call").and_then(Node::as_str)
+    {
+        found.insert(target.trim().to_string());
+    }
+    if let Some(inner) = stage.get("steps").and_then(Node::as_map) {
+        for entry in inner.values() {
+            calls_in(&entry.node, found);
+        }
     }
 }
 
@@ -174,7 +272,7 @@ fn key_changes(
     repeat: &str,
     at: Span,
 ) -> Diagnostic {
-    Diagnostic::error(
+    Diagnostic::warning(
         "loader/a-key-that-changes-every-attempt",
         at,
         format!(
@@ -184,17 +282,21 @@ fn key_changes(
              doing it again."
         ),
         format!(
-            "Bind `{key}` from something the same in every round — the run's own input, or a \
-             stage before '{repeat}' — so two rounds aiming at the same thing make the same key."
+            "If two rounds may aim at the same thing, bind `{key}` from something the same in \
+             every round — the run's own input, or a stage before '{repeat}' — so they make the \
+             same key. If every round makes a new thing (a new update, a new booking), this key \
+             is right: a retry of one round still makes the same key."
         ),
     )
 }
 
 fn claims_wider_than_what_keeps_them(root: &Node, diags: &mut Diagnostics) {
-    let durability = root
-        .get("durability")
-        .and_then(Node::as_str)
-        .map_or("none", str::trim);
+    // Only a workspace that SAYS nothing survives a run is one where a wider claim
+    // is kept by nothing: the schema reads an unwritten `durability:` as "PACT
+    // assumes nothing", and a host may well keep claims in its own store.
+    let Some(durability) = root.get("durability").and_then(Node::as_str).map(str::trim) else {
+        return;
+    };
     if durability != "none" {
         return;
     }
@@ -220,9 +322,8 @@ fn claims_wider_than_what_keeps_them(root: &Node, diags: &mut Diagnostics) {
                 across.span.clone(),
                 format!(
                     "'{tool}/{action}' says the same call reaches `{scope}`, and this workspace \
-                     keeps nothing outside one run (`durability:` is `none`, or not written). A \
-                     claim nobody keeps past the run cannot stop another run making the same \
-                     call."
+                     says it keeps nothing outside one run (`durability: none`). A claim nobody \
+                     keeps past the run cannot stop another run making the same call."
                 ),
                 "Write `durability: checkpoint` (or `durable-execution`) in workspace.yaml, so \
                  the claim is kept where other runs can see it, or say `this-run`."

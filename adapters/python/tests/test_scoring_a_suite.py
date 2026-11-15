@@ -42,6 +42,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from fitting import fits  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[3]
 EXAMPLE = REPO / "examples" / "refund-desk"
 PACT_BIN = REPO / "target" / "debug" / "pact"
@@ -124,7 +126,9 @@ class _Runtime:
             # so, and answering in that shape is what makes this a stand-in for a
             # grader rather than a second decision-maker.
             return _text("PASS\nthe reason is one sentence a customer could read")
-        if "[result of payments]" not in said:
+        # A result is a `tool` message answering the call the stand-in made:
+        # the transport sends a model its own calls as calls.
+        if not any(m.get("role") == "tool" for m in messages):
             # One `payments` call per run and no more. The worked example's own
             # `interceptors/stop-runaway-refunds.yaml` ends any run that calls
             # that tool twice — it counts calls to the tool, not refunds — so a
@@ -136,7 +140,7 @@ class _Runtime:
                     {"action": "issue-refund", "order-number": "A-1", "amount": "40 USD"},
                 )
             return _tool_call("payments", {"action": "look-up-order", "order-number": "A-1"})
-        return _text(_decides_from(said, self.wrong))
+        return _text(fits(_decides_from(said, self.wrong)))
 
 
 def _decides_from(ticket: str, wrong: str) -> str:

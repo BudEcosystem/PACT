@@ -638,7 +638,15 @@ def test_a_model_turn_that_said_nothing_and_did_nothing_is_not_a_turn() -> None:
         ModelResponse(parts=[]),
         ModelResponse(parts=[ToolCallPart(tool_name="zendesk", args={"ticket": "T-1"})]),
     ])
-    assert crossed == [{"role": "assistant", "content": "", "tool_calls": ["zendesk"]}], (
+    assert crossed == [
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": ["zendesk"],
+            # What the call was given crosses too, beside the name.
+            "calls": [{"name": "zendesk", "args": {"ticket": "T-1"}}],
+        }
+    ], (
         "either an empty turn was invented or the turn that called a tool was lost"
     )
 

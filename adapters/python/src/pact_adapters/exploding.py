@@ -63,6 +63,20 @@ PROSE = frozenset({"instructions", "content", "description"})
 STAYS_INLINE = frozenset({"description"})
 
 
+#: Settings PACT hands over as written and never reads as fields, by
+#: `(collection, field)`: a plugin's own `config:` (`spec/schema.yaml`
+#: `plugin.config`, `map of anything`). Its keys are the plugin's names and not
+#: PACT's (`searchMaxResults` is a setting of the package), so the value stays
+#: in the entry's settings file whole: never split into folders, and never held
+#: to the portable key alphabet, since none of its keys becomes a file name.
+OPAQUE: frozenset[tuple[str, str]] = frozenset({("plugins", "config")})
+
+
+def _opaque(at: tuple[str, ...], key: str) -> bool:
+    """Whether `key` under the path `at` is one of the `OPAQUE` values."""
+    return len(at) >= 2 and (at[-2], key) in OPAQUE
+
+
 #: The key the loader puts on a payload folder — a directory it carried
 #: verbatim rather than read as fields.
 PAYLOAD = "$payload"
@@ -148,7 +162,8 @@ def _unportable(node: Any, at: tuple[str, ...] = ()) -> dict[str, str]:
             why = why_not_portable(str(key))
             if why:
                 found[".".join((*at, str(key)))] = why
-            found.update(_unportable(value, (*at, str(key))))
+            if not _opaque(at, str(key)):
+                found.update(_unportable(value, (*at, str(key))))
     elif isinstance(node, list):
         for i, value in enumerate(node):
             found.update(_unportable(value, (*at, str(i))))
@@ -202,7 +217,9 @@ def explode(document: Mapping[str, Any], into: "str | Path") -> Explosion:
     return said
 
 
-def _write_map(node: dict, where: Path, said: Explosion, *, top: bool) -> None:
+def _write_map(
+    node: dict, where: Path, said: Explosion, *, top: bool, at: tuple[str, ...] = ()
+) -> None:
     """One mapping as a directory: prose to `.md`, the rest to a settings file.
 
     Nested maps become directories with their own settings file, which is the
@@ -215,7 +232,7 @@ def _write_map(node: dict, where: Path, said: Explosion, *, top: bool) -> None:
             path.write_text(value if value.endswith("\n") else value + "\n")
             said.wrote.append(str(path))
             continue
-        if isinstance(value, dict) and value and all(
+        if not _opaque(at, key) and isinstance(value, dict) and value and all(
             isinstance(v, dict) for v in value.values()
         ):
             # A map OF maps is a folder of things — `agents/`, `tools/`. A map of
@@ -226,7 +243,7 @@ def _write_map(node: dict, where: Path, said: Explosion, *, top: bool) -> None:
             for name, inner in value.items():
                 child = folder / name
                 child.mkdir(parents=True, exist_ok=True)
-                _write_map(dict(inner), child, said, top=False)
+                _write_map(dict(inner), child, said, top=False, at=(*at, key, name))
             continue
         settings[key] = value
 

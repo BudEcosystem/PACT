@@ -17,6 +17,9 @@
 //! | `loader/a-call-that-does-not-fit` | WF-39 | a call's `bind:` leaves a required input (or a required part of one filled part by part, `fills.first-name`) of its target empty, names one it does not take or a part its shape does not have, or binds the wrong shape; the same for the stage's `bind:` against its `if-it-fails.backup:`, and for an `answer`'s `bind:` (in the workflow's own `steps:`) against the workflow's `answers-with:`; a `carry-on-with:` value in another shape than the answer field it stands in for |
 //! | `loader/a-binding-to-nothing` *(also)* | WF-4 | `carry-on-with:` names a field the stage does not answer with (its values are bindings, read as any other) |
 //! | `loader/a-binding-to-nothing` *(also)* | WF-4 | `latest-update.<field>` names a field neither the workflow's `accepts:` nor any port answering it brings (a port with no `accepts:` brings the workflow's own) |
+//! | `loader/a-call-that-does-not-fit` *(also)* | WF-39 | a `decide`'s `bind:` names an input none of the agents on its rungs accepts, or binds the wrong shape for one that does |
+//! | `loader/a-deciding-agent-given-nothing` | new | an agent on a `decide`'s rung requires an input nothing can ever give it, or accepts nothing that anything can give it: a deciding agent is given the workflow's input, the item of the `each` it is inside and the stage's `bind:`, by name, and the stage's `says:` in its `message` |
+//! | `loader/a-line-this-stage-never-reads` *(also)* | WF-3 | `bind:` on a `decide` none of whose rungs asks an agent |
 //! | `loader/a-shape-made-of-itself` | new | a shape under `workspace.shapes` is, through its parts, made of itself |
 //! | `loader/a-line-this-stage-never-reads` | WF-3 | `comes-from:`, `combines-by:` or `lasts: one-run` on memory that is not a repeat's, or `kept-per:` on an agent's or a port's |
 //!
@@ -80,9 +83,13 @@ pub(crate) fn is_binding(said: &str) -> bool {
         || ROOTS.contains(&said)
 }
 
-/// Every binding and shape check, over the loaded document.
-pub fn check(document: &Node, schema: &Schema, diags: &mut Diagnostics) {
+/// Every binding and shape check, over the loaded document. `builtin` is the
+/// distribution's `models/catalog.yaml`, as text: which models are trained
+/// classifiers decides whether a stage's `says:` is something an agent on a
+/// `decide`'s rung is given ([`Flow::decide`]).
+pub fn check(document: &Node, schema: &Schema, builtin: &str, diags: &mut Diagnostics) {
     let shapes = Shapes::of(document, schema);
+    let decision = crate::deciding::decision_models(builtin, document);
     shapes.go_round(diags);
     shapes.named_like_a_built_in(diags);
     memory_lines(document, diags);
@@ -98,6 +105,7 @@ pub fn check(document: &Node, schema: &Schema, diags: &mut Diagnostics) {
         let flow = Flow {
             document,
             shapes: &shapes,
+            decision: &decision,
             node: &entry.node,
             name,
         };
@@ -356,6 +364,8 @@ impl Frame<'_> {
 struct Flow<'a> {
     document: &'a Node,
     shapes: &'a Shapes<'a>,
+    /// Every catalogue row with `kind: decision`, by id and alias.
+    decision: &'a BTreeSet<String>,
     node: &'a Node,
     name: &'a str,
 }
@@ -483,6 +493,7 @@ impl<'a> Flow<'a> {
                         }
                     }
                 }
+                self.decide(frames, stage, fields, diags);
             }
             if let Some(over) = fields.get("over") {
                 self.read(frames, stage, &over.node, None, Reading::At, diags);
@@ -586,6 +597,321 @@ impl<'a> Flow<'a> {
                 diags,
             );
         }
+    }
+
+    /// A `decide` stage's agent rungs: what its `bind:` hands them, and
+    /// whether each is given anything to decide about.
+    ///
+    /// An agent that decides is given the workflow's input, the fields of the
+    /// item it is inside an `each` of, and the stage's own `bind:` — in that
+    /// order, a later one winning — and of those only what it `accepts:`
+    /// (`rung.agent`, in the schema's own words). The stage's `says:` is the
+    /// start of its `message`. So:
+    ///
+    /// * each `bind:` value is a binding, read where the stage sits (WF-4 to
+    ///   WF-7), filling an input at least one agent on a rung accepts, in a
+    ///   shape every one that accepts it takes (WF-39);
+    /// * a `bind:` with no agent rung is read by nobody (WF-3): written rules
+    ///   read their bindings themselves, and a person is shown the question's
+    ///   `shows:`;
+    /// * an agent that requires an input none of the three can ever give it,
+    ///   or that accepts nothing any of them has, would pick a label having
+    ///   been shown nothing (`loader/a-deciding-agent-given-nothing`). A
+    ///   stage's `says:` counts as a `message` for an agent that reads
+    ///   instructions and not for one all of whose models are trained
+    ///   classifiers (`kind: decision`), which is given none. Six
+    ///   trees of Bud Agent Flow's did exactly that: the sorter took a
+    ///   `message`, the workflow's input was `subject` and `text`, and every
+    ///   scripted sorter answered all the same.
+    fn decide(&self, frames: &[Frame<'a>], stage: &str, fields: &Map, diags: &mut Diagnostics) {
+        let rungs = fields.get("by").and_then(|e| e.node.as_list());
+        let mut asked = 0usize;
+        // Each agent on a rung that the workspace has: its name, where the
+        // rung names it, and what it accepts.
+        type Accepts = Vec<(String, Option<Line>, String)>;
+        let mut agents: Vec<(&str, &Node, Accepts, bool, bool)> = Vec::new();
+        for rung in rungs.into_iter().flatten() {
+            let Some(written) = rung.get("agent") else {
+                continue;
+            };
+            asked += 1;
+            let Some(name) = written.as_str().map(str::trim) else {
+                continue;
+            };
+            // A name that is nothing is `names: agents`' to tell.
+            let Some(agent) = workflows::entry_in(self.document, "agents", name) else {
+                continue;
+            };
+            let declared = agent
+                .get("accepts")
+                .and_then(Node::as_map)
+                .filter(|m| !m.is_empty());
+            let accepts: Accepts = match declared {
+                Some(m) => m
+                    .iter()
+                    .map(|(k, e)| {
+                        (
+                            k.clone(),
+                            self.shapes.line(&e.node),
+                            e.node.as_str().unwrap_or("").to_string(),
+                        )
+                    })
+                    .collect(),
+                // An agent that writes no `accepts:` takes a `message` and
+                // nothing else.
+                None => vec![(
+                    "message".to_string(),
+                    Some(Line {
+                        shape: Shape::Plain("text".to_string()),
+                        optional: false,
+                    }),
+                    "text".to_string(),
+                )],
+            };
+            // A trained classifier follows no instruction, so the stage's
+            // `says:` is not something it is given.
+            let classifier = crate::deciding::decides_alone(agent, self.decision);
+            agents.push((name, written, accepts, declared.is_some(), classifier));
+        }
+        let bind_entry = fields.get("bind");
+        let bind = bind_entry.and_then(|e| e.node.as_map());
+        if let Some(entry) = bind_entry
+            && asked == 0
+        {
+            diags.push(Diagnostic::error(
+                "loader/a-line-this-stage-never-reads",
+                entry.key_span.clone(),
+                format!(
+                    "'{stage}' writes `bind:`, which is what the agents that decide are given, \
+                     and none of its rungs asks an agent — written rules read their own \
+                     bindings and a person is shown the question's `shows:` — so nothing ever \
+                     reads this line."
+                ),
+                "Delete it, or add a rung that asks an agent — `- agent: <an agent>`.".to_string(),
+            ));
+        }
+        for (key, value) in bind.into_iter().flatten() {
+            let dotted = dotted(key);
+            let takers: Vec<(&str, Option<Line>, String)> = agents
+                .iter()
+                .filter_map(|(name, _, accepts, _, _)| match self.fill_of(accepts, &dotted) {
+                    Fill::Line(line, written) => Some((*name, line, written)),
+                    _ => None,
+                })
+                .collect();
+            let filling = takers.first().map(|(name, line, written)| Filling {
+                input: key.trim(),
+                line: line.clone(),
+                written: Some(written.clone()),
+                target: name,
+            });
+            self.read(
+                frames,
+                stage,
+                &value.node,
+                filling.as_ref(),
+                Reading::At,
+                diags,
+            );
+            if agents.is_empty() {
+                continue;
+            }
+            if takers.is_empty() {
+                let input = dotted.split('.').next().unwrap_or(&dotted).to_string();
+                let mut names: Vec<&str> = agents
+                    .iter()
+                    .flat_map(|(_, _, accepts, _, _)| accepts.iter().map(|(k, _, _)| k.as_str()))
+                    .collect();
+                names.sort();
+                names.dedup();
+                let who = agents
+                    .iter()
+                    .map(|(name, _, _, _, _)| format!("'{name}'"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                diags.push(Diagnostic::error(
+                    "loader/a-call-that-does-not-fit",
+                    key_span(bind, key).unwrap_or_else(|| value.node.span.clone()),
+                    format!(
+                        "'{stage}' gives `{input}:` to whoever decides ({who}), and {} input by \
+                         that name, so nobody is given it.",
+                        if agents.len() == 1 {
+                            "it accepts no"
+                        } else {
+                            "none of them accepts an"
+                        }
+                    ),
+                    format!(
+                        "Change it to one of: {} — or add `{input}:` under the agent's \
+                         `accepts:`, or delete it.",
+                        offered(&input, &names)
+                    ),
+                ));
+                continue;
+            }
+            for (name, line, written) in &takers {
+                if let Some(want) = line {
+                    self.unlike(
+                        frames,
+                        stage,
+                        &Against::call(name),
+                        &dotted,
+                        (want, written),
+                        value,
+                        diags,
+                    );
+                }
+            }
+        }
+        let says = fields
+            .get("says")
+            .and_then(|e| e.node.as_str())
+            .is_some_and(|s| !s.trim().is_empty());
+        let Some(by_name) = self.given_by_name(frames, bind) else {
+            return;
+        };
+        for (name, at, accepts, declared, classifier) in &agents {
+            // The stage's `says:` is the start of the `message` of an agent
+            // that reads instructions, and of no classifier's.
+            let mut given = by_name.clone();
+            if says && !classifier {
+                given.insert("message".to_string());
+            }
+            let missing: Vec<&str> = accepts
+                .iter()
+                .filter(|(k, line, _)| {
+                    !given.contains(k.as_str()) && line.as_ref().is_some_and(|l| !l.optional)
+                })
+                .map(|(k, _, _)| k.as_str())
+                .collect();
+            let any = accepts.iter().any(|(k, _, _)| given.contains(k.as_str()));
+            if missing.is_empty() && any {
+                continue;
+            }
+            let on_offer = if given.is_empty() {
+                "nothing is: the workflow accepts no input, the stage is inside no `for each`, \
+                 and it writes no `bind:` and no `says:` this agent reads"
+                    .to_string()
+            } else {
+                format!(
+                    "what is on offer here is {}",
+                    given
+                        .iter()
+                        .map(|g| format!("`{g}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            };
+            let (message, fix) = if !declared {
+                (
+                    format!(
+                        "'{stage}' asks '{name}' to decide, and '{name}' writes no `accepts:`, \
+                         so it takes a `message` and nothing else — and nothing here is called \
+                         `message` ({on_offer}). It would pick a label having been shown nothing."
+                    ),
+                    format!(
+                        "Give '{name}' an `accepts:` naming what it decides about, or hand it a \
+                         message under this stage's `bind:` — `message: <binding>`."
+                    ),
+                )
+            } else if !missing.is_empty() {
+                let listed = missing
+                    .iter()
+                    .map(|k| format!("'{k}'"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let (it, one) = if missing.len() == 1 {
+                    ("it", "it")
+                } else {
+                    ("them", "one")
+                };
+                (
+                    format!(
+                        "'{stage}' asks '{name}' to decide, and '{name}' needs {listed}, which \
+                         nothing here gives it ({on_offer}). An agent that decides is given the \
+                         workflow's input, the item it is inside a `for each` of and this \
+                         stage's `bind:`, by name — so it would decide without {it}."
+                    ),
+                    format!(
+                        "Fill {it} under this stage's `bind:` — {} — or, if '{name}' can decide \
+                         without {one}, mark {one} `, optional` under its `accepts:`.",
+                        missing
+                            .iter()
+                            .map(|k| format!("`{k}: <binding>`"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                )
+            } else {
+                (
+                    format!(
+                        "'{stage}' asks '{name}' to decide and gives it nothing: '{name}' \
+                         accepts {}, and {on_offer}. It would pick a label having been shown \
+                         nothing.",
+                        accepts
+                            .iter()
+                            .map(|(k, _, _)| format!("`{k}`"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                    format!(
+                        "Say what it decides about under this stage's `bind:` — \
+                         `<an input of '{name}'>: <binding>`."
+                    ),
+                )
+            };
+            diags.push(Diagnostic::error(
+                "loader/a-deciding-agent-given-nothing",
+                at.span.clone(),
+                message,
+                fix,
+            ));
+        }
+    }
+
+    /// The names a deciding agent can be given a value under, at this stage:
+    /// the workflow's `accepts:`, the parts of the item of the `each` it is
+    /// inside (`message`, for an item that is one value) and its `bind:` keys.
+    /// `None` when the item's shape cannot be known here, so nothing can be
+    /// said about what is missing.
+    fn given_by_name(
+        &self,
+        frames: &[Frame<'a>],
+        bind: Option<&Map>,
+    ) -> Option<BTreeSet<String>> {
+        let mut given: BTreeSet<String> = self
+            .node
+            .get("accepts")
+            .and_then(Node::as_map)
+            .into_iter()
+            .flat_map(|m| m.keys().cloned())
+            .collect();
+        if let Some(each) = frames.iter().rev().find(|f| f.kind() == "each") {
+            let over = each.holder.and_then(|(_, n)| n.get("over"))?;
+            let Line {
+                shape: Shape::ListOf(inner),
+                ..
+            } = self.shape_of_path(frames, over)?
+            else {
+                return None;
+            };
+            match inner.as_ref() {
+                Shape::Named(name) => {
+                    given.extend(self.shapes.parts.get(name.as_str())?.keys().cloned())
+                }
+                Shape::StreamOf(_) => return None,
+                // One value and not a set of fields: it is the `message`.
+                _ => {
+                    given.insert("message".to_string());
+                }
+            }
+        }
+        given.extend(
+            bind.into_iter()
+                .flatten()
+                .map(|(k, _)| dotted(k).split('.').next().unwrap_or("").to_string()),
+        );
+        Some(given)
     }
 
     /// An `answer` stage: each value it hands back is a binding (WF-4 to
@@ -2284,7 +2610,7 @@ mod tests {
     fn rules(text: &str) -> Vec<(&'static str, String)> {
         let doc = parse_yaml(text, camino::Utf8Path::new("bindings-test.yaml")).expect("parses");
         let mut d = Diagnostics::new();
-        check(&doc, &schema(), &mut d);
+        check(&doc, &schema(), "", &mut d);
         d.items()
             .iter()
             .map(|x| (x.rule, x.message.clone()))

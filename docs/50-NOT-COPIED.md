@@ -382,6 +382,19 @@ already covers.
 To share across workspaces, copy the folder — which is a thing you can read,
 diff and sign, and which behaves identically wherever it lands.
 
+**Narrowed by D29.** One part of this refusal has been taken back, and it is the
+part that was never about definitions: a workspace may now *ask* its runtime for
+a package. `plugins/<name>.yaml` names the package with its registry, the
+versions that will do, its settings and whether an agent may start without it,
+and an agent names the plugins it needs. That is a request written in the folder
+— reviewed, diffed and digested like every other line — and not a mount. PACT
+never resolves, fetches or runs the package (R5); a runtime that did not load it
+refuses to start the agent or names the plugin on every run; and the `plugins`
+lattice column says before anything runs which runtimes can load one at all. What
+stands is the refusal of packages that bring *definitions* into the tree: a
+bundle is still a folder of definitions PACT reads, mounting one is still unbuilt
+(§6), and nothing a plugin does at run time is written back into the folder.
+
 ### 3.4 Checks that can only be written as code
 
 **What Eve ships.** Evaluations as imperative TypeScript with four judge-based
@@ -424,6 +437,7 @@ knows what a Slack block looks like."*
 | One model summarising another's history | `context-policy.summarised-by:` — which model writes the summary, resolved against the same catalogue | the summarising call itself, through `write_summary()` on the transport. A transport that cannot re-bind to a second model reports `summarised-by` on `unmetered`, so a rung of the author's ladder never silently fails to fire |
 | Author-set attributes on a trace (`experimental_setAttributes`) | `watch` — which moments to record and what each one carries. A moment is nameable in the format; a span is not, because a span is a shape one tracing vendor chose | the exporter, and the trace itself. PACT names the moment; what a moment becomes on the wire is the host's |
 | An integration catalogue of servers a machine can reach | `resource.endpoint` — the author names one server, by a name their platform team publishes | the list of what this machine actually has. A registry of it in the format would make the portable artifact depend on one host's inventory (R20) |
+| Extensions mounted from packages, with versioned contracts | `plugins:` — the package with its registry, a version range, its settings, `if-it-cannot-be-loaded:` and `applies-to:` | resolving, installing, isolating and loading the package, and the `plugins` column of its lattice that says whether it can (D29) |
 
 The line is worth stating once, because it is the same line every time: **PACT
 holds what a reviewer must be able to read, and what must be identical on two
@@ -463,7 +477,7 @@ a restatement, and points at the section that argues it.
 | R14 | A join rule written as an expression | same as R6; and five named ways to wait cover what teams actually do | `waits-for`, plus a schema edit when a sixth is needed | §2 (G8) |
 | R15 | A hosted catalogue as the source of model facts | a machine with no network must still be able to validate and resolve, and a fetched catalogue makes that impossible | a local catalogue file; better, say what the model must be able to do and let PACT pick | §3.1 |
 | R16 | Orchestration code the model writes while it runs | it cannot be reviewed before it runs, diffed, signed, or reproduced — and structural change is exactly what needs a person | `team:` and `teamwork:`; structural change arrives as a diff. Who an agent may bring in while it runs is `teamwork.may-start:`, inside `starts-at-most:` and `nests-at-most:` | §3.2, **narrowed — see its last paragraph** |
-| R17 | Extensions as installable packages | naming already solves sharing, and a package layer costs the property that everything the system does is in the folder you were handed | put the shared thing at the workspace root and name it | §3.3 |
+| R17 | Extensions as installable packages | naming already solves sharing, and a package layer costs the property that everything the system does is in the folder you were handed | put the shared thing at the workspace root and name it; code the runtime loads is asked for by `plugins:` (D29) | §3.3, **narrowed — see its last paragraph** |
 | R18 | Checks that can only be written as code | the evaluation suite is what decides whether a port worked, so a suite most authors cannot write makes most agents unportable | example cases, plain rules, or promoted conversations; code stays possible, never necessary | §3.4 |
 | R24 | An interceptor power a written rule cannot reach — `change-the-request` and `change-the-answer` were choices in `may:` that no sentence in the vocabulary produces, so declaring one and then writing any rule got the rule refused by the next check down | a choice a non-coder can type that nothing can ever use reads as a capability and is worse than an absent one; and offering it made the list of five look like five answers when three of them were the answers | the three that reach something: `hide-values`, `stop-the-run`, `send-elsewhere`. Rewriting a request or an answer stays available to the system running the agent, through the typed escape §5.5 requires — see §6 below | §2 (G5), **amended — see §8.5** |
 | R25 | A **guessed** number for how much a model can hold, so that `context-policy:` always appears to work | a policy measured against an invented budget tidies at the wrong moment and reports that it tidied, which is the silent degradation T7 exists to name; a spend cap with no price list is already reported rather than guessed and this is the same shape | a **sourced** row in `models/catalog.yaml` — a figure with the place it was read from and the date beside it, or the word `unknown`. A model no row covers, on a transport that will not say, leaves the policy on `unmetered` with `session.limit.failed` naming it | §4 |
@@ -700,8 +714,8 @@ section used to count, which was the plan's §1 table: the same inventory
 *condensed* into eleven areas and 58 bullets, with the other 22 in an exploration
 output that never reached this repository.
 
-> **101 capabilities are enumerated and 101 are accounted for — 49 expressible,
-> 22 declared and delegated, 30 refused or deferred, none outside.**
+> **101 capabilities are enumerated and 101 are accounted for — 51 expressible,
+> 22 declared and delegated, 28 refused or deferred, none outside.**
 
 One row moved this round. **85** — prompt-cache markers — was (a), citing
 `limits.reuse-context`; that field appeared exactly once in the whole repository,
@@ -709,11 +723,16 @@ in the schema itself, so the citation resolved to nothing an author could act on
 and the field is deleted. Where a cache breakpoint goes is a fact about one
 provider's wire format, so the row is (c) and its reason is **R46**.
 
+Two rows moved the other way with D29. **84** and **99** — Eve's extensions,
+mounted and defined — were (c), against R17 and §6. Naming a package for the
+runtime to load is now `workspace.plugins`, so each is (a) for that half, and
+loading it is the host's (§8.6).
+
 | | Category | Rows | What holds it |
 |---|---|---|---|
-| **(a)** | An author writes it, in `spec/schema.yaml` | 49 | `authoring_surface.rs` — every field explains itself; `eve_inventory.rs::every_expressible_row_names_a_field_the_schema_actually_has` — the field it points at exists |
+| **(a)** | An author writes it, in `spec/schema.yaml` | 51 | `authoring_surface.rs` — every field explains itself; `eve_inventory.rs::every_expressible_row_names_a_field_the_schema_actually_has` — the field it points at exists |
 | **(b)** | Declared here, executed by the host (§4) | 22 | the schema comment at each point of declaration, and `eve_inventory.rs::every_delegated_row_names_a_row_of_section_four` |
-| **(c)** | Refused (§5) or deferred (§6) | 30 | `deliberate_refusals.rs` — the reason is a constraint |
+| **(c)** | Refused (§5) or deferred (§6) | 28 | `deliberate_refusals.rs` — the reason is a constraint |
 | | **Total** | **101** | `crates/pact-cli/tests/eve_inventory.rs` |
 
 ### 8.1 Why the count is 101 and not 80
@@ -750,12 +769,12 @@ that fits none of the three letters, and there is not one.
 | Channels | 9 | 4 | 4 | 1 — one channel writing into another's session (R23) |
 | Auth | 6 | 1 | 5 | 0 |
 | Sandbox | 5 | 3 | 2 | 0 |
-| Runtime | 11 | 2 | 6 | 3 — five separate kinds of pause (R12); extensions as installable packages (R17); prompt-cache markers placed for the provider that supports them (R46) |
+| Runtime | 11 | 3 | 6 | 2 — five separate kinds of pause (R12); prompt-cache markers placed for the provider that supports them (R46) |
 | Evals | 4 | 2 | 0 | 2 — checks that can only be written as code (R18) |
-| Developer experience, catalogue, templates | 11 | 3 | 2 | 6 — the typed client and the framework hooks, and the terminal app (R4); a verb that scaffolds a workspace (§6, deferred); capability sets as installable packages (§6, deferred); the model orchestrating subagents from JavaScript it wrote (R5, R42) |
-| **Total** | **101** | **49** | **22** | **30** |
+| Developer experience, catalogue, templates | 11 | 4 | 2 | 5 — the typed client and the framework hooks, and the terminal app (R4); a verb that scaffolds a workspace (§6, deferred); the model orchestrating subagents from JavaScript it wrote (R5, R42) |
+| **Total** | **101** | **51** | **22** | **28** |
 
-Five of the thirty are **deferred rather than refused** — `toModelOutput`,
+Four of the twenty-eight are **deferred rather than refused** — `toModelOutput`,
 read-before-write, a teammate on another deployment, and a verb that scaffolds a
 workspace — and sit in §6 with the fixture that lets each back in. The other
 twenty-four are ledger rows in §5.
@@ -781,7 +800,7 @@ refuse. Each of the five had a wrong version that would have passed its own test
 the sharpest being the last, where the wording was the author's and the contract
 was correct and the two named different things.
 
-**Four rows are split, and the split is named rather than rounded.** Each is
+**Six rows are split, and the split is named rather than rounded.** Each is
 lettered for the half PACT answers with, and the same cell names the other half:
 
 * *markdown-or-module* — the markdown half is (a); a slot written as a module is
@@ -794,6 +813,9 @@ lettered for the half PACT answers with, and the same cell names the other half:
 * *an integration catalogue* — naming one server is (a), `resource.endpoint:`;
   the list of servers a particular machine has is the host's, §4 and R20. It was
   lettered (a) against `pact tools list`, a command that does not exist.
+* *extensions mounted from packages* and *`defineExtension`* — naming the
+  package, its range and its settings is (a), `workspace.plugins` and
+  `plugin.package`; loading it is the host's, §4 (§8.6).
 
 ### 8.3 A refusal that was withdrawn
 
@@ -865,6 +887,32 @@ still name a program this workspace carries, and still be bound at a moment that
 carries the thing it rewrites. A rewriter with nothing to run it leaves the words
 exactly as they were and says so — half-applying would leave an author believing
 their program had run.
+
+### 8.6 R17 is narrowed, and this is the row that says so
+
+**R17 refused extensions as installable packages**, because naming already solves
+sharing and a package layer costs the property that everything the system does is
+in the folder you were handed. Both halves of that reason are about DEFINITIONS —
+the skills, tools and policies a package would carry into a tree — and both still
+hold for them: a bundle is a folder PACT reads, and mounting one is unbuilt.
+
+What D29 admits is the other thing a package can be: code a runtime loads, asked
+for by name. Eve's `defineExtension` (row 99) and its mounted extensions (row 84)
+are each two powers under one name, and each row is now split the way §8.2's
+other four are — lettered for the half PACT answers with, the other half named in
+the same cell:
+
+* *naming the package* — which registry, which versions, its settings and what
+  an agent does without it — is (a), `workspace.plugins` and `plugin.package`;
+* *loading it* is the host's, §4, and the `plugins` lattice column is where a
+  runtime says whether it can.
+
+So two rows move from (c) to (a), and R17 is amended rather than deleted for the
+reason §8.3 gives about R29: a row that quietly disappears is indistinguishable
+from one nobody noticed. Its general refusal stands. Checking a tree is still an
+act of reading (R5), an `x-` field is still preserved in the IR and never emitted
+into any substrate, and the folder still holds everything a reviewer has to read
+— the request for code included, and the code excluded.
 
 ### 8.4 What this section used to say, and why it changed
 

@@ -46,6 +46,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from fitting import one_that_fits  # noqa: E402
+from pact_adapters.reactions import JUDGE_SYSTEM  # noqa: E402
 from pact_adapters.harness import run  # noqa: E402
 from pact_adapters.ir import AgentSpec  # noqa: E402
 from pact_adapters.script import Script, Turn  # noqa: E402
@@ -81,6 +83,19 @@ TRANSPORTS = {
 #: no tool calls — see the module note for why, and for what that leaves out.
 ASKED = "What do you make of this?"
 ANSWER = "Here is what I make of it."
+
+
+def _answer(spec: AgentSpec) -> str:
+    """What the model says back to THIS agent: `ANSWER`, and then each field
+    the agent says it gives, as the model is asked to end its reply.
+
+    One sentence was the answer for every agent, and an agent that gives a
+    decision and an amount was "answered" by it: the run ended `final` with an
+    answer that had none of what it promises. An answer is now held to
+    `answers-with:` (`answers_fit`), so a scripted one has to fit. The second
+    port does not hold it and says so (`notDoneHere`); handed the same fitting
+    answer, the two make the same single call, which is what is compared."""
+    return one_that_fits(spec.answers_with, spec.shapes, ANSWER)
 
 
 def _workspaces() -> list[Path]:
@@ -141,16 +156,30 @@ class Watching(ReferenceTransport):
 
 
 def _here(spec: AgentSpec, transport_cls: Any) -> dict[str, Any]:
-    s = Script([Turn(ANSWER)])
+    s = Script([Turn(_answer(spec))])
     transport = transport_cls(s)
     result = asyncio.run(run(spec, transport, ASKED, {}))
+    # A judged reaction (docs/99) puts a yes-or-no question to a model, on this
+    # transport when the run was handed no second one. That is a call the
+    # agent's own steps do not account for, so it is taken out of what is
+    # compared here and counted on its own: the claim under test is about the
+    # agent's loop, and the second port — which judges nothing and says so —
+    # is held to the same loop.
+    judged = result.reactor.judged if result.reactor is not None else 0
+    told = getattr(transport, "told", None)
+    offered = getattr(transport, "offered", None)
+    if told is not None and judged:
+        mine = [i for i, system in enumerate(told) if system != JUDGE_SYSTEM]
+        assert len(told) - len(mine) == judged, (len(told), len(mine), judged)
+        told = [told[i] for i in mine]
+        offered = [offered[i] for i in mine]
     return {
         "trace": result.trace(),
         "output": result.output,
         "halted": result.halted,
-        "model_calls": s.calls,
-        "told": getattr(transport, "told", None),
-        "offered": getattr(transport, "offered", None),
+        "model_calls": s.calls - judged,
+        "told": told,
+        "offered": offered,
     }
 
 
@@ -204,11 +233,25 @@ def _there(spec: AgentSpec) -> dict[str, Any] | None:
             }
             for k in spec.knowledge
         ],
+        # D29, for the same reason: a plugin left off the wire would let Node
+        # answer where the reference port halted `plugins-not-loaded`, or say
+        # nothing where it named the plugin on `unenforced`.
+        "plugins": [
+            {
+                "name": p.name, "package": p.package, "version": p.version,
+                "if-it-cannot-be-loaded": p.if_cannot_load,
+            }
+            for p in spec.plugins
+        ],
         "team": dict(spec.team),
         "loop": spec.loop.name if spec.loop else "",
         "loops": _loops_of(spec),
         "answersWith": dict(spec.answers_with),
         "answersWithMode": spec.answers_with_mode,
+        # What an answer is held to and how many tries it gets. This port holds
+        # it to neither and says so; sent so that it can.
+        "checkedBy": [r.kind for r in spec.checked_by],
+        "checksAtMost": spec.checks_at_most,
         # docs/98 WP-8: each memory shared with the team, which Python offers as
         # a tool named after it. Sent so the port offers the same names and says
         # it keeps no board, rather than offering fewer tools in silence.
@@ -217,10 +260,24 @@ def _there(spec: AgentSpec) -> dict[str, Any] | None:
             for f in spec.facts.declared.values()
             if f.shared_with == "the-team"
         ],
+        # docs/99: the reactions that cover this agent, by name, and the tool
+        # Python offers it to say its own topic with. Sent so the port offers
+        # the same tools and names each reaction it does not carry out.
+        "reactions": {
+            "names": [r.name for r in spec.reactions.reactions],
+            "workingOn": (
+                {
+                    "description": said_so["description"],
+                    "topics": [t.name for t in spec.reactions.said_by_the_agent()],
+                }
+                if (said_so := spec.reactions.tool()) is not None
+                else None
+            ),
+        },
     })
     out = subprocess.run(
         ["node", "--experimental-strip-types", "src/run-trace.ts",
-         payload, json.dumps({"turns": [{"text": ANSWER}]}), ASKED],
+         payload, json.dumps({"turns": [{"text": _answer(spec)}]}), ASKED],
         cwd=TS_DIR, capture_output=True, text=True,
     )
     if out.returncode != 0:

@@ -741,7 +741,7 @@ fn same_request_key_is_an_argument(tool: &str, action: &str, spec: &Node, diags:
     let Some(key) = entry.node.as_str().map(str::trim) else {
         return;
     };
-    if key.is_empty() {
+    if key.is_empty() || key == crate::exactly_once::THE_CALL {
         return;
     }
     let mut known: BTreeSet<&str> = BTreeSet::new();

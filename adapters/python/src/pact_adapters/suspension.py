@@ -650,9 +650,39 @@ class Suspension:
     #: it. Empty for a record written before this field existed, which resumes
     #: with no keys spent — the same honest degradation `used` already has.
     spent_keys: tuple[tuple[str, str, str], ...] = ()
+    #: Who holds the claims this run took in a claim store (`Ledger.holder`).
+    #: Carried for the same reason as `spent_keys`: a run that came back under a
+    #: new name could neither renew nor release what it claimed before the
+    #: park, and its own claims would refuse it. Empty for a record written
+    #: before this field existed, which resumes under a new name.
+    claim_holder: str = ""
     #: A fingerprint of the calls this run is waiting to make, taken when it
     #: parked (docs/98 WP-12, the exact-action binding). Empty: nothing to bind.
     request_digest: str = ""
+    #: Which reactions this run has already carried out, what they added to
+    #: what the model is told, and which calls they are holding back (docs/99
+    #: §5). Beside `spent_keys` for the reason that field gives: a run does not
+    #: get a fresh record by being interrupted, so a reaction that fires once a
+    #: run does not fire a second time because a person was asked in between.
+    reactions: dict[str, Any] = field(default_factory=dict)
+    #: What the agents this run had put to work could not carry out and could
+    #: not count, as `RunResult` words them: `{"unenforced": […], "unmetered":
+    #: […]}`. A teammate asked before the park is not asked again after it, so
+    #: without this a resumed run reports that teammate's run as clean.
+    from_members: dict[str, list[str]] = field(default_factory=dict)
+    #: The ceilings in force when the run parked, where a person's "keep
+    #: going" had raised them above the ones written: each `Limits` figure by
+    #: its attribute, and the step ceiling under `steps`. Empty when nobody
+    #: has. Without it a run that was told to keep going and then parked for
+    #: anything else — an approval — came back under the ceilings as written,
+    #: already past them, and ran out at once.
+    budget: dict[str, float] = field(default_factory=dict)
+    #: For a run parked because a limit ran out: which ceiling, and both
+    #: figures, as they were at that moment (`field`, `reads`, `limit`, `unit`,
+    #: `halted`, `default`, `at`). A person who says no is told which one, and
+    #: it has to be the one that stopped the run, not one worked out later.
+    #: Empty for every other wait.
+    reached: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         check_reason(self.reason)
@@ -731,6 +761,11 @@ class Suspension:
             # `same-request-key:` exists to make and the exact moment it is
             # worth most: money moving while a person decides.
             spent_keys=tuple(self.spent_keys),
+            claim_holder=self.claim_holder,
+            reactions=dict(self.reactions),
+            from_members={k: list(v) for k, v in self.from_members.items()},
+            budget=dict(self.budget),
+            reached=dict(self.reached),
         )
 
     # -- crossing a process boundary ---------------------------------------
@@ -778,7 +813,12 @@ class Suspension:
                 # tuples below, so the record's shape on this side of the
                 # process boundary is the same one it had on the other.
                 "spent-keys": [list(k) for k in self.spent_keys],
+                "claim-holder": self.claim_holder,
                 "request-digest": self.request_digest,
+                "reactions": self.reactions,
+                "from-members": self.from_members,
+                "budget": self.budget,
+                "reached": self.reached,
             },
             sort_keys=True,
         )
@@ -826,7 +866,12 @@ class Suspension:
             spent_keys=tuple(
                 (str(t), str(a), str(v)) for t, a, v in (d.get("spent-keys") or ())
             ),
+            claim_holder=str(d.get("claim-holder") or ""),
             request_digest=str(d.get("request-digest") or ""),
+            reactions=dict(d.get("reactions") or {}),
+            from_members={str(k): list(v) for k, v in (d.get("from-members") or {}).items()},
+            budget={str(k): float(v) for k, v in (d.get("budget") or {}).items()},
+            reached=dict(d.get("reached") or {}),
         )
 
 

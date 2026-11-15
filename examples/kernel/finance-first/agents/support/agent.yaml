@@ -1,0 +1,12 @@
+description: Answers customers about their orders.
+instructions: |
+  Help the customer with their order. Look the order up before you answer.
+uses:
+  - orders
+  - billing
+reactions:
+  - wrap-up
+  - upset-customer
+limits:
+  steps-at-most: 10
+  when-it-runs-out: stop-and-say-so

@@ -45,6 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from consenting import allowing_the_connection  # noqa: E402
+from fitting import fits  # noqa: E402
 from pact_adapters.events import Bus  # noqa: E402
 from pact_adapters.harness import ToolCall, run  # noqa: E402
 from pact_adapters.ir import AgentSpec, ToolSpec  # noqa: E402
@@ -102,7 +103,7 @@ def batch() -> Script:
             ToolCall("payments", {"amount": 40}),
             ToolCall("email", {"to": "customer"}),
         )),
-        Turn("All done."),
+        Turn(fits("All done.")),
     ])
 
 
@@ -421,7 +422,7 @@ def a_refund_over_the_written_limit() -> Script:
     return Script([
         Turn("Refunding.",
              (ToolCall("payments", {"order-number": "A-1182", "amount": "300.00 USD"}),)),
-        Turn("Refunded 300.00 USD."),
+        Turn(fits("Refunded 300.00 USD.")),
     ])
 
 

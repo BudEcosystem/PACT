@@ -51,6 +51,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from fitting import fits  # noqa: E402
 from pact_adapters import harness  # noqa: E402
 from pact_adapters.harness import RunResult, ToolCall  # noqa: E402
 from pact_adapters.ir import AgentSpec, ToolSpec  # noqa: E402
@@ -129,7 +130,7 @@ def three_turns() -> Script:
     return Script([
         Turn("Checking the ticket.", (ToolCall(LOOKS_UP, {"ticket": "T-1"}),)),
         Turn("Issuing the refund.", (ToolCall(SPENDS, {"amount": "40"}),)),
-        Turn("Approved: the item arrived damaged within 30 days."),
+        Turn(fits("Approved: the item arrived damaged within 30 days.")),
     ])
 
 
@@ -485,9 +486,9 @@ def careful_turns() -> Script:
     """One lookup, then one plain answer per remaining stage of `loop: careful`."""
     return Script([
         Turn("Checking the ticket.", (ToolCall(LOOKS_UP, {"ticket": "T-1"}),)),
-        Turn("The ticket says the lamp arrived broken 6 days ago."),
-        Turn("Rule 2 applies: faulty on arrival, and 6 days is inside the window."),
-        Turn("Approved: the item arrived damaged within 30 days."),
+        Turn(fits("The ticket says the lamp arrived broken 6 days ago.")),
+        Turn(fits("Rule 2 applies: faulty on arrival, and 6 days is inside the window.")),
+        Turn(fits("Approved: the item arrived damaged within 30 days.")),
     ])
 
 

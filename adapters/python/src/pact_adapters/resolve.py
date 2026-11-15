@@ -37,6 +37,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import subprocess
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from pathlib import Path
@@ -64,7 +65,7 @@ from .evals import (
 from .harness import delegate_by_running, run
 from .holes import holes_in
 from .ir import AgentSpec
-from .loader import REPO, shipped
+from .loader import REPO, pact_binary, shipped
 from .yes_no import said_yes
 
 #: Where the distribution keeps its catalogue: `<repo>/models/catalog.yaml` in a
@@ -208,6 +209,43 @@ class ModelEntry:
     #: binds another. A row that says nothing about regions is served in none,
     #: never in every one.
     regions: frozenset[tuple[str, str]] = frozenset()
+    #: `model-can.voices`, `languages`, `sessions` and `dimensions` (96 §A2,
+    #: §A6): the voices a speech model speaks in, the language tags a model
+    #: handles, how a conversation with it can go (`turns`, `duplex`), and how
+    #: many numbers an embedding model turns a passage into. `pact check` holds
+    #: the first three against a `voice:` that NAMES its models; a host binds
+    #: the model it was given, which the tree may not name, so the row it binds
+    #: carries them too and `fits_voice` holds them the same way. Empty (or
+    #: `None`) means the catalogue does not say, which is never checked.
+    voices: tuple[str, ...] = ()
+    languages: tuple[str, ...] = ()
+    sessions: frozenset[str] = frozenset()
+    dimensions: "int | None" = None
+
+    def fits_voice(self, plan: Any, role: str) -> tuple[bool, str]:
+        """Whether this model can play `role` in voice plan `plan` (`voice.VoicePlan`), and why not.
+
+        `role` is `hears` (the transcriber), `speaks` (the speaker) or `both`
+        (the one model of `one-speech-model`). The rules are the loader's own
+        (`crates/pact-loader/src/voice.rs`), for the model a host binds: the
+        speaker must have the voice `speaks-as:` names, every model listening or
+        speaking must handle each of `languages:` (`en` covers `en-GB`), and a
+        plan that talks both at once needs a model that holds a duplex session.
+        A line the row leaves out is not checked.
+        """
+        if role in ("speaks", "both") and plan.speaks_as and self.voices and plan.speaks_as not in self.voices:
+            return False, (
+                f"has no voice named {plan.speaks_as!r} (its voices: {', '.join(self.voices)})"
+            )
+        if self.languages:
+            for tag in plan.languages:
+                if not any(_covers(listed, tag) for listed in self.languages):
+                    return False, (
+                        f"does not handle {tag!r} (it handles: {', '.join(self.languages)})"
+                    )
+        if role == "both" and plan.duplex and "duplex" not in self.sessions:
+            return False, "cannot listen while it speaks (its row has no `sessions: [duplex]`)"
+        return True, ""
 
     def satisfies(self, needs: dict[str, Any]) -> tuple[bool, str]:
         """Cheap pre-filter. Never a substitute for an eval verdict (FR-2.1.2).
@@ -390,7 +428,9 @@ class Catalogue:
 
 
 def load_catalogue(
-    path: "str | Path | None" = None, workspace: "str | Path | None" = None
+    path: "str | Path | None" = None,
+    workspace: "str | Path | None" = None,
+    document: "Mapping[str, Any] | None" = None,
 ) -> Catalogue:
     """Read the catalogue. Offline, always — D17 forbids a network path here.
 
@@ -408,14 +448,92 @@ def load_catalogue(
     workspace states one.
     """
     builtin = _read(Path(path) if path is not None else BUILTIN_CATALOGUE)
+    if document is not None:
+        # A caller that has already loaded the workspace hands over what
+        # `pact show` printed, and nothing is run or opened a second time. The
+        # rows are layered over the distribution's exactly as a file's are.
+        over = _of_a_document(document, "the workspace's `models`")
+        return _layer(builtin, over) if (over.entries or over.default or over.problems) else builtin
     if workspace is None:
         return builtin
     local = Path(workspace)
+    # A workspace written in the PACT language (docs/99 §4.4) has its rows in a
+    # `.pact` file, as a `models` block — there is no `models/catalog.yaml` to
+    # open, and `pact check` already reads them from the document. This read
+    # the disk only, so such a workspace's own models were held by the checker
+    # and unknown to everything that binds, prices or sizes one. Handed the
+    # `.pact` file itself it was worse: it parsed the workspace as a catalogue.
+    stamp = _written_in_the_language(local)
+    if stamp:
+        over = _from_the_document(local, stamp)
+        if over is not None:
+            return _layer(builtin, over) if (over.entries or over.default or over.problems) else builtin
+        if local.is_file():
+            return builtin  # nothing could read it, and it is not a catalogue file
     if local.is_dir():
         local = local / "models" / "catalog.yaml"
     if not local.exists():
         return builtin
     return _layer(builtin, _read(local))
+
+
+def _written_in_the_language(root: Path) -> "tuple[tuple[str, int], ...]":
+    """The `.pact` FILES this workspace is written in, each with when it last
+    changed — empty when it is a folder of YAML and nothing else. A directory
+    called `.pact` is a workspace's own runtime area and is not one of them."""
+    try:
+        if root.is_file():
+            files = [root] if root.suffix == ".pact" else []
+        elif root.is_dir():
+            files = sorted(p for p in root.glob("*.pact") if p.is_file())
+        else:
+            return ()
+        if not files:
+            return ()
+        # The folder's own catalogue file too, where it has one: `pact show`
+        # reads both, so a change to either is a change to what comes out.
+        beside = root / "models" / "catalog.yaml" if root.is_dir() else None
+        if beside is not None and beside.is_file():
+            files.append(beside)
+        return tuple((str(p), p.stat().st_mtime_ns) for p in files)
+    except OSError:
+        return ()
+
+
+@lru_cache(maxsize=8)
+def _from_the_document(root: Path, stamp: "tuple[tuple[str, int], ...]") -> "Catalogue | None":
+    """The workspace's `models`, as `pact show` prints them — or `None` when
+    there is no loader here to ask, or the workspace does not load. Cached on
+    the files it is written in and when each last changed."""
+    binary = pact_binary()
+    if binary is None:
+        return None
+    shown = subprocess.run([str(binary), "show", str(root)], capture_output=True, text=True)
+    if shown.returncode != 0:
+        return None
+    try:
+        document = json.loads(shown.stdout)
+    except json.JSONDecodeError:
+        return None
+    return _of_a_document(document, f"{_shown(root)} (its `models`, as `pact show` prints them)")
+
+
+def _of_a_document(document: Any, shown: str) -> Catalogue:
+    """The rows a loaded workspace brings: its `models`, read as the file is."""
+    written = document.get("models") if isinstance(document, Mapping) else None
+    if not isinstance(written, Mapping) or not written:
+        return Catalogue()
+    text = yaml.safe_dump(_plain(written), sort_keys=False, allow_unicode=True)
+    return _parse(text, shown)
+
+
+def _plain(value: Any) -> Any:
+    """`value` as plain dicts and lists, so any mapping a caller holds dumps."""
+    if isinstance(value, Mapping):
+        return {str(k): _plain(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain(v) for v in value]
+    return value
 
 
 def _layer(under: Catalogue, over: Catalogue) -> Catalogue:
@@ -542,7 +660,12 @@ def _load(path: Path, changed: int = 0) -> Catalogue:
                 ),
             )
         )
+    return _parse(text, shown)
 
+
+def _parse(text: str, shown: str) -> Catalogue:
+    """A catalogue from its text. `shown` is where the text came from, for a
+    problem to name: a file, or a workspace's own `models`."""
     lines = text.splitlines()
     try:
         raw = yaml.safe_load(text)
@@ -623,6 +746,10 @@ def _load(path: Path, changed: int = 0) -> Catalogue:
             first_words_ms=_milliseconds((row.get("speed") or {}).get("first-words-within"))
             if isinstance(row.get("speed"), dict)
             else None,
+            voices=_words(caps.get("voices")),
+            languages=_words(caps.get("languages")),
+            sessions=frozenset(_words(caps.get("sessions"))),
+            dimensions=_dimensions(caps.get("dimensions")),
         )
         entries.append(entry)
         for key in (name, *entry.aliases):
@@ -636,6 +763,27 @@ def _load(path: Path, changed: int = 0) -> Catalogue:
                      f"use one of: {', '.join(sorted(e.name for e in entries)) or '(none)'}")
         )
     return Catalogue(tuple(entries), default, tuple(problems), by_id)
+
+
+def _words(written: Any) -> tuple[str, ...]:
+    """A `list of text` line of a row, each word trimmed; anything else is not said."""
+    if not isinstance(written, list):
+        return ()
+    return tuple(str(w).strip() for w in written if isinstance(w, str | int) and str(w).strip())
+
+
+def _dimensions(written: Any) -> "int | None":
+    """`model-can.dimensions`, a whole number of at least 1 (the schema's), else not said."""
+    if isinstance(written, bool) or not isinstance(written, int) or written < 1:
+        return None
+    return written
+
+
+def _covers(listed: str, asked: str) -> bool:
+    """Whether a row's language tag covers one asked for: `en` covers `en` and `en-GB`
+    (`crates/pact-loader/src/voice.rs`, `covers`)."""
+    listed, asked = listed.lower(), asked.strip().lower()
+    return asked == listed or asked.startswith(f"{listed}-")
 
 
 def _window(

@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from pact_adapters.checking import check_instructions  # noqa: E402
+from pact_adapters.checking import check_agent_field  # noqa: E402
 from pact_adapters.ir import AgentSpec  # noqa: E402
 from pact_adapters.learning import Learner, Proposal  # noqa: E402
 from trees import shown  # noqa: E402
@@ -25,19 +25,19 @@ BROKEN = "Answer the customer, who is {{run-inputs.nobody-declared-this}}."
 
 def test_a_sound_change_to_a_tree_that_carries_files_passes() -> None:
     doc = shown(DESK)
-    assert check_instructions(doc, "refund-desk", "Decide the refund. Be brief.", source=DESK) == []
+    assert check_agent_field(doc, "refund-desk", "instructions", "Decide the refund. Be brief.", source=DESK) == []
 
 
 def test_a_change_that_breaks_a_rule_is_refused_in_the_checkers_own_words() -> None:
     doc = shown(DESK)
-    refused = check_instructions(doc, "refund-desk", BROKEN, source=DESK)
+    refused = check_agent_field(doc, "refund-desk", "instructions", BROKEN, source=DESK)
     assert refused and any("nobody-declared-this" in r for r in refused), refused
 
 
 def test_a_document_with_no_files_is_checked_through_the_document_itself() -> None:
     doc = shown(PHASES)
-    assert check_instructions(doc, "builder", "Carry out the plan, in order.") == []
-    assert check_instructions(doc, "builder", BROKEN), "no source tree needed to refuse it"
+    assert check_agent_field(doc, "builder", "instructions", "Carry out the plan, in order.") == []
+    assert check_agent_field(doc, "builder", "instructions", BROKEN), "no source tree needed to refuse it"
 
 
 def test_a_learning_cycle_refuses_a_proposal_the_checker_refuses_before_scoring_it() -> None:

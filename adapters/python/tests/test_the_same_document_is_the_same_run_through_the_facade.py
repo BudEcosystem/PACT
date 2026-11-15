@@ -52,6 +52,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from fitting import fits  # noqa: E402
 from pact_adapters.harness import RunResult, ToolCall, run  # noqa: E402
 from pact_adapters.ir import AgentSpec  # noqa: E402
 from pact_adapters.limits import Meter  # noqa: E402
@@ -125,9 +126,9 @@ def careful_turns() -> Script:
     """
     return Script([
         Turn("Checking the ticket.", (ToolCall("zendesk", {"ticket": "T-1"}),)),
-        Turn("The ticket says the lamp arrived broken 6 days ago."),
-        Turn("Rule 2 applies: faulty on arrival, and 6 days is inside the window."),
-        Turn("Approved: the item arrived damaged within 30 days."),
+        Turn(fits("The ticket says the lamp arrived broken 6 days ago.")),
+        Turn(fits("Rule 2 applies: faulty on arrival, and 6 days is inside the window.")),
+        Turn(fits("Approved: the item arrived damaged within 30 days.")),
     ])
 
 
@@ -500,9 +501,14 @@ def test_what_comes_back_is_the_sdks_own_result_carrying_the_pact_run(
         f"AbstractAgent was promised an AgentRunResult"
     )
     assert isinstance(ours.pact, RunResult)
-    # The SDK-facing answer and the PACT answer are the same words. Two spellings
-    # of one run is how a caller comes to log one and act on the other.
-    assert ours.output == ours.pact.output
+    # The SDK-facing answer and the PACT answer are the same answer. This agent
+    # says what it gives (`answers-with:`), so what a caller is handed is those
+    # fields, as the harness read them off the reply when it held it: one
+    # reading, in one place. Two readings of one run is how a caller comes to
+    # log one and act on the other.
+    assert ours.output == ours.pact.answer
+    assert set(ours.output) == set(spec.answers_with)
+    assert all(str(value) in ours.pact.output for value in ours.output.values())
 
 
 def test_the_facade_is_an_agent_the_sdk_itself_would_accept(spec: AgentSpec) -> None:
@@ -586,7 +592,7 @@ def test_the_one_loop_that_forks_needs_no_driver_of_its_own() -> None:
     )
     agent = pact_agent_class().for_spec(
         spec,
-        script=Script([Turn("option A"), Turn("A is best"), Turn("final answer")]),
+        script=Script([Turn(fits("option A")), Turn(fits("A is best")), Turn(fits("final answer"))]),
     )
     answered = agent.run_sync("pick one")
 
@@ -594,4 +600,4 @@ def test_the_one_loop_that_forks_needs_no_driver_of_its_own() -> None:
     # not merely "it did not crash".
     assert answered.pact.phases == ["propose", "judge", "follow"]
     assert answered.pact.halted == "final"
-    assert answered.output == "final answer"
+    assert answered.output == fits("final answer")

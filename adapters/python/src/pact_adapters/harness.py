@@ -40,10 +40,12 @@ from .at_most_once import WITHHELD, Ledger
 from .boards import Admit, Board
 from .placeholders import Vault
 from .rests import Rests
+from .reactions import JUDGE_SYSTEM, WORKING_ON, Reactor, judge_request, judged_yes
 from .boards import tool_for as board_tool
 from .claims import ClaimStore
 from .delegation import (
     Asker,
+    Divides,
     Grant,
     Handoff,
     OverBudget,
@@ -60,8 +62,10 @@ from .events import Bus
 from .facts import TURN_ENDS, Fact, Facts
 from .holes import fill
 from .interceptors import Chain
-from .ir import AgentSpec, SkillSpec
-from .limits import RAN_OUT, Action, Meter, Reached, money, step_ceiling
+from .ir import RUN_WITHOUT_IT, AgentSpec, PluginSpec, SkillSpec
+from .answers_fit import CHECKS_FAILED, Held, fields_of
+from .limits import RAN_OUT, Action, Ceiling, Limits, Meter, Reached, money, step_ceiling
+from .limits import _CEILING_FIELDS as CEILING_FIELDS
 from .loops import DONE, Does, Loop, LoopError, Phase
 from .questions import AN_AGENT, ANYTHING, Gate, Question, Rejected, Wait, quoted
 #: Three outcomes where this file used to read two. `_cleared` returned a bare
@@ -141,6 +145,12 @@ class RunResult:
     output: str
     steps: list[Step] = field(default_factory=list)
     halted: str = "final"
+    #: The fields of the answer, for an agent that says what it gives
+    #: (`answers-with:`): each declared field the answer carried, as it was
+    #: written, and no other. A field the agent does not declare is not here;
+    #: `output` is the reply as the model wrote it. Empty for an agent with no
+    #: `answers-with:`, and for a run that did not end in an answer.
+    answer: dict[str, Any] = field(default_factory=dict)
     suspension: "Suspension | None" = None
     #: One entry per step in which the team was asked. Kept because "two of the
     #: three agreed and the third was never waited for" is a fact about the run
@@ -210,7 +220,22 @@ class RunResult:
     #: the second. *"Cannot promise"* is exactly what is true of it. Argued at
     #: `limits._nothing_can_reach`, pinned by
     #: `tests/test_a_spend_cap_nothing_can_reach_holds_nothing_and_says_so.py`.
-    unmetered: tuple[str, ...] = ()
+    _unmetered: tuple[str, ...] = ()
+    #: What the agents THIS run put to work could not count, and could not carry
+    #: out — each line `<member> (put to work by this agent): <its own line>`.
+    #: Live lists, read by `unmetered` and `unenforced` below.
+    #:
+    #: A member's run handed back its words and nothing else
+    #: (`delegate_by_running.ask` returns `out.output`), so "said, never silent"
+    #: held for the agent a host ran and for nobody it asked: a teammate whose
+    #: spend cap could not be metered, or whose reaction could not be carried
+    #: out, was a clean run as far as anybody reading the result could tell.
+    #: Bud Agent Flow had the same hole and closed it first; the wording is its.
+    members_unmetered: list[str] = field(default_factory=list)
+    members_unenforced: list[str] = field(default_factory=list)
+    #: The ceilings a person's "keep going" has raised this run to, as
+    #: `Suspension.budget` carries them. Empty until somebody has.
+    budget: dict[str, float] = field(default_factory=dict)
     #: Rules the author wrote that this run could not decide, each a sentence
     #: naming the file, the line, what was not applied and a line to type. A
     #: different fact from `unmetered` and so a different field: `unmetered` is
@@ -226,6 +251,15 @@ class RunResult:
     #: dozen ways to end. So the list itself is carried and read at the end,
     #: which is the only reading that is right at every exit.
     chain_notes: list[str] = field(default_factory=list)
+    #: What the run's REACTIONS could not carry out, in sentences (docs/99 §5)
+    #: — the same shape `chain_notes` has, read the same way by `unenforced`.
+    reaction_notes: list[str] = field(default_factory=list)
+    #: Every reaction that fired, in order: which one, at which step, what it
+    #: did, and whether what woke it was exact or a guess. Outside `trace()`,
+    #: for the reason `phases` is.
+    reactions: list[dict[str, Any]] = field(default_factory=list)
+    #: The run's reactor, so a park can keep what it has already done.
+    reactor: Any = field(default=None, repr=False, compare=False)
     #: Watches the author wrote that this run could not write down, because
     #: nothing said where the workspace is. Same door as `unmetered` and for the
     #: same reason: an author who wrote a watch and got neither a record nor a
@@ -292,10 +326,28 @@ class RunResult:
         rule that could not fire on three of them is one thing to fix.
         """
         out = list(self._unenforced)
-        for said in self.chain_notes:
+        for said in (*self.chain_notes, *self.reaction_notes, *self.members_unenforced):
             if said not in out:
                 out.append(said)
         return tuple(out)
+
+    @property
+    def unmetered(self) -> tuple[str, ...]:
+        """Ceilings nobody could measure: this run's own, by the name of the
+        setting, and then each one a member it put to work could not."""
+        out = list(self._unmetered)
+        for said in self.members_unmetered:
+            if said not in out:
+                out.append(said)
+        return tuple(out)
+
+    @unmetered.setter
+    def unmetered(self, value: "Sequence[str]") -> None:
+        # Stored without the members' lines, which are read off their own list:
+        # `result.unmetered = result.unmetered + (…,)` would otherwise write them
+        # into this run's own.
+        mine = set(self.members_unmetered)
+        self._unmetered = tuple(v for v in value if v not in mine)
 
     @unenforced.setter
     def unenforced(self, value: "Sequence[str]") -> None:
@@ -546,12 +598,16 @@ SUPPLIED_BY_THE_HOST: frozenset[str] = frozenset({
     # (docs/98 WP-7). WHICH actions claim, how far and for how long is authored
     # (`same-request-key-across:`, `claim-lasts:`); the record every run of a
     # team shares is a store, and the store is the host's.
-    "claims", "claims_team",
+    "claims", "claims_team", "claims_workspace",
     # The team's shared memory, and who judges what may go in it (docs/98
     # WP-8). Which facts are shared, their shapes and their admission rules are
     # authored (`shared-with:`, `admitted-when:`, `admitted-by:`); the entries
     # written during a request, and running the admitting agent, are the host's.
     "board", "board_facts", "admit",
+    # The request's hidden values (docs/98 WP-11). WHICH actions get them back is
+    # authored (`gets-hidden-values:`); the values a request hid are its own, and
+    # a lead hands its vault to its members as it does the board.
+    "vault",
     # The circuit breaker's record (docs/98 WP-13). The RULE is authored
     # (`rests-after:`, `rests-for:`); which tools failed lately is the host's.
     "rests",
@@ -590,7 +646,48 @@ SUPPLIED_BY_THE_HOST: frozenset[str] = frozenset({
     # before the first call, because the failure otherwise is `error: no tool
     # named ...`, which reads as a mistake in the author's own file.
     "run_program",
+    # Which plugins the host loaded (D29). The DOCUMENT says which plugins an
+    # agent needs, which versions will do and what to do without one, and all
+    # of that reaches `AgentSpec.plugins`; loading a package is something only
+    # the process can do, and this harness loads none.
+    "loaded_plugins",
+    # Which reactions are being carried out above this run (docs/99 §5): a
+    # consulted agent's run is handed the names, and none of them fires again
+    # beneath itself. `delegate_by_running` passes it down — a host passes
+    # nothing.
+    "reacting",
 })
+
+
+def _plugin_named(p: PluginSpec) -> str:
+    """`'web-search' (`npm:@acme/web-search`, versions `^0.2.0`)`."""
+    return f"'{p.name}' (`{p.package}`, versions `{p.version}`)"
+
+
+def _cannot_start_without(needed: "Sequence[PluginSpec]") -> str:
+    """Why the turn ended before it began, and the two ways out.
+
+    Word for word the second port's `cannotStartWithout`; the conformance
+    driver compares the two.
+    """
+    named = [_plugin_named(p) for p in needed]
+    listed = named[0] if len(named) == 1 else f"{', '.join(named[:-1])} and {named[-1]}"
+    registries = " or ".join(dict.fromkeys(f"`{p.registry}:`" for p in needed))
+    return (
+        f"This agent cannot start: it needs {listed}, and nothing running it loaded "
+        f"{'it' if len(needed) == 1 else 'them'}. fix: run it where a runtime loads "
+        f"{registries} packages, or write `if-it-cannot-be-loaded: run-without-it` in "
+        f"the plugin's file under `plugins/` if the agent can do its job without it."
+    )
+
+
+def _ran_without(p: PluginSpec) -> str:
+    """The `unenforced` line for a plugin the agent started without."""
+    return (
+        f"plugin {_plugin_named(p)} was not loaded by whatever runs this agent, so "
+        f"nothing it adds is here and the agent ran without it. fix: run it where a "
+        f"runtime loads `{p.registry}:` packages."
+    )
 
 
 def _and_list(names: "Sequence[str]") -> str:
@@ -637,6 +734,11 @@ async def run(
     #: `RunResult.unretrieved`. `None` means nothing retrieved anything, which is
     #: the honest state on a machine with no index.
     retrieved_by: "Mapping[str, Sequence[str]] | None" = None,
+    #: What the host loaded for this agent, as plugin name to the version it
+    #: loaded (D29). PACT loads no plugin itself; a host that does hands this
+    #: in, having held each package to its line's range. `None` means nothing
+    #: loaded anything, which is the honest state of every transport here.
+    loaded_plugins: "Mapping[str, str] | None" = None,
     approved: frozenset[str] = frozenset(),
     bus: Bus | None = None,
     chain: Chain | None = None,
@@ -684,6 +786,9 @@ async def run(
     #: The team a `the-team` claim belongs to: the agent at the root of the
     #: request. `None` means this agent is the root.
     claims_team: str | None = None,
+    #: The workspace a `the-workspace` claim belongs to, when the host shares
+    #: one store between workspaces. `None`: the store is this workspace's.
+    claims_workspace: str | None = None,
     #: The team's shared memory for this request (docs/98 WP-8). The root run
     #: makes one when its agent shares a fact; every member it starts gets the
     #: same object, riding the grant as `at_work` does.
@@ -691,6 +796,11 @@ async def run(
     #: Facts the LEAD shares that this member may read and write, handed down
     #: with the board. A member does not declare them; the lead does.
     board_facts: "tuple[Fact, ...]" = (),
+    #: The request's hidden values (docs/98 WP-11). The root run makes one when
+    #: an action it, or a member of its team, uses gets hidden values; every
+    #: member it starts gets the same object, riding the grant as the board
+    #: does, so a member's action restores the placeholder its lead minted.
+    vault: "Vault | None" = None,
     #: Who judges an entry before it is written, when a fact says `admitted-by:`:
     #: `admit(judge, fact, entry) -> (yes, because)`. The host's, because the
     #: judge is a run and a run needs a transport. `None` refuses every such
@@ -700,6 +810,9 @@ async def run(
     #: unless the host shares one record across runs, so a tool that is down for
     #: everyone stays rested for everyone.
     rests: "Rests | None" = None,
+    #: The reactions being carried out above this run (docs/99 §5). None of
+    #: them fires here or beneath here: a handler does not wake itself.
+    reacting: frozenset[str] = frozenset(),
 ) -> RunResult:
     """Drive `spec` to completion over `transport`.
 
@@ -791,9 +904,12 @@ async def run(
     once.store = claims
     rested = rests if rests is not None else Rests()
     once.team = claims_team or spec.name
+    once.workspace = claims_workspace or ""
     # Who holds a claim this run takes: the run, by name and a fresh id, so a
     # renewed lease (the same holder taking again) is this run and nobody else.
-    once.holder = f"{spec.name}:{uuid.uuid4().hex}"
+    # A parked run comes back as the same holder, or the claims it took before
+    # the park would refuse it.
+    once.holder = (resume.claim_holder if resume is not None else "") or f"{spec.name}:{uuid.uuid4().hex}"
     supplied: dict[str, Any] = dict(run_inputs or {})
     # A money ceiling handed in for this run (`cost-per-request-from:`, docs/98
     # WP-14), through the same door a teammate's share comes through: the
@@ -886,6 +1002,13 @@ async def run(
     # and is asked again is a new activation at the same depth.
     at_work = {} if at_work is None else at_work
     at_work[spec.name] = at_work.get(spec.name, 0) + 1
+    #: What the agents this run puts to work could not carry out, and could not
+    #: count: the two lists `RunResult` reads. Kept across a park, because a run
+    #: that asked a teammate and then waited for a person is still that run.
+    from_members: tuple[list[str], list[str]] = (
+        list((resume.from_members.get("unenforced") or ()) if resume is not None else ()),
+        list((resume.from_members.get("unmetered") or ()) if resume is not None else ()),
+    )
     if ask_member is not None:
         # `Asker` takes one argument, and the spend check belongs where the
         # member's own `limits:` is read — inside `delegate_by_running.ask`,
@@ -903,13 +1026,29 @@ async def run(
             # its teammates do (docs/98 WP-8).
             grant.board = board
             grant.board_facts = shared
+            # The request's vault rides the same way (docs/98 WP-11).
+            grant.vault = chain.vault
             # HOW this member was reached, which is what decides whether it owes
             # a figure of its own (P4). It rides the grant for the reason the
             # meter does: `Asker` takes one argument, and the check belongs
             # where the member's own `limits:` is read. An asker that never
             # looks at it behaves exactly as before.
             grant.named_by_value = by_value
-            return await inner_ask(grant)
+            # The reactions above this run ride down to whoever it asks, for the
+            # reason the meter does. A grant made FOR a reaction already says
+            # which, and is left alone.
+            if not hasattr(grant, "reacting"):
+                grant.reacting = reacting
+            try:
+                return await inner_ask(grant)
+            finally:
+                # What it could not do rides back on the grant
+                # (`delegate_by_running.ask`), whether it answered or failed.
+                for kind, kept in (("unenforced", from_members[0]), ("unmetered", from_members[1])):
+                    for line in getattr(grant, kind, ()) or ():
+                        told = f"{grant.member} (put to work by this agent): {line}"
+                        if told not in kept:
+                            kept.append(told)
 
         ask_member = sharing_the_meter
     # The author's own rules, unless a caller supplied its own set. Read from
@@ -918,11 +1057,14 @@ async def run(
     # documents in the worked example loaded, validated and did nothing, and
     # the card numbers they say they stop reached the model.
     chain = spec.chain if chain is None else chain
-    # A vault of this run's own, when an action it uses gets hidden values back
-    # (docs/98 WP-11). A copy of the chain, so one run's placeholders are never
+    # The request's vault, when an action it or a member of its team uses gets
+    # hidden values back (docs/98 WP-11): the one a lead handed down, else a
+    # new one. A copy of the chain, so one request's placeholders are never
     # another's: the spec's chain is shared by every run of the agent.
-    if spec.gets_hidden:
-        chain = dataclasses.replace(chain, vault=Vault())
+    if vault is None and (spec.gets_hidden or spec.team_gets_hidden):
+        vault = Vault()
+    if vault is not None:
+        chain = dataclasses.replace(chain, vault=vault)
     # AND THE RUNNER THE CHAIN COULD NOT HAVE BEEN BUILT WITH. `AgentSpec.
     # from_document` is handed a loaded document and nothing else (P-1), so it
     # has no host to ask for one; `run()` has one and never passed it on. Through
@@ -1176,12 +1318,27 @@ async def run(
     # A stage may only narrow what the agent already has. Checked once, before
     # the first model call, so a typo in a branch taken on the fortieth step
     # fails on the first one instead.
+    # The tool an agent says its own topic with (docs/99 §5), when a topic
+    # that matters to it is `noticed-by: the-agent`. It has no body: the call
+    # is answered where a reaction would hold one, with what was said to it.
+    #
+    # Not offered to a run a reaction woke. That agent was run to be asked or
+    # told about one thing; what the work has turned to is the waking run's to
+    # say. Found live: the auditor, told a refund had gone out, said `finance`
+    # — which is true — and the finance desk was then to be consulted by an
+    # agent that has nobody it can ask, about a refund already made. What its
+    # own tagged CALLS raise is exact, and still holds.
+    if (said_so := spec.reactions.tool()) is not None and not reacting and not any(
+        d["name"] == WORKING_ON for d in tool_defs
+    ):
+        tool_defs.append(said_so)
     loop.check_against(
         tuple(t.name for t in spec.tools) + tuple(spec.team),
         skill_names=spec.skill_names,
     )
 
     result = RunResult(output="")
+    result.members_unenforced, result.members_unmetered = from_members
     # The chain's own live list, so what a rule could not do is reported by the
     # RUN and not only by an object the host never sees.
     result.chain_notes = chain.unenforced
@@ -1235,6 +1392,10 @@ async def run(
     pending_text: str = ""
     already: dict[str, str] = {}
     limit = spec.max_steps
+    # The ceilings in force. They are the ones written until a person says
+    # "keep going", which grants the same budget again from where the run is
+    # (`Limits.kept_going`); `spec.limits` stays what the author wrote.
+    limits = spec.limits
 
     # Every stage an interceptor can send this run to, held against the loop
     # here rather than when a rule fires. `Loop.check_against` states the
@@ -1254,6 +1415,113 @@ async def run(
     # it has been told something untrue (T7).
     meter = Meter(started=clock())
     result.used = meter
+
+    async def _wake(member: str, message: str, reaction: str) -> str:
+        """Run another agent because a reaction said to, and charge what it
+        spent to THIS run: one written ceiling bounds the agent and everybody
+        its reactions wake (docs/99 §3.3)."""
+        left = (team_budget - meter.money) if team_budget else 0.0
+        if team_budget and left <= 0.0:
+            raise RuntimeError(
+                "nothing is left of this request's `cost-per-request-under` to pay for it"
+            )
+        grant = Grant(member, Pool(max(left, 0.0), Divides.AS_NEEDED, (member,)), message)
+        grant.reacting = reacting | {reaction}
+        said = await ask_member(grant)
+        meter.money += grant.spent
+        return said
+
+    async def _judge(question: str, words: str) -> "bool | None":
+        """One yes-or-no question about some words, put to the checking model
+        when there is one and to the working model when there is not."""
+        judging = checking_transport if checking_transport is not None else transport
+        said, _ = await judging.model_call(
+            JUDGE_SYSTEM, [{"role": "user", "content": judge_request(question, words)}], []
+        )
+        _meter_usage(judging, meter)
+        return judged_yes(said)
+
+    reactor = Reactor(
+        spec.reactions,
+        ask=_wake if ask_member is not None else None,
+        judge=_judge,
+        bus=bus,
+        reacting=reacting,
+        state=resume.reactions if resume is not None else None,
+    )
+    result.reactor = reactor
+
+    def closing_words(reached: "Reached", not_made: "tuple[ToolCall, ...]" = ()) -> str:
+        """What the closing request of a run that ran out is told: the agent's
+        instructions, every procedure it has, anything a connected server said
+        of itself, the shape of its answer, and what its reactions have added
+        — what any request is told, less a stage's own line — and then, last,
+        that the run has reached a limit and which calls were not made
+        (`Reached.closing`)."""
+        return _system_for(
+            spec.instructions, None, spec.skills,
+            answers_with=shape_to_ask_for,
+            external=spec.external_prose,
+            added=reactor.reminded(),
+        ) + "\n\n" + reached.closing(tuple(_as_asked(c.name, c.args) for c in not_made))
+
+    #: What the next model request is told once and no request after it: that
+    #: a person said to keep going (`Reached.raised`). Empty at every other time.
+    told_once: list[str] = []
+
+    def after_a_yes() -> str:
+        return "\n\n" + told_once.pop() if told_once else ""
+
+    # What this run's answer is held to (`answers_fit`): the shape it was asked
+    # for, and the author's own `checked-by:` rules, `checks-at-most:` attempts
+    # in all. A `judged:` rule needs a grader and this loop is handed none, so
+    # it is said (`unenforced`) and not passed in silence, once.
+    unjudged: list[str] = []
+
+    def _breaks_a_rule(said: str) -> str:
+        from .evals import first_broken
+
+        noted: list[str] = []
+        broken = first_broken(
+            spec.checked_by, RunResult(output=said, steps=list(result.steps)),
+            unenforced=noted, run_program=run_program,
+        )
+        for line in noted:
+            if line not in unjudged:
+                unjudged.append(line)
+                result.unenforced = result.unenforced + (line,)
+        return broken
+
+    held = Held(
+        shape=dict(shape_to_ask_for),
+        shapes=spec.shapes,
+        rules=_breaks_a_rule if spec.checked_by else None,
+        at_most=max(1, spec.checks_at_most),
+        asked=int((resume.used or {}).get("answers-asked-for", 0)) if resume is not None else 0,
+    )
+
+    def hold(said: str, at: int, *, can_ask_again: bool = True) -> str:
+        """Hold a reply that would be the run's answer. `""` when it is the
+        answer; `"again"` when it is not and the model is asked once more (it
+        is told why at its next request, and at no other); `"failed"` when it
+        is not and the run has ended `checks-failed`, handing back nothing."""
+        why = held.wrong(said)
+        if not why:
+            result.answer = fields_of(said, held.shape) if held.shape else {}
+            return ""
+        # Across a pause with everything else the run has used.
+        result.used.answers = held.asked
+        bus.emit("turn.message.failed", at=(at,), attempt=held.asked, reason=why)
+        if can_ask_again and held.may_ask_again:
+            told_once.append(why)
+            return "again"
+        result.halted = CHECKS_FAILED
+        result.output = held.gave_up()
+        result.answer = {}
+        bus.emit("turn.run.failed", at=(at,), reason=CHECKS_FAILED)
+        return "failed"
+    result.reaction_notes = reactor.notes
+    result.reactions = reactor.log
     reports_usage = callable(getattr(transport, "usage", None))
     # Two questions, not one. A transport can count tokens on every call it makes
     # and still be bound to a model the catalogue publishes no price for — that
@@ -1418,7 +1686,7 @@ async def run(
         many = len(spec.programs) != 1
         result.unenforced = result.unenforced + (
             (
-                f"`allow-egress:` names `programs`, so {named} "
+                f"`allow-egress:` names `programs` or is not written, so {named} "
                 f"{'are' if many else 'is'} allowed to reach outside this box. What "
                 f"{'they' if many else 'it'} can actually reach is the room's, and "
                 f"PACT never opens a carried body or watches the room."
@@ -1483,6 +1751,23 @@ async def run(
     # by `ir.ToolSpec`, and a tool here answers in TEXT, so nothing on this
     # runtime holds a result to it. Said, for `bind:`'s reason one line up.
     result.unenforced = result.unenforced + _unchecked_answers(spec) + _unheld(spec)
+    # D29. A plugin is code the host loads and this harness never does, so on
+    # every shipped transport each one is missing — and that must not be the
+    # SILENT state. One the agent may run without is named on `unenforced`, in
+    # the same door as every other line this run did not carry out. One it may
+    # not run without ends the turn HERE, before a single model call: an agent
+    # written to rely on code it did not get is not the agent that was reviewed,
+    # and paying for its first answer would look like working.
+    missing = [p for p in spec.plugins if p.name not in (loaded_plugins or {})]
+    result.unenforced = result.unenforced + tuple(
+        _ran_without(p) for p in missing if p.if_cannot_load == RUN_WITHOUT_IT
+    )
+    needed = [p for p in missing if p.if_cannot_load != RUN_WITHOUT_IT]
+    if needed:
+        result.halted = "plugins-not-loaded"
+        result.output = _cannot_start_without(needed)
+        bus.emit("turn.run.failed", at=(0,), reason="plugins-not-loaded")
+        return result
     # A7. PACT does not retrieve, so a set of documents this run never consulted
     # is the ordinary state on a machine with no index — and it must not be the
     # SILENT state, because the agent then answers from what the model already
@@ -1594,12 +1879,20 @@ async def run(
         result.asked = seen["content"]
         bus.emit("turn.run.started")
         start = 0
+        reactor.asked = seen["content"]
+        woke = await reactor.turn_started(seen["content"], tuple(retrieved_by or ()))
+        if woke.stop is not None:
+            result.halted = "stopped-by-rule"
+            result.output = woke.stop
+            bus.emit("turn.run.cancelled", reason=woke.stop)
+            return result
     else:
         # Continue exactly where the wait happened. The model is NOT re-asked
         # for the step that was already decided, and tools that already ran are
         # not run again — that is what makes resume exactly-once rather than
         # at-least-once.
         history = list(resume.history)
+        reactor.asked = str((history[0].get("content") if history else "") or "")
         result.steps = list(resume.steps)
         start = resume.step_index
         pending = resume.awaiting
@@ -1616,6 +1909,36 @@ async def run(
         # lunch. Eve has nothing to carry here, because it has nothing to spend.
         meter = Meter.restored(resume.used, clock(), start)
         result.used = meter
+        # And the ceilings it had been raised to come back with it.
+        if resume.budget:
+            result.budget = dict(resume.budget)
+            limits = replace(
+                spec.limits,
+                **{k: _as_written(spec.limits, k, v) for k, v in resume.budget.items() if k != "steps"},
+            )
+            if "steps" in resume.budget:
+                limit = int(resume.budget["steps"])
+
+        def at_ceiling() -> "Reached | None":
+            """The ceiling this run is parked at: the one the pause recorded,
+            or, for a pause written before it recorded one, worked out again
+            from what the run has spent."""
+            if resume.reached:
+                r = resume.reached
+                return Reached(
+                    Ceiling(
+                        str(r["field"]), str(r["reads"]), float(r["limit"]),
+                        str(r["unit"]), str(r["halted"]), bool(r.get("default")),
+                    ),
+                    float(r["at"]),
+                    Action.ASK,
+                )
+            return limits.reached(
+                meter,
+                clock(),
+                None if spec.unbounded else limit,
+                not spec.steps_written and not spec.unbounded,
+            )
 
         if resume.expired(now):
             outcome = _give_up(resume, now, result, bus)
@@ -1625,7 +1948,9 @@ async def run(
             # run carries on knowing that. It is never granted: a timeout that
             # grants is not a gate, it is a delay.
             if resume.reason == OUT_OF_BUDGET:
-                return _out_of_budget(result, bus, start)
+                return _out_of_budget(
+                    result, bus, start, reached=at_ceiling(), nobody_answered=True
+                )
             if resume.reason == ASKED_A_PERSON:
                 # The stage asked and nobody came. Recording that as the stage's
                 # own words is the honest reading — the run continues knowing it,
@@ -1677,8 +2002,46 @@ async def run(
                     # continuation grants — which can itself run out, under a
                     # new key, so a second continuation is a second decision.
                     limit = start + spec.max_steps
+                    # Of EVERY ceiling, not the step ceiling alone. A run that
+                    # reached `tool-calls-at-most` and was told to keep going
+                    # kept the figure it had already reached, so it parked
+                    # again at once, at the same place, with the same question
+                    # — `Limits.kept_going` was written to end that and was
+                    # called by nothing here. Found by the first shared case
+                    # for limits (`tests/conformance/limits.json`).
+                    was = at_ceiling()
+                    limits, _ = spec.limits.kept_going(meter, clock())
+                    # The model is told, at its next request and no other: the
+                    # limit it had reached is raised, and which calls it asked
+                    # for were never made.
+                    raised_to = next(
+                        (
+                            c.limit
+                            for c in limits.ceilings(None if spec.unbounded else limit)
+                            if was is not None and c.field == was.ceiling.field
+                        ),
+                        None,
+                    )
+                    if was is not None and raised_to is not None:
+                        told_once.append(
+                            was.raised(
+                                raised_to,
+                                tuple(
+                                    _as_asked(str(c.get("name")), c.get("args") or {})
+                                    for c in resume.reached.get("not-made") or ()
+                                ),
+                            )
+                        )
+                    result.budget = {
+                        "steps": float(limit),
+                        **{
+                            attr: float(getattr(limits, attr))
+                            for attr, _line, _reads in CEILING_FIELDS
+                            if getattr(limits, attr) is not None
+                        },
+                    }
                 elif said:
-                    return _out_of_budget(result, bus, start)
+                    return _out_of_budget(result, bus, start, reached=at_ceiling())
                 else:
                     result.halted = "suspended"
                     result.suspension = resume
@@ -1714,11 +2077,12 @@ async def run(
         meter.steps = i
         # Checked at the top of the step, not the bottom: a run that is already
         # out of time or money must not start work it cannot pay to finish.
-        if (out := spec.limits.reached(meter, clock())) is not None:
+        if (out := limits.reached(meter, clock())) is not None:
             return await _ran_out(
                 out, spec=spec, transport=transport, result=result, history=history,
                 already=already, bus=bus, meter=meter, now=now, clock=clock, at=i,
                 phase=phase_name, visits=visits, asking=asking, once=once, chain=chain, given=given,
+            closing_words=closing_words, held=held,
             )
         # Which stage runs now. A stage that has used up its `at-most` is routed
         # past here rather than after the fact, so it never spends a model call
@@ -1729,6 +2093,10 @@ async def run(
             if gave_up:
                 result.halted = "stage-limit"
                 bus.emit("turn.run.failed", at=(i,), reason=gave_up)
+            # No stage is left to ask again in: these words are the answer, or
+            # there is none.
+            elif hold(result.output, i, can_ask_again=False):
+                pass
             else:
                 result.halted = "final"
                 bus.emit("turn.run.completed", at=(i,))
@@ -1739,6 +2107,15 @@ async def run(
 
         bus.emit("step.run.started", at=(i,))
         bus.emit("step.stage.started", at=(i,), name=phase_name, does=phase.does.value)
+        # A step resumed part-way (`pending`) began before the park, and was
+        # counted then.
+        if not pending:
+            woke = await reactor.step_started(i)
+            if woke.stop is not None:
+                result.halted = "stopped-by-rule"
+                result.output = woke.stop
+                bus.emit("turn.run.cancelled", at=(i,), reason=woke.stop)
+                return result
 
         # A stage that asks a person makes no model call at all. It is the same
         # suspension every other wait uses, under one more `x-` reason — the
@@ -1815,6 +2192,15 @@ async def run(
         # which is why a planning step there can see the payment tool; here it
         # is the stage's own line.
         offered = set(phase.tools_offered(tuple(d["name"] for d in tool_defs)))
+        # Saying what the work has turned to is not a capability a stage
+        # narrows: wherever the agent may act at all, it may say so.
+        # And only while there is something left to say: once every topic that
+        # is the agent's to notice has been said, the tool is not offered.
+        if any(d["name"] == WORKING_ON for d in tool_defs):
+            if offered and reactor.more_to_say():
+                offered.add(WORKING_ON)
+            else:
+                offered.discard(WORKING_ON)
         step_tools = [d for d in tool_defs if d["name"] in offered]
         readable = set(phase.skills_offered(spec.skill_names))
         step_skills = tuple(s for s in spec.skills if s.name in readable)
@@ -1925,7 +2311,12 @@ async def run(
                     result.unenforced = result.unenforced + (result.output,)
                     return result
                 wrote, _ = await asking_now.model_call(
-                    _system_for(spec.instructions, phase, step_skills), history, []
+                    _system_for(
+                        spec.instructions, phase, step_skills,
+                        added=reactor.reminded() + after_a_yes(),
+                    ),
+                    history,
+                    [],
                 )
                 _meter_usage(asking_now, meter)
                 # THE SNIPPET IS WORDS THE MODEL PRODUCED, and it goes into
@@ -1969,7 +2360,7 @@ async def run(
                         (
                             f"stage {phase_name!r} writes code to be run, and a hiding "
                             f"rule changed it before it ran — `allow-egress:` names "
-                            f"`programs`, so the room may reach outside and is given the "
+                            f"`programs` or is not written, so the room may reach outside and is given the "
                             f"hidden form rather than what the model wrote. What it "
                             f"worked out may not be what was asked for."
                         )
@@ -2017,6 +2408,13 @@ async def run(
                 if nxt is None:
                     return result
                 if nxt == DONE:
+                    verdict = hold(ran, i)
+                    if verdict == "again":
+                        # The same stage, once more: it is not another visit.
+                        visits[phase_name] -= 1
+                        continue
+                    if verdict == "failed":
+                        return _turn_ended(result, spec.facts)
                     return _finish(result, chain, bus, i, ran, spec.facts)
                 phase_name = nxt
                 continue
@@ -2025,6 +2423,7 @@ async def run(
                 asking_now,
                 _system_for(
                     spec.instructions, phase, step_skills,
+                    added=reactor.reminded() + after_a_yes(),
                     # The author's declared answer shape, on every stage. Not
                     # only the last: a `check-its-work` stage that cannot see
                     # what the answer must contain cannot check it against
@@ -2046,12 +2445,24 @@ async def run(
             # What that call cost. Checked immediately: a spend cap enforced one
             # step late has already spent the step that broke it.
             _meter_usage(transport, meter)
-            if (out := spec.limits.reached(meter, clock())) is not None:
+            if (out := limits.reached(meter, clock())) is not None:
                 return await _ran_out(
                     out, spec=spec, transport=transport, result=result, history=history,
                     already=already, bus=bus, meter=meter, now=now, clock=clock, at=i,
                     phase=phase_name, visits=visits, asking=asking, once=once, chain=chain, given=given,
+            closing_words=closing_words, held=held,
                 )
+            # The reactions on what the agent just wrote (docs/99 §5) — AFTER
+            # the step's own call has been metered. A judge may be the same
+            # transport, and a transport reports the cost of its LAST call: a
+            # judgement made before the line above would have its cost counted
+            # twice and the step's own counted never.
+            woke = await reactor.wrote(text, i)
+            if woke.stop is not None:
+                result.halted = "stopped-by-rule"
+                result.output = woke.stop
+                bus.emit("turn.run.cancelled", at=(i,), reason=woke.stop)
+                return result
 
         # A call to something this stage does not offer is refused, and the
         # refusal is handed back to the model. Dropping it silently would lose an
@@ -2090,10 +2501,29 @@ async def run(
             if nxt is None:
                 return result
             if nxt == DONE:
+                # THE ANSWER IS HELD BEFORE IT IS ONE (`answers_fit`). What the
+                # model wrote is what is held, before any rule rewrites it: a
+                # hiding rule that removed a field's value must not be what
+                # makes an answer stop fitting.
+                verdict = hold(text, i)
+                if verdict:
+                    # The reply is a step either way: it was written, and a
+                    # model asked again has to be able to see what it said.
+                    kept, decision = chain.run("step.message.after", {"content": text})
+                    shown = decision.stop if decision.stop is not None else kept["content"]
+                    result.steps.append(Step(index=i, text=shown))
+                    if verdict == "failed":
+                        return _turn_ended(result, spec.facts)
+                    history.append({"role": "assistant", "content": shown})
+                    bus.emit("step.message.completed", at=(i,), text=shown)
+                    # The same stage, once more: it is not another visit.
+                    visits[phase_name] -= 1
+                    continue
                 answered, decision = chain.run("turn.message.after", {"content": text})
                 if decision.stop is not None:
                     result.halted = "stopped-by-rule"
                     result.output = decision.stop
+                    result.answer = {}
                     bus.emit("turn.run.cancelled", at=(i,), reason=decision.stop)
                     return result
                 text = answered["content"]
@@ -2177,6 +2607,11 @@ async def run(
         step_gated: dict[str, tuple[Wait, ...]] = {}
         for slot, c in zip(slots, calls):
             if slot not in already and once.look(c.name, _with_binds(spec, c, supplied).args):
+                continue
+            # A call a reaction is about to hold back is not put to a person in
+            # the same step: they would approve a call that then does not
+            # happen, and be asked again when the model makes it a second time.
+            if slot not in already and reactor.will_hold(slot, c.name, c.args):
                 continue
             if waits := asking.waits_for(c.name, c.args, gated.get(c.name, "")):
                 step_gated[slot] = waits
@@ -2314,6 +2749,7 @@ async def run(
                     slot in already
                     or call.name in refused
                     or call.name in delegates
+                    or reactor.concerns(slot, call.name, call.args)
                     or any(
                         rulings[(slot, w.reason)] is not Ruling.CLEARED
                         for w in step_gated.get(slot, ())
@@ -2477,6 +2913,12 @@ async def run(
                 result.output = decision.stop
                 bus.emit("step.delegate.cancelled", at=(i,), reason=decision.stop)
                 return result
+            woke = await reactor.before_asking([c.name for c in to_ask], i)
+            if woke.stop is not None:
+                result.halted = "stopped-by-rule"
+                result.output = woke.stop
+                bus.emit("step.delegate.cancelled", at=(i,), reason=woke.stop)
+                return result
             handoff = await ask_team(
                 [c.name for c in to_ask],
                 ask_member,
@@ -2502,7 +2944,12 @@ async def run(
                         for slot in slots_named(a.member, calls):
                             already[slot] = a.text
                 for slot, call in zip(slots, calls):
-                    if slot in step_gated or call.name in delegates or slot in already:
+                    if (
+                        slot in step_gated
+                        or call.name in delegates
+                        or slot in already
+                        or reactor.concerns(slot, call.name, call.args)
+                    ):
                         continue
                     carried = _with_binds(spec, call, supplied)
                     # A call carried out before the run parks spends its key
@@ -2571,6 +3018,7 @@ async def run(
         outputs: list[str] = []
         ran: list[ToolCall] = []
         out_of_calls: "Reached | None" = None
+        not_made: tuple[ToolCall, ...] = ()
         #: The stage a rule sent this run to instead of doing the call it was
         #: about to do (G5's third outcome, `send-elsewhere`).
         sent_to: str = ""
@@ -2616,7 +3064,10 @@ async def run(
             # the 41st through because it arrived in the same batch as the 40th
             # is not a ceiling, it is a suggestion — and a batch is exactly where
             # a runaway agent spends fastest.
-            if (out_of_calls := spec.limits.reached(meter, clock())) is not None:
+            if (out_of_calls := limits.reached(meter, clock())) is not None:
+                # `ran` holds every call of this reply already dealt with, so
+                # what is left is this one and all after it.
+                not_made = tuple(calls[len(ran):])
                 break
 
             # What the person said, if they were asked. Their answer is not only
@@ -2693,6 +3144,29 @@ async def run(
             # disagree about it — which they did for a round, when the tool was
             # handed the masked args and the trace kept the original.
             call = ToolCall(call.name, checked["args"])
+
+            # The reactions about this call (docs/99 §5), AFTER the workspace's
+            # own rules have hidden what they hide — so an agent asked first
+            # sees what the tool would have been handed — and BEFORE the
+            # at-most-once record, so a call held back has not been spent.
+            if decision.stop is None and decision.redirect is None:
+                woke = await reactor.before_call(slot, call.name, call.args, i)
+                if woke.stop is not None:
+                    result.halted = "stopped-by-rule"
+                    result.output = woke.stop
+                    bus.emit("step.tool.cancelled", at=(i,), name=call.name, reason=woke.stop)
+                    return result
+                if woke.held is not None:
+                    outputs.append(woke.held)
+                    ran.append(call)
+                    if call.name == WORKING_ON:
+                        bus.emit("step.tool.completed", at=(i,), name=call.name)
+                    else:
+                        bus.emit(
+                            "step.tool.cancelled", at=(i,), name=call.name,
+                            reason="held while another agent is asked first",
+                        )
+                    continue
 
             # At-most-once, from the author's own `same-request-key:` line.
             #
@@ -2778,12 +3252,23 @@ async def run(
             # The one place a hidden value comes back (docs/98 WP-11): in the
             # arguments of an action that says it gets them, after every rule
             # ran, so the trace and any approval saw only the placeholder.
+            # A placeholder the request's vault does not hold (another request's,
+            # or one the model made up) never reaches the tool as text: the call
+            # is not made, and the model is told which placeholder it used.
+            unheld: list[str] = []
             if chain.vault is not None and (call.name, str(sent.args.get("action") or "")) in spec.gets_hidden:
-                sent = ToolCall(sent.name, chain.vault.restored(sent.args))
+                unheld = chain.vault.unknown(sent.args)
+                if not unheld:
+                    sent = ToolCall(sent.name, chain.vault.restored(sent.args))
             # A tool resting after failing too often is not called (docs/98
             # WP-13); the model is told until when, and can do something else.
             back = rested.resting(call.name, clock()) if call.name in spec.rests else None
-            if back is not None:
+            if unheld:
+                out = (
+                    f"not done: {', '.join(unheld)} {'stands' if len(unheld) == 1 else 'stand'} for no value "
+                    f"this request holds — use only the placeholders this conversation showed you, exactly as written"
+                )
+            elif back is not None:
                 out = (
                     f"not done: {call.name!r} failed too often in a row and is resting "
                     f"for another {round(back - clock())}s — do without it for now"
@@ -2859,12 +3344,31 @@ async def run(
             outputs.append(out)
             ran.append(call)
             bus.emit("step.tool.completed", at=(i,), name=call.name)
+            woke = await reactor.after_call(call.name, call.args, out, i)
+            if woke.stop is not None:
+                result.halted = "stopped-by-rule"
+                result.output = woke.stop
+                result.steps.append(
+                    Step(index=i, text=text, tool_calls=tuple(ran), tool_results=tuple(outputs))
+                )
+                bus.emit("turn.run.cancelled", at=(i,), reason=woke.stop)
+                return result
 
         result.steps.append(
             Step(index=i, text=text, tool_calls=tuple(ran), tool_results=tuple(outputs))
         )
         history.append(
-            {"role": "assistant", "content": text, "tool_calls": [c.name for c in ran]}
+            {
+                "role": "assistant",
+                "content": text,
+                "tool_calls": [c.name for c in ran],
+                # What each call was given, beside its name. Without it a
+                # transport cannot show the model its own calls, only their
+                # results, and a model shown results it does not remember
+                # asking for asks again: on a live model an agent made the
+                # same five lookups in each of its three steps.
+                "calls": [{"name": c.name, "args": dict(c.args)} for c in ran],
+            }
         )
         for call, out in zip(ran, outputs):
             history.append({"role": "tool", "name": call.name, "content": out})
@@ -2878,6 +3382,7 @@ async def run(
                 out_of_calls, spec=spec, transport=transport, result=result,
                 history=history, already=already, bus=bus, meter=meter, now=now,
                 clock=clock, at=i, phase=phase_name, visits=visits, asking=asking, once=once, chain=chain, given=given,
+            closing_words=closing_words, held=held, not_made=not_made,
             )
 
         visits[phase_name] = visits.get(phase_name, 0) + 1
@@ -2942,11 +3447,22 @@ async def run(
     # its own ending.
     meter.steps = limit
     return await _ran_out(
-        Reached(step_ceiling(limit), float(limit), spec.limits.when_it_runs_out),
+        Reached(
+            step_ceiling(limit, default=not spec.steps_written and not spec.unbounded),
+            float(limit),
+            spec.limits.when_it_runs_out,
+        ),
         spec=spec, transport=transport, result=result, history=history,
         already=already, bus=bus, meter=meter, now=now, clock=clock, at=limit,
         phase=phase_name, visits=visits, asking=asking, once=once, chain=chain, given=given,
+            closing_words=closing_words, held=held,
     )
+
+
+def _as_written(limits: Limits, attr: str, figure: float) -> "int | float":
+    """A carried ceiling in the kind of number its line is written in: a count
+    stays a whole number."""
+    return int(figure) if isinstance(getattr(limits, attr, None), int) else float(figure)
 
 
 def _park_state(
@@ -2995,6 +3511,14 @@ def _park_state(
     parked.used = meter.as_dict(clock())
     parked.granted = dict(given)
     parked.spent_keys = once.used()
+    parked.claim_holder = once.holder
+    if result.reactor is not None:
+        parked.reactions = result.reactor.state()
+    parked.from_members = {
+        "unenforced": list(result.members_unenforced),
+        "unmetered": list(result.members_unmetered),
+    }
+    parked.budget = dict(result.budget)
     if text:
         parked.text = text
     if awaiting:
@@ -3042,6 +3566,17 @@ async def _ran_out(
     #: had just replaced. `None` means the agent's own, so a caller with nothing
     #: to override behaves exactly as before.
     asking: "Gate | None" = None,
+    #: The system text of the closing request, built where the run knows what
+    #: it has been telling the model. Required for the reason `chain` is: a
+    #: caller that forgets it sends the closing request less than every other.
+    closing_words: "Callable[[Reached, tuple[ToolCall, ...]], str]",
+    #: What the run's answer is held to. Required for the reason `chain` is:
+    #: the closing answer is the one nobody planned for, and a caller that
+    #: forgets this hands it back unheld.
+    held: "Held",
+    #: The calls of this reply that were not made because the ceiling was
+    #: reached part-way through it. The closing request tells the model.
+    not_made: "tuple[ToolCall, ...]" = (),
 ) -> RunResult:
     """A ceiling has been reached. Do what the author said, and say which one.
 
@@ -3117,6 +3652,23 @@ async def _ran_out(
             waits_for=budget_rule.answer_within if budget_rule else "",
             asked_of=tuple(budget_rule.who_can_answer) if budget_rule else (),
         )
+        # Which ceiling, as it was when the run stopped. A refusal names it
+        # (`Reached.declined`), and working it out again afterwards can name a
+        # different one: a run whose second step makes its second call is at
+        # `steps-at-most: 2` and `tool-calls-at-most: 2` together, was stopped
+        # by the calls, and would be reported as stopped by the steps.
+        parked.reached = {
+            "field": reached.ceiling.field,
+            "reads": reached.ceiling.reads,
+            "limit": reached.ceiling.limit,
+            "unit": reached.ceiling.unit,
+            "halted": reached.ceiling.halted,
+            "default": reached.ceiling.default,
+            "at": reached.at,
+            # The calls of the last reply that were not made, so a yes can
+            # tell the model which they were.
+            "not-made": [{"name": c.name, "args": dict(c.args)} for c in not_made],
+        }
         result.halted = "suspended"
         result.suspension = parked
         bus.emit("turn.run.failed", at=(at,), reason=OUT_OF_BUDGET)
@@ -3131,7 +3683,31 @@ async def _ran_out(
         # budget — charging for the work and withholding the answer helps
         # nobody — and the run still reports the ceiling it reached.
         bus.emit("step.model.requested", at=(at,))
-        text, _ = await transport.model_call(spec.instructions, history, [])
+        # Told everything every other request is told. It was sent the bare
+        # `instructions:` — so the one answer nobody planned for was written
+        # without the procedures the agent follows, without the shape its
+        # answer must have, and without anything a reaction had reminded it
+        # of.
+        text, _ = await transport.model_call(closing_words(reached, not_made), history, [])
+        # THE CLOSING ANSWER IS HELD LIKE ANY OTHER, from the same count: the
+        # closing request is one more time the run asks for its answer. Asked
+        # again, it is told why, after everything the closing request is told.
+        # What never fits is not handed back: the run keeps the ceiling's word,
+        # because it did run out, and says it was left with no answer.
+        while why := held.wrong(text):
+            bus.emit("turn.message.failed", at=(at,), attempt=held.asked, reason=why)
+            kept, _ = chain.run("step.message.after", {"content": text})
+            result.steps.append(Step(index=at, text=kept["content"]))
+            if not held.may_ask_again:
+                result.output = reached.unanswered(held.asked)
+                result.answer = {}
+                bus.emit("turn.run.failed", at=(at,), reason=CHECKS_FAILED)
+                return result
+            history.append({"role": "assistant", "content": kept["content"]})
+            text, _ = await transport.model_call(
+                closing_words(reached, not_made) + "\n\n" + why, history, []
+            )
+        result.answer = fields_of(text, held.shape) if held.shape else {}
         # THE SAME RULES AS EVERY OTHER REPLY. `_finish`'s docstring states the
         # guarantee this used to break, word for word: "a redaction rule cannot
         # be escaped by finishing from a stage rather than by running out of
@@ -3149,6 +3725,7 @@ async def _ran_out(
             # survive in the trace: a redaction visible nowhere but the
             # transcript is a redaction in name only.
             result.output = decision.stop
+            result.answer = {}
             result.steps.append(Step(index=at, text=decision.stop))
             bus.emit("turn.run.cancelled", at=(at,), reason=decision.stop)
             return result
@@ -3367,22 +3944,14 @@ def _unchecked_answers(spec: AgentSpec) -> tuple[str, ...]:
 def _unheld(spec: AgentSpec) -> tuple[str, ...]:
     """The lines this loop reads nothing of, said rather than skipped.
 
-    `checked-by:`, `teamwork.may-start:` and a list under `model:` are checked
-    by `pact check` and carried by `ir`, and nothing in `run` holds any of them:
-    an answer is returned without being held to its rules, nobody can be
+    `teamwork.may-start:` and a list under `model:` are checked by `pact check`
+    and carried by `ir`, and nothing in `run` holds either: nobody can be
     started who is not on `team:`, and the one transport this run was handed is
-    the only model it will ever ask. Silence here let `pact-eval` score an agent
+    the only model it will ever ask. (`checked-by:` was a third, and is held:
+    `answers_fit`.) Silence here let `pact-eval` score an agent
     whose checks never ran as though they had.
     """
     out: list[str] = []
-    if spec.checked_by:
-        out.append(
-            f"checked-by: {spec.key or 'this agent'} holds an answer to "
-            f"{len(spec.checked_by)} rule(s) before it is the answer, and this "
-            "runtime returns the answer unchecked. fix: run it on a runtime that "
-            "holds `checked-by:`, or hold the answer yourself with "
-            "`evals.first_broken(spec.checked_by, result)`."
-        )
     if spec.teamwork.may_start:
         allowed = ", ".join(sorted(str(getattr(w, "value", w)) for w in spec.teamwork.may_start))
         out.append(
@@ -3794,6 +4363,7 @@ def delegate_by_running(
     claims: "ClaimStore | None" = None,
     team: str | None = None,
     admit: "Admit | None" = None,
+    claims_workspace: str | None = None,
 ) -> Asker:
     """Ask a team member by *running* it — this same harness, one level down.
 
@@ -3918,10 +4488,18 @@ def delegate_by_running(
             # WP-7): a member's `the-team` claim is the team's, not its own.
             claims=claims,
             claims_team=team,
+            claims_workspace=claims_workspace,
             board=getattr(grant, "board", None),
             board_facts=tuple(getattr(grant, "board_facts", ()) or ()),
+            vault=getattr(grant, "vault", None),
             admit=admit,
+            reacting=frozenset(getattr(grant, "reacting", ()) or ()),
         )
+        # What it could not carry out and could not count goes back with it, on
+        # the grant: this function returns words, and a caller that read only
+        # those was told a teammate's run was clean whatever it had said.
+        grant.unenforced = tuple(out.unenforced)
+        grant.unmetered = tuple(out.unmetered)
         # What it cost comes off its share. `OverBudget` is raised as this
         # member's failure rather than allowed out of the join, so the author's
         # `if-someone-fails:` decides what happens next — which is the whole
@@ -3996,10 +4574,11 @@ def _answer_shape_in_words(shape: Mapping[str, str]) -> str:
 
 def _system_for(
     instructions: str,
-    phase: Phase,
+    phase: "Phase | None",
     skills: tuple[SkillSpec, ...] = (),
     answers_with: "Mapping[str, str] | None" = None,
     external: tuple[str, ...] = (),
+    added: str = "",
 ) -> str:
     """The system text for one stage.
 
@@ -4026,7 +4605,9 @@ def _system_for(
     bug one level up, and quietly fixing it would hide whichever other path is
     handling the same text unfenced.
     """
-    stage = phase.instruction()
+    # `None` is the closing request of a run that reached a ceiling and
+    # answers with what it has: it is no stage, so it has no stage's line.
+    stage = phase.instruction() if phase is not None else ""
     parts = [p for p in (instructions, stage) if p]
     if skills:
         body = "\n\n".join(s.in_words() for s in skills)
@@ -4052,7 +4633,9 @@ def _system_for(
     # stated before a long document is the part a model forgets.
     if answers_with:
         parts.append(_answer_shape_in_words(answers_with))
-    return "\n\n".join(parts)
+    # What this run's reactions have added (docs/99 §5), last: it is the newest
+    # thing the model is told, and it is the workspace's own words.
+    return "\n\n".join(parts) + added
 
 
 def _where_next(
@@ -4146,6 +4729,7 @@ def _finish(
     if decision.stop is not None:
         result.halted = "stopped-by-rule"
         result.output = decision.stop
+        result.answer = {}
         bus.emit("turn.run.cancelled", at=(at,), reason=decision.stop)
         return result
     said = answered["content"]
@@ -4159,10 +4743,41 @@ def _finish(
     return result
 
 
-def _out_of_budget(result: RunResult, bus: Bus, at: int) -> RunResult:
+def _as_asked(name: str, args: "Mapping[str, Any]") -> str:
+    """One call as a model is told of it: its name, a space, and what it was
+    given as JSON with sorted keys. The form `Reached.closing` and
+    `Reached.raised` are handed, and the one a shared case records."""
+    return f"{name} {json.dumps(dict(args), sort_keys=True)}"
+
+
+def _out_of_budget(
+    result: RunResult,
+    bus: Bus,
+    at: int,
+    *,
+    #: The ceiling the run is at, worked out again from what it has spent and
+    #: the ceilings in force. `None` when it is at none of them any more — the
+    #: file was edited to allow more while the run waited.
+    reached: "Reached | None",
+    nobody_answered: bool = False,
+) -> RunResult:
     """The run asked for more budget and did not get it. Distinct from
-    `step-limit`, which is a run that was never allowed to ask."""
+    `step-limit`, which is a run that was never allowed to ask.
+
+    It says so, and which ceiling (`Reached.declined`). It used to hand back
+    the model's last words, which for a run stopped between tool calls is
+    usually nothing at all: a person who refused more budget was shown an empty
+    answer and no reason.
+    """
     result.halted = "out-of-budget"
-    result.output = result.steps[-1].text if result.steps else ""
+    result.stopped_by = reached
+    if reached is not None:
+        result.output = reached.declined(nobody_answered=nobody_answered)
+    else:
+        result.output = (
+            "Stopped before finishing: this run reached a limit and asked whether to "
+            "keep going. "
+            + ("Nobody answered in time." if nobody_answered else "A person said not to.")
+        )
     bus.emit("turn.run.failed", at=(at,), reason=OUT_OF_BUDGET)
     return result

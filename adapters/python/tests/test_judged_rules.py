@@ -36,6 +36,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from fitting import fits  # noqa: E402
 from pact_adapters.evals import (  # noqa: E402
     JUDGED,
     Case,
@@ -98,6 +99,9 @@ def one_sentence_reader(system: str, user: str) -> str:
     asked for in `judge.RUBRIC`.
     """
     answer = user.split("ANSWER:", 1)[-1]
+    # The words written to the customer, and not the three fields the answer
+    # ends with (`answers-with:`): a field is not a sentence of the reason.
+    answer = answer.split("\n- decision:", 1)[0]
     sentences = [s for s in answer.replace("\n", " ").split(".") if s.strip()]
     if len(sentences) <= 2:
         return "PASS\nthe decision and one reason, which is all a customer needs."
@@ -168,8 +172,8 @@ class Deciding:
         asked = " ".join(str(m.get("content") or "") for m in history).lower()
         for marker, said in ANSWERS:
             if marker in asked:
-                return said, []
-        return "DECISION: declined. Nothing here matched a rule we hold.", []
+                return fits(said), []
+        return fits("DECISION: declined. Nothing here matched a rule we hold."), []
 
 
 def _agent(doc: dict) -> AgentSpec:

@@ -1,11 +1,11 @@
-# The 63 kinds
+# The 69 kinds
 
 Generated from `spec/schema.yaml`. Every kind, what it is for, and how
 many fields it has. You do not need to learn these — `pact check` names the
 right one when you need it.
 
 
-**63 kinds.** A kind is a *shape a document can take*, not a file you must
+**69 kinds.** A kind is a *shape a document can take*, not a file you must
 write: most workspaces use a dozen.
 
 
@@ -13,20 +13,30 @@ write: most workspaces use a dozen.
 
 | Kind | Fields | Core fields |
 |---|---:|---|
-| `action` | 20 | `description`, `takes`, `reads-only`, `needs-a-person`, `spends-money` |
-| `agent` | 27 | `name`, `description`, `instructions`, `team`, `teamwork` |
+| `action` | 22 | `description`, `topics`, `takes`, `reads-only`, `needs-a-person` |
+| `agent` | 30 | `name`, `description`, `instructions`, `team`, `teamwork` |
 | `loop` | 4 | `description`, `based-on` |
-| `knowledge` | 14 | `description`, `documents`, `passages-at-most`, `must-cite`, `use-when` |
+| `knowledge` | 15 | `description`, `topics`, `documents`, `passages-at-most`, `must-cite` |
 | `skill` | 14 | `name`, `description`, `use-when`, `do-not-use-when`, `if-unsure` |
 | `stage` | 32 | `does`, `says`, `asks`, `call`, `may-call` |
-| `tool` | 16 | `description`, `connect`, `url`, `method`, `says` |
+| `tool` | 17 | `description`, `connect`, `url`, `method`, `says` |
 | `program` | 7 | `description` |
 | `program-fuel` | 4 | — |
 | `value` | 4 | `description`, `rows-are`, `value` |
 | `variant` | 6 | — |
 | `turn` | 6 | — |
 | `voice` | 9 | — |
-| `workspace` | 36 | `name`, `workspace-id`, `description`, `owner`, `profile` |
+| `workspace` | 40 | `name`, `workspace-id`, `description`, `owner`, `profile` |
+
+## Topics, events and reactions
+
+| Kind | Fields | Core fields |
+|---|---:|---|
+| `topic` | 2 | `description`, `noticed-by` |
+| `event` | 6 | `description`, `at`, `when-this`, `more-than`, `topic` |
+| `reaction` | 10 | `description`, `event`, `at`, `when-this`, `more-than` |
+| `reaction-step` | 4 | `remind`, `consult`, `tell`, `stop` |
+| `subscription` | 3 | `topic`, `event`, `how` |
 
 ## Workflows
 
@@ -83,6 +93,7 @@ write: most workspaces use a dozen.
 | Kind | Fields | Core fields |
 |---|---:|---|
 | `bundle` | 5 | `description`, `version`, `from`, `brings` |
+| `plugin` | 7 | `description`, `if-it-cannot-be-loaded` |
 | `port` | 22 | `description`, `kind`, `every`, `says`, `if-still-running` |
 | `resource` | 14 | `resource-kind`, `endpoint`, `auth`, `asks-to-connect`, `description` |
 | `published` | 5 | — |
@@ -116,7 +127,7 @@ write: most workspaces use a dozen.
 
 ## How to read a kind
 
-Every kind follows the same shape, so 54 is not 54 things to learn:
+Every kind follows the same shape, so 64 is not 64 things to learn:
 
 ```yaml
 description: what this is, in one line     # every kind has this

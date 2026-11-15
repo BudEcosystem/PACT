@@ -205,3 +205,31 @@ fn a_workflow_whose_agents_teammate_uses_it_starts_itself() {
     );
     assert!(said.contains("'helper'"), "{said}");
 }
+
+#[test]
+fn a_teammate_that_counts_its_own_activations_meters_the_circle() {
+    // The same circle, with the teammate bounded by `asks-itself-at-most:`: law 2
+    // asks that every cycle be metered, and this one is.
+    let tree = copied(SHAPES, "teammate-metered");
+    edit(
+        &tree,
+        "agents/sorter/agent.yaml",
+        "answers-with:",
+        "team:\n  helper: Helps sort.\nanswers-with:",
+    );
+    append(
+        &tree,
+        "agents/helper/agent.yaml",
+        "description: Helps sort.\ninstructions: Help sort.\nuses:\n  - invoices\n\
+         limits:\n  asks-itself-at-most: 2\n  when-it-runs-out: stop-and-say-so\n",
+    );
+    let (_, said) = check(&tree, false);
+    assert!(
+        !said.contains("loader/a-workflow-its-own-agent-starts"),
+        "{said}"
+    );
+    assert!(
+        !said.contains("loader/workflows-that-call-each-other"),
+        "{said}"
+    );
+}

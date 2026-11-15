@@ -43,6 +43,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from fitting import fits  # noqa: E402
 from pact_adapters import suspension  # noqa: E402
 from pact_adapters.harness import ToolCall, run  # noqa: E402
 from pact_adapters.ir import AgentSpec  # noqa: E402
@@ -96,7 +97,7 @@ def a_refund_of(amount: str) -> Script:
     return Script([
         Turn("Issuing the refund.",
              (ToolCall("payments", {"order-number": "A-1182", "amount": amount}),)),
-        Turn(f"Approved: refunded {amount}."),
+        Turn(fits(f"Approved: refunded {amount}.")),
     ])
 
 
@@ -394,7 +395,7 @@ def two_refunds_and_a_lookup() -> Script:
             ToolCall("payments", {"order-number": "A-300", "amount": "300.00 USD"}),
             ToolCall("payments", {"order-number": "A-040", "amount": "40.00 USD"}),
         )),
-        Turn("Done."),
+        Turn(fits("Done.")),
     ])
 
 

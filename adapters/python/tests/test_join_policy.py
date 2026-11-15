@@ -24,6 +24,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from fitting import fits, fraud_says, policy_says  # noqa: E402
 from pact_adapters.delegation import (  # noqa: E402
     ANSWERED,
     Answer,
@@ -523,7 +524,7 @@ def asking_both() -> Script:
             Turn("Consulting the team.",
                  (ToolCall("policy-checker", {"question": "is this covered?"}),
                   ToolCall("fraud-checker", {"question": "does this look real?"}))),
-            Turn("Approved."),
+            Turn(fits("Approved.")),
         ]
     )
 
@@ -582,7 +583,7 @@ def test_asking_the_same_teammate_twice_asks_it_twice() -> None:
         [
             Turn("First pass.", (ToolCall("policy-checker", {"question": "a"}),)),
             Turn("Second pass.", (ToolCall("policy-checker", {"question": "b"}),)),
-            Turn("Approved."),
+            Turn(fits("Approved.")),
         ]
     )
     result = asyncio.run(
@@ -779,11 +780,11 @@ def test_every_transport_reaches_the_same_place_when_the_team_is_asked() -> None
 def test_a_run_that_never_asks_the_team_is_unchanged_by_the_mechanism() -> None:
     """It must cost nothing when unused — the same bar the interceptor chain is
     held to."""
-    plain = Script([Turn("checking", (ToolCall("zendesk", {}),)), Turn("Approved.")])
+    plain = Script([Turn("checking", (ToolCall("zendesk", {}),)), Turn(fits("Approved."))])
     without = asyncio.run(run(SPEC, ReferenceTransport(plain), "refund?", TOOLS))
     with_team = asyncio.run(
         run(SPEC, ReferenceTransport(
-            Script([Turn("checking", (ToolCall("zendesk", {}),)), Turn("Approved.")])),
+            Script([Turn("checking", (ToolCall("zendesk", {}),)), Turn(fits("Approved."))])),
             "refund?", TOOLS, ask_member=answering(), teamwork=Teamwork())
     )
     assert without.trace() == with_team.trace()
@@ -797,8 +798,8 @@ def test_a_teammate_is_run_by_this_same_harness_one_level_down(document: dict) -
     """Delegation is not a second execution model, so it does not get a second
     loop. The child is an agent in the same folder, run by the same `run`."""
     child_scripts = {
-        "policy-checker": Script([Turn("Allowed under clause 3.")]),
-        "fraud-checker": Script([Turn("Nothing suspicious.")]),
+        "policy-checker": Script([Turn(policy_says("Allowed under clause 3."))]),
+        "fraud-checker": Script([Turn(fraud_says("Nothing suspicious."))]),
     }
 
     def transport_for(member_spec: AgentSpec):
@@ -812,7 +813,9 @@ def test_a_teammate_is_run_by_this_same_harness_one_level_down(document: dict) -
             teamwork=Teamwork())
     )
     assert result.halted == "final"
-    assert result.steps[0].tool_results == ("Allowed under clause 3.", "Nothing suspicious.")
+    assert result.steps[0].tool_results == (
+        policy_says("Allowed under clause 3."), fraud_says("Nothing suspicious."),
+    )
 
 
 def test_the_parents_question_reaches_the_teammate_it_was_meant_for(document: dict) -> None:
@@ -831,7 +834,7 @@ def test_the_parents_question_reaches_the_teammate_it_was_meant_for(document: di
         key = {"Policy Checker": "policy-checker", "Fraud Checker": "fraud-checker"}[
             member_spec.name
         ]
-        return Listening(Script([Turn("ok")]), key)
+        return Listening(Script([Turn(fits("ok"))]), key)
 
     desk = AgentSpec.from_document(document, "refund-desk")
     asyncio.run(
@@ -1073,7 +1076,7 @@ def test_a_teammate_that_overspends_its_share_is_refused_rather_than_billed(
         run(AgentSpec.from_document(document, "refund-desk"),
             ReferenceTransport(asking_both()), "Can I get a refund?", TOOLS,
             ask_member=delegate_by_running(
-                document, lambda member: Costly(Script([Turn("checked")]))))
+                document, lambda member: Costly(Script([Turn(fits("checked"))]))))
     )
 
     handoff = result.handoffs[0]
@@ -1102,7 +1105,7 @@ def test_what_the_team_spent_counts_against_the_ceiling_the_author_wrote(
     twice = Script([
         Turn("asking", (ToolCall("policy-checker", {"message": "a"}),)),
         Turn("asking again", (ToolCall("policy-checker", {"message": "b"}),)),
-        Turn("Approved."),
+        Turn(fits("Approved.")),
     ])
     seen: list[float] = []
 
@@ -1142,7 +1145,7 @@ def test_a_member_runs_under_the_share_it_was_granted_and_never_a_larger_one(
 
     def transport_for(member: AgentSpec) -> ReferenceTransport:
         ceilings[member.name] = member.limits.cost_per_request_under
-        return Watching(Script([Turn("checked")]))
+        return Watching(Script([Turn(fits("checked"))]))
 
     asyncio.run(
         run(AgentSpec.from_document(document, "refund-desk"),
@@ -1177,7 +1180,7 @@ def test_two_calls_to_one_teammate_keep_its_answer_across_a_park_for_another() -
                      (ToolCall("policy-checker", {"question": "is this covered?"}),
                       ToolCall("policy-checker", {"question": "and the fee?"}),
                       ToolCall("fraud-checker", {"question": "does this look real?"}))),
-                Turn("Approved."),
+                Turn(fits("Approved.")),
             ]
         )
 

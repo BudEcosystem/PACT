@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from consenting import allowing_the_connection  # noqa: E402
+from fitting import fits  # noqa: E402
 from pact_adapters.harness import ToolCall, run  # noqa: E402
 from pact_adapters.ir import AgentSpec, ToolSpec  # noqa: E402
 from pact_adapters.loops import Loop  # noqa: E402
@@ -90,7 +91,7 @@ def script() -> Script:
         Turn("Reading the ticket and issuing the refund.",
              (ToolCall("zendesk", {"id": "T-1"}),
               ToolCall("payments", {"amount": "40.00 USD", "order-number": "A-1182"}))),
-        Turn("Done."),
+        Turn(fits("Done.")),
     ])
 
 
@@ -376,7 +377,7 @@ def test_a_refund_over_the_written_limit_waits_for_a_person_with_nothing_passed_
     def over() -> Script:
         return Script([
             Turn("refunding", (ToolCall("payments", {"amount": "300.00 USD"}),)),
-            Turn("Refunded."),
+            Turn(fits("Refunded.")),
         ])
 
     result = allowing_the_connection(
@@ -408,7 +409,7 @@ def test_a_refund_under_the_written_limit_is_not_stopped_by_the_same_rule(
     def under() -> Script:
         return Script([
             Turn("refunding", (ToolCall("payments", {"amount": "40.00 USD"}),)),
-            Turn("Refunded."),
+            Turn(fits("Refunded.")),
         ])
 
     result = allowing_the_connection(
@@ -439,7 +440,7 @@ def test_a_call_that_does_not_say_which_action_it_is_is_not_gated_on_a_guess(
     seen = Watching()
     looking = Script([
         Turn("looking", (ToolCall("zendesk", {"ticket": "T-1"}),)),
-        Turn("Approved."),
+        Turn(fits("Approved.")),
     ])
     result = asyncio.run(run(spec, ReferenceTransport(looking), "refund me", seen.tools()))
 
@@ -459,7 +460,7 @@ def test_an_eval_run_says_out_loud_that_it_turns_the_gate_off(document: dict) ->
     seen = Watching()
     over = Script([
         Turn("refunding", (ToolCall("payments", {"amount": "300.00 USD"}),)),
-        Turn("Refunded."),
+        Turn(fits("Refunded.")),
     ])
     result = asyncio.run(
         run(spec, ReferenceTransport(over), "refund me", seen.tools(),
@@ -489,7 +490,7 @@ def test_the_policys_own_gate_survives_a_park_and_lets_the_call_through_once(
     def script() -> Script:
         return Script([
             Turn("refunding", (ToolCall("payments", {"amount": "300.00 USD"}),)),
-            Turn("Refunded."),
+            Turn(fits("Refunded.")),
         ])
 
     parked = allowing_the_connection(
@@ -508,7 +509,7 @@ def test_the_policys_own_gate_survives_a_park_and_lets_the_call_through_once(
     )
 
     assert done.halted == "final"
-    assert done.output == "Refunded."
+    assert done.output == fits("Refunded.")
     assert [n for n, _ in seen.calls] == ["payments"], seen.calls
 
 
@@ -574,7 +575,7 @@ def _a_teammate_that_could_not_answer(document: dict):
         Turn("Consulting the team.",
              (ToolCall("policy-checker", {"question": "covered?"}),
               ToolCall("fraud-checker", {"question": "genuine?"}))),
-        Turn("Approved."),
+        Turn(fits("Approved.")),
     ])
     return asyncio.run(
         run(spec, ReferenceTransport(both), "refund me",
@@ -589,7 +590,7 @@ def _a_stage_that_stops_to_ask(document: dict):
     doc = _asking_workspace(asks="is-this-within-policy")
     spec = AgentSpec.from_document(doc, "desk")
     return asyncio.run(
-        run(spec, ReferenceTransport(Script([Turn("Approved.")])), "refund me",
+        run(spec, ReferenceTransport(Script([Turn(fits("Approved."))])), "refund me",
             Watching().tools())
     )
 
@@ -727,7 +728,7 @@ def test_a_teammates_own_words_reach_the_approver_as_quoted_data(document: dict)
 
     calls_them = Script([
         Turn("Consulting.", (ToolCall("fraud-checker", {"question": "genuine?"}),)),
-        Turn("Approved."),
+        Turn(fits("Approved.")),
     ])
     parked = asyncio.run(
         run(spec, ReferenceTransport(calls_them), "refund me", {}, ask_member=ask)
@@ -763,7 +764,7 @@ def test_answering_the_teamwork_question_carries_on_without_the_member() -> None
     def calls_them() -> Script:
         return Script([
             Turn("Consulting.", (ToolCall("fraud-checker", {"question": "worth?"}),)),
-            Turn("Approved at 400 USD."),
+            Turn(fits("Approved at 400 USD.")),
         ])
 
     parked = asyncio.run(
@@ -818,7 +819,7 @@ def test_a_loop_handed_in_by_a_host_still_shows_the_words_that_stage_carries() -
     """
     handed_in = Loop.resolve(_asking_workspace(asks=None), "checked")
     parked = asyncio.run(
-        run(SPEC, ReferenceTransport(Script([Turn("Approved.")])), "refund me",
+        run(SPEC, ReferenceTransport(Script([Turn(fits("Approved."))])), "refund me",
             Watching().tools(), loop=handed_in)
     ).suspension
 

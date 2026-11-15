@@ -31,6 +31,11 @@ echo "── CLI on every shipped tree ──"
 for spec in $(find examples -name workspace.yaml | sort); do
   cargo run --quiet -p pact-cli -- check "$(dirname "$spec")" --deny-warnings
 done
+# And every workspace written the other way (docs/99): a folder with a
+# PACT-language file at the top of it. Found the same way, for the same reason.
+for spec in $(find examples -name '*.pact' | sort); do
+  cargo run --quiet -p pact-cli -- check "$(dirname "$spec")" --deny-warnings
+done
 echo "── TypeScript ──"
 # 1238 lines of the "second, independent port" were never type-checked: there was
 # no tsconfig, `typescript` was not a dependency, and `--experimental-strip-types`
@@ -65,7 +70,7 @@ echo "── Adapters (7 targets: Pydantic AI, LangGraph, LangChain, AutoGen, Op
 # the thing invariant P-1 is about. The `cargo run` above builds it; this is the
 # assertion that it did.
 if [ ! -x target/debug/pact ]; then
-  echo "error: target/debug/pact is missing, and 72 test files read the worked" >&2
+  echo "error: target/debug/pact is missing, and 73 test files read the worked" >&2
   echo "  example through it. Running the suite now would skip them silently." >&2
   echo "  fix: cargo build -p pact-cli" >&2
   exit 1

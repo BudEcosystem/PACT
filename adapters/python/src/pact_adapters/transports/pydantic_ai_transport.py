@@ -161,6 +161,7 @@ class PydanticAITransport:
             # changed with the installed extras would make the published matrix
             # a property of one laptop instead of a property of the runtime.
             "connected_tools": "native",
+            "plugins": "unsupported",
         }
 
     def _respond(self, messages: list[Any], info: AgentInfo) -> ModelResponse:

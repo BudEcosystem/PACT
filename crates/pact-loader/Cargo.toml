@@ -11,6 +11,8 @@ repository.workspace = true
 sha2 = { workspace = true }
 pact-diag = { workspace = true }
 pact-doc = { workspace = true }
+# A `.pact` file is read into the same document a YAML file is (docs/99 §4).
+pact-lang = { workspace = true }
 # `report` reads `answer-within: 1m30s` through the schema's own duration
 # reader rather than growing a second one. The copies that mistake replaces all
 # read `1m30s` as one second — a wait ninety times shorter than the one written.
@@ -20,6 +22,8 @@ indexmap = { workspace = true }
 serde_json = { workspace = true }
 unicode-normalization = { workspace = true }
 minijinja = { workspace = true }
+nodejs-semver = { workspace = true }
+pep440_rs = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }

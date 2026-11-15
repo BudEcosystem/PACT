@@ -178,6 +178,9 @@ pub enum FileKind {
     Structured,
     /// Markdown — front matter plus prose.
     Prose,
+    /// A PACT-language file (`docs/99` §4) — blocks of settings and sentences,
+    /// read into the same value tree a structured file is.
+    Language,
     /// Plain text — the whole file is a string value.
     PlainText,
     /// Anything else — referenced, never inlined.
@@ -301,6 +304,10 @@ impl Default for Policy {
                 // after the kind, so the folder is the thing and the file
                 // describes it — the shape `agent` and `skill` already have.
                 "program",
+                // D29. `plugins/web-search/plugin.yaml` is the plugin, as
+                // `tools/weather/tool.yaml` is the tool: added with the kind
+                // rather than one round after it.
+                "plugin",
                 // `redaction` is deliberately NOT here, and the reason is the
                 // `learning.yaml` sentence above rather than an oversight.
                 // `agent.policy` is a NAME (`policy: approvals`), so the cost of
@@ -364,6 +371,8 @@ impl Policy {
         let ext = path.extension().unwrap_or_default().to_ascii_lowercase();
         if STRUCTURED.contains(&ext.as_str()) {
             FileKind::Structured
+        } else if ext == pact_lang::EXTENSION {
+            FileKind::Language
         } else if PROSE.contains(&ext.as_str()) {
             FileKind::Prose
         } else if PLAIN_TEXT.contains(&ext.as_str()) {

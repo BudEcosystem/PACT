@@ -49,6 +49,7 @@ loudly instead of reaching for a network.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field, replace
 from enum import Enum
@@ -116,13 +117,18 @@ class Part:
     #: Which *call*, when one tool is used twice in a turn. Defaults to the tool
     #: name, which is how the harness itself identifies a result today.
     ref: str = ""
+    #: What a call was given, as JSON with sorted keys; "" for anything that
+    #: is not a call, and for a call recorded before this was kept. Not `text`:
+    #: a call's arguments are not something the model SAID, and `Message.text`
+    #: is what pins and summaries read.
+    args: str = ""
 
     @property
     def pairs_on(self) -> str:
         return self.ref or self.tool
 
     def sized(self) -> int:
-        return len(self.text) + len(self.tool)
+        return len(self.text) + len(self.tool) + len(self.args)
 
 
 #: Labels the runtime stamps on a message so a pin can name it without code.
@@ -1266,8 +1272,13 @@ def from_history(history: Iterable[dict[str, Any]]) -> list[Message]:
                 parts.append(Part(PartKind.TEXT, text))
             if thinking := str(raw.get("thinking") or ""):
                 parts.append(Part(PartKind.THINKING, thinking))
-            for call in raw.get("tool_calls") or []:
-                parts.append(Part(PartKind.TOOL_CALL, "", str(call)))
+            written = raw.get("calls") or []
+            for n, call in enumerate(raw.get("tool_calls") or []):
+                given = written[n] if n < len(written) else None
+                args = ""
+                if isinstance(given, dict) and str(given.get("name")) == str(call):
+                    args = json.dumps(given.get("args") or {}, sort_keys=True)
+                parts.append(Part(PartKind.TOOL_CALL, "", str(call), args=args))
 
         stated = raw.get("labels")
         labels = {str(x) for x in stated} if isinstance(stated, list) else set()
@@ -1306,8 +1317,15 @@ def to_history(messages: Sequence[Message]) -> list[dict[str, Any]]:
             "role": m.role,
             "content": "\n".join(p.text for p in m.parts if p.kind is PartKind.TEXT),
         }
-        if calls := [p.pairs_on for p in m.parts if p.kind is PartKind.TOOL_CALL]:
-            entry["tool_calls"] = calls
+        asked = [p for p in m.parts if p.kind is PartKind.TOOL_CALL]
+        if asked:
+            entry["tool_calls"] = [p.pairs_on for p in asked]
+            # Only when every call still says what it was given: half a list
+            # would pair a call with another's arguments.
+            if all(p.args for p in asked):
+                entry["calls"] = [
+                    {"name": p.pairs_on, "args": json.loads(p.args)} for p in asked
+                ]
         if thinking := [p.text for p in m.parts if p.kind is PartKind.THINKING]:
             entry["thinking"] = "\n".join(thinking)
         out.append({**entry, **_marks(m)})

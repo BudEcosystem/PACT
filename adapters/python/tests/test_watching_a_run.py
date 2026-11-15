@@ -36,6 +36,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from fitting import fits  # noqa: E402
 from pact_adapters.events import Address, Bus  # noqa: E402
 from pact_adapters.harness import ToolCall, run  # noqa: E402
 from pact_adapters.ir import AgentSpec  # noqa: E402
@@ -125,7 +126,7 @@ def desk(workspace: Path) -> AgentSpec:
 def _run(desk: AgentSpec, said: str = "please refund order A-1182"):
     script = Script([
         Turn("checking the ticket", (ToolCall("zendesk", {"id": "A-1182"}),)),
-        Turn("approved"),
+        Turn(fits("approved")),
     ])
     return asyncio.run(run(desk, ReferenceTransport(script), said, TOOLS))
 

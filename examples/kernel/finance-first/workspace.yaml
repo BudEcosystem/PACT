@@ -1,0 +1,16 @@
+# FINANCE FIRST — when the work turns to money, the finance desk is asked
+# before anything moves, and the auditor is told after.
+#
+# Three things an author could not say before docs/99. A TOPIC: `billing` is
+# tagged `finance`, so "this is finance work" is exact the moment that tool is
+# about to be used, and the support agent can also say so itself. An EVENT: a
+# refund going out has a name, `refund-issued`. And two agents that LISTEN:
+# the finance desk is asked first, the auditor is told after — and neither is
+# named anywhere in the support agent's own file.
+#
+# What goes wrong: a reaction that stops the run on a guess. Change the
+# `remind:` in `reactions/upset-customer.yaml` to `stop:` and this tree does not
+# load — a judge can be wrong, and a run stopped only when a guess is right is
+# not guarded.
+name: Finance first
+description: A support desk whose money questions go past the finance desk.

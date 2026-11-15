@@ -30,6 +30,11 @@
 //! | `loader/passes-an-argument-the-interface-does-not-take` | a `passes:` line names an argument the interface's action does not take |
 //! | `loader/an-interface-nothing-implements` (warning) | an interface with no implementation, so a run that reaches it has nothing to use |
 //! | `loader/the-interface-and-one-of-its-own` (warning) | an agent `uses:` both the interface and one of its implementations |
+//!
+//! A plugin whose `implements:` names an interface is one of its
+//! implementations too (`plugins.rs`): it is counted as one, and may be a
+//! choice of `chosen-by: run-inputs.<name>`. Its actions are the interface's
+//! by construction, since the plugin writes none.
 
 use pact_diag::{Diagnostic, Diagnostics, Span};
 use pact_doc::Node;
@@ -154,7 +159,9 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
                 .get(name.as_str())
                 .cloned()
                 .unwrap_or_default();
-            if found.is_empty() {
+            let by_plugins = crate::plugins::implementing(document, name);
+            let every: Vec<&str> = found.iter().chain(by_plugins.iter()).copied().collect();
+            if every.is_empty() {
                 diags.push(Diagnostic::warning(
                     "loader/an-interface-nothing-implements",
                     entry.key_span.clone(),
@@ -163,12 +170,13 @@ pub fn check(document: &Node, diags: &mut Diagnostics) {
                          reaches it has no {noun} to use."
                     ),
                     format!(
-                        "Add a {noun} that says `implements: {name}`. A template may leave \
-                         this to the copies made from it."
+                        "Add a {noun} that says `implements: {name}`, or name '{name}' on the \
+                         `implements:` line of the plugin whose code does it. A template may \
+                         leave this to the copies made from it."
                     ),
                 ));
             }
-            chosen_by(document, collection, name, &entry.node, &found, diags);
+            chosen_by(document, collection, name, &entry.node, &every, diags);
             if collection == "tools" {
                 actions(entries, name, &entry.node, &entry.key_span, &found, diags);
             }

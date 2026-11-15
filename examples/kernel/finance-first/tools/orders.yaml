@@ -1,0 +1,8 @@
+description: Orders and deliveries.
+connect: back-office
+actions:
+  look-up:
+    description: Read one order.
+    reads-only: yes
+    takes:
+      order: text

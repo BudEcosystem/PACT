@@ -105,7 +105,7 @@ def test_every_park_site_fills_the_same_durable_block() -> None:
     text = HARNESS.read_text()
     body = text[: text.index("def _park_state(")] + text[text.index("async def _ran_out(") :]
     stragglers = sorted(
-        set(re.findall(r"parked\.(steps|history|step_index|completed|phase|visits|used|granted|spent_keys)\s*=", body))
+        set(re.findall(r"parked\.(steps|history|step_index|completed|phase|visits|used|granted|spent_keys|claim_holder)\s*=", body))
     )
     assert not stragglers, (
         f"these durable fields are still set by hand outside `_park_state`: {stragglers}. "
@@ -124,7 +124,7 @@ def test_the_helper_fills_every_field_a_resume_reads() -> None:
     text = HARNESS.read_text()
     helper = text[text.index("def _park_state(") : text.index("async def _ran_out(")]
     for field in ("steps", "history", "step_index", "completed", "phase", "visits",
-                  "used", "granted", "spent_keys"):
+                  "used", "granted", "spent_keys", "claim_holder"):
         assert re.search(rf"parked\.{field}\s*=", helper), (
             f"`{field}` crosses the process boundary and the helper does not set it"
         )
@@ -162,10 +162,11 @@ def test_an_escalation_carries_the_same_fields_a_park_does() -> None:
         used={"steps": 2.0},
         granted={"payments": "yes"},
         spent_keys=(("payments", "issue-refund", "k"),),
+        claim_holder="refund-desk:9a1c",
     )
     on = parked.escalate(now=9.0)
     for field in ("history", "step_index", "completed", "phase", "visits",
-                  "used", "granted", "spent_keys"):
+                  "used", "granted", "spent_keys", "claim_holder"):
         assert getattr(on, field) == getattr(parked, field), (
             f"`{field}` did not survive the escalation"
         )

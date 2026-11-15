@@ -35,100 +35,20 @@ Three checks run on every recipe, and the script fails if any fails:
   3. Every operation in OPS is used by at least one pattern. An operation no
      pattern needs would be a candidate for removal.
 
-OPS also records, for each operation, the PACT keyword that is that operation
-today, or "proposed" with the keyword section 9 suggests. `--ops` prints it.
+OPS is read from spec/kernel.yaml, which also records, for each operation, the
+PACT keyword that is that operation today. `--ops` prints it, with the fields
+of spec/schema.yaml whose `kernel-op:` names it.
 `--check-shipped` runs `pact check` on every shipped example a recipe cites.
 """
 import json, sys, collections, pathlib
+import yaml
 
 SNAPSHOT = pathlib.Path(__file__).resolve().parent.parent / "research/extracts/agentic-patterns-2026-11-10.json"
 
-# The kernel: every operation of the seven primitives. id: (primitive, meaning, keyword today | "proposed: ...")
-OPS = {
- # Shape
- "shape.scalar":        ("Shape", "text, money, yes-or-no, number, date, duration, image, audio, file", "accepts / answers-with / takes"),
- "shape.one-of":        ("Shape", "a closed set of words", "`one of a, b`"),
- "shape.record":        ("Shape", "records, lists, maps, optional, a failed marker", "`list of`, nested `accepts:`"),
- "shape.stream":        ("Shape", "an answer that arrives in parts, each part with a kind", "answer shape `stream of <shape>`; the harness builds an answer only from `answer` parts (voice `talking: both-at-once` too)"),
- "shape.reference":     ("Shape", "a host-issued reference to an agent, run, stored value or Allowance", "an `agent`-shaped answer as a `call:` binding, held to `may-call:` at check and run time"),
- "shape.validate":      ("Shape", "accept or refuse a value that arrived", "answers-with-mode"),
- "shape.describe":      ("Shape", "tell a producer the expected form (JSON Schema, MCP inputSchema, a form)", "schemas-from, published-tool"),
- "shape.parse":         ("Shape", "read a value out of loose text", "answers-with-mode: prompted"),
- "shape.render":        ("Shape", "fill a template; nothing filled in is read as template again", "template-language, `{{run-inputs.x}}`"),
- "shape.digest":        ("Shape", "a value's fingerprint", "`in-share: <percent>` in `when-this`; a person's yes bound to the digest of the request they saw"),
- # Origin
- "label.origin":        ("Origin", "customer, person, tool, retrieval, model, teammate, server, reviewed definition, clock", "turn.from, never-from"),
- "label.sensitivity":   ("Origin", "a category such as card number or personal data, set by a detector or `hides`", "hides, redaction"),
- "label.region":        ("Origin", "where a value may live", "data-stays-in"),
- "label.propagate":     ("Origin", "anything computed from labelled values carries the combined label", "`never-from:` checked statically (law 7) and again at run time on every memory write"),
- "label.fence":         ("Origin", "only reviewed text instructs; everything else reaches a model as quoted data", "question.shows, server prose fenced"),
- "label.placeholder":   ("Origin", "a hidden value travels as a reference and is restored only for use-without-seeing", "`gets-hidden-values: yes` on an action; hidden values travel as placeholders"),
- # Store
- "store.read":          ("Store", "read a path, or as of a version", "`input.x`, `steps.x.result`, `remembers.x`"),
- "store.write":         ("Store", "write through the merge rule", "remember-as, remembers, writes-to"),
- "store.merge":         ("Store", "keep-all, keep-the-latest, merge, add-up, vote, top-n, or a pure program", "combines-by"),
- "store.claim":         ("Store", "insert-if-absent or compare-and-swap, with an optional lease; take = claim then forget", "same-request-key, `same-request-key-across: the-team | the-workspace`, `claim-lasts:`"),
- "store.fork":          ("Store", "a copy-on-write branch or snapshot, discarded unless joined out", "`forks: yes` on an each, together, repeat or loop stage"),
- "store.find":          ("Store", "by key, words or meaning, reranked, at most N", "knowledge: looked-up-by, passages-at-most, reranked-by"),
- "store.forget":        ("Store", "remove an entry or let it expire", "kept-for, drop-parts, stops-being-true-when"),
- "store.scope":         ("Store", "step, turn, conversation, run, flow, team, workspace; one per key", "lasts, kept-per, counted-per"),
- "store.lifetime":      ("Store", "until a moment or an event", "kept-for, forget-after"),
- "store.durability":    ("Store", "none, checkpoint, durable-execution", "workspace.durability"),
- "store.version":       ("Store", "every write may create a version with a digest", "based-on: name@version, stage.version, tool-snapshot-digest"),
- "store.pin":           ("Store", "pinned entries survive tidying", "always-keep, survives-shortening"),
- "store.host":          ("Store", "the conversation, run record, inbox, run registry, clock, directory, catalogue, definition", "turns, population: past-runs, counts-events-from, if-still-running, every, asked-of, catalog, values"),
- # Actor
- "actor.model":         ("Actor", "decides by sampling", "model, settings, needs"),
- "actor.program":       ("Actor", "decides by computing, under fuel", "programs, run-code, engine, determinism"),
- "actor.tool":          ("Actor", "an outside system decides", "tools, actions, resources, MCP"),
- "actor.person":        ("Actor", "a human answers; slow and authoritative", "questions, asked-of, escalates-to"),
- "actor.remote":        ("Actor", "someone else's agent decides", "resource-kind: a2a-agent"),
- "actor.composite":     ("Actor", "a named Flow with a signature", "agents, workflows, published-as"),
- "actor.signature":     ("Actor", "what it takes and answers with", "accepts, answers-with, takes"),
- "actor.effect":        ("Actor", "none, reads, writes, spends, irreversible; with undo and status-check; readable by a Check", "computed from reads-only, spends-money, undone-by; Check-readable as `effect:` in `when-this`; shown by `pact discover`"),
- "actor.write-set":     ("Actor", "the Store paths an Actor declares it writes", "`writes: [<place>, ...]` on an action; overlapping branches are warned"),
- "actor.park":          ("Actor", "may wait on a person or an event", "ask-someone, answer-within"),
- "actor.figures":       ("Actor", "cost, latency, context, capabilities, benchmark scores, with provenance", "model-cost, model-speed, figure, provenance"),
- "actor.identity":      ("Actor", "who acted, on whose behalf, how strongly established", "needs-signature, owned-by, not-the-same-as"),
- "actor.location":      ("Actor", "where it runs", "served-by.region, runs-in"),
- "actor.by-requirement":("Actor", "chosen from a catalogue by a Check and a preference", "needs, prefer, interface, implements, chosen-by"),
- "actor.instantiate":   ("Actor", "make an Actor from a definition value during a run, through the checker (law 8)", "may-start: narrowed-new, run-code"),
- # Flow
- "flow.ask":            ("Flow", "ask one Actor with inputs bound from Stores; wait, or detach for a run reference", "does: call / think / use-tools, call, bind"),
- "flow.then":           ("Flow", "every ask ends in a labelled outcome; the label picks the next step", "then, outcome, starts-at"),
- "flow.choose":         ("Flow", "pick one label from a closed set by rungs: Checks, then Actors, then a person", "does: decide, chooses-between, rung, route-rule, if-unsure-below"),
- "flow.split":          ("Flow", "fixed branches, one per item, one per stream part, or one per entry of a growing Store", "does: each / together, over, teamwork.starts"),
- "flow.join":           ("Flow", "everyone, first, k of n passing a Check, deadline, or quiet; then cancel / ignore / detach the rest", "waits-for, enough-is, gives-up-after, combines-by; growing sets: `keeps-taking: yes` on an each"),
- "flow.await":          ("Flow", "pause until a Check over Stores holds, with a correlation key and a deadline", "heard, answer-within, counts-events-from, only-when"),
- "flow.scope":          ("Flow", "a region with its own Store fork, Allowance and meters", "a stage's steps, team, isolated conversation, limits on a stage"),
- "flow.handler":        ("Flow", "before, each part, after, failure, ran-out: change, hold, divert, refuse, retry, back up, undo", "interceptors, policies, if-it-fails, when-it-runs-out, context-policy, watch, redaction"),
- "flow.starts-when":    ("Flow", "a trigger: a Check over Stores becomes true; with a concurrency key and an overlap rule", "ports, every, if-still-running, if-missed, per-row-of"),
- "flow.cancel":         ("Flow", "cancel a scope or a run by reference", "if-someone-fails: stop-the-others; by reference: `does: stop` with `stops: steps.<stage>.run`"),
- "flow.detach":         ("Flow", "start and get a run reference instead of waiting", "waits-for-result: no"),
- "flow.name":           ("Flow", "a Flow with a signature is an Actor", "agents, workflows, loops"),
- # Check
- "check.compare":       ("Check", "more-than, less-than, is, is-one-of, contains-any-of, is-empty", "when-this"),
- "check.typed":         ("Check", "money in its currency, durations, now-plus, business days", "comparand, moment.counted-in"),
- "check.detector":      ("Check", "a named recogniser: built in (card number, email) or declared by the author", "redaction.hide; declared: workspace `detectors:`, used as `looks-like:` and in sentences"),
- "check.origin":        ("Check", "a test on a value's Origin", "never-from"),
- "check.count":         ("Check", "counts and order over the run record; distinct in the last k", "must-call-before, `called more than n times`"),
- "check.aggregate":     ("Check", "shares, percentiles, means over a population", "must-pass, metrics, threshold, measured-at"),
- "check.combine":       ("Check", "all, any, not", "rules lists"),
- "check.reachability":  ("Check", "what a part can reach, directly or through others", "available-when; `carries:` on a tool, and the three-part leak rule"),
- "check.digest":        ("Check", "compare two fingerprints", "tool-snapshot-digest; request digests on approvals; `in-share:`"),
- # Allowance
- "allowance.reach":     ("Allowance", "which Actors and addresses a part may ask", "uses, may-use, may-call, allow-egress, who-can-reach-it"),
- "allowance.see":       ("Allowance", "who may read a labelled value", "hides, question.shows, inspects"),
- "allowance.use-without-seeing": ("Allowance", "pass a value along without reading it", "credential-reference"),
- "allowance.write":     ("Allowance", "what a part may write, including to the definition", "owners, locked, learning.needs-a-person-to-approve"),
- "allowance.start":     ("Allowance", "whether and how many helpers a part may start, and how deep", "may-start, starts-at-most, nests-at-most"),
- "allowance.quantity":  ("Allowance", "steps, tool calls, tokens, money, time, items, attempts, fuel", "limits, at-most, fuel, checks-at-most"),
- "allowance.period":    ("Allowance", "counted per scope and reset per period", "counted-per, resets-every"),
- "allowance.pass":      ("Allowance", "handed down, never wider; totals conserved", "divides-the-budget, shares"),
- "allowance.revoke":    ("Allowance", "taken back, expired, or withdrawn for a period", "locked-until, tool-snapshot-max-age; for a period: `rests-after:` with `rests-for:` on a tool"),
- "allowance.pause":     ("Allowance", "a meter paused during a scope", "paused-during"),
- "allowance.value":     ("Allowance", "a grant as a run-time value that can be split and passed", "`cost-per-request-from:` a run input, never above `cost-per-request-under:`"),
-}
+# The kernel: every operation of the seven primitives, read from spec/kernel.yaml (one copy, which
+# the schema's `kernel-op:` lines are held to). id: (primitive, meaning, keyword today)
+OPS = {op: (e["primitive"], e["meaning"], e["keyword"])
+       for op, e in yaml.safe_load((SNAPSHOT.parent.parent.parent / "spec/kernel.yaml").read_text())["ops"].items()}
 
 M, T, P, PACT = "mechanism", "training", "practice", "pact"
 
@@ -853,8 +773,14 @@ def main(argv):
     for p in pats: bycat[p["category"]][R[p["slug"]][0]] += 1
     for c in sorted(bycat): print(f"  {c}: {dict(bycat[c])}")
     if "--ops" in argv:
-        print("\n| Operation | Primitive | What it does | PACT keyword today |\n|---|---|---|---|")
-        for k,(prim,what,kw) in OPS.items(): print(f"| `{k}` | {prim} | {what} | {kw} |")
+        fields = collections.defaultdict(list)
+        schema = yaml.safe_load((SNAPSHOT.parent.parent.parent / "spec/schema.yaml").read_text())
+        for g, gv in schema["groups"].items():
+            for f, fv in (gv.get("fields") or {}).items():
+                ops = fv.get("kernel-op", []) if isinstance(fv, dict) else []
+                for op in [ops] if isinstance(ops, str) else ops: fields[op].append(f"{g}.{f}")
+        print("\n| Operation | Primitive | What it does | PACT keyword today | Fields |\n|---|---|---|---|---|")
+        for k,(prim,what,kw) in OPS.items(): print(f"| `{k}` | {prim} | {what} | {kw} | {', '.join(f'`{x}`' for x in fields[k])} |")
     if "--check-shipped" in argv:
         import subprocess, shutil
         root = SNAPSHOT.parent.parent.parent

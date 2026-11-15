@@ -1,0 +1,330 @@
+# The kernel: every operation of PACT's seven primitives (docs/97-PRIMITIVES.md §2 and §5.4).
+#
+# This is the closed operation vocabulary. A pattern recipe in
+# `scripts/pattern-coverage.py` is typed against it, and a runtime that keeps
+# one implementation per operation reads its list from here rather than from a
+# copy of its own.
+#
+# Each operation names its primitive, what it does, and the PACT keyword that is
+# that operation today. Where it is written is data on the other side: a field
+# in `spec/schema.yaml` that IS an operation says so with `kernel-op:`. An
+# operation an author writes as syntax inside a value rather than as a field of
+# its own (`one of a, b` in a shape line, `input.x` in a binding) says where
+# with `written-in:` here.
+#
+# `crates/pact-schema/tests/every_kernel_operation_is_written_somewhere.rs`
+# holds the two files to each other: a `kernel-op:` that names an operation not
+# listed here fails, and so does an operation that no field names and no
+# `written-in:` places. An operation added here without a decision about where
+# an author writes it therefore stops the test rather than going unwritten.
+ops:
+  shape.scalar:
+    primitive: Shape
+    meaning: "text, money, yes-or-no, number, date, duration, image, audio, file"
+    keyword: "accepts / answers-with / takes"
+  shape.one-of:
+    primitive: Shape
+    meaning: "a closed set of words"
+    keyword: "`one of a, b`"
+    written-in: "a shape line: `one of a, b`, wherever a field takes an answer shape"
+  shape.record:
+    primitive: Shape
+    meaning: "records, lists, maps, optional, a failed marker"
+    keyword: "`list of`, nested `accepts:`"
+    written-in: "a shape line: `list of`, `optional`, and named shapes with parts"
+  shape.stream:
+    primitive: Shape
+    meaning: "an answer that arrives in parts, each part with a kind"
+    keyword: "answer shape `stream of <shape>`; the harness builds an answer only from `answer` parts (voice `talking: both-at-once` too)"
+    written-in: "a shape line: `stream of <shape>`"
+  shape.reference:
+    primitive: Shape
+    meaning: "a host-issued reference to an agent, run, stored value or Allowance"
+    keyword: "an `agent`-shaped answer as a `call:` binding, held to `may-call:` at check and run time"
+    written-in: "a shape line: an `agent`-shaped answer"
+  shape.validate:
+    primitive: Shape
+    meaning: "accept or refuse a value that arrived"
+    keyword: "answers-with-mode"
+  shape.describe:
+    primitive: Shape
+    meaning: "tell a producer the expected form (JSON Schema, MCP inputSchema, a form)"
+    keyword: "schemas-from, published-tool"
+  shape.parse:
+    primitive: Shape
+    meaning: "read a value out of loose text"
+    keyword: "answers-with-mode: prompted"
+  shape.render:
+    primitive: Shape
+    meaning: "fill a template; nothing filled in is read as template again"
+    keyword: "template-language, `{{run-inputs.x}}`"
+  shape.digest:
+    primitive: Shape
+    meaning: "a value's fingerprint"
+    keyword: "`in-share: <percent>` in `when-this`; a person's yes bound to the digest of the request they saw"
+  label.origin:
+    primitive: Origin
+    meaning: "customer, person, tool, retrieval, model, teammate, server, reviewed definition, clock"
+    keyword: "turn.from, never-from"
+  label.sensitivity:
+    primitive: Origin
+    meaning: "a category such as card number or personal data, set by a detector or `hides`"
+    keyword: "hides, redaction"
+  label.region:
+    primitive: Origin
+    meaning: "where a value may live"
+    keyword: "data-stays-in"
+  label.propagate:
+    primitive: Origin
+    meaning: "anything computed from labelled values carries the combined label"
+    keyword: "`never-from:` checked statically (law 7) and again at run time on every memory write"
+  label.fence:
+    primitive: Origin
+    meaning: "only reviewed text instructs; everything else reaches a model as quoted data"
+    keyword: "question.shows, server prose fenced"
+  label.placeholder:
+    primitive: Origin
+    meaning: "a hidden value travels as a reference and is restored only for use-without-seeing"
+    keyword: "`gets-hidden-values: yes` on an action; hidden values travel as placeholders"
+  store.read:
+    primitive: Store
+    meaning: "read a path, or as of a version"
+    keyword: "`input.x`, `steps.x.result`, `remembers.x`"
+    written-in: "a binding: `input.x`, `steps.x.result`, `remembers.x`, `values.x`"
+  store.write:
+    primitive: Store
+    meaning: "write through the merge rule"
+    keyword: "remember-as, remembers, writes-to"
+  store.merge:
+    primitive: Store
+    meaning: "keep-all, keep-the-latest, merge, add-up, vote, top-n, or a pure program"
+    keyword: "combines-by"
+  store.claim:
+    primitive: Store
+    meaning: "insert-if-absent or compare-and-swap, with an optional lease; take = claim then forget"
+    keyword: "same-request-key, `same-request-key-across: the-team | the-workspace`, `claim-lasts:`"
+  store.fork:
+    primitive: Store
+    meaning: "a copy-on-write branch or snapshot, discarded unless joined out"
+    keyword: "`forks: yes` on an each, together, repeat or loop stage"
+  store.find:
+    primitive: Store
+    meaning: "by key, words or meaning, reranked, at most N"
+    keyword: "knowledge: looked-up-by, passages-at-most, reranked-by"
+  store.forget:
+    primitive: Store
+    meaning: "remove an entry or let it expire"
+    keyword: "kept-for, drop-parts, stops-being-true-when"
+  store.scope:
+    primitive: Store
+    meaning: "step, turn, conversation, run, flow, team, workspace; one per key"
+    keyword: "lasts, kept-per, counted-per"
+  store.lifetime:
+    primitive: Store
+    meaning: "until a moment or an event"
+    keyword: "kept-for, forget-after"
+  store.durability:
+    primitive: Store
+    meaning: "none, checkpoint, durable-execution"
+    keyword: "workspace.durability"
+  store.version:
+    primitive: Store
+    meaning: "every write may create a version with a digest"
+    keyword: "based-on: name@version, stage.version, tool-snapshot-digest"
+  store.pin:
+    primitive: Store
+    meaning: "pinned entries survive tidying"
+    keyword: "always-keep, survives-shortening"
+  store.host:
+    primitive: Store
+    meaning: "the conversation, run record, inbox, run registry, clock, directory, catalogue, definition"
+    keyword: "turns, population: past-runs, counts-events-from, if-still-running, every, asked-of, catalog, values"
+  actor.model:
+    primitive: Actor
+    meaning: "decides by sampling"
+    keyword: "model, settings, needs"
+  actor.program:
+    primitive: Actor
+    meaning: "decides by computing, under fuel"
+    keyword: "programs, run-code, engine, determinism"
+  actor.tool:
+    primitive: Actor
+    meaning: "an outside system decides"
+    keyword: "tools, actions, resources, MCP"
+  actor.person:
+    primitive: Actor
+    meaning: "a human answers; slow and authoritative"
+    keyword: "questions, asked-of, escalates-to"
+  actor.remote:
+    primitive: Actor
+    meaning: "someone else's agent decides"
+    keyword: "resource-kind: a2a-agent"
+  actor.composite:
+    primitive: Actor
+    meaning: "a named Flow with a signature"
+    keyword: "agents, workflows, published-as"
+  actor.signature:
+    primitive: Actor
+    meaning: "what it takes and answers with"
+    keyword: "accepts, answers-with, takes"
+  actor.effect:
+    primitive: Actor
+    meaning: "none, reads, writes, spends, irreversible; with undo and status-check; readable by a Check"
+    keyword: "computed from reads-only, spends-money, undone-by; Check-readable as `effect:` in `when-this`; shown by `pact discover`"
+  actor.write-set:
+    primitive: Actor
+    meaning: "the Store paths an Actor declares it writes"
+    keyword: "`writes: [<place>, ...]` on an action; overlapping branches are warned"
+  actor.park:
+    primitive: Actor
+    meaning: "may wait on a person or an event"
+    keyword: "ask-someone, answer-within"
+  actor.figures:
+    primitive: Actor
+    meaning: "cost, latency, context, capabilities, benchmark scores, with provenance"
+    keyword: "model-cost, model-speed, figure, provenance"
+  actor.identity:
+    primitive: Actor
+    meaning: "who acted, on whose behalf, how strongly established"
+    keyword: "needs-signature, owned-by, not-the-same-as"
+  actor.location:
+    primitive: Actor
+    meaning: "where it runs"
+    keyword: "served-by.region, runs-in"
+  actor.by-requirement:
+    primitive: Actor
+    meaning: "chosen from a catalogue by a Check and a preference"
+    keyword: "needs, prefer, interface, implements, chosen-by"
+  actor.instantiate:
+    primitive: Actor
+    meaning: "make an Actor from a definition value during a run, through the checker (law 8)"
+    keyword: "may-start: narrowed-new, run-code"
+  flow.ask:
+    primitive: Flow
+    meaning: "ask one Actor with inputs bound from Stores; wait, or detach for a run reference"
+    keyword: "does: call / think / use-tools, call, bind"
+  flow.then:
+    primitive: Flow
+    meaning: "every ask ends in a labelled outcome; the label picks the next step"
+    keyword: "then, outcome, starts-at"
+  flow.choose:
+    primitive: Flow
+    meaning: "pick one label from a closed set by rungs: Checks, then Actors, then a person"
+    keyword: "does: decide, chooses-between, rung, route-rule, if-unsure-below"
+  flow.split:
+    primitive: Flow
+    meaning: "fixed branches, one per item, one per stream part, or one per entry of a growing Store"
+    keyword: "does: each / together, over, teamwork.starts"
+  flow.join:
+    primitive: Flow
+    meaning: "everyone, first, k of n passing a Check, deadline, or quiet; then cancel / ignore / detach the rest"
+    keyword: "waits-for, enough-is, gives-up-after, combines-by; growing sets: `keeps-taking: yes` on an each"
+  flow.await:
+    primitive: Flow
+    meaning: "pause until a Check over Stores holds, with a correlation key and a deadline"
+    keyword: "heard, answer-within, counts-events-from, only-when"
+  flow.scope:
+    primitive: Flow
+    meaning: "a region with its own Store fork, Allowance and meters"
+    keyword: "a stage's steps, team, isolated conversation, limits on a stage"
+  flow.handler:
+    primitive: Flow
+    meaning: "before, each part, after, failure, ran-out: change, hold, divert, refuse, retry, back up, undo"
+    keyword: "interceptors, policies, if-it-fails, when-it-runs-out, context-policy, watch, redaction"
+  flow.starts-when:
+    primitive: Flow
+    meaning: "a trigger: a Check over Stores becomes true; with a concurrency key and an overlap rule"
+    keyword: "ports, every, if-still-running, if-missed, per-row-of"
+  flow.cancel:
+    primitive: Flow
+    meaning: "cancel a scope or a run by reference"
+    keyword: "if-someone-fails: stop-the-others; by reference: `does: stop` with `stops: steps.<stage>.run`"
+  flow.detach:
+    primitive: Flow
+    meaning: "start and get a run reference instead of waiting"
+    keyword: "waits-for-result: no"
+  flow.name:
+    primitive: Flow
+    meaning: "a Flow with a signature is an Actor"
+    keyword: "agents, workflows, loops"
+  check.compare:
+    primitive: Check
+    meaning: "more-than, less-than, is, is-one-of, contains-any-of, is-empty"
+    keyword: "when-this"
+  check.typed:
+    primitive: Check
+    meaning: "money in its currency, durations, now-plus, business days"
+    keyword: "comparand, moment.counted-in"
+  check.detector:
+    primitive: Check
+    meaning: "a named recogniser: built in (card number, email) or declared by the author"
+    keyword: "redaction.hide; declared: workspace `detectors:`, used as `looks-like:` and in sentences"
+  check.origin:
+    primitive: Check
+    meaning: "a test on a value's Origin"
+    keyword: "never-from"
+  check.count:
+    primitive: Check
+    meaning: "counts and order over the run record; distinct in the last k"
+    keyword: "must-call-before, `called more than n times`"
+  check.aggregate:
+    primitive: Check
+    meaning: "shares, percentiles, means over a population"
+    keyword: "must-pass, metrics, threshold, measured-at"
+  check.combine:
+    primitive: Check
+    meaning: "all, any, not"
+    keyword: "rules lists"
+    written-in: "a list of conditions: every line holds"
+  check.reachability:
+    primitive: Check
+    meaning: "what a part can reach, directly or through others"
+    keyword: "available-when; `carries:` on a tool, and the three-part leak rule"
+  check.digest:
+    primitive: Check
+    meaning: "compare two fingerprints"
+    keyword: "tool-snapshot-digest; request digests on approvals; `in-share:`"
+  allowance.reach:
+    primitive: Allowance
+    meaning: "which Actors and addresses a part may ask"
+    keyword: "uses, may-use, may-call, allow-egress, who-can-reach-it"
+  allowance.see:
+    primitive: Allowance
+    meaning: "who may read a labelled value"
+    keyword: "hides, question.shows, inspects"
+  allowance.use-without-seeing:
+    primitive: Allowance
+    meaning: "pass a value along without reading it"
+    keyword: "credential-reference"
+  allowance.write:
+    primitive: Allowance
+    meaning: "what a part may write, including to the definition"
+    keyword: "owners, locked, learning.needs-a-person-to-approve"
+  allowance.start:
+    primitive: Allowance
+    meaning: "whether and how many helpers a part may start, and how deep"
+    keyword: "may-start, starts-at-most, nests-at-most"
+  allowance.quantity:
+    primitive: Allowance
+    meaning: "steps, tool calls, tokens, money, time, items, attempts, fuel"
+    keyword: "limits, at-most, fuel, checks-at-most"
+  allowance.period:
+    primitive: Allowance
+    meaning: "counted per scope and reset per period"
+    keyword: "counted-per, resets-every"
+  allowance.pass:
+    primitive: Allowance
+    meaning: "handed down, never wider; totals conserved"
+    keyword: "divides-the-budget, shares"
+  allowance.revoke:
+    primitive: Allowance
+    meaning: "taken back, expired, or withdrawn for a period"
+    keyword: "locked-until, tool-snapshot-max-age; for a period: `rests-after:` with `rests-for:` on a tool"
+  allowance.pause:
+    primitive: Allowance
+    meaning: "a meter paused during a scope"
+    keyword: "paused-during"
+  allowance.value:
+    primitive: Allowance
+    meaning: "a grant as a run-time value that can be split and passed"
+    keyword: "`cost-per-request-from:` a run input, never above `cost-per-request-under:`"

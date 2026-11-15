@@ -72,7 +72,10 @@ def _hears_and_speaks(row: "ModelEntry | None") -> bool:
 
 
 def _duplex(row: "ModelEntry | None", raw: Mapping[str, Any]) -> bool:
-    sessions = ((raw.get("capabilities") or {}).get("sessions") or []) if raw else []
+    # The row carries its `sessions:` (`ModelEntry.sessions`); `raw` is read too
+    # for a caller that still hands rows beside an entry built without them.
+    said = ((raw.get("capabilities") or {}).get("sessions") or []) if raw else []
+    sessions = set(row.sessions if row is not None else ()) | {str(s) for s in said}
     return _hears_and_speaks(row) and "duplex" in sessions
 
 
@@ -84,9 +87,9 @@ def plan_for(
 ) -> "VoicePlan | None":
     """The voice plan for one agent, or `None` when it writes no `voice:`.
 
-    `rows` is the raw catalogue rows by id (the workspace's own over the
-    distribution's), for the one figure `ModelEntry` does not carry: which
-    sessions a model can hold.
+    Which sessions a model can hold is read off its entry (`ModelEntry.sessions`).
+    `rows`, the raw catalogue rows by id, is still read beside it, for a caller
+    that built its entries by hand without them.
     """
     agent = ((document.get("agents") or {}).get(agent_key)) or {}
     voice = agent.get("voice")

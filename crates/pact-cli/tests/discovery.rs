@@ -50,7 +50,13 @@ fn a_workspace_is_found_by_walking_the_tree() {
         for e in std::fs::read_dir(&dir).unwrap().flatten() {
             let p = e.path();
             if p.is_dir() && !p.file_name().unwrap().to_string_lossy().starts_with('.') {
-                if p.join("workspace.yaml").exists() {
+                // A workspace is a folder with a `workspace.yaml`, or one with a
+                // PACT-language file at the top of it (`docs/99` §4.4).
+                let written = std::fs::read_dir(&p)
+                    .unwrap()
+                    .flatten()
+                    .any(|f| f.path().extension().is_some_and(|x| x == "pact"));
+                if p.join("workspace.yaml").exists() || written {
                     on_disk.push(p.file_name().unwrap().to_string_lossy().into_owned());
                 } else {
                     stack.push(p);
@@ -230,12 +236,37 @@ fn the_inventory_carries_a_digest_so_the_runtime_can_cache_safely() {
     // And every workspace gets its OWN digest. Indexing position 0 twice would
     // have compared one workspace with itself however many there were, so this
     // said nothing about the other eight.
+    //
+    // `examples/language/` is left out of THIS claim and held to the opposite
+    // one below: each workspace there is another one written a second way, so
+    // the same document — and a digest is of the document, not of the files
+    // it was read from.
+    let written_twice = |w: &serde_json::Value| w["root"].as_str().unwrap().contains("/language/");
     let all: Vec<&str> = inv
         .as_array()
         .unwrap()
         .iter()
+        .filter(|w| !written_twice(w))
         .map(|w| w["digest"].as_str().unwrap())
         .collect();
+    let digest_at = |ending: &str| {
+        inv.as_array()
+            .unwrap()
+            .iter()
+            .find(|w| w["root"].as_str().unwrap().ends_with(ending))
+            .unwrap_or_else(|| panic!("no workspace at {ending}"))["digest"]
+            .clone()
+    };
+    for (file, folder) in [
+        ("language/finance-first", "kernel/finance-first"),
+        ("language/staff-desk", "examples/answers-from-documents"),
+    ] {
+        assert_eq!(
+            digest_at(file),
+            digest_at(folder),
+            "{file} and {folder} are one workspace written two ways, so they are one digest"
+        );
+    }
     assert_eq!(
         all.len(),
         all.iter().collect::<std::collections::BTreeSet<_>>().len(),

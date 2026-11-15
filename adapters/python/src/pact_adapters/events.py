@@ -63,6 +63,9 @@ SUBJECTS = (
     # cost this line, which is the lattice's whole claim — Eve's equivalent is
     # editing the union, the channel subset, the hook map and the manifest.
     "limit",
+    # A reaction carried out (docs/99 §5): which one, and what it did. One row,
+    # so a watch can write down that the finance desk was asked.
+    "reaction",
 )
 
 
