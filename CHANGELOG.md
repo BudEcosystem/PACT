@@ -3,6 +3,19 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — a workspace's own detector names its placeholder in a run (15 November)
+
+A redaction that hides `anything that looks like an order reference`, with that detector declared
+under `detectors:`, put `⟦hidden-1⟧` in the conversation where `⟦order-reference-1⟧` was meant: the
+placeholder's name was looked up from the pattern when the run hid the value, and by then the
+workspace's detectors were no longer in scope, which they are only while the chain is read.
+
+### What holds now
+
+- **A compiled hiding sentence keeps the thing it names.** Each pattern carries `card number`, or the
+  declared detector's name, so a placeholder is named for it whenever it is minted. The test reads the
+  name from a real run rather than from the lookup with the detectors put back in scope by hand.
+
 ## 2026-11 — a hidden value belongs to the request, not the run (15 November)
 
 `gets-hidden-values: yes` put a card back only for an action of the agent whose own redaction hid
