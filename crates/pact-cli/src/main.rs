@@ -31,6 +31,9 @@ USAGE:
                           inventory a runtime can index (no build step)
     pact card <agent> [PATH]
                           Print one agent's A2A Agent Card
+    pact fill <agent> [PATH]
+                          Print one agent's words filled for one run, from
+                          --run-inputs and --remembered
     pact write    [PATH]  Print the workspace as one PACT-language file — the
                           same document, in sentences where a sentence says it
     pact build <FILE> --to <FOLDER>
@@ -53,6 +56,12 @@ OPTIONS:
                           Without it the card carries the path and no host — a
                           tree is not deployed anywhere, and an address PACT
                           invented would be one nobody can reach.
+    --run-inputs <json>   For `pact fill`: the run's inputs, one JSON object
+                          keyed by the names the agent declares.
+    --remembered <json>   For `pact fill`: what the agent remembers at the start
+                          of the run, the same way.
+    --field <field>       For `pact fill`: `instructions` (the default) or
+                          `description`.
     --unsafe-spec         Validate against $PACT_SPEC instead of the specification
                           compiled into this binary. Development builds only, and
                           the source is named on every run that uses it.
@@ -72,10 +81,19 @@ const OPTIONS: &[&str] = &[
     "--deny-warnings",
     "--base-url",
     "--to",
+    "--run-inputs",
+    "--remembered",
+    "--field",
 ];
 
 /// The options that are followed by a value, which is theirs and not a path.
-const TAKES_A_VALUE: &[&str] = &["--base-url", "--to"];
+const TAKES_A_VALUE: &[&str] = &[
+    "--base-url",
+    "--to",
+    "--run-inputs",
+    "--remembered",
+    "--field",
+];
 
 /// What a diagnostic points at when the mistake is in the command rather than in
 /// a file.
@@ -405,6 +423,26 @@ fn run() -> Result<i32> {
                 .map(|s| Utf8PathBuf::from(s.as_str()));
             build_cmd(&path, positional.len() > 1, to)
         }
+        "fill" => {
+            let agent = positional.get(1).map(|s| s.as_str()).unwrap_or("");
+            let root = positional
+                .get(2)
+                .map(|s| Utf8PathBuf::from(s.as_str()))
+                .unwrap_or_else(|| Utf8PathBuf::from("."));
+            let value_of = |flag: &str| {
+                args.iter()
+                    .position(|a| a == flag)
+                    .and_then(|i| args.get(i + 1))
+                    .map(String::as_str)
+            };
+            fill_cmd(
+                agent,
+                &root,
+                unsafe_spec,
+                [value_of("--run-inputs"), value_of("--remembered")],
+                value_of("--field"),
+            )
+        }
         "card" => {
             let agent = positional.get(1).map(|s| s.as_str()).unwrap_or("");
             let root = positional
@@ -420,7 +458,8 @@ fn run() -> Result<i32> {
             // typo suggestion is the same `suggest::closest` the option refusal
             // two functions up already uses.
             let verbs = [
-                "check", "show", "waits", "discover", "card", "write", "build", "about", "help",
+                "check", "show", "waits", "discover", "card", "fill", "write", "build", "about",
+                "help",
             ];
             let fix = match pact_schema::suggest::closest(other, &verbs) {
                 Some(near) => format!("Did you mean `pact {near}`?"),
@@ -2868,38 +2907,167 @@ fn card_cmd(agent: &str, root: &Utf8PathBuf, unsafe_spec: bool, base_url: &str) 
             Ok(0)
         }
         None => {
-            // Bases are left off the list: suggesting one would send the
-            // reader straight into the refusal they just read about.
-            let mut known: Vec<String> = found
-                .document
-                .get("agents")
-                .and_then(pact_doc::Node::as_map)
-                .map(|m| {
-                    m.iter()
-                        .filter(|(_, e)| !discover::is_base(&e.node))
-                        .map(|(k, _)| k.clone())
-                        .collect()
-                })
-                .unwrap_or_default();
-            known.sort();
-            let fix = if known.is_empty() {
-                format!(
-                    "This tree has no agents at all — add one at \
-                     `{root}/agents/<name>/agent.yaml`."
-                )
-            } else {
-                format!("Change it to one of: {}.", known.join(", "))
+            eprint!("{}", no_such_agent(&found.document, agent, root).render());
+            Ok(2)
+        }
+    }
+}
+
+/// The refusal for an agent `root` does not have, naming the ones it does.
+///
+/// Bases are left off the list: suggesting one would send the reader straight
+/// into the refusal they just read about.
+pub(crate) fn no_such_agent(
+    document: &pact_doc::Node,
+    agent: &str,
+    root: &Utf8PathBuf,
+) -> Diagnostics {
+    let mut known: Vec<String> = document
+        .get("agents")
+        .and_then(pact_doc::Node::as_map)
+        .map(|m| {
+            m.iter()
+                .filter(|(_, e)| !discover::is_base(&e.node))
+                .map(|(k, _)| k.clone())
+                .collect()
+        })
+        .unwrap_or_default();
+    known.sort();
+    let fix = if known.is_empty() {
+        format!(
+            "This tree has no agents at all — add one at \
+             `{root}/agents/<name>/agent.yaml`."
+        )
+    } else {
+        format!("Change it to one of: {}.", known.join(", "))
+    };
+    refuse(
+        "cli/no-such-agent",
+        format!("there is no agent named '{agent}' in {root}."),
+        fix,
+    )
+}
+
+/// `pact fill <agent> [PATH]` — one agent's words, filled for one run.
+///
+/// The words a model reads at the start of a run: the agent's `instructions:`
+/// (or `--field description`) with each hole, or the whole Jinja template, filled
+/// from `--run-inputs` and `--remembered` (each a JSON object keyed by the names
+/// the agent declares), through [`pact_loader::fill`]. The text goes to stdout as
+/// it is, with nothing added, so a runtime can send it on unchanged; a runtime
+/// that keeps its own cache keys it by the version's digest and the inputs.
+/// Refused, at exit 1, when the tree has problems or a value the words need was
+/// not given, so the braces never reach a model.
+fn fill_cmd(
+    agent: &str,
+    root: &Utf8PathBuf,
+    unsafe_spec: bool,
+    given: [Option<&str>; 2],
+    field: Option<&str>,
+) -> Result<i32> {
+    if agent.is_empty() {
+        eprint!(
+            "{}",
+            refuse(
+                "cli/no-agent-named",
+                "`pact fill` was not told whose words to fill.".into(),
+                "Write it as `pact fill <agent> [PATH] --run-inputs '{\"brand\": \"Acme\"}'`."
+                    .into(),
+            )
+            .render()
+        );
+        return Ok(2);
+    }
+    let field = field.unwrap_or("instructions");
+    if !matches!(field, "instructions" | "description") {
+        eprint!(
+            "{}",
+            refuse(
+                "cli/not-a-field-with-words",
+                format!("`--field {field}` is not a field `pact fill` fills."),
+                "Write `--field instructions` (the default) or `--field description`.".into(),
+            )
+            .render()
+        );
+        return Ok(2);
+    }
+    let mut values = Vec::new();
+    for (flag, text) in ["--run-inputs", "--remembered"].into_iter().zip(given) {
+        match text.map(serde_json::from_str::<serde_json::Value>) {
+            None => values.push(serde_json::Map::new()),
+            Some(Ok(serde_json::Value::Object(map))) => values.push(map),
+            Some(_) => {
+                eprint!(
+                    "{}",
+                    refuse(
+                        "cli/not-a-json-object",
+                        format!("the value after `{flag}` is not a JSON object."),
+                        format!(
+                            "Write it as one object keyed by the names the agent declares, \
+                             for example `{flag} '{{\"brand-voice\": \"warm\"}}'`."
+                        ),
+                    )
+                    .render()
+                );
+                return Ok(2);
+            }
+        }
+    }
+    let (node, mut diags, _) = validate(root, unsafe_spec)?;
+    if diags.has_errors() {
+        eprint!("{}", diags.render());
+        return Ok(1);
+    }
+    diags.sort();
+    if !diags.is_empty() {
+        eprint!("{}", diags.render());
+    }
+    let Some(document) = node else {
+        bail!("nothing loadable at '{root}'");
+    };
+    let Some(entry) = document
+        .get("agents")
+        .and_then(|agents| agents.get(agent))
+        .filter(|entry| !discover::is_base(entry))
+    else {
+        eprint!("{}", no_such_agent(&document, agent, root).render());
+        return Ok(2);
+    };
+    let text = entry
+        .get(field)
+        .and_then(pact_doc::Node::as_str)
+        .unwrap_or("");
+    let language = pact_loader::fill::Language::written(
+        document
+            .get("template-language")
+            .and_then(pact_doc::Node::as_str),
+    );
+    match pact_loader::fill::fill(text, language, &values[0], &values[1]) {
+        Ok(said) => {
+            out_raw!("{said}");
+            Ok(0)
+        }
+        Err(why) => {
+            let (rule, fix) = match &why {
+                pact_loader::fill::FillError::Unfilled { .. } => (
+                    "cli/a-hole-with-no-value",
+                    "Pass the value in `--run-inputs` or `--remembered`, under the name the agent declares.",
+                ),
+                pact_loader::fill::FillError::NotRendered(_) => (
+                    "cli/a-template-that-cannot-be-rendered",
+                    "Run `pact check` on the tree: it names what the template may use.",
+                ),
             };
             eprint!(
                 "{}",
                 refuse(
-                    "cli/no-such-agent",
-                    format!("there is no agent named '{agent}' in {root}."),
-                    fix,
+                    rule,
+                    format!("'{agent}' cannot be filled: {why}."),
+                    fix.into()
                 )
                 .render()
             );
-            Ok(2)
+            Ok(1)
         }
     }
 }

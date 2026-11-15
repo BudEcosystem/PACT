@@ -151,6 +151,7 @@ pub mod detecting;
 pub mod effects;
 pub mod exactly_once;
 pub mod failures;
+pub mod fill;
 pub mod firstfile;
 pub mod handover;
 pub mod holes;

@@ -44,8 +44,8 @@ use pact_schema::{Group, Schema, Ty};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The two namespaces a hole may name.
-const RUN_INPUTS: &str = "run-inputs";
-const REMEMBERS: &str = "remembers";
+pub(crate) const RUN_INPUTS: &str = "run-inputs";
+pub(crate) const REMEMBERS: &str = "remembers";
 
 /// One hole found in some text: the name between the braces, and how many
 /// lines into the text it sits.
@@ -65,17 +65,33 @@ struct Found {
     almost: bool,
 }
 
-/// Every hole and near-miss in `text`, in order.
+/// One `{{` in some text, as [`braces`] steps over it.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Brace {
+    /// `\{{`: the author's own braces. `at` is the backslash; `end` is just past the `{{`.
+    Escaped { at: usize, end: usize },
+    /// `{{name}}` with a name of the characters a hole's name may hold, in either namespace or none.
+    Name { at: usize, end: usize, name: String },
+    /// `{{...}}` whose inside is no name: a Handlebars helper, an example of JSON, or nearly a hole.
+    Other { at: usize, close: usize },
+}
+
+/// Every `{{` in `text` the scan stops at, in order: the one walk both checking ([`scan`]) and
+/// filling ([`crate::fill`]) read, so a hole is the same hole to both.
 ///
-/// Leftmost `{{`, first `}}` after it, and on anything that is not a name step
-/// past the `{{` only — so `{{{run-inputs.x}}}` is not a hole. A `{{` with a
-/// backslash before it is the author's own braces and is stepped over.
-fn scan(text: &str) -> Vec<Found> {
+/// Leftmost `{{`, first `}}` after it, and on anything that is not a name step past the `{{`
+/// only, so `{{{run-inputs.x}}}` is not a hole. A `{{` with a backslash before it is the
+/// author's own braces and is stepped over. A `{{` with no `}}` after it ends the walk.
+pub(crate) fn braces(text: &str) -> Vec<Brace> {
     let mut out = Vec::new();
     let mut from = 0usize;
     while let Some(open) = text[from..].find("{{").map(|i| from + i) {
         let after = open + 2;
         if text[..open].ends_with('\\') {
+            out.push(Brace::Escaped {
+                at: open - 1,
+                end: after,
+            });
             from = after;
             continue;
         }
@@ -88,31 +104,50 @@ fn scan(text: &str) -> Vec<Found> {
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'));
         if is_name {
-            out.push(Found {
-                written: inner.to_string(),
+            out.push(Brace::Name {
                 at: open,
-                almost: false,
+                end: close + 2,
+                name: inner.to_string(),
             });
             from = close + 2;
-            continue;
+        } else {
+            out.push(Brace::Other { at: open, close });
+            from = after;
         }
-        // Nearly a hole: it names a namespace and is one pair of braces (a
-        // second `{{` inside means this pair closes somewhere else).
-        let names_one = [RUN_INPUTS, REMEMBERS]
-            .iter()
-            .any(|n| inner.contains(&format!("{n}.")));
-        if names_one && !inner.contains("{{") {
-            // `{{{x}}}` is shown whole: its third brace is part of the mistake.
-            let end = close + 2 + usize::from(text[close + 2..].starts_with('}'));
-            out.push(Found {
-                written: text[open..end].to_string(),
-                at: open,
-                almost: true,
-            });
-        }
-        from = after;
     }
     out
+}
+
+/// Every hole and near-miss in `text`, in order.
+fn scan(text: &str) -> Vec<Found> {
+    braces(text)
+        .into_iter()
+        .filter_map(|brace| match brace {
+            Brace::Escaped { .. } => None,
+            Brace::Name { at, name, .. } => Some(Found {
+                written: name,
+                at,
+                almost: false,
+            }),
+            // Nearly a hole: it names a namespace and is one pair of braces (a second `{{`
+            // inside means this pair closes somewhere else).
+            Brace::Other { at, close } => {
+                let inner = text[at + 2..close].trim();
+                let names_one = [RUN_INPUTS, REMEMBERS]
+                    .iter()
+                    .any(|n| inner.contains(&format!("{n}.")));
+                (names_one && !inner.contains("{{")).then(|| {
+                    // `{{{x}}}` is shown whole: its third brace is part of the mistake.
+                    let end = close + 2 + usize::from(text[close + 2..].starts_with('}'));
+                    Found {
+                        written: text[at..end].to_string(),
+                        at,
+                        almost: true,
+                    }
+                })
+            }
+        })
+        .collect()
 }
 
 /// Every hole in `text`, in order.

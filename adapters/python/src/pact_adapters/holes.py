@@ -29,6 +29,7 @@ author did not write.
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -168,11 +169,61 @@ def _template_names(values: Mapping[str, Any]) -> dict[str, Any]:
     return {str(k).replace("-", "_"): v for k, v in (values or {}).items()}
 
 
+def number_text(number: float) -> str:
+    """A finite number as ECMAScript's `Number::toString` writes it, as `fill.rs::number_text`
+    does: the shortest digits that read back the same; positional from 1e-6 up to (not
+    including) 1e21, with no fraction when there is none (`2`, not `2.0`); otherwise
+    `<d>[.<digits>]e<sign><exp>`. A runtime in TypeScript holds no `2.0` apart from `2`, so
+    the shared rule is the one it can keep."""
+    if isinstance(number, int):
+        return str(number)
+    if number == 0:
+        return "0"
+    sign, digits_tuple, exponent = Decimal(repr(number)).normalize().as_tuple()
+    digits = "".join(map(str, digits_tuple))
+    k = len(digits)
+    n = k + int(exponent)  # 10^(n-1) <= |number| < 10^n
+    minus = "-" if sign else ""
+    if k <= n <= 21:
+        return f"{minus}{digits}{'0' * (n - k)}"
+    if 0 < n <= 21:
+        return f"{minus}{digits[:n]}.{digits[n:]}"
+    if -6 < n <= 0:
+        return f"{minus}0.{'0' * -n}{digits}"
+    mantissa = f"{digits[0]}.{digits[1:]}" if k > 1 else digits
+    return f"{minus}{mantissa}e{'-' if n - 1 < 0 else '+'}{abs(n - 1)}"
+
+
+def json_text(value: Any) -> str:
+    """`value` as JSON the way every port writes it into words (`fill.rs::json_text`): `, `
+    between items, `: ` after a key, non-ASCII kept, and a number by `number_text`."""
+    if value is None or isinstance(value, (bool, str)):
+        return json.dumps(value, ensure_ascii=False)
+    if isinstance(value, (int, float)):
+        return number_text(value)
+    if isinstance(value, Mapping):
+        return "{" + ", ".join(f"{json.dumps(str(k), ensure_ascii=False)}: {json_text(v)}" for k, v in value.items()) + "}"
+    return "[" + ", ".join(json_text(item) for item in value) + "]"
+
+
+def _said(value: Any) -> Any:
+    """What `{{ ... }}` prints, as a hole's value goes in: text as written, anything else
+    as JSON (`json_text`), so `true`, `null`, `5` and a list read the same from every port
+    (Jinja2 alone prints `True`, `None`, `5.0` and a Python list).
+    An undefined value is handed back as it is, so printing it is still the error."""
+    from jinja2 import Undefined
+
+    if isinstance(value, (str, Undefined)):
+        return value
+    return json_text(value)
+
+
 def _render_jinja(text: str, run_inputs: Mapping[str, Any], remembers: Mapping[str, Any]) -> str:
     """One authored template, rendered once, in the sandbox, from data.
 
     `SandboxedEnvironment` with no globals and only the shared filters and
-    tests, so a template can reach nothing `pact check` did not allow;
+    tests, so a template can reach nothing `pact check` did not allow; what it prints
+    follows `_said`;
     `StrictUndefined`, so a value the run was not given is an error and never an
     empty string; no autoescape, because these are words for a model, not HTML.
     What is inserted is never rendered again — a customer who typed `{{ 7*7 }}`
@@ -188,7 +239,10 @@ def _render_jinja(text: str, run_inputs: Mapping[str, Any], remembers: Mapping[s
         ) from missing
 
     env = SandboxedEnvironment(
-        undefined=StrictUndefined, autoescape=False, keep_trailing_newline=True
+        undefined=StrictUndefined,
+        autoescape=False,
+        keep_trailing_newline=True,
+        finalize=_said,
     )
     env.globals.clear()
     env.filters = {k: v for k, v in env.filters.items() if k in JINJA_FILTERS}
@@ -212,8 +266,8 @@ def fill(
 ) -> str:
     """`text` with every hole replaced by its value, and every escaped `\\{{` as `{{`.
 
-    Text goes in as written; any other value as JSON, so a list of examples
-    reads as a list rather than as a Python repr. Raises `Unfilled` for a hole
+    Text goes in as written; any other value as JSON (`json_text`), so a list
+    of examples reads as a list rather than as a Python repr. Raises `Unfilled` for a hole
     with no value, absent or `None`.
 
     `language="jinja"` (the workspace's `template-language:`, 96 §C) renders
@@ -233,6 +287,6 @@ def fill(
         value = sources[hole.namespace].get(hole.name)
         if value is None:
             raise Unfilled(hole)
-        parts.append(value if isinstance(value, str) else json.dumps(value, ensure_ascii=False))
+        parts.append(value if isinstance(value, str) else json_text(value))
     parts.append(text[at:])
     return "".join(parts)
