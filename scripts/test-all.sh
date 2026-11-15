@@ -36,6 +36,10 @@ done
 for spec in $(find examples -name '*.pact' | sort); do
   cargo run --quiet -p pact-cli -- check "$(dirname "$spec")" --deny-warnings
 done
+echo "── WebAssembly ──"
+# `pact_loader::fill` for runtimes that are not Rust (`adapters/typescript/src/fill.ts`); the
+# adapter suite replays the shared fill cases through it.
+cargo build --quiet -p pact-fill-wasm --target wasm32-unknown-unknown --release
 echo "── TypeScript ──"
 # 1238 lines of the "second, independent port" were never type-checked: there was
 # no tsconfig, `typescript` was not a dependency, and `--experimental-strip-types`

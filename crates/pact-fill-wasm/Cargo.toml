@@ -1,0 +1,27 @@
+[package]
+name = "pact-fill-wasm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "pact_loader::fill as a WebAssembly module: an agent's words filled for one run, in process, for runtimes that are not Rust."
+repository.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pact-loader = { workspace = true }
+serde_json = { workspace = true }
+
+# The workspace forbids `unsafe`. This crate is the one exception, and only for
+# the three exported functions a host calls through raw memory (`src/lib.rs`):
+# WebAssembly hands a host numbers, not strings, so copying bytes in and out of
+# linear memory is the whole interface. Everything else is safe Rust in
+# `pact-loader`.
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }

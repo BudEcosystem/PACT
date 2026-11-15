@@ -7,6 +7,7 @@ members = [
     "crates/pact-loader",
     "crates/pact-schema",
     "crates/pact-cli",
+    "crates/pact-fill-wasm",
 ]
 
 [workspace.package]
@@ -57,9 +58,11 @@ yaml-rust2 = "0.11"
 # 96 §C. The checker for `template-language: jinja`. Pinned EXACTLY, and with
 # `unstable_machinery`, because what `holes.rs` reads is the compiled
 # instruction list — every filter, test, function and include a template uses —
-# and that list is the crate's unstable surface. Nothing renders here: the
-# document carries the template, and a runtime renders it.
-minijinja = { version = "=2.21.0", default-features = false, features = ["builtins", "unstable_machinery"] }
+# and that list is the crate's unstable surface. `fill.rs` renders with the same
+# engine (`pact fill`, the WebAssembly build); `preserve_order` keeps a mapping's
+# keys in the order the run gave them, as Jinja2 does, so `| items` walks them
+# alike in both ports.
+minijinja = { version = "=2.21.0", default-features = false, features = ["builtins", "unstable_machinery", "preserve_order"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
