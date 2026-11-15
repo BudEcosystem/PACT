@@ -1283,7 +1283,7 @@ def _compile_rules(
     """
     doc = where or "this interceptor"
     at_document = _where(source, name, "")
-    patterns: list[tuple[re.Pattern[str], str]] = []
+    patterns: list[Hiding] = []
     destinations: set[str] = set()
     # A guard returns the decision it reached, not a reason string. One list
     # rather than one list per consequence: stopping and redirecting are the
@@ -1385,7 +1385,7 @@ def _compile_rules(
                     f"so this rule would do nothing. Fix: change `when:` to "
                     f"{WHERE_HIDING_WORKS}."
                 )
-            patterns.append((re.compile(looks_like), last_replacement))
+            patterns.append((re.compile(looks_like), last_replacement, thing))
             continue
 
         rewrite = _REWRITE_ANSWER.match(text)
@@ -1604,7 +1604,17 @@ def _compile_rules(
     return body, frozenset(destinations)
 
 
-def _mask(value: Any, patterns: Sequence[tuple[re.Pattern[str], str]]) -> Any:
+#: One hiding sentence, compiled: what it recognises as a pattern, the words left
+#: in its place, and the thing it names (`card number`, or a workspace's own
+#: detector, `order reference`). The name is kept here because a placeholder is
+#: named for it (`⟦order-reference-1⟧`) when the run hides, which is after the
+#: chain was read and the workspace's `detectors:` went out of scope: looked up
+#: from the pattern then, a declared detector's name was gone, and its values
+#: came back as an anonymous `⟦hidden-1⟧`.
+Hiding = tuple[re.Pattern[str], str, str]
+
+
+def _mask(value: Any, patterns: Sequence[Hiding]) -> Any:
     """Apply the pattern table to this value and to everything inside it.
 
     A message's `content` is a string and a tool call's `args` is a map, so the
@@ -1643,26 +1653,16 @@ def _mask(value: Any, patterns: Sequence[tuple[re.Pattern[str], str]]) -> Any:
 
 
 @lru_cache(maxsize=None)
-def _scanner(patterns: tuple[tuple[re.Pattern[str], str], ...]) -> re.Pattern[str]:
+def _scanner(patterns: tuple[Hiding, ...]) -> re.Pattern[str]:
     """One expression that finds where ANY of the patterns could begin.
 
     Only used to skip the parts of a long string nothing recognises, so the walk
     below costs one linear scan rather than one attempt per character.
     """
-    return re.compile("|".join(f"(?:{rx.pattern})" for rx, _ in patterns))
+    return re.compile("|".join(f"(?:{rx.pattern})" for rx, _, _ in patterns))
 
 
-def _thing_of(pattern: str) -> str:
-    """Which recogniser a pattern is, by name (`card number`, or a workspace's own detector,
-    `order reference`, when its `detectors:` are in scope), or `""`. A placeholder is named for it,
-    so whoever reads `⟦order-reference-1⟧` knows what kind of value stands there."""
-    from .detectors import DECLARED
-
-    known = {**RECOGNISES, **DECLARED.get()}
-    return next((thing for thing, p in known.items() if p == pattern), "")
-
-
-def _substitute(text: str, patterns: Sequence[tuple[re.Pattern[str], str]]) -> str:
+def _substitute(text: str, patterns: Sequence[Hiding]) -> str:
     """Replace every run any sentence recognises — longest match wins.
 
     This used to be one `rx.sub` per pattern in the order the sentences were
@@ -1689,11 +1689,11 @@ def _substitute(text: str, patterns: Sequence[tuple[re.Pattern[str], str]]) -> s
     while (found := scan.search(text, i)) is not None:
         start = found.start()
         end, replacement, kind = start, "", ""
-        for rx, repl in patterns:
+        for rx, repl, thing in patterns:
             m = rx.match(text, start)
             stop = start + _hides(rx.pattern, m.group()) if m is not None else start
             if stop > end:
-                end, replacement, kind = stop, repl, rx.pattern
+                end, replacement, kind = stop, repl, thing
         if end <= start:
             # Nothing here is a thing to hide after all (an id that only starts
             # like an IBAN): step past this character, so the loop always
@@ -1710,7 +1710,7 @@ def _substitute(text: str, patterns: Sequence[tuple[re.Pattern[str], str]]) -> s
         else:
             # Named for what was recognised (`card number`), not for the words
             # it would otherwise have been replaced with (`[removed]`).
-            out.append(vault.token(_thing_of(kind) or replacement, text[start:end]))
+            out.append(vault.token(kind or replacement, text[start:end]))
         i = end
     out.append(text[i:])
     return "".join(out)

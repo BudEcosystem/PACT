@@ -123,16 +123,17 @@ def test_a_tool_answer_is_not_kept_where_never_from_refuses_it() -> None:
 
 
 def test_a_workspace_detectors_placeholder_is_named_for_it() -> None:
-    """`⟦order-reference-1⟧`, not an anonymous `⟦hidden-1⟧`: a reviewer reads what kind it was."""
-    from pact_adapters.detectors import DECLARED
-    from pact_adapters.interceptors import _thing_of
+    """`⟦order-reference-1⟧`, not an anonymous `⟦hidden-1⟧`: a reviewer reads what kind it was.
 
-    held = DECLARED.set({"order reference": "(?:ORD-[0-9]{8})"})
-    try:
-        assert _thing_of("(?:ORD-[0-9]{8})") == "order reference"
-    finally:
-        DECLARED.reset(held)
-    assert _thing_of("(?:ORD-[0-9]{8})") == "", "with no detectors in scope, nothing to name it by"
+    Read from a real run, because the name has to survive the chain being read:
+    the workspace's `detectors:` are in scope while it is, and out of scope by
+    the time the run hides the value."""
+    doc = _doc(True)
+    doc["detectors"] = {"order reference": {"looks-like": ["ORD-[0-9]{8}"], "examples": ["ORD-12345678"]}}
+    doc["redaction"]["hide"].append("anything that looks like an order reference")
+    model = Echo("payments", "charge")
+    asyncio.run(run(AgentSpec.from_document(doc, "a"), model, f"order ORD-20261115, card {CARD}", {"payments": lambda a: "ok"}))
+    assert "order ⟦order-reference-1⟧, card ⟦card-number-1⟧" in model.seen[0], model.seen[0]
 
 
 def test_a_placeholder_the_request_does_not_hold_is_never_sent() -> None:
