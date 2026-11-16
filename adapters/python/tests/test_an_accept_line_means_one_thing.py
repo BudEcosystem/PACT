@@ -158,6 +158,30 @@ def test_the_shipped_benchmarks_say_how_each_is_measured() -> None:
     for b in known.values():
         if b.runner == "deepeval":
             assert hasattr(shipped, b.runs.split(":", 1)[1]), b.name
+    # DeepEval's ARC runs the easy set by default; the row's figure is the challenge set's.
+    from deepeval.benchmarks.modes import ARCMode
+
+    assert benchmarks._settings_for(shipped.ARC, known["arc"].with_) == {"mode": ARCMode.CHALLENGE}
+
+
+def test_deepeval_comes_with_what_its_benchmarks_import() -> None:
+    """`datasets` (every benchmark) and `pandas` (MMLU) are imported when a benchmark is built,
+    and DeepEval's own package declares neither, so the `deepeval` extra does."""
+    import importlib
+
+    for module in ("datasets", "pandas"):
+        importlib.import_module(module)
+
+
+def test_a_figure_recorded_under_an_alias_lands_on_the_rows_own_id(tmp_path: Path) -> None:
+    path = benchmarks.record(tmp_path, "qwen2.5:7b-instruct", "mmlu", 70.0, source="a run on this machine")
+    assert list(yaml.safe_load(path.read_text())["models"]) == ["qwen2.5-7b-instruct"]
+    rows = [e for e in resolve.load_catalogue(workspace=tmp_path).entries if "qwen2.5:7b-instruct" in e.aliases]
+    assert [e.name for e in rows] == ["qwen2.5-7b-instruct"], "one candidate, not the alias beside the row"
+    assert rows[0].scores["mmlu"] == pytest.approx(70.0)
+    again = benchmarks.record(tmp_path, "qwen2.5-7b-instruct", "gsm8k", 80.0, source="a run on this machine")
+    figures = yaml.safe_load(again.read_text())["models"]["qwen2.5-7b-instruct"]["benchmarks"]
+    assert set(figures) == {"mmlu", "gsm8k"}
 
 
 def test_a_bound_model_says_which_of_an_agents_settings_it_would_throw_away() -> None:
