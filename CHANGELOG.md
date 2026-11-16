@@ -3,6 +3,30 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — a runtime may serve a workspace without its broken agents (16 November)
+
+An error in any file of a workspace withdrew all of it: `pact discover` printed `skipping <root>: N
+problem(s)` and `pact show` exited 1, so a runtime serving a tree that is edited while it runs stopped
+serving every agent the moment one agent was edited badly, agents nobody had touched among them.
+
+### What holds now
+
+- **`--leave-out-broken-agents` leaves out an agent whose own folder holds the errors, and serves the
+  rest.** With it, when every error lies in some agents' folders (`agents/<key>/…`), `pact show` and
+  `pact discover` validate the workspace again without those agents and serve it if it then loads,
+  exit 0. Each left-out agent's problems print on stderr as warnings, with `loader/agent-left-out`
+  naming it.
+- **A runtime hears which agents were left out.** `pact discover --leave-out-broken-agents` adds
+  `"left-out": [{ "id": "pact:<key>", "problems": N }]` to the workspace's inventory, so a runtime can
+  keep serving the version it last had of them.
+- **Anything else still refuses the workspace.** An error outside the agents' folders, or one the
+  reduced workspace still has (a teammate naming a left-out agent), keeps the whole workspace refused.
+- **Without the flag nothing changes.** `pact show`'s exit code is how a session's door and a sealed
+  plan decide that a document loads, and neither may lose an agent quietly, so isolation is asked for.
+- **The author is still told.** `pact check <root>` refuses the tree. `pact check <agent>` for a clean
+  agent beside broken ones now says `loader/other-agents-left-out` (a runtime that leaves them out runs
+  this agent) instead of `loader/the-workspace-around-it-is-broken`.
+
 ## 2026-11 — PACT Core, first phase: actors and functions the checker reads, and a workspace that changes while it runs (16 November)
 
 The seven primitives were a way of classifying PACT (`docs/97`: "a mental model, not a syntax").
