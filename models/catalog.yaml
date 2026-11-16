@@ -726,6 +726,145 @@ models:
     # checked 2026-07-28 by jithinvg@bud.studio.
     cost: { input-per-mtok: 5.00 USD, output-per-mtok: 30.00 USD }
 
+  # ───────────────────────────────────────────── OpenAI's low-cost rows
+  #
+  # The three cheapest models OpenAI still serves, so an agent with
+  # `cost-per-request-under:` or "the cheapest model that passes" can land on
+  # this vendor below the mid row, and a tree can name them without adding a
+  # workspace catalogue layer. Every figure below is read from the same pinned
+  # dependencies as the rows above, at the versions `adapters/python/uv.lock`
+  # pins today: `genai-prices` 0.1.9 (`genai_prices/data.py`, the `openai`
+  # provider's entry for each id, fields `context_window`,
+  # `prices.input_mtok` and `prices.output_mtok`) and Pydantic AI 2.54
+  # (`profiles/openai.py`, `_REASONING_SUPPORT_BY_PREFIX`). Read 2026-11-16 by
+  # jithinvg@bud.studio.
+  #
+  # IMAGES: all three accept images on OpenAI's API, but no dependency this
+  # distribution ships states it for these ids, so `modality-in` stays `[text]`
+  # under the same rule as `gpt-5.4-mini`: claiming too little costs a
+  # candidacy with a printed reason, claiming too much fails mid-run.
+
+  gpt-5-mini:
+    family: gpt-5
+    tier: mid
+    also-known-as:
+      - "openai/gpt-5-mini"
+    served-by:
+      - { runtime: openai-api }
+    capabilities:
+      # Same source as `gpt-5.4-mini`: `parallel_tool_calls` on the vendored
+      # OpenAI request type.
+      tool-calling: parallel
+      modality-in: [text]
+      modality-out: [text]
+      ignores: [top-k]
+      ignores-while-thinking: [temperature, top-p, presence-penalty, frequency-penalty]
+      # `'gpt-5': _ALWAYS_ON_REASONING`, the prefix that covers the original
+      # GPT-5 family "(incl. -mini/-pro/-codex)".
+      thinks-unless-told: yes   # `thinking_enabled_by_default`
+      context-window:
+        value: 400000
+        provenance:
+          source: >
+            `genai-prices` 0.1.9, bundled data at `genai_prices/data.py`,
+            pinned in `adapters/python/uv.lock`. Read from the `openai`
+            provider's `gpt-5-mini` entry, field `context_window`.
+          date: 2026-11-16
+          as-of: 2026-11-16
+          recorded-by: jithinvg@bud.studio
+    reasoning:
+      value: unknown
+      provenance:
+        source: >
+          No positioning statement maps onto the four-rung ladder and no
+          benchmark figure has been measured on this distribution. Written
+          `unknown`: Y12 makes UNKNOWN bind and rank last.
+        harness: none
+        as-of: 2026-11-16
+        recorded-by: jithinvg@bud.studio
+    # `genai-prices` 0.1.9, `openai` provider, `gpt-5-mini`, fields
+    # `prices.input_mtok` and `prices.output_mtok`. Cached input is 0.025 USD.
+    cost: { input-per-mtok: 0.25 USD, output-per-mtok: 2.00 USD }
+
+  gpt-5-nano:
+    family: gpt-5
+    tier: small
+    also-known-as:
+      - "openai/gpt-5-nano"
+    served-by:
+      - { runtime: openai-api }
+    capabilities:
+      tool-calling: parallel
+      modality-in: [text]
+      modality-out: [text]
+      ignores: [top-k]
+      ignores-while-thinking: [temperature, top-p, presence-penalty, frequency-penalty]
+      thinks-unless-told: yes   # `thinking_enabled_by_default`, as `gpt-5-mini`
+      context-window:
+        value: 400000
+        provenance:
+          source: >
+            `genai-prices` 0.1.9, bundled data at `genai_prices/data.py`,
+            pinned in `adapters/python/uv.lock`. Read from the `openai`
+            provider's `gpt-5-nano` entry, field `context_window`.
+          date: 2026-11-16
+          as-of: 2026-11-16
+          recorded-by: jithinvg@bud.studio
+    reasoning:
+      value: unknown
+      provenance:
+        source: >
+          No positioning statement maps onto the four-rung ladder and no
+          benchmark figure has been measured on this distribution. Written
+          `unknown`: Y12 makes UNKNOWN bind and rank last.
+        harness: none
+        as-of: 2026-11-16
+        recorded-by: jithinvg@bud.studio
+    # `genai-prices` 0.1.9, `openai` provider, `gpt-5-nano`. Cached input is
+    # 0.005 USD.
+    cost: { input-per-mtok: 0.05 USD, output-per-mtok: 0.40 USD }
+
+  gpt-4o-mini:
+    family: gpt-4o
+    tier: small
+    also-known-as:
+      - "openai/gpt-4o-mini"
+      # The dated snapshot `genai-prices` matches to the same entry.
+      - "gpt-4o-mini-2024-07-18"
+    served-by:
+      - { runtime: openai-api }
+    capabilities:
+      tool-calling: parallel
+      modality-in: [text]
+      modality-out: [text]
+      # No prefix in `_REASONING_SUPPORT_BY_PREFIX` matches, so Pydantic AI
+      # treats it as a model that does not reason: no `thinks-unless-told`, and
+      # sampling parameters are sent. `top_k` is still never sent.
+      ignores: [top-k]
+      context-window:
+        value: 128000
+        provenance:
+          source: >
+            `genai-prices` 0.1.9, bundled data at `genai_prices/data.py`,
+            pinned in `adapters/python/uv.lock`. Read from the `openai`
+            provider's `gpt-4o-mini` entry, field `context_window`.
+          date: 2026-11-16
+          as-of: 2026-11-16
+          recorded-by: jithinvg@bud.studio
+    reasoning:
+      value: unknown
+      provenance:
+        source: >
+          No positioning statement maps onto the four-rung ladder and no
+          benchmark figure has been measured on this distribution. Written
+          `unknown`: Y12 makes UNKNOWN bind and rank last.
+        harness: none
+        as-of: 2026-11-16
+        recorded-by: jithinvg@bud.studio
+    # `genai-prices` 0.1.9, `openai` provider, `gpt-4o-mini`. Cached input is
+    # 0.075 USD.
+    cost: { input-per-mtok: 0.15 USD, output-per-mtok: 0.60 USD }
+
   # The second hosted vendor with a price, which is what makes the ceiling a
   # ceiling rather than an Anthropic feature. It is also the only row here whose
   # image support is stated by its own source rather than left out for want of
