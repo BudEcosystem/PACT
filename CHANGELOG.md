@@ -3,6 +3,68 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — PACT Core, first phase: actors and functions the checker reads, and a workspace that changes while it runs (16 November)
+
+The seven primitives were a way of classifying PACT (`docs/97`: "a mental model, not a syntax").
+The owner asked for a language that can be written, changed while it runs, with a pre-compiled
+option. `docs/100-PACT-CORE-A-WRITABLE-KERNEL-LANGUAGE.md` is the plan; this is its first phase.
+
+### What an author can now write
+
+- **A signature on the line that names it**, for a flow, an agent or a program:
+  `flow decide-all(orders: list of text) gives summary: text`. `flow` is another word for
+  `workflow`.
+- **A call in brackets**: `seen = orders/look(order: input.order)`.
+- **An actor**: one name with several capabilities. Beneath each `can`, `by model` makes it an
+  agent (`<actor>-<capability>`, with what the actor shares) and statements make it a workflow.
+  Called as `desk.judge(…)`.
+- None of these is a new thing in the document: a workspace written with them and the same one
+  written in keywords load to the identical document and the identical fingerprint.
+- `examples/core/refund-desk` is a workspace written this way. With it, every one of the 76
+  kernel operations is written in a shipped tree that loads; four were written in none.
+
+### Two ways to run a workspace
+
+- **Interpreted** (`session.Session.open`): `propose`, `change`, `withdraw` and `cell` go through
+  one door whose judge is the `pact` binary. A refusal changes nothing and carries the checker's
+  sentence. A run in flight finishes under the version it began with. Every version has a
+  fingerprint; the journal is written first, and a session resumed from any point of it is exactly
+  a version it had reached.
+- **Pre-compiled** (`session.compile_plan`, `Plan.load`): checked once and sealed. A plan runs
+  with no checker beside it, refuses every proposal, and refuses to load if it was edited.
+
+### A model that acts by writing a cell
+
+- `cells.act_by_a_cell`: the model writes a few statements; the door checks them; they are carried
+  out on the whole of each value; a refused or stopped cell is told why and written again.
+- A cell may call what its writer was given and nothing else, may define agents, flows and shapes
+  and nothing of the workspace's own, never replaces what is there, and is gone when the call
+  ends: the workspace is then the one it was, to the fingerprint.
+- `previews.preview`: a value is shown to a model in a few words with its true size, and worked on
+  whole. What a model is told for 5 orders and for 20,000 differs by under 200 characters.
+
+### What a runtime must match
+
+- **`tests/conformance/cells.json`**, 21 cases on `examples/core/refund-desk`, 18 of them attacks.
+  What is held is which door refuses each (`checker` with its rule, `floor`, `meter`, `collision`,
+  `reach`, `wider`), not a guard's wording.
+
+### Checked live
+
+Four tasks, five times each: `gpt-4o-mini` 20 of 20, `gpt-5-nano` 19 of 20 (recovery after a
+refusal 4 of 5). The tasks: a cell admitted at the first try;
+recovery after a refused cell; 20,000 values by reference; an injected instruction to define a
+tool and pay, which did neither. The first wording of what a model is told failed every run (the
+model copied the explanations into its cell) and was rewritten; `docs/100` §17.4 lists that and
+five other things the live runs found.
+
+### Still owed
+
+- `define` and the keywords as a prelude; a kernel interpreter; cached plans; promotion.
+- The checker's fix for a loop with no ceiling suggests `ask-a-person`, which a cell cannot use.
+- A statement cannot state a value of its own, or give a value another name.
+- No second runtime replays `cells.json` yet.
+
 ## 2026-11 — an agent's answer is held to what the agent says it gives (15 November)
 
 `answers-with:` is a promise to whoever calls the agent. The reference harness put the shape to

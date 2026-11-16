@@ -50,6 +50,7 @@ nav:
       - One file instead of a folder: guide/the-pact-language.md
       - Your first agent, in one file: guide/first-agent-in-one-file.md
       - Variables, functions and loops: guide/programs-in-the-language.md
+      - Actors, functions and live changes: guide/pact-core.md
   - Reference:
       - The 68 kinds: reference/kinds.md
       - The PACT language: reference/language.md

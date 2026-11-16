@@ -32,6 +32,9 @@
 //! | workflow, loop | a statement: `call`, `for each`, `repeat`, `together`, `decide`, `answer`, … | one stage of `steps:`, in the order written (`read/flow.rs`) |
 //! | any block | `based on <name> [with <name>: <value>, …]` | `based-on:`, and `with:` for what the base `expects:` |
 //! | top | `let <name> = <figure>` | one entry of `values:` |
+//! | top | `flow <name>(<input>: <shape>, …) gives <field>: <shape>, …` | a workflow with `accepts:` and `answers-with:`; the same on `agent` and `program` |
+//! | top | `actor <name>` + `can <name>(…) gives …` | an agent for each capability `by model`, a workflow for each written as statements, named `<actor>-<capability>` |
+//! | workflow, loop | `<name> = <target>(<input>: <binding>, …)` | the stage `call <target> with …`; `<actor>.<capability>` is `<actor>-<capability>` |
 //!
 //! Signals, after `when`: `the agent is about to call <tool>`, `the agent has
 //! called <tool> more than <n> times`, `<tool> has answered`, `the agent has

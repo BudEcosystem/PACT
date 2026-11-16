@@ -52,8 +52,10 @@ What its lines are:
   brackets, and names its answer `page`. After it, `page.<field>` is a field of that answer.
 - `each = for each item in <a list>` carries out the indented statements once for every item of the
   list. Inside it, `item` is the item, and `item.<field>` a field of it. Directly under it, before the
-  statements, it must have the three `limits:` lines as shown, with `items-at-most:` no smaller than
-  the number of items. Always write `when-it-runs-out: stop-and-say-so`: a cell cannot ask a person.
+  statements, it must have the three `limits:` lines as shown. `items-at-most:` is YOUR list's number
+  of items, or more: the number is written beside each list you were given, and a loop given more
+  items than its `items-at-most:` stops without doing any. Always write `when-it-runs-out:
+  stop-and-say-so`: a cell cannot ask a person.
 - After the loop, `each.<field>` is the list of that field of what the loop's LAST statement answered
   in each round, and `each.items` is the list of those whole answers.
 - `answer with <field>: <where from>, …` is the last line of the cell.
@@ -148,7 +150,8 @@ async def act_by_a_cell(
         "What you may call:\n" + what_it_may_call(document, allowed),
         GRAMMAR,
         "What you were given:\n" + "\n".join(
-            f"  input.{name} ({takes[name]}): {preview(value)}" for name, value in inputs.items()
+            f"  input.{name} ({takes[name]}{_how_many(value)}): {preview(value)}"
+            for name, value in inputs.items()
         ),
         ("Your cell must end with `answer with` and exactly these fields:\n"
          + "\n".join(f"  {k}: {v}" for k, v in gives.items())) if gives else "",
@@ -164,14 +167,13 @@ async def act_by_a_cell(
         admitted = session.cell(text, by=agent, takes=takes, gives=gives, may_call=may_call)
         out.cells.append((text, admitted))
         history.append({"role": "assistant", "content": reply})
+        again = len(out.cells) > 1 and out.cells[-2][0] == text
+        same = "You wrote the same cell again, word for word. " if again else ""
+        differ = ("\nA different cell is needed: change the line this points at, or take it out."
+                  if again else "")
         if not admitted.admitted:
-            again = len(out.cells) > 1 and out.cells[-2][0] == text
-            why = (("You wrote the same cell again, word for word. " if again else "")
-                   + "Your last cell was refused, and nothing in it was carried out:\n"
-                   + "\n".join(f"- {s}" for s in admitted.said)
-                   + ("\nA different cell is needed: change the line the refusal points at, or take it out."
-                      if again else "")
-                   + "\nWrite the cell again.")
+            why = (same + "Your last cell was refused, and nothing in it was carried out:\n"
+                   + "\n".join(f"- {s}" for s in admitted.said) + differ + "\nWrite the cell again.")
             continue
         try:
             flow = WorkflowSpec.from_workflow(session.document, admitted.main)
@@ -180,8 +182,8 @@ async def act_by_a_cell(
             version = admitted.version
             session.end(admitted)
         if ran.halted != "final":
-            why = (f"Your last cell was carried out and stopped before its answer: {ran.said}\n"
-                   "Write the cell again.")
+            why = (f"{same}Your last cell was carried out and stopped before its answer: {ran.said}"
+                   f"{differ}\nWrite the cell again.")
             continue
         wrong = does_not_fit(json.dumps(ran.answer, default=str), gives, document.get("shapes") or {}) if gives else ()
         if wrong:
@@ -194,6 +196,11 @@ async def act_by_a_cell(
     out.said = (f"Stopped without an answer: {len(out.cells)} cell(s) were written and none was "
                 f"admitted and carried out to an answer that fits. {why.splitlines()[0] if why else ''}")
     return out
+
+
+def _how_many(value: Any) -> str:
+    """`, 20000 items` for a list: the figure a loop over it has to allow."""
+    return f", {len(value)} items" if isinstance(value, (list, tuple)) else ""
 
 
 def _shape_of(value: Any) -> str:

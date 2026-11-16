@@ -112,6 +112,8 @@ def test_a_cell_that_stops_part_way_is_told_where_and_written_again(session: Ses
 
     out, _ = act(session, [LOOKS, LOOKS], GIVEN, tool=flaky)
     assert out.halted == "final" and len(out.cells) == 2
+    # The same cell, word for word, after it stopped: said in so many words.
+    assert out.told[1].startswith(out.told[0]) and "You wrote the same cell again" not in out.told[1]
     assert "was carried out and stopped before its answer" in out.told[1]
     assert "the order book is down" in out.told[1]
 
@@ -193,6 +195,8 @@ def test_a_value_is_worked_on_whole_and_shown_in_a_few_words(session: Session) -
     # What the model was told grew by a line's worth, not by 20,000 items.
     assert abs(len(large) - len(small)) < 200, (len(small), len(large))
     assert "list(20000 items; first: " in large and '"order-19999"' in large
+    # And the figure a loop over it has to allow is written beside the list.
+    assert "input.orders (list of text, 20000 items): " in large
     assert GRAMMAR in large
 
 

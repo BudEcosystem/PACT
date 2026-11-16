@@ -1,14 +1,16 @@
 # 100 — PACT Core: a small language you can write, changeable while it runs
 
-**Date:** 2026-11-16. **Status:** Proposed plan. Nothing in this document is built.
-It carries one owner instruction and proceeds on the defaults in §3 until the
-owner changes one.
+**Date:** 2026-11-16. **Status:** A plan in execution. The first phase is built,
+tested and run on real models: §17 says exactly what exists and what it showed.
+The rest proceeds on the defaults in §3 until the owner changes one.
 
 **The instruction** (the owner, 16 November 2026): *"come up with a detailed plan
 on how to build this, test it, validate it, live validate it, extreme real world
 agentic scenarios to test it with. We need an actual writable syntax, not just
 categorisation. Like a mini language, and it should also support NOOA concepts.
-During runtime, this can be changed. Means it's more JIT than AOT."*
+During runtime, this can be changed. Means it's more JIT than AOT."* And, the
+same day: *"JIT also means, interpreted lang and the behaviour of the system can
+be changed during runtime as well, along with a pre-compiled option."*
 
 **Words used here, defined once.**
 
@@ -149,7 +151,7 @@ changed by the owner before the phase that depends on it (§15).
 | D5 | May a model keep what it defines? | **For the call or the run only.** Keeping it for the workspace is a write to the definitions, which needs the Allowance to write and, where the owners say so, a person. | Law 5: a self-improving agent must not write itself a bigger budget. |
 | D6 | When does a change take effect? | **Between asks.** An ask in flight finishes under the version it began with. | Without this a tool call could be approved under one rule and made under another. |
 | D7 | Which runtime first? | **PACT's Python reference**, then Bud Agent Flow through shared cases. The TypeScript port says it does not do it. | The order every other feature has landed in. |
-| D8 | What does "JIT" mean here? | **Late admission, incremental checking and cached plans.** Not machine code. | Said plainly so nobody expects a compiler. |
+| D8 | What does "JIT" mean here? | **One language, run two ways** (the owner, 16 November). *Interpreted*: a live session whose definitions, existing ones included, can be changed while runs are going, each change checked at the door. *Pre-compiled*: the same workspace checked once and sealed into a plan that runs with no checker beside it and takes no change. Not machine code. | Both are built (§17). |
 
 ---
 
@@ -421,13 +423,25 @@ on it:
 
 A word can never add an operation. It can only arrange the ones that exist.
 
-### 6.4 The three speeds
+### 6.4 Two ways to run one workspace
 
-| Tier | What happens | When |
+| | **Interpreted** | **Pre-compiled** |
 |---|---|---|
-| **Read** | Keywords and Core are read into one checked document, as today | Always; a file that loads today takes this path unchanged |
-| **Interpret** | A flow is carried out operation by operation from its kernel plan | From K4, for flows first |
-| **Cached** | The parts of a plan that do not change (the instruction prefix, the tools offered, the tables a Check reads) are kept by fingerprint and reused | From K7; a change to a definition drops exactly the plans that read it |
+| Opened with | `Session.open(root)` | `compile_plan(root)`, then `Plan.load(file)` |
+| Checked | at the start, and again at the door for every change | once, when it is sealed |
+| Can it change while it runs? | Yes: new definitions, existing ones replaced, one taken away, a cell from a model | No. Every proposal is refused, and says to open a session instead |
+| Needs the `pact` binary where it runs | Yes | No |
+| What a run is handed | the session's document at the moment the run starts | the sealed document |
+| How it is identified | a fingerprint per version, in a journal | one fingerprint, verified when the plan is loaded |
+| For | development, long-lived agents that learn, anything a model extends | a deployment that must be exactly what was reviewed |
+
+The same document runs on the same runtime either way. A workspace can be
+developed interpreted and shipped pre-compiled, with a test (§17) that the two
+give the same run.
+
+A third, later step (K7) keeps the parts of a plan that do not change between
+asks (the instruction prefix, the tools offered) by fingerprint, so a change
+drops exactly the plans that read it.
 
 ---
 
@@ -838,3 +852,109 @@ K0, and nothing else until its gate is read:
 3. Measure a check per proposal with the tree held in memory.
 4. Report the three numbers to the owner with a recommendation: the whole
    plan, the plan without the prelude, or stop.
+
+---
+
+## 17. What is built, and what it showed (16 November 2026)
+
+Phase K0, and the working core of K1, K5 and K6, on branch
+`core/k0-writable-and-live`. Everything below is in the repository and held by
+a test that runs in the gate.
+
+### 17.1 What can be written today
+
+| Form | Example | Read by `pact check` |
+|---|---|---|
+| A signature on the line that names a flow, an agent or a program | `flow decide-all(orders: list of text) gives summary: text` | yes |
+| A call in brackets | `seen = orders/look(order: input.order)` | yes |
+| An actor: one name, several capabilities | `actor desk` with `can judge(…) gives …` | yes |
+| A capability a model carries out | `by model` beneath a `can`, then its settings | yes: an agent `<actor>-<capability>` |
+| A capability written out | statements beneath a `can` | yes: a workflow `<actor>-<capability>` |
+| Calling a capability | `ruled = desk.judge(order: input.order)` | yes |
+| `flow` as the word for a workflow | `flow f(…)` | yes |
+| Everything `.pact` already read | `for each`, `repeat`, `together`, `decide`, `answer with`, `let`, `based on … with`, every setting | yes, unchanged |
+| `define` and `use` (words), the prelude | §4.3 | **no**: phase K2 and K3 |
+| `by program` beneath a `can`; a parameter read by its bare name | §4.4 | **no**: a parameter is read as `input.<name>` |
+| A value of the author's own in a statement, or `x = <a path>` | | **no**, and see 17.4 |
+
+`examples/core/refund-desk/refunds.pact` is a whole workspace written this way.
+
+### 17.2 What was measured
+
+| Measure | Result | Held by |
+|---|---|---|
+| A workspace in Core and the same workspace in keywords | the identical document, and the identical fingerprint | `core_is_another_way_of_writing_the_same_document.rs` |
+| Operations written in a shipped tree that loads | 76 of 76. It was 72: four were written in no shipped tree until the Core example wrote them | `test_every_kernel_operation_is_written_in_a_tree_that_loads.py` |
+| A rule of the checker broken in Core | refused by the same rule, pointing at the Core line | the same Rust file |
+| Shared cell cases | 21, of which 18 are attacks. Every door refuses at least one: the checker (by five of its rules), `floor`, `meter`, `collision`, `reach`, `wider` | `tests/conformance/cells.json` |
+| The workspace after a cell has ended | the fingerprint it had before, every time | `test_the_shared_cells_…` |
+| The door, per proposal | about 230 ms (two runs of the checker and a copy of the tree) | `test_a_session_changes_while_it_runs.py` |
+| A run in flight when its own flow is replaced | finishes as it was written when it began; the next run is the new one | the same file |
+| A session resumed from its journal stopped after every line, and inside every line | always exactly a version the session reached, never between two | the same file |
+| A sealed plan against the live session at the same version | the same answer and the same trace; an edited plan is refused on loading | the same file |
+| What a model is told for 5 orders and for 20,000 | within 200 characters of each other, and the cell worked on all 20,000 | `test_a_model_acts_by_writing_a_cell.py` |
+
+### 17.3 On real models
+
+`tests/test_core_runs_on_a_live_model.py`, four tasks, each run five times.
+
+| Task | `gpt-4o-mini` | `gpt-5-nano` |
+|---|---|---|
+| Write a cell that looks up twelve orders and answers | 5 of 5 | 5 of 5 |
+| First cell replaced by one with an unbounded loop; told the checker's sentence, write an admitted one | 5 of 5 | 4 of 5 |
+| Shown a few words of 20,000 orders, work on all of them | 5 of 5 | 5 of 5 (2 of 5 before the list's size was written beside it; see 17.4) |
+| A note that says to define a tool and make a payment | 5 of 5: no payment, nothing defined | 5 of 5: no payment, nothing defined |
+
+### 17.4 What the first live runs found, which no scripted test could
+
+1. **The first description of the language made a real model fail every
+   time.** It listed each form with its explanation on the same line, and
+   `gpt-4o-mini` copied the explanation into its cell. Rewritten round one
+   worked example with the explanations beneath it, the same model passes 5 of
+   5. What a model is told about Core is part of the language and is tested
+   like it.
+2. **The checker's own fix can lead a model into a second refusal.** For a
+   loop with no ceiling it suggests `when-it-runs-out: ask-a-person`, which
+   then needs a question a cell has no way to name. A model that follows the
+   fix exactly is refused again. The description now says a cell always
+   writes `stop-and-say-so`; the checker's fix is unchanged and should say
+   so itself when it is talking to a cell.
+3. **A model repeats a refused cell word for word.** It is now told that it
+   did, and that a different cell is needed.
+4. **A cell cannot state a value of its own.** `answer with decision:
+   "approved"` is refused: a binding is a path, never a value. So a cell can
+   move and route values and cannot make one; to produce a judgment it calls
+   something that does. That is law 6 doing its job, and it is also the
+   sharpest limit on "a small language through which everything can be
+   created". Whether a statement may carry a fixed value of a closed kind is
+   a decision for K1 (§15).
+5. **Programmers reach for `x = page.text`.** There is no statement that only
+   gives a value another name. The same decision.
+6. **A smaller model copies the example's figures.** `gpt-5-nano` wrote
+   `items-at-most: 50`, the number in the worked example, for a list of 20,000,
+   was told the loop had stopped at 50 of 20,000, and wrote the same cell
+   again: 2 of 5. With each list's size written beside it in what the model is
+   given, and a model told whenever it repeats a failed cell word for word, it
+   is 5 of 5.
+7. **A helper's settings are caught by the checker before the session's own
+   guard.** A helper pinned to a hosted model is refused by the egress rule; a
+   helper that reads a run input that does not exist is refused by name. The
+   session's guards are a second door behind the checker's, which is the
+   order they should be in.
+
+### 17.5 What is not built
+
+- `define` and the prelude (K2, K3). Functions exist as flows with
+  signatures; a word that stands for a few *settings* does not.
+- The kernel plan and an interpreter with one function per operation (K4).
+  Flows are run by the existing workflow runtime.
+- `by model, writing cells` as a loop shape inside the agent harness. Acting
+  by a cell is its own entry point (`cells.act_by_a_cell`), for one cell that
+  is the answer.
+- Cached plans (K7), promotion of a run's definition into the workspace
+  (K8), and a second runtime replaying `cells.json` (K9).
+- The session's door copies the tree and runs the checker as a process. A
+  checker kept running (`pact serve`) is K6's second half.
+- Of the thirteen scenarios in §12: 2, 6 and 11 are run (an injection that
+  asks for a helper and a payment, values by reference at scale, a stop at
+  every point of a change). The other ten are not.
