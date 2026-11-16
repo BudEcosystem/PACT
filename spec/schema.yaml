@@ -2073,6 +2073,58 @@ groups:
         surface: S-GOV
         tier: expert
         help: who wrote it down
+      sample-size:
+        type: integer
+        surface: S-GOV
+        tier: expert
+        kernel-op: actor.figures
+        help: >
+          for a measured figure, how many of the benchmark's cases it was taken
+          on. Fewer than `population:` makes it a subset figure, which is read
+          as one: a score on 200 of 14,042 questions is not the benchmark's
+          score, and a reader that compares it with a published full figure
+          says so.
+      population:
+        type: integer
+        surface: S-GOV
+        tier: expert
+        kernel-op: actor.figures
+        help: how many cases the whole benchmark has, so `sample-size:` can be read against it
+      interval:
+        type: group:figure-interval
+        surface: S-GOV
+        tier: expert
+        kernel-op: actor.figures
+        help: >
+          for a measured figure, the confidence interval around `value:`, on
+          the figure's own scale. A runtime may hold an `accept-when:` line to
+          the whole interval rather than the point, so a figure that clears a
+          bar only within its own noise is not taken as clearing it.
+
+  figure-interval:
+    describe: something the confidence interval around a measured figure can have
+    fields:
+      low:
+        type: number
+        required: yes
+        surface: S-GOV
+        tier: expert
+        kernel-op: actor.figures
+        help: the interval's lower bound, on the figure's scale
+      high:
+        type: number
+        required: yes
+        surface: S-GOV
+        tier: expert
+        kernel-op: actor.figures
+        help: the interval's upper bound, on the figure's scale
+      level:
+        type: number
+        required: yes
+        surface: S-GOV
+        tier: expert
+        kernel-op: actor.figures
+        help: the confidence level, as a share such as 0.95
 
   model-cost:
     describe: something a model's price can have

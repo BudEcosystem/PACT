@@ -1765,6 +1765,12 @@ words for a person, with no behaviour.
 | `provenance.date` | Store |
 | `provenance.as-of` | Store |
 | `provenance.recorded-by` | Store |
+| `provenance.sample-size` | Store + Actor |
+| `provenance.population` | Store + Actor |
+| `provenance.interval` | Store + Actor |
+| `figure-interval.low` | Store + Actor |
+| `figure-interval.high` | Store + Actor |
+| `figure-interval.level` | Store + Actor |
 | `model-cost.input-per-mtok` | Store |
 | `model-cost.output-per-mtok` | Store |
 | `needs.reasoning` | Check |

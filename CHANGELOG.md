@@ -3,6 +3,31 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — a measured figure says how it was measured (16 November)
+
+A figure's `provenance:` said where a number came from but not how much of the benchmark it rests on
+or how sure it is. A runtime that measures figures itself (Bud Meta Harness measures MMLU on a few
+hundred questions at onboarding) had to keep that under its own `x-` key, and a reader could not tell
+a 200-question score from the published full one.
+
+### What an author can now write
+
+- **`provenance.sample-size:` and `provenance.population:`** — how many of the benchmark's cases a
+  measured figure was taken on, out of how many it has. Fewer than the population makes it a subset
+  figure, read as one.
+- **`provenance.interval: {low, high, level}`** — the confidence interval around `value:`, on the
+  figure's own scale, with the level as a share (`0.95`). A runtime may hold an `accept-when:` line to
+  the whole interval, so a figure that clears a bar only within its own noise is not taken as clearing
+  it.
+
+### What holds now
+
+- The checker reads the three fields and the new `figure-interval` group like every other field: a
+  key the group does not have is refused (`'width' is not something the confidence interval around a
+  measured figure can have`). The reference resolver still holds a line to `value:`; the fields are
+  listed in `test_every_field_has_a_reader.py` as read by a reviewer, and in 97's table as Store +
+  Actor.
+
 ## 2026-11 — an agent's words are filled by one renderer in every port (16 November)
 
 Each runtime filled an agent's words its own way. Python rendered a `jinja` workspace with Jinja2 and
