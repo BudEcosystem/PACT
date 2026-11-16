@@ -177,6 +177,14 @@ struct Reader<'a> {
     described: Option<(String, Span)>,
 }
 
+/// What a header's bracketed line says: a name, what it takes, what it gives.
+struct Signature {
+    name: String,
+    at: Span,
+    takes: Option<Node>,
+    gives: Option<Node>,
+}
+
 fn s(text: impl Into<String>, span: &Span) -> Node {
     Node::str(text, span.clone())
 }
@@ -398,11 +406,30 @@ impl<'a> Reader<'a> {
             self.put_root(word.to_string(), block.clone(), Node::map(settings, block));
             return;
         }
+        if word == "actor" {
+            self.actor(&l, rest_at, body);
+            return;
+        }
+        // `flow` is the kernel's word for a workflow (docs/100 §4.2): the
+        // same block, the same field.
+        let word = if word == "flow" { "workflow" } else { word };
         let Some(collection) = collection_of(word) else {
             self.unknown_header(&l, word);
             return;
         };
-        let Some((id, id_span, next)) = self.name(&l, rest_at) else {
+        // `flow refund-one(order: text) gives decision: text` — a signature on
+        // the line that names it, for the three things that are asked with
+        // inputs and answer with fields.
+        let signed = if matches!(word, "workflow" | "agent" | "program") {
+            self.signature(&l, rest_at)
+        } else {
+            None
+        };
+        let named = match &signed {
+            Some(sig) => Some((sig.name.clone(), sig.at.clone(), l.text.len())),
+            None => self.name(&l, rest_at),
+        };
+        let Some((id, id_span, next)) = named else {
             self.error(
                 "lang/a-block-with-no-name",
                 block,
@@ -437,6 +464,15 @@ impl<'a> Reader<'a> {
             }
         }
         (self.called, self.described) = saved;
+        if let Some(sig) = signed {
+            let takes = if word == "program" { "takes" } else { "accepts" };
+            if let Some(node) = sig.takes {
+                self.put(&mut settings, takes.to_string(), sig.at.clone(), node);
+            }
+            if let Some(node) = sig.gives {
+                self.put(&mut settings, "answers-with".to_string(), sig.at.clone(), node);
+            }
+        }
         if let Some((shown, shown_span, _)) = shown {
             if word == "agent" {
                 let node = s(shown, &shown_span);
@@ -454,6 +490,153 @@ impl<'a> Reader<'a> {
             }
         }
         self.add_root(collection, id, id_span, Node::map(settings, block));
+    }
+
+    /// `<name>(<input>: <shape>, …) [gives <field>: <shape>, …]`, from `from`
+    /// to the end of the line. `None` when the line has no `(` in the name:
+    /// it is then a plain name, read as it always was.
+    fn signature(&mut self, l: &Line, from: usize) -> Option<Signature> {
+        let rest = l.text.get(from..)?;
+        let lead = rest.len() - rest.trim_start().len();
+        let open = rest.find('(')?;
+        let name = rest[lead..open].trim();
+        if name.is_empty() || !name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+            return None;
+        }
+        let at = self.at(l, from + lead, name.len());
+        let Some(close) = rest[open..].find(')').map(|n| open + n) else {
+            let span = self.whole(l);
+            self.error(
+                "lang/not-a-line",
+                span,
+                format!("'{name}(' is opened and never closed."),
+                format!("Write what it takes between the brackets — `{name}(order: text)` — or `{name}()` for nothing."),
+            );
+            return Some(Signature { name: name.to_string(), at, takes: None, gives: None });
+        };
+        let takes = if rest[open + 1..close].trim().is_empty() {
+            None
+        } else {
+            let inside = Line { text: &l.text[..from + close], ..*l };
+            self.shapes(&inside, from + open + 1)
+        };
+        let after_it = rest[close + 1..].trim_start();
+        let gives = if after_it.is_empty() {
+            None
+        } else if let Some(n) = after(after_it, "gives ") {
+            let at = l.text.len() - after_it.len() + n;
+            self.shapes(l, at)
+        } else {
+            let span = self.at(l, l.text.len() - after_it.len(), after_it.len());
+            self.error(
+                "lang/not-a-line",
+                span,
+                format!("After what '{name}' takes, the only thing this line can say is what it gives."),
+                format!("Write `{name}(…) gives <field>: <shape>`, or end the line at the bracket."),
+            );
+            None
+        };
+        Some(Signature { name: name.to_string(), at, takes, gives })
+    }
+
+    /// `actor <name>` — one thing with several capabilities (docs/100 §4.4).
+    ///
+    /// Everything in the block that is not a `can` is what every capability
+    /// shares: what it uses, its limits, its model. Each `can <name>(…) gives
+    /// …` is one capability, and what is beneath it says who carries it out:
+    ///
+    /// * `by model` (then its own settings: `instructions:` and the rest) —
+    ///   the agent `<actor>-<name>`, with everything the actor shares;
+    /// * statements — the workflow `<actor>-<name>`.
+    ///
+    /// So an actor is not a new kind of thing in the document. It is a way of
+    /// writing an agent for each thing a model decides and a workflow for
+    /// each thing that is written out, under one name, and every rule `pact
+    /// check` has for agents and workflows holds for them as it stands. It is
+    /// called as `<actor>.<name>`.
+    fn actor(&mut self, l: &Line, rest_at: usize, body: Range<usize>) {
+        let block = self.whole(l);
+        let Some((actor, _, _)) = self.name(l, rest_at) else {
+            self.error(
+                "lang/a-block-with-no-name",
+                block,
+                "This `actor` block does not say which actor it is.".to_string(),
+                "Write its name after the word: `actor <name>`.".to_string(),
+            );
+            return;
+        };
+        let mut shared = Map::new();
+        let mut cans: Vec<(usize, Range<usize>)> = Vec::new();
+        for (first, rest) in self.items(body) {
+            self.lines[first].text = uncommented(self.lines[first].text);
+            if self.lines[first].text.starts_with("can ") {
+                cans.push((first, rest));
+            } else {
+                self.item(first, rest, Kind::Agent, &mut shared);
+            }
+        }
+        if cans.is_empty() {
+            self.error(
+                "lang/an-actor-that-can-do-nothing",
+                block.clone(),
+                format!("The actor '{actor}' has no `can` line, so there is nothing to ask it."),
+                "Add one beneath it — `can decide(order: text) gives decision: text`, with `by \
+                 model` or its steps underneath. For one thing a model does, `agent` is the \
+                 shorter way to write it."
+                    .to_string(),
+            );
+            return;
+        }
+        let about = shared.shift_remove("description");
+        for (first, rest) in cans {
+            let c = self.lines[first];
+            let span = self.whole(&c);
+            let Some(sig) = self.signature(&c, "can ".len()).or_else(|| {
+                // `can greet` with nothing taken: a name alone.
+                self.name(&c, "can ".len()).map(|(name, at, _)| Signature { name, at, takes: None, gives: None })
+            }) else {
+                continue;
+            };
+            let id = format!("{actor}-{}", sig.name);
+            let by_model = rest
+                .clone()
+                .map(|k| self.lines[k])
+                .find(|k| !k.quiet())
+                .is_some_and(|k| uncommented(k.text) == "by model");
+            let mut fields = if by_model {
+                let own: Vec<(usize, Range<usize>)> = self
+                    .items(rest)
+                    .into_iter()
+                    .filter(|(k, _)| uncommented(self.lines[*k].text) != "by model")
+                    .collect();
+                let mut fields = shared.clone();
+                for (k, under) in own {
+                    self.item(k, under, Kind::Agent, &mut fields);
+                }
+                fields
+            } else {
+                self.flow_body(rest, Kind::Flow, true)
+            };
+            if let Some(node) = sig.takes {
+                self.put(&mut fields, "accepts".to_string(), sig.at.clone(), node);
+            }
+            if let Some(node) = sig.gives {
+                self.put(&mut fields, "answers-with".to_string(), sig.at.clone(), node);
+            }
+            if !fields.contains_key("description") {
+                // What the actor is for, and which of its capabilities this is.
+                let said = match about.as_ref().and_then(|e| e.node.as_str()) {
+                    Some(text) => format!("{} ({actor} can {})", text.trim().trim_end_matches('.'), sig.name),
+                    None => format!("What {actor} does to {}.", sig.name),
+                };
+                fields.insert(
+                    "description".to_string(),
+                    Entry { key_span: sig.at.clone(), node: s(said, &sig.at) },
+                );
+            }
+            let collection = if by_model { "agents" } else { "workflows" };
+            self.add_root(collection, id, sig.at.clone(), Node::map(fields, span));
+        }
     }
 
     /// `let refund-limit = 200 USD` — a figure with a name: one entry of

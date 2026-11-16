@@ -73,6 +73,31 @@ enum Ends {
     Decides,
 }
 
+/// `<target>(<what it is given>)`: the target and where its bracket opens.
+/// A target is a name, a `tool/action` or an `actor.capability`, with nothing
+/// in it that a sentence has: no space.
+fn called_with_brackets(said: &str) -> Option<(&str, usize)> {
+    let open = said.find('(')?;
+    let target = &said[..open];
+    let named = !target.is_empty()
+        && target.chars().all(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | '/' | '.'));
+    (named && said.ends_with(')')).then_some((target, open))
+}
+
+/// What a call names, in the document. `desk.decide` is the capability
+/// `decide` of the actor `desk`, which the document holds as `desk-decide`
+/// (`Reader::actor`). A path that starts as a binding does (`steps.pick.agent`,
+/// `item.worker`) is one, and a `tool/action` is that: both are left as
+/// written.
+fn capability(target: &str) -> String {
+    let root = target.split('.').next().unwrap_or(target);
+    if target.contains('/') || !target.contains('.') || crate::BINDING_ROOTS.contains(&root) {
+        target.to_string()
+    } else {
+        target.replacen('.', "-", 1)
+    }
+}
+
 pub(super) struct Step {
     name: String,
     at: Span,
@@ -216,7 +241,24 @@ impl<'a> Reader<'a> {
         let mut branches = Vec::new();
         let default: String;
 
-        if let Some(n) = after(said, "call ") {
+        // `verdict = desk.decide(order: input.order)` — a call written the way
+        // it is in most languages: the target, then what it is given in
+        // brackets. The same stage as `call … with …`.
+        let bracketed = called_with_brackets(said);
+        if let Some((target, open)) = bracketed {
+            does(self, &mut fields, "call", &whole);
+            let ts = self.at(&l, at, target.len());
+            self.put(&mut fields, "call".to_string(), ts.clone(), s(capability(target), &ts));
+            if !said[open + 1..said.len() - 1].trim().is_empty() {
+                let inside = Line { text: &t[..t.len() - 1], ..l };
+                match self.binds(&inside, at + open + 1) {
+                    Some(node) => self.put(&mut fields, "bind".to_string(), whole.clone(), node),
+                    None => return Line2::Refused,
+                }
+            }
+            self.beneath(rest, &mut fields);
+            default = slug(target);
+        } else if let Some(n) = after(said, "call ") {
             let (target, with) = match said[n..].find(" with ") {
                 Some(w) => (said[n..n + w].trim(), Some(at + n + w + 6)),
                 None => (said[n..].trim(), None),
@@ -232,7 +274,7 @@ impl<'a> Reader<'a> {
             }
             does(self, &mut fields, "call", &whole);
             let ts = self.at(&l, at + n, target.len());
-            self.put(&mut fields, "call".to_string(), ts.clone(), s(target, &ts));
+            self.put(&mut fields, "call".to_string(), ts.clone(), s(capability(target), &ts));
             if let Some(with) = with {
                 match self.binds(&l, with) {
                     Some(node) => self.put(&mut fields, "bind".to_string(), whole.clone(), node),
