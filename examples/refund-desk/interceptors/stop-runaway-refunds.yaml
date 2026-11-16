@@ -12,6 +12,10 @@
 # asking a person is not one of them — that is what `policies/approvals.yaml`
 # is for, and it is a different thing: a gate a person can open, rather than a
 # rule that ends the run.
+#
+# It names `payments/issue-refund`, not `payments`: counting the whole tool
+# counted the look-ups too, so a ticket naming two orders stopped at its second
+# look-up, before any refund.
 description: Stops the run if it tries to issue more than one refund per request.
 
 when: step.tool.before
@@ -21,5 +25,5 @@ may:
 
 rules:
   - >-
-    if payments is called more than 1 time in one run, stop and say "A second
+    if payments/issue-refund is called more than 1 time in one run, stop and say "A second
     refund in one conversation needs a person. Nothing further has been done."

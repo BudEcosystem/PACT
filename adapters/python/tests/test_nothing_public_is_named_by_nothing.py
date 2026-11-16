@@ -44,15 +44,20 @@ SRC = Path(__file__).resolve().parents[1] / "src" / "pact_adapters"
 #: _gained_a_caller` deletes it again when one appears — a list of what must stay
 #: uncalled cannot notice a fix.
 HOST_API: dict[str, str] = {
-    # A workflow hands an agent a set of fields; what turns them into what a
-    # model reads is whoever runs the agent. The reference workflow runtime
-    # runs none (`Callers.agent` is the host's), so nothing in `src/` words a
-    # set of fields; a host that does (the live suite here, budflow-core's
-    # `sending.sent`) is held to the one rule this states.
-    "workflow_runtime.worded": (
-        "what a model is shown of the fields an agent was given — all of them and nothing "
-        "else, in `accepts:` order — for a host that runs a workflow's agents; the "
-        "reference workflow runtime runs none"
+    # PACT Core (docs/100): the three doors a host opens. Nothing in `src/`
+    # calls them because nothing in `src/` is a host: a session is opened, a
+    # plan sealed and a cell asked for by whoever runs the workspace.
+    "session.compile_plan": (
+        "checks a workspace once and seals it into a plan (the pre-compiled way to run, "
+        "docs/100 §6.4), for a host that deploys what was reviewed"
+    ),
+    "cells.act_by_a_cell": (
+        "has an agent answer by writing a cell of PACT Core, checked at the session's door "
+        "before it is carried out (docs/100 §4.5), for a host that runs agents"
+    ),
+    "cells.callers_of": (
+        "what a cell's calls reach on PACT's own harness: a tool by the host's function, an "
+        "agent by `harness.run`. The host hands it to `act_by_a_cell`"
     ),
     # docs/96 §D: `turns:` lowered to Pydantic AI's own messages. The reference
     # harness keeps a conversation in its own dialect and has no Pydantic AI

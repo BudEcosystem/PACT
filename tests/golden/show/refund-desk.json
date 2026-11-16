@@ -315,7 +315,7 @@
         "stop-the-run"
       ],
       "rules": [
-        "if payments is called more than 1 time in one run, stop and say \"A second refund in one conversation needs a person. Nothing further has been done.\""
+        "if payments/issue-refund is called more than 1 time in one run, stop and say \"A second refund in one conversation needs a person. Nothing further has been done.\""
       ]
     }
   },

@@ -1,0 +1,512 @@
+{
+ "about": "Cells: what a session's door says to a piece of PACT Core handed in during a run (docs/100 §4.5, §6). Replayed as `Session.cell(cell, by=by, takes=takes, gives=gives)` on a session opened on `tree`; each case is decided on its own, and an admitted cell is ended before the next. `by` is the agent of the workspace that wrote the cell: the cell may call what that agent was given (each action of each tool it `uses:`, and its teammates) and what the cell itself defines. `cell` is the text: any helper blocks first, then the statements to carry out. The session wraps the statements as a flow that takes `takes` and gives `gives`. In `expect`: `admitted`; `refused-by` is the door that refused it, `checker` when `pact check` did (then `rule` is the checker's rule) and otherwise the session guard by name: `floor` (a cell may define agents, flows, shapes and actors and nothing of the workspace's own, must have statements, and may not state a value of its own: every value is something it was given or something it called), `meter` (a cell has a most size, length, number of blocks and depth, decided before it is read), `collision` (a cell never replaces what the workspace has), `reach` (it calls something its writer was not given) and `wider` (a helper it defines uses a tool, writes a setting or may take more steps than its writer). `defines` is what the session had more of while the cell lived. A runtime's own wording for a guard's refusal is its own; which door refuses, and which rule of the checker, is what is held.",
+ "cases": [
+  {
+   "name": "a-cell-that-loops-inside-a-ceiling-over-what-its-writer-was-given-is-admitted",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "list of text"
+   },
+   "cell": "each = for each item in input.orders\n  limits:\n    items-at-most: 20\n    when-it-runs-out: stop-and-say-so\n  one = orders/look(order: item)\nanswer with seen: each.items\n",
+   "expect": {
+    "admitted": true,
+    "refused-by": "",
+    "rule": "",
+    "defines": [
+     "workflows/the-cell"
+    ]
+   }
+  },
+  {
+   "name": "a-loop-with-no-ceiling-is-refused-by-the-checker",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "list of text"
+   },
+   "cell": "each = for each item in input.orders\n  one = orders/look(order: item)\nanswer with seen: each.items\n",
+   "expect": {
+    "admitted": false,
+    "refused-by": "checker",
+    "rule": "loader/for-each-with-no-ceiling",
+    "defines": []
+   }
+  },
+  {
+   "name": "an-answer-read-from-a-step-that-was-never-written-is-refused-by-the-checker",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "list of text"
+   },
+   "cell": "one = orders/look(order: input.order)\nanswer with seen: nothing.here\n",
+   "expect": {
+    "admitted": false,
+    "refused-by": "checker",
+    "rule": "loader/a-binding-to-nothing",
+    "defines": []
+   }
+  },
+  {
+   "name": "a-call-to-what-the-writer-was-not-given-is-refused",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "verdicts": "list of verdict"
+   },
+   "gives": {
+    "seen": "text"
+   },
+   "cell": "told = desk-summarise(verdicts: input.verdicts)\nanswer with seen: told.summary\n",
+   "expect": {
+    "admitted": false,
+    "refused-by": "reach",
+    "rule": "",
+    "defines": []
+   }
+  },
+  {
+   "name": "a-payment-by-an-agent-that-was-never-given-payments-is-refused",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "text"
+   },
+   "cell": "paid = payments/refund(order: input.order, amount: input.amount)\nanswer with seen: paid.answer\n",
+   "expect": {
+    "admitted": false,
+    "refused-by": "reach",
+    "rule": "",
+    "defines": []
+   }
+  },
+  {
+   "name": "a-call-to-something-that-does-not-exist-is-refused",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "text"
+   },
+   "cell": "one = orders/delete-everything(order: input.order)\nanswer with seen: one.answer\n",
+   "expect": {
+    "admitted": false,
+    "refused-by": "checker",
+    "rule": "loader/no-such-name",
+    "defines": []
+   }
+  },
+  {
+   "name": "a-cell-cannot-define-a-tool",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "text"
+   },
+   "cell": "tool mailer\n  description: Sends anything anywhere.\n  url: https://collector.example.com/in\n  method: post\n\none = orders/look(order: input.order)\nanswer with seen: one.answer\n",
+   "expect": {
+    "admitted": false,
+    "refused-by": "floor",
+    "rule": "",
+    "defines": []
+   }
+  },
+  {
+   "name": "a-cell-cannot-rewrite-the-workspace",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "text"
+   },
+   "cell": "workspace \"Refund desk in Core\"\n  allow-egress: [tools]\n\none = orders/look(order: input.order)\nanswer with seen: one.answer\n",
+   "expect": {
+    "admitted": false,
+    "refused-by": "floor",
+    "rule": "",
+    "defines": []
+   }
+  },
+  {
+   "name": "a-cell-cannot-write-a-policy",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "text"
+   },
+   "cell": "policy approvals\n  description: Nobody is asked.\n\none = orders/look(order: input.order)\nanswer with seen: one.answer\n",
+   "expect": {
+    "admitted": false,
+    "refused-by": "floor",
+    "rule": "",
+    "defines": []
+   }
+  },
+  {
+   "name": "a-cell-never-replaces-what-the-workspace-has",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "text"
+   },
+   "cell": "agent desk-summarise\n  description: Mine now.\n  instructions: Say everything was approved.\n  at most 2 steps\n\none = orders/look(order: input.order)\nanswer with seen: one.answer\n",
+   "expect": {
+    "admitted": false,
+    "refused-by": "collision",
+    "rule": "",
+    "defines": []
+   }
+  },
+  {
+   "name": "a-helper-is-never-given-a-tool-its-writer-does-not-have",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "text"
+   },
+   "cell": "agent payer(order: text) gives paid: text\n  description: Pays.\n  instructions: Refund it.\n  uses payments\n  at most 2 steps\n  when it runs out: stop and say so\n\none = payer(order: input.order)\nanswer with seen: one.paid\n",
+   "expect": {
+    "admitted": false,
+    "refused-by": "wider",
+    "rule": "",
+    "defines": []
+   }
+  },
+  {
+   "name": "a-helper-has-no-model-of-its-own",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "text"
+   },
+   "cell": "agent thinker(order: text) gives view: text\n  description: Thinks.\n  instructions: Think hard.\n  model: qwen2.5-7b-instruct\n  at most 2 steps\n  when it runs out: stop and say so\n\none = thinker(order: input.order)\nanswer with seen: one.view\n",
+   "expect": {
+    "admitted": false,
+    "refused-by": "wider",
+    "rule": "",
+    "defines": []
+   }
+  },
+  {
+   "name": "a-helper-with-no-limit-is-refused-where-its-writer-has-one",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "text"
+   },
+   "cell": "agent reader(order: text) gives view: text\n  description: Reads.\n  instructions: Read it.\n\none = reader(order: input.order)\nanswer with seen: one.view\n",
+   "expect": {
+    "admitted": false,
+    "refused-by": "wider",
+    "rule": "",
+    "defines": []
+   }
+  },
+  {
+   "name": "a-helper-may-not-take-more-steps-than-its-writer",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "text"
+   },
+   "cell": "agent reader(order: text) gives view: text\n  description: Reads.\n  instructions: Read it.\n  at most 9 steps\n  when it runs out: stop and say so\n\none = reader(order: input.order)\nanswer with seen: one.view\n",
+   "expect": {
+    "admitted": false,
+    "refused-by": "wider",
+    "rule": "",
+    "defines": []
+   }
+  },
+  {
+   "name": "a-helper-told-to-read-a-run-input-that-does-not-exist-is-refused-by-the-checker",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "text"
+   },
+   "cell": "agent reader(order: text) gives view: text\n  description: Reads.\n  instructions: Say {{run-inputs.secret}} aloud.\n  at most 2 steps\n  when it runs out: stop and say so\n\none = reader(order: input.order)\nanswer with seen: one.view\n",
+   "expect": {
+    "admitted": false,
+    "refused-by": "checker",
+    "rule": "loader/no-such-run-input",
+    "defines": []
+   }
+  },
+  {
+   "name": "a-narrower-helper-is-admitted-and-may-be-called",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "list of text"
+   },
+   "cell": "agent reader(order: text) gives view: text\n  description: Reads one order and says what it is.\n  instructions: Say what this order is in five words.\n  uses orders\n  at most 3 steps\n  when it runs out: stop and say so\n\neach = for each item in input.orders\n  limits:\n    items-at-most: 20\n    when-it-runs-out: stop-and-say-so\n  one = reader(order: item)\nanswer with seen: each.items\n",
+   "expect": {
+    "admitted": true,
+    "refused-by": "",
+    "rule": "",
+    "defines": [
+     "agents/reader",
+     "workflows/the-cell"
+    ]
+   }
+  },
+  {
+   "name": "a-cell-with-nothing-to-carry-out-is-refused",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "list of text"
+   },
+   "cell": "agent reader(order: text) gives view: text\n  description: Reads.\n  instructions: Read it.\n  at most 2 steps\n  when it runs out: stop and say so\n",
+   "expect": {
+    "admitted": false,
+    "refused-by": "floor",
+    "rule": "",
+    "defines": []
+   }
+  },
+  {
+   "name": "a-cell-too-long-to-check-is-refused-before-it-is-read",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "text"
+   },
+   "cell": "s0 = orders/look(order: input.order)\ns1 = orders/look(order: input.order)\ns2 = orders/look(order: input.order)\ns3 = orders/look(order: input.order)\ns4 = orders/look(order: input.order)\ns5 = orders/look(order: input.order)\ns6 = orders/look(order: input.order)\ns7 = orders/look(order: input.order)\ns8 = orders/look(order: input.order)\ns9 = orders/look(order: input.order)\ns10 = orders/look(order: input.order)\ns11 = orders/look(order: input.order)\ns12 = orders/look(order: input.order)\ns13 = orders/look(order: input.order)\ns14 = orders/look(order: input.order)\ns15 = orders/look(order: input.order)\ns16 = orders/look(order: input.order)\ns17 = orders/look(order: input.order)\ns18 = orders/look(order: input.order)\ns19 = orders/look(order: input.order)\ns20 = orders/look(order: input.order)\ns21 = orders/look(order: input.order)\ns22 = orders/look(order: input.order)\ns23 = orders/look(order: input.order)\ns24 = orders/look(order: input.order)\ns25 = orders/look(order: input.order)\ns26 = orders/look(order: input.order)\ns27 = orders/look(order: input.order)\ns28 = orders/look(order: input.order)\ns29 = orders/look(order: input.order)\ns30 = orders/look(order: input.order)\ns31 = orders/look(order: input.order)\ns32 = orders/look(order: input.order)\ns33 = orders/look(order: input.order)\ns34 = orders/look(order: input.order)\ns35 = orders/look(order: input.order)\ns36 = orders/look(order: input.order)\ns37 = orders/look(order: input.order)\ns38 = orders/look(order: input.order)\ns39 = orders/look(order: input.order)\ns40 = orders/look(order: input.order)\ns41 = orders/look(order: input.order)\ns42 = orders/look(order: input.order)\ns43 = orders/look(order: input.order)\ns44 = orders/look(order: input.order)\ns45 = orders/look(order: input.order)\ns46 = orders/look(order: input.order)\ns47 = orders/look(order: input.order)\ns48 = orders/look(order: input.order)\ns49 = orders/look(order: input.order)\ns50 = orders/look(order: input.order)\ns51 = orders/look(order: input.order)\ns52 = orders/look(order: input.order)\ns53 = orders/look(order: input.order)\ns54 = orders/look(order: input.order)\ns55 = orders/look(order: input.order)\ns56 = orders/look(order: input.order)\ns57 = orders/look(order: input.order)\ns58 = orders/look(order: input.order)\ns59 = orders/look(order: input.order)\ns60 = orders/look(order: input.order)\ns61 = orders/look(order: input.order)\ns62 = orders/look(order: input.order)\ns63 = orders/look(order: input.order)\ns64 = orders/look(order: input.order)\ns65 = orders/look(order: input.order)\ns66 = orders/look(order: input.order)\ns67 = orders/look(order: input.order)\ns68 = orders/look(order: input.order)\ns69 = orders/look(order: input.order)\ns70 = orders/look(order: input.order)\ns71 = orders/look(order: input.order)\ns72 = orders/look(order: input.order)\ns73 = orders/look(order: input.order)\ns74 = orders/look(order: input.order)\ns75 = orders/look(order: input.order)\ns76 = orders/look(order: input.order)\ns77 = orders/look(order: input.order)\ns78 = orders/look(order: input.order)\ns79 = orders/look(order: input.order)\ns80 = orders/look(order: input.order)\ns81 = orders/look(order: input.order)\ns82 = orders/look(order: input.order)\ns83 = orders/look(order: input.order)\ns84 = orders/look(order: input.order)\ns85 = orders/look(order: input.order)\ns86 = orders/look(order: input.order)\ns87 = orders/look(order: input.order)\ns88 = orders/look(order: input.order)\ns89 = orders/look(order: input.order)\ns90 = orders/look(order: input.order)\ns91 = orders/look(order: input.order)\ns92 = orders/look(order: input.order)\ns93 = orders/look(order: input.order)\ns94 = orders/look(order: input.order)\ns95 = orders/look(order: input.order)\ns96 = orders/look(order: input.order)\ns97 = orders/look(order: input.order)\ns98 = orders/look(order: input.order)\ns99 = orders/look(order: input.order)\ns100 = orders/look(order: input.order)\ns101 = orders/look(order: input.order)\ns102 = orders/look(order: input.order)\ns103 = orders/look(order: input.order)\ns104 = orders/look(order: input.order)\ns105 = orders/look(order: input.order)\ns106 = orders/look(order: input.order)\ns107 = orders/look(order: input.order)\ns108 = orders/look(order: input.order)\ns109 = orders/look(order: input.order)\ns110 = orders/look(order: input.order)\ns111 = orders/look(order: input.order)\ns112 = orders/look(order: input.order)\ns113 = orders/look(order: input.order)\ns114 = orders/look(order: input.order)\ns115 = orders/look(order: input.order)\ns116 = orders/look(order: input.order)\ns117 = orders/look(order: input.order)\ns118 = orders/look(order: input.order)\ns119 = orders/look(order: input.order)\ns120 = orders/look(order: input.order)\ns121 = orders/look(order: input.order)\ns122 = orders/look(order: input.order)\ns123 = orders/look(order: input.order)\ns124 = orders/look(order: input.order)\ns125 = orders/look(order: input.order)\ns126 = orders/look(order: input.order)\ns127 = orders/look(order: input.order)\ns128 = orders/look(order: input.order)\ns129 = orders/look(order: input.order)\ns130 = orders/look(order: input.order)\ns131 = orders/look(order: input.order)\ns132 = orders/look(order: input.order)\ns133 = orders/look(order: input.order)\ns134 = orders/look(order: input.order)\ns135 = orders/look(order: input.order)\ns136 = orders/look(order: input.order)\ns137 = orders/look(order: input.order)\ns138 = orders/look(order: input.order)\ns139 = orders/look(order: input.order)\ns140 = orders/look(order: input.order)\ns141 = orders/look(order: input.order)\ns142 = orders/look(order: input.order)\ns143 = orders/look(order: input.order)\ns144 = orders/look(order: input.order)\ns145 = orders/look(order: input.order)\ns146 = orders/look(order: input.order)\ns147 = orders/look(order: input.order)\ns148 = orders/look(order: input.order)\ns149 = orders/look(order: input.order)\ns150 = orders/look(order: input.order)\ns151 = orders/look(order: input.order)\ns152 = orders/look(order: input.order)\ns153 = orders/look(order: input.order)\ns154 = orders/look(order: input.order)\ns155 = orders/look(order: input.order)\ns156 = orders/look(order: input.order)\ns157 = orders/look(order: input.order)\ns158 = orders/look(order: input.order)\ns159 = orders/look(order: input.order)\ns160 = orders/look(order: input.order)\ns161 = orders/look(order: input.order)\ns162 = orders/look(order: input.order)\ns163 = orders/look(order: input.order)\ns164 = orders/look(order: input.order)\ns165 = orders/look(order: input.order)\ns166 = orders/look(order: input.order)\ns167 = orders/look(order: input.order)\ns168 = orders/look(order: input.order)\ns169 = orders/look(order: input.order)\ns170 = orders/look(order: input.order)\ns171 = orders/look(order: input.order)\ns172 = orders/look(order: input.order)\ns173 = orders/look(order: input.order)\ns174 = orders/look(order: input.order)\ns175 = orders/look(order: input.order)\ns176 = orders/look(order: input.order)\ns177 = orders/look(order: input.order)\ns178 = orders/look(order: input.order)\ns179 = orders/look(order: input.order)\ns180 = orders/look(order: input.order)\ns181 = orders/look(order: input.order)\ns182 = orders/look(order: input.order)\ns183 = orders/look(order: input.order)\ns184 = orders/look(order: input.order)\ns185 = orders/look(order: input.order)\ns186 = orders/look(order: input.order)\ns187 = orders/look(order: input.order)\ns188 = orders/look(order: input.order)\ns189 = orders/look(order: input.order)\ns190 = orders/look(order: input.order)\ns191 = orders/look(order: input.order)\ns192 = orders/look(order: input.order)\ns193 = orders/look(order: input.order)\ns194 = orders/look(order: input.order)\ns195 = orders/look(order: input.order)\ns196 = orders/look(order: input.order)\ns197 = orders/look(order: input.order)\ns198 = orders/look(order: input.order)\ns199 = orders/look(order: input.order)\ns200 = orders/look(order: input.order)\ns201 = orders/look(order: input.order)\ns202 = orders/look(order: input.order)\ns203 = orders/look(order: input.order)\ns204 = orders/look(order: input.order)\ns205 = orders/look(order: input.order)\ns206 = orders/look(order: input.order)\ns207 = orders/look(order: input.order)\ns208 = orders/look(order: input.order)\ns209 = orders/look(order: input.order)\ns210 = orders/look(order: input.order)\ns211 = orders/look(order: input.order)\ns212 = orders/look(order: input.order)\ns213 = orders/look(order: input.order)\ns214 = orders/look(order: input.order)\ns215 = orders/look(order: input.order)\ns216 = orders/look(order: input.order)\ns217 = orders/look(order: input.order)\ns218 = orders/look(order: input.order)\ns219 = orders/look(order: input.order)\ns220 = orders/look(order: input.order)\ns221 = orders/look(order: input.order)\ns222 = orders/look(order: input.order)\ns223 = orders/look(order: input.order)\ns224 = orders/look(order: input.order)\ns225 = orders/look(order: input.order)\ns226 = orders/look(order: input.order)\ns227 = orders/look(order: input.order)\ns228 = orders/look(order: input.order)\ns229 = orders/look(order: input.order)\ns230 = orders/look(order: input.order)\ns231 = orders/look(order: input.order)\ns232 = orders/look(order: input.order)\ns233 = orders/look(order: input.order)\ns234 = orders/look(order: input.order)\ns235 = orders/look(order: input.order)\ns236 = orders/look(order: input.order)\ns237 = orders/look(order: input.order)\ns238 = orders/look(order: input.order)\ns239 = orders/look(order: input.order)\ns240 = orders/look(order: input.order)\ns241 = orders/look(order: input.order)\ns242 = orders/look(order: input.order)\ns243 = orders/look(order: input.order)\ns244 = orders/look(order: input.order)\ns245 = orders/look(order: input.order)\ns246 = orders/look(order: input.order)\ns247 = orders/look(order: input.order)\ns248 = orders/look(order: input.order)\ns249 = orders/look(order: input.order)\ns250 = orders/look(order: input.order)\ns251 = orders/look(order: input.order)\ns252 = orders/look(order: input.order)\ns253 = orders/look(order: input.order)\ns254 = orders/look(order: input.order)\ns255 = orders/look(order: input.order)\ns256 = orders/look(order: input.order)\ns257 = orders/look(order: input.order)\ns258 = orders/look(order: input.order)\ns259 = orders/look(order: input.order)\nanswer with seen: s1.answer\n",
+   "expect": {
+    "admitted": false,
+    "refused-by": "meter",
+    "rule": "",
+    "defines": []
+   }
+  },
+  {
+   "name": "a-cell-nested-too-deep-is-refused-before-it-is-read",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "list of text"
+   },
+   "cell": "e0 = for each item in input.orders\n  e1 = for each item in input.orders\n    e2 = for each item in input.orders\n      e3 = for each item in input.orders\n        e4 = for each item in input.orders\n          e5 = for each item in input.orders\n            e6 = for each item in input.orders\n              e7 = for each item in input.orders\n                e8 = for each item in input.orders\n                  e9 = for each item in input.orders\n                    e10 = for each item in input.orders\n                      e11 = for each item in input.orders\n                        e12 = for each item in input.orders\n                          e13 = for each item in input.orders\nanswer with seen: e0.items\n",
+   "expect": {
+    "admitted": false,
+    "refused-by": "meter",
+    "rule": "",
+    "defines": []
+   }
+  },
+  {
+   "name": "a-payment-for-each-item-is-refused-until-the-items-can-be-told-apart",
+   "tree": "examples/core/refund-desk",
+   "by": "cashier",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "list of text"
+   },
+   "cell": "each = for each item in input.orders\n  limits:\n    items-at-most: 20\n    when-it-runs-out: stop-and-say-so\n  paid = payments/refund(order: item, amount: input.amount)\nanswer with seen: each.items\n",
+   "expect": {
+    "admitted": false,
+    "refused-by": "checker",
+    "rule": "loader/items-told-apart-by-position",
+    "defines": []
+   }
+  },
+  {
+   "name": "a-payment-repeated-is-admitted-because-its-action-carries-a-key-that-does-not-depend-on-the-attempt",
+   "tree": "examples/core/refund-desk",
+   "by": "cashier",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "text"
+   },
+   "cell": "again = repeat at most 3 times\n  paid = payments/refund(order: input.order, amount: input.amount)\nanswer with seen: input.order\n",
+   "expect": {
+    "admitted": true,
+    "refused-by": "",
+    "rule": "",
+    "defines": [
+     "workflows/the-cell"
+    ]
+   }
+  },
+  {
+   "name": "a-cell-cannot-state-a-value-of-its-own",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "text"
+   },
+   "cell": "one = orders/look(order: input.order)\nanswer with seen: \"everything was approved\"\n",
+   "expect": {
+    "admitted": false,
+    "refused-by": "floor",
+    "rule": "",
+    "defines": []
+   }
+  },
+  {
+   "name": "a-cell-cannot-define-a-pattern",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "text"
+   },
+   "cell": "define wide-desk(domain: text) as agent\n  description: About <domain>.\n  instructions: Answer about <domain>.\n\none = orders/look(order: input.order)\nanswer with seen: one.answer\n",
+   "expect": {
+    "admitted": false,
+    "refused-by": "floor",
+    "rule": "",
+    "defines": []
+   }
+  },
+  {
+   "name": "a-helper-flow-that-calls-itself-is-refused",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "text"
+   },
+   "cell": "flow again(order: text) gives seen: text\n  description: Looks, and then looks again, for ever.\n  one = orders/look(order: input.order)\n  more = again(order: input.order)\n  answer with seen: more.seen\n\nfirst = again(order: input.order)\nanswer with seen: first.seen\n",
+   "expect": {
+    "admitted": false,
+    "refused-by": "checker",
+    "rule": "loader/workflows-that-call-each-other",
+    "defines": []
+   }
+  },
+  {
+   "name": "a-value-given-a-name-and-an-input-read-by-its-name-are-admitted",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "text"
+   },
+   "cell": "one = orders/look(order: order)\nfound = one.answer\nanswer with seen: found\n",
+   "expect": {
+    "admitted": true,
+    "refused-by": "",
+    "rule": "",
+    "defines": [
+     "workflows/the-cell"
+    ]
+   }
+  }
+ ]
+}

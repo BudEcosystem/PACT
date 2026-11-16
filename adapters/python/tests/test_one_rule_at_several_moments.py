@@ -327,7 +327,7 @@ def test_a_rule_that_names_one_moment_with_no_dash_still_loads(document: dict) -
 
     _, decision = desk.run(
         "step.tool.before",
-        {"name": "payments", "args": {}, "so-far": ["payments"]},
+        {"name": "payments", "args": {"action": "issue-refund"}, "so-far": ["payments/issue-refund"]},
     )
     assert decision.stop and "needs a person" in decision.stop, decision
 

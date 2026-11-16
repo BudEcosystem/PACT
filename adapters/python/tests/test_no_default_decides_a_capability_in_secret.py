@@ -101,6 +101,10 @@ NOT_ABOUT_CAPABILITY: dict[str, str] = {
 
 #: Made once, on purpose, and an author overriding it would weaken something.
 DELIBERATE_AND_CLOSED: dict[str, str] = {
+    "session.MOST_FROM_MODELS": "how many definitions models may add to one session in "
+                                "all (docs/100 §6.2, rule 8: the checker is metered too). "
+                                "An author who could raise it could let a model keep a "
+                                "session checking for ever; it bounds the door, not an agent",
     "evals.CONSEQUENTIAL_BAR": "money-moving cases are graded at 100%. It is a "
                                "correctness invariant and not a rate (AD-58a) — "
                                "an author who could lower it could accept a suite "
