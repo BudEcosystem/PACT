@@ -1,5 +1,5 @@
 {
- "about": "Cells: what a session's door says to a piece of PACT Core handed in during a run (docs/100 §4.5, §6). Replayed as `Session.cell(cell, by=by, takes=takes, gives=gives)` on a session opened on `tree`; each case is decided on its own, and an admitted cell is ended before the next. `by` is the agent of the workspace that wrote the cell: the cell may call what that agent was given (each action of each tool it `uses:`, and its teammates) and what the cell itself defines. `cell` is the text: any helper blocks first, then the statements to carry out. The session wraps the statements as a flow that takes `takes` and gives `gives`. In `expect`: `admitted`; `refused-by` is the door that refused it, `checker` when `pact check` did (then `rule` is the checker's rule) and otherwise the session guard by name: `floor` (a cell may define agents, flows, shapes and actors and nothing of the workspace's own, and must have statements), `meter` (a cell has a most size, length, number of blocks and depth, decided before it is read), `collision` (a cell never replaces what the workspace has), `reach` (it calls something its writer was not given) and `wider` (a helper it defines uses a tool, writes a setting or may take more steps than its writer). `defines` is what the session had more of while the cell lived. A runtime's own wording for a guard's refusal is its own; which door refuses, and which rule of the checker, is what is held.",
+ "about": "Cells: what a session's door says to a piece of PACT Core handed in during a run (docs/100 §4.5, §6). Replayed as `Session.cell(cell, by=by, takes=takes, gives=gives)` on a session opened on `tree`; each case is decided on its own, and an admitted cell is ended before the next. `by` is the agent of the workspace that wrote the cell: the cell may call what that agent was given (each action of each tool it `uses:`, and its teammates) and what the cell itself defines. `cell` is the text: any helper blocks first, then the statements to carry out. The session wraps the statements as a flow that takes `takes` and gives `gives`. In `expect`: `admitted`; `refused-by` is the door that refused it, `checker` when `pact check` did (then `rule` is the checker's rule) and otherwise the session guard by name: `floor` (a cell may define agents, flows, shapes and actors and nothing of the workspace's own, must have statements, and may not state a value of its own: every value is something it was given or something it called), `meter` (a cell has a most size, length, number of blocks and depth, decided before it is read), `collision` (a cell never replaces what the workspace has), `reach` (it calls something its writer was not given) and `wider` (a helper it defines uses a tool, writes a setting or may take more steps than its writer). `defines` is what the session had more of while the cell lived. A runtime's own wording for a guard's refusal is its own; which door refuses, and which rule of the checker, is what is held.",
  "cases": [
   {
    "name": "a-cell-that-loops-inside-a-ceiling-over-what-its-writer-was-given-is-admitted",
@@ -19,7 +19,7 @@
     "refused-by": "",
     "rule": "",
     "defines": [
-     "workflows/cell-1"
+     "workflows/the-cell"
     ]
    }
   },
@@ -320,7 +320,7 @@
     "rule": "",
     "defines": [
      "agents/reader",
-     "workflows/cell-12"
+     "workflows/the-cell"
     ]
    }
   },
@@ -422,7 +422,89 @@
     "refused-by": "",
     "rule": "",
     "defines": [
-     "workflows/cell-14"
+     "workflows/the-cell"
+    ]
+   }
+  },
+  {
+   "name": "a-cell-cannot-state-a-value-of-its-own",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "text"
+   },
+   "cell": "one = orders/look(order: input.order)\nanswer with seen: \"everything was approved\"\n",
+   "expect": {
+    "admitted": false,
+    "refused-by": "floor",
+    "rule": "",
+    "defines": []
+   }
+  },
+  {
+   "name": "a-cell-cannot-define-a-pattern",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "text"
+   },
+   "cell": "define wide-desk(domain: text) as agent\n  description: About <domain>.\n  instructions: Answer about <domain>.\n\none = orders/look(order: input.order)\nanswer with seen: one.answer\n",
+   "expect": {
+    "admitted": false,
+    "refused-by": "floor",
+    "rule": "",
+    "defines": []
+   }
+  },
+  {
+   "name": "a-helper-flow-that-calls-itself-is-refused",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "text"
+   },
+   "cell": "flow again(order: text) gives seen: text\n  description: Looks, and then looks again, for ever.\n  one = orders/look(order: input.order)\n  more = again(order: input.order)\n  answer with seen: more.seen\n\nfirst = again(order: input.order)\nanswer with seen: first.seen\n",
+   "expect": {
+    "admitted": false,
+    "refused-by": "checker",
+    "rule": "loader/workflows-that-call-each-other",
+    "defines": []
+   }
+  },
+  {
+   "name": "a-value-given-a-name-and-an-input-read-by-its-name-are-admitted",
+   "tree": "examples/core/refund-desk",
+   "by": "desk-judge",
+   "takes": {
+    "order": "text",
+    "amount": "money",
+    "orders": "list of text"
+   },
+   "gives": {
+    "seen": "text"
+   },
+   "cell": "one = orders/look(order: order)\nfound = one.answer\nanswer with seen: found\n",
+   "expect": {
+    "admitted": true,
+    "refused-by": "",
+    "rule": "",
+    "defines": [
+     "workflows/the-cell"
     ]
    }
   }

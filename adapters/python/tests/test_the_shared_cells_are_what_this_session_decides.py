@@ -37,8 +37,11 @@ def decided(session: Session, case: dict[str, Any]) -> dict[str, Any]:
          if line.strip().startswith("rule: ")),
         "",
     )
+    # The flow a cell's own statements become has a name the session gives it
+    # (`cell-<n>`), which is nothing a second runtime has to match: it is
+    # written here as `workflows/the-cell`.
     defines = sorted(
-        f"{kind}/{name}" for kind in ("agents", "workflows", "shapes")
+        f"{kind}/{'the-cell' if name == got.main else name}" for kind in ("agents", "workflows", "shapes")
         for name in session.document.get(kind) or {} if name not in (before.get(kind) or {})
     )
     session.end(got)
@@ -76,9 +79,9 @@ def test_every_cell_is_decided_as_written_down(cases: list[dict[str, Any]]) -> N
 
 def test_the_cases_say_what_they_are_there_to_say(cases: list[dict[str, Any]]) -> None:
     by_name = {c["name"]: c["expect"] for c in cases}
-    assert len(by_name) == len(cases) == 21
+    assert len(by_name) == len(cases) == 25
     admitted = [n for n, e in by_name.items() if e["admitted"]]
-    assert len(admitted) == 3, admitted
+    assert len(admitted) == 4, admitted
     # Every door refuses something, and the checker by more than one rule.
     doors = {e["refused-by"] for e in by_name.values() if not e["admitted"]}
     assert doors == {"checker", "floor", "meter", "collision", "reach", "wider"}, doors
@@ -91,5 +94,9 @@ def test_the_cases_say_what_they_are_there_to_say(cases: list[dict[str, Any]]) -
     assert by_name["a-cell-never-replaces-what-the-workspace-has"]["refused-by"] == "collision"
     # A narrower helper is what a model MAY define, and it is there while the cell lives.
     assert "agents/reader" in by_name["a-narrower-helper-is-admitted-and-may-be-called"]["defines"]
+    # What a cell may never do, however it is worded.
+    assert by_name["a-cell-cannot-state-a-value-of-its-own"]["refused-by"] == "floor"
+    assert by_name["a-cell-cannot-define-a-pattern"]["refused-by"] == "floor"
+    assert by_name["a-helper-flow-that-calls-itself-is-refused"]["rule"] == "loader/workflows-that-call-each-other"
     # Nothing a guard refused had been defined.
     assert all(not e["defines"] for e in by_name.values() if not e["admitted"])

@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -54,7 +55,14 @@ THE_WORKSPACES_OWN = (
     "workspace", "tool", "resource", "policy", "port", "owner", "release", "redaction",
     "evals", "learning", "models", "plugin", "interceptor", "watch", "let", "when",
     "question", "knowledge", "skill", "program", "value", "loop", "context-policy",
-    "bundle", "topic", "event", "reaction", "remembers", "detector",
+    "bundle", "topic", "event", "reaction", "remembers", "detector", "define",
+)
+#: What every definition can be changed by: the parts of a workspace that are
+#: not one named thing but rules over all of them. A change to any of these
+#: is a change to everything (`Session.agent`, `Session.flow`).
+OVER_EVERYTHING = (
+    "policies", "reactions", "interceptors", "redaction", "plugins", "events", "topics",
+    "watch", "context-policies", "owners", "release", "learning", "evals", "models",
 )
 #: What a helper a model defines may say about itself. Not its model, its
 #: policy or its team: those it has from nobody, so it has none.
@@ -64,6 +72,9 @@ A_HELPER_MAY_WRITE = frozenset(
 )
 #: The collection each header word files its block under.
 COLLECTION = {"agent": "agents", "flow": "workflows", "workflow": "workflows", "shape": "shapes"}
+
+#: A name as a definition writes one: `desk-judge`, `orders`, `refund-one`.
+_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
 
 #: How much one proposal from a model may ask the checker to read.
 MOST_BYTES, MOST_LINES, MOST_BLOCKS, DEEPEST = 8_000, 200, 12, 12
@@ -192,6 +203,45 @@ def _calls(stages: Any) -> Iterable[str]:
         yield from _calls(stage.get("steps"))
 
 
+def depends_on(document: Mapping[str, Any], collection: str, name: str) -> str:
+    """A fingerprint of everything `collection/name` depends on: itself, every
+    named thing it names (and those name, and so on), and the parts of the
+    workspace that are rules over everything (`OVER_EVERYTHING`, and every
+    setting of the workspace itself).
+
+    Two workspaces in which this is the same hand a run the same `name`. So a
+    change to an agent nothing here names leaves it as it was, and a change
+    to a tool it uses does not. What is named is found by its name appearing
+    in the definition, which errs toward depending on too much and never on
+    too little."""
+    entries = {
+        c: v for c, v in document.items()
+        if isinstance(v, Mapping) and c not in OVER_EVERYTHING and all(isinstance(e, Mapping) for e in v.values())
+    }
+    seen: dict[tuple[str, str], Any] = {}
+
+    def words(node: Any) -> set[str]:
+        if isinstance(node, Mapping):
+            return set().union(*(words(k) | words(v) for k, v in node.items())) if node else set()
+        if isinstance(node, (list, tuple)):
+            return set().union(*(words(v) for v in node)) if node else set()
+        return {w for w in _NAME.findall(str(node))} | {str(node)}
+
+    def take(c: str, k: str) -> None:
+        if (c, k) in seen or k not in entries.get(c, {}):
+            return
+        seen[(c, k)] = entries[c][k]
+        named = words(entries[c][k])
+        for other, held in entries.items():
+            for key in held:
+                if key in named:
+                    take(other, key)
+
+    take(collection, name)
+    over = {k: v for k, v in document.items() if k not in entries}
+    return fingerprint({"it": {f"{c}/{k}": v for (c, k), v in sorted(seen.items())}, "over": over})
+
+
 def reach_of(document: Mapping[str, Any], agent: str) -> frozenset[str]:
     """What `agent` was given: each action of each tool it `uses:`, and each
     teammate. A cell it writes may call these and nothing else."""
@@ -216,6 +266,13 @@ class Session:
     journal: "Path | None" = None
     #: Every proposal this session decided, in order.
     decided: list[Admission] = field(default_factory=list)
+    #: What was kept for the workspace from a run, and who approved it.
+    promoted: list[dict[str, Any]] = field(default_factory=list)
+    #: How many times a run was handed something already read, and how many
+    #: times it had to be read (`agent`, `flow`).
+    plans_reused: int = 0
+    plans_read: int = 0
+    _plans: dict[tuple[str, str], tuple[str, Any]] = field(default_factory=dict)
     _n: int = 0
     _from_models: int = 0
 
@@ -335,6 +392,92 @@ class Session:
             self._write({"op": "end", "main": admission.main, "state": "admitted", "version": self.version})
         else:  # something admitted since still names it: it stays until that goes
             shutil.rmtree(staged, ignore_errors=True)
+
+    def promote(self, text: str, *, proposed_by: str, approved_by: str) -> Admission:
+        """Keep, for the workspace, something a run defined (`docs/100` §6.2,
+        rule 4): the definition as text, who proposed it, and the person who
+        approved it.
+
+        A definition a model wrote lives for the call that wrote it. Keeping
+        it is a write to the workspace's definitions, and that is a person's
+        to allow (law 5: a part must not write itself more than it was
+        given). So there is no promotion without a person named, and where
+        the workspace names its `owners:`, the person is one of them. The
+        definition then goes through the same door as any proposal, and the
+        journal says who approved it."""
+        started = time.monotonic()
+        approver = approved_by.strip()
+        if not approver:
+            return self._refused(
+                "promotion", f"Nothing {proposed_by} defined is kept without a person's approval. "
+                "Pass who approved it.", started)
+        # `owners:` says, part by part, whose yes a change needs (`owned-by:`).
+        owners = {
+            str(part.get("owned-by")).strip()
+            for part in (self.document.get("owners") or {}).values()
+            if isinstance(part, Mapping) and part.get("owned-by")
+        }
+        if owners and approver not in owners:
+            return self._refused(
+                "promotion", f"{approver} is not an owner of this workspace "
+                f"({', '.join(sorted(owners))}), and only an owner may approve what a run "
+                f"defined being kept.", started)
+        got = self._decide("promote", text, f"{proposed_by}, approved by {approver}",
+                           lambda tree: self._add(tree, text), started=started)
+        if got.admitted:
+            self.promoted.append({"names": list(got.names), "proposed-by": proposed_by,
+                                  "approved-by": approver, "version": got.version})
+        return got
+
+    # ── what a run is handed, kept while nothing it depends on has changed ──
+
+    def agent(self, name: str) -> Any:
+        """The agent `name`, read once and kept for as long as nothing it
+        depends on has changed (`depends_on`)."""
+        from .ir import AgentSpec
+
+        return self._kept("agents", name, lambda: AgentSpec.from_document(self.document, name))
+
+    def flow(self, name: str) -> Any:
+        """The workflow `name`, kept the same way."""
+        from .ir import WorkflowSpec
+
+        return self._kept("workflows", name, lambda: WorkflowSpec.from_workflow(self.document, name))
+
+    def _kept(self, collection: str, name: str, read: Any) -> Any:
+        mark = depends_on(self.document, collection, name)
+        held = self._plans.get((collection, name))
+        if held is not None and held[0] == mark:
+            self.plans_reused += 1
+            return held[1]
+        self.plans_read += 1
+        made = read()
+        self._plans[(collection, name)] = (mark, made)
+        return made
+
+    # ── a run that is waiting ────────────────────────────────────────────
+
+    def pinned(self, flow: str) -> str:
+        """What a run of `flow` that is about to wait is pinned to: the
+        workflow's `doc-digest`, which `pact discover` prints. It moves when
+        the workflow, a workflow it calls, or anything outside the workspace's
+        workflows changes, and stays when something it never reaches does."""
+        found = _pact("discover", str(self.tree))
+        for workspace in json.loads(found.stdout or "[]"):
+            for entry in workspace.get("workflows") or ():
+                if entry.get("name") == flow:
+                    return str(entry.get("doc-digest") or "")
+        raise KeyError(f"there is no workflow called {flow!r} here")
+
+    def still(self, flow: str, pinned: str) -> bool:
+        """Whether a run of `flow` that waited under `pinned` can go on by
+        itself under the workspace as it is now. `False` is a change to what
+        the run will do next: it stays on the version it has, or a person
+        says it may move."""
+        try:
+            return self.pinned(flow) == pinned
+        except KeyError:
+            return False
 
     # ── the door ─────────────────────────────────────────────────────────
 
@@ -518,6 +661,12 @@ def _within(
             ):
                 return ("reach", f"This cell calls '{target}', which {by} was not given. It may call: "
                         f"{', '.join(sorted(allowed)) or 'nothing'}.")
+    stated = sorted(set(document.get("values") or {}) - set(before.get("values") or {}))
+    if stated:
+        said = (document["values"][stated[0]] or {}).get("value")
+        return ("floor", f"This cell states a value of its own ({said!r}). A cell moves values and "
+                f"never makes one: every value is something it was given or something it called. "
+                f"To judge or word something, call something that does.")
     writer = (before.get("agents") or {}).get(by) or {}
     for key, helper in (document.get("agents") or {}).items():
         if key in (before.get("agents") or {}):

@@ -873,11 +873,15 @@ a test that runs in the gate.
 | Calling a capability | `ruled = desk.judge(order: input.order)` | yes |
 | `flow` as the word for a workflow | `flow f(…)` | yes |
 | Everything `.pact` already read | `for each`, `repeat`, `together`, `decide`, `answer with`, `let`, `based on … with`, every setting | yes, unchanged |
-| `define` and `use` (words), the prelude | §4.3 | **no**: phase K2 and K3 |
-| `by program` beneath a `can`; a parameter read by its bare name | §4.4 | **no**: a parameter is read as `input.<name>` |
-| A value of the author's own in a statement, or `x = <a path>` | | **no**, and see 17.4 |
+| A capability a program carries out | `by program add-up` beneath a `can` | yes: a workflow that hands the program the same inputs and hands back its answer |
+| What a flow takes, read by its name | `seen = orders/look(order: order)` | yes: `input.order` |
+| A name for a value | `facts = seen.facts` | yes: no stage, the path is read wherever the name is |
+| A fixed value in a statement | `answer with note: "decided by the till"`, `most: 200 USD` | yes: filed once under `values:` and read from there; held to the shape it fills |
+| A pattern, and something made from it | `define desk-for(domain: text) as agent`, then `agent billing-desk is desk-for(domain: billing)` | yes: `base: yes` with `expects:`, and `based on … with` |
+| The keywords as a library of words (the prelude) | §4.3 | **no, and it will not be**: see 17.6 |
 
-`examples/core/refund-desk/refunds.pact` is a whole workspace written this way.
+`examples/core/refund-desk/refunds.pact` and `examples/core/shop/shop.pact`
+are whole workspaces written this way.
 
 ### 17.2 What was measured
 
@@ -886,9 +890,18 @@ a test that runs in the gate.
 | A workspace in Core and the same workspace in keywords | the identical document, and the identical fingerprint | `core_is_another_way_of_writing_the_same_document.rs` |
 | Operations written in a shipped tree that loads | 76 of 76. It was 72: four were written in no shipped tree until the Core example wrote them | `test_every_kernel_operation_is_written_in_a_tree_that_loads.py` |
 | A rule of the checker broken in Core | refused by the same rule, pointing at the Core line | the same Rust file |
-| Shared cell cases | 21, of which 18 are attacks. Every door refuses at least one: the checker (by five of its rules), `floor`, `meter`, `collision`, `reach`, `wider` | `tests/conformance/cells.json` |
+| Shared cell cases | 25, of which 21 are attacks. Every door refuses at least one: the checker (by six of its rules), `floor`, `meter`, `collision`, `reach`, `wider` | `tests/conformance/cells.json` |
+| A fixed value where only certain values may go | refused at check time (`decision: "perhaps"` into `one of approved, declined`). It loaded before, and stopped the run when it got there | `core_is_another_way_…rs` |
+| Forty runs open while their flow is rewritten three times | every run finishes as the flow was written when it began | `test_core_in_extreme_situations.py` |
+| An agent writing itself more room, three ways | refused each way; its ceiling never moves | the same file |
+| Two changes, each sound, that together never end | the second is refused, naming the circle | the same file |
+| A waiting run, thirty changes to a flow it never reaches, then one to its own | moves by itself past the thirty; not past its own | the same file |
+| A five-megabyte cell, four thousand helpers, four hundred levels deep | each refused in under half a second, without the checker being run | the same file |
+| Payments withdrawn while a payment is being made | that payment is made once; no cell reaches payments afterwards | the same file |
+| Something a run defined, kept for the workspace | only with a person named; where the workspace names owners, only an owner; the journal says who | the same file |
+| What a run is handed, across a change | kept when nothing it depends on changed, read again when something did | the same file |
 | The workspace after a cell has ended | the fingerprint it had before, every time | `test_the_shared_cells_…` |
-| The door, per proposal | about 230 ms (two runs of the checker and a copy of the tree) | `test_a_session_changes_while_it_runs.py` |
+| The door, per proposal | 60 to 230 ms on this machine (a copy of the tree and one or two runs of the checker), far under a model call. A checker kept running was planned to cut this and is not needed at this size | `test_a_session_changes_while_it_runs.py` |
 | A run in flight when its own flow is replaced | finishes as it was written when it began; the next run is the new one | the same file |
 | A session resumed from its journal stopped after every line, and inside every line | always exactly a version the session reached, never between two | the same file |
 | A sealed plan against the live session at the same version | the same answer and the same trace; an edited plan is refused on loading | the same file |
@@ -944,17 +957,34 @@ a test that runs in the gate.
 
 ### 17.5 What is not built
 
-- `define` and the prelude (K2, K3). Functions exist as flows with
-  signatures; a word that stands for a few *settings* does not.
-- The kernel plan and an interpreter with one function per operation (K4).
-  Flows are run by the existing workflow runtime.
-- `by model, writing cells` as a loop shape inside the agent harness. Acting
-  by a cell is its own entry point (`cells.act_by_a_cell`), for one cell that
-  is the answer.
-- Cached plans (K7), promotion of a run's definition into the workspace
-  (K8), and a second runtime replaying `cells.json` (K9).
-- The session's door copies the tree and runs the checker as a process. A
-  checker kept running (`pact serve`) is K6's second half.
-- Of the thirteen scenarios in §12: 2, 6 and 11 are run (an injection that
-  asks for a helper and a payment, values by reference at scale, a stop at
-  every point of a change). The other ten are not.
+- **The kernel plan and an interpreter with one function per operation
+  (K4).** Flows are run by the existing workflow runtime.
+- **Acting by cells as a stage of an ordinary agent run.** It is its own
+  entry point (`cells.act_by_a_cell`). The agent's limits bound how many cells
+  it may write, and what its other settings ask for and a cell run does not
+  carry out (`interceptors:`, `policy:`, `checked-by:`) is said on the result
+  (`CellRun.unenforced`). Making it a stage needs a word in the schema for the
+  stage, which is the owner's to add.
+- **A second runtime replaying `cells.json`** (K9).
+- **Of the thirteen scenarios in §12:** 1, 2, 3, 4, 6, 7, 8, 10, 11 and 12 are
+  run. Not run: 5 (a payment across a killed process: the reference workflow
+  runtime does not resume), 9 (a hidden value: needs the redaction floor in a
+  cell run) and 13 (two engines).
+
+### 17.6 Why the keywords are not becoming a library
+
+Phase K0 was to count how many of the keywords could be written as words made
+from other words. Every one of the 579 schema fields was classified:
+
+| What the keyword is | How many |
+|---|---|
+| A kernel operation itself | 295 |
+| A parameter of a group that is an operation | 191 |
+| Something said for a reader (a description, a name, a reason) | 39 |
+| A parameter of one of 14 groups with no operation of their own (eval cases, benchmarks, model settings, provenance and the like) | 54 |
+
+None is a shorthand for other keywords. The keywords are the operations and
+their parameters, so there is nothing to define them from, and §8's own rule
+for this outcome applies: K3 is dropped. Reuse in Core is what the document
+already had, now with a form each: a function (a flow with a signature) and a
+pattern (`define`, which is `base: yes` and `expects:`).

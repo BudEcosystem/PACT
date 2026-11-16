@@ -95,6 +95,9 @@ class CellRun:
     trace: list[str] = field(default_factory=list)
     #: The system text of each request, for whoever wants to see what was told.
     told: list[str] = field(default_factory=list)
+    #: What the agent's own settings ask for that acting by a cell does not
+    #: carry out, each in a sentence. Said, never skipped.
+    unenforced: list[str] = field(default_factory=list)
 
 
 def what_it_may_call(document: Mapping[str, Any], allowed: "set[str] | frozenset[str]") -> str:
@@ -132,18 +135,23 @@ async def act_by_a_cell(
     *,
     tries: int = 3,
     may_call: "set[str] | frozenset[str]" = frozenset(),
+    shapes: Mapping[str, str] | None = None,
 ) -> CellRun:
     """Have `agent` answer `asked` by writing a cell over `inputs`.
 
     `inputs` are handed to the cell by reference: the model is shown a
     preview of each, and the cell's statements are carried out on the whole
-    value. The cell must end in an answer that is what the agent says it
+    value. `shapes` names the shape of an input where its value alone does
+    not say it. The cell must end in an answer that is what the agent says it
     gives."""
     document = session.document
     spec = (document.get("agents") or {}).get(agent) or {}
     gives = dict(spec.get("answers-with") or {})
     allowed = set(reach_of(document, agent)) | set(may_call)
-    takes = {name: _shape_of(value) for name, value in inputs.items()}
+    # What each input is. Read off the value where the host does not say: a
+    # text, a number, a list. `shapes` says what cannot be read off one, such
+    # as that `45 USD` is money and not a text.
+    takes = {name: (shapes or {}).get(name) or _shape_of(value) for name, value in inputs.items()}
     system = "\n\n".join(part for part in (
         str(spec.get("instructions") or "").strip(),
         PRIMER,
@@ -157,6 +165,14 @@ async def act_by_a_cell(
          + "\n".join(f"  {k}: {v}" for k, v in gives.items())) if gives else "",
     ) if part)
     out = CellRun()
+    out.unenforced = _not_held(agent, spec)
+    # How many cells it may write is the agent's own to say, as how many times
+    # it is asked for its answer is (`checks-at-most:`); and never more than
+    # the steps it may take, because each cell is one.
+    tries = int(spec.get("checks-at-most") or tries)
+    most = (spec.get("limits") or {}).get("steps-at-most")
+    if isinstance(most, int) and not isinstance(most, bool):
+        tries = min(tries, most)
     history: list[dict[str, Any]] = [{"role": "user", "content": asked}]
     why = ""
     for _ in range(max(1, tries)):
@@ -196,6 +212,27 @@ async def act_by_a_cell(
     out.said = (f"Stopped without an answer: {len(out.cells)} cell(s) were written and none was "
                 f"admitted and carried out to an answer that fits. {why.splitlines()[0] if why else ''}")
     return out
+
+
+#: The settings of an agent that are carried out by the harness's own loop
+#: (`harness.run`) and by nothing here. An agent that writes one and acts by
+#: a cell is told, rather than left believing it holds.
+_THE_LOOPS_OWN = {
+    "interceptors": "nothing is hidden, stopped or sent elsewhere on the way",
+    "policy": "nobody is asked before a call a cell makes; what a cell may call is what the agent was given",
+    "context-policy": "the conversation is not shortened",
+    "loop": "the cell is the one stage there is",
+    "team": "a teammate is called by a cell, not asked by the model",
+    "checked-by": "the answer is held to its shape and not to these rules",
+}
+
+
+def _not_held(agent: str, spec: Mapping[str, Any]) -> list[str]:
+    return [
+        f"{setting}: {agent} acts by writing a cell here, and {why}. fix: run it on the "
+        f"harness's own loop (`harness.run`) where `{setting}:` has to hold."
+        for setting, why in _THE_LOOPS_OWN.items() if spec.get(setting)
+    ]
 
 
 def _how_many(value: Any) -> str:

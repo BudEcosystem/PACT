@@ -178,6 +178,27 @@ struct Reader<'a> {
     called: Option<(String, Span)>,
     /// The description a `when` sentence gives a reaction that writes none.
     described: Option<(String, Span)>,
+    /// What the flow being read can say by a bare name (`flow.rs`).
+    scope: Scope,
+    /// The fixed values statements have written, each filed once under
+    /// `values:` as `said-<slug>`: `(the name it has, the text as written)`.
+    said: Vec<(String, String)>,
+}
+
+/// The names a flow's statements can use without saying where they are from.
+#[derive(Default, Clone)]
+struct Scope {
+    /// What the flow takes: `order` is `input.order`.
+    takes: Vec<String>,
+    /// The statements named so far: `seen.facts` is `steps.seen.facts`.
+    steps: Vec<String>,
+    /// A value given a name: `price = seen.total`, and `price` is that path.
+    names: Vec<(String, String)>,
+}
+
+/// The names a set of `<name>: <shape>` lines gives, in the order written.
+fn names_of(shapes: &Node) -> Vec<String> {
+    shapes.as_map().map(|m| m.keys().cloned().collect()).unwrap_or_default()
 }
 
 /// What a header's bracketed line says: a name, what it takes, what it gives.
@@ -320,6 +341,8 @@ impl<'a> Reader<'a> {
             side: Vec::new(),
             called: None,
             described: None,
+            scope: Scope::default(),
+            said: Vec::new(),
         }
     }
 
@@ -413,6 +436,10 @@ impl<'a> Reader<'a> {
             self.actor(&l, rest_at, body);
             return;
         }
+        if word == "define" {
+            self.define(&l, rest_at, body);
+            return;
+        }
         // `flow` is the kernel's word for a workflow (docs/100 §4.2): the
         // same block, the same field.
         let word = if word == "flow" { "workflow" } else { word };
@@ -441,10 +468,43 @@ impl<'a> Reader<'a> {
             );
             return;
         };
-        let shown = self.name(&l, next);
+        let mut shown = self.name(&l, next);
+        // `agent billing-desk is desk-for(domain: billing)` — one made from a
+        // pattern (`define`), with what the pattern left open filled in.
+        let mut made_from: Option<(Node, Option<Node>)> = None;
+        if signed.is_none()
+            && let Some(n) = l.text.get(next..).and_then(|r| after(r.trim_start(), "is ").map(|k| l.text.len() - r.trim_start().len() + k))
+        {
+            shown = None;
+            let said = &l.text[n..];
+            let (pattern, open) = match said.find('(') {
+                Some(o) if said.ends_with(')') => (said[..o].trim(), Some(n + o + 1)),
+                _ => (said.trim(), None),
+            };
+            let ps = self.at(&l, n, pattern.len().max(1));
+            let with = match open {
+                Some(open) if !l.text[open..l.text.len() - 1].trim().is_empty() => {
+                    let inside = Line { text: &l.text[..l.text.len() - 1], ..l };
+                    self.given(&inside, open)
+                }
+                _ => None,
+            };
+            made_from = Some((s(pattern, &ps), with));
+        }
         let kind = Kind::of(word);
         let saved = (self.called.take(), self.described.take());
+        let outer = std::mem::take(&mut self.scope);
+        if let Some(sig) = &signed {
+            self.scope.takes = sig.takes.as_ref().map(names_of).unwrap_or_default();
+        }
         let mut settings = self.body(body, kind);
+        self.scope = outer;
+        if let Some((pattern, with)) = made_from {
+            self.put(&mut settings, "based-on".to_string(), block.clone(), pattern);
+            if let Some(with) = with {
+                self.put(&mut settings, "with".to_string(), block.clone(), with);
+            }
+        }
         if matches!(kind, Kind::Reaction | Kind::Event) {
             if let Some((_, span)) = self.called.take() {
                 self.error(
@@ -601,12 +661,40 @@ impl<'a> Reader<'a> {
                 continue;
             };
             let id = format!("{actor}-{}", sig.name);
-            let by_model = rest
-                .clone()
-                .map(|k| self.lines[k])
-                .find(|k| !k.quiet())
-                .is_some_and(|k| uncommented(k.text) == "by model");
-            let mut fields = if by_model {
+            let first_line = rest.clone().map(|k| self.lines[k]).find(|k| !k.quiet());
+            let by_model = first_line.is_some_and(|k| uncommented(k.text) == "by model");
+            let by_program = first_line.and_then(|k| {
+                after(uncommented(k.text), "by program ").map(|n| (k, uncommented(k.text)[n..].trim().to_string(), n))
+            });
+            let outer = std::mem::take(&mut self.scope);
+            self.scope.takes = sig.takes.as_ref().map(names_of).unwrap_or_default();
+            let mut fields = if let Some((line, program, n)) = &by_program {
+                // Carried out by a program: the same inputs handed to it, and
+                // what it answers handed back, field for field.
+                let at = self.at(line, *n, program.len().max(1));
+                let whole = self.whole(line);
+                let given: Vec<(String, Node)> = self.scope.takes.iter()
+                    .map(|k| (k.clone(), s(format!("input.{k}"), &at))).collect();
+                let back: Vec<(String, Node)> = sig.gives.as_ref().map(names_of).unwrap_or_default().iter()
+                    .map(|k| (k.clone(), s(format!("steps.run.{k}"), &at))).collect();
+                let pairs = |v: &[(String, Node)]| -> Node {
+                    map_of(v.iter().map(|(k, n)| (k.as_str(), n.clone())).collect(), &whole)
+                };
+                let mut run = vec![("does", s("call", &whole)), ("call", s(program.clone(), &at))];
+                if !given.is_empty() {
+                    run.push(("bind", pairs(&given)));
+                }
+                run.push(("then", map_of(vec![("answered", s("answer", &whole))], &whole)));
+                let mut answer = vec![("does", s("answer", &whole))];
+                if !back.is_empty() {
+                    answer.push(("bind", pairs(&back)));
+                }
+                let steps = map_of(vec![("run", map_of(run, &whole)), ("answer", map_of(answer, &whole))], &whole);
+                let mut fields = Map::new();
+                self.put(&mut fields, "steps".to_string(), whole.clone(), steps);
+                self.put(&mut fields, "starts-at".to_string(), whole.clone(), s("run", &whole));
+                fields
+            } else if by_model {
                 let own: Vec<(usize, Range<usize>)> = self
                     .items(rest)
                     .into_iter()
@@ -620,6 +708,7 @@ impl<'a> Reader<'a> {
             } else {
                 self.flow_body(rest, Kind::Flow, true)
             };
+            self.scope = outer;
             if let Some(node) = sig.takes {
                 self.put(&mut fields, "accepts".to_string(), sig.at.clone(), node);
             }
@@ -640,6 +729,122 @@ impl<'a> Reader<'a> {
             let collection = if by_model { "agents" } else { "workflows" };
             self.add_root(collection, id, sig.at.clone(), Node::map(fields, span));
         }
+    }
+
+    /// `define <name>(<blank>: <shape>, …) as <kind>` — a pattern: an entry of
+    /// that kind that never runs, with blanks (`<blank>` in its lines) for
+    /// whatever is made from it to fill: `agent billing-desk is
+    /// <name>(<blank>: <value>)`. The document has had this since `based on …
+    /// with`; it is `base: yes` and `expects:`, written on one line.
+    fn define(&mut self, l: &Line, rest_at: usize, body: Range<usize>) {
+        let block = self.whole(l);
+        let said = &l.text[rest_at.min(l.text.len())..];
+        let Some(as_at) = said.rfind(" as ") else {
+            self.error(
+                "lang/not-a-line",
+                block,
+                "A `define` says what kind of thing the pattern is.".to_string(),
+                "Write `define <name>(<blank>: <shape>, …) as agent` — or `as tool`, `as \
+                 workflow`, whatever is to be made from it."
+                    .to_string(),
+            );
+            return;
+        };
+        let kind_word = said[as_at + 4..].trim();
+        let kind_word = if kind_word == "flow" { "workflow" } else { kind_word };
+        let Some(collection) = collection_of(kind_word) else {
+            let span = self.at(l, rest_at + as_at + 4, kind_word.len().max(1));
+            self.error(
+                "lang/not-a-line",
+                span,
+                format!("A pattern cannot be a '{kind_word}': nothing is written under that word."),
+                "Write `as agent`, `as tool`, `as workflow` or another kind of block.".to_string(),
+            );
+            return;
+        };
+        let head = Line { text: &l.text[..rest_at + as_at], ..*l };
+        let Some(sig) = self.signature(&head, rest_at).or_else(|| {
+            self.name(&head, rest_at).map(|(name, at, _)| Signature { name, at, takes: None, gives: None })
+        }) else {
+            self.error(
+                "lang/a-block-with-no-name",
+                block,
+                "This `define` does not name its pattern.".to_string(),
+                "Write `define <name>(<blank>: <shape>) as <kind>`.".to_string(),
+            );
+            return;
+        };
+        let mut settings = self.body(body, Kind::of(kind_word));
+        self.put(&mut settings, "base".to_string(), block.clone(), self.scalar("yes", &block));
+        if let Some(blanks) = &sig.takes {
+            let mut expects = Map::new();
+            for (name, entry) in blanks.as_map().into_iter().flatten() {
+                let shape = map_of(vec![("shape", entry.node.clone())], &entry.key_span);
+                expects.insert(name.clone(), Entry { key_span: entry.key_span.clone(), node: shape });
+            }
+            self.put(&mut settings, "expects".to_string(), sig.at.clone(), Node::map(expects, sig.at.clone()));
+        }
+        self.add_root(collection, sig.name, sig.at, Node::map(settings, block));
+    }
+
+    /// A binding as a statement says it, as the document holds it.
+    ///
+    /// * a value given a name earlier (`price = seen.total`) is that path;
+    /// * a statement named earlier is `steps.<it>`;
+    /// * what the flow takes is `input.<it>`;
+    /// * a fixed value — `"approved"`, `200 USD` — is filed under `values:`
+    ///   and read from there, because a binding is a path and never a value;
+    /// * anything else is read as it always was ([`crate::bound`]).
+    pub(super) fn path(&mut self, said: &str, at: &Span) -> String {
+        let fixed = said.starts_with('"') || said.chars().next().is_some_and(|c| c.is_ascii_digit());
+        if fixed {
+            let text = self.unquoted(said, at);
+            if let Some((name, _)) = self.said.iter().find(|(_, t)| *t == text) {
+                return format!("values.{name}");
+            }
+            let base = match crate::slug(&text) {
+                made if made.is_empty() => "said-value".to_string(),
+                made => format!("said-{}", made.chars().take(40).collect::<String>().trim_end_matches('-')),
+            };
+            let taken = |me: &Self, n: &str| {
+                me.said.iter().any(|(k, _)| k == n)
+                    || me.root.get("values").and_then(|v| v.node.as_map()).is_some_and(|m| m.contains_key(n))
+            };
+            let mut name = base.clone();
+            let mut k = 2;
+            while taken(self, &name) {
+                name = format!("{base}-{k}");
+                k += 1;
+            }
+            let value = if said.starts_with('"') { s(text.clone(), at) } else { self.scalar(&text, at) };
+            self.add_root("values", name.clone(), at.clone(), map_of(vec![("value", value)], at));
+            self.said.push((name.clone(), text));
+            return format!("values.{name}");
+        }
+        let (root, rest) = match said.split_once('.') {
+            Some((r, rest)) => (r, Some(rest)),
+            None => (said, None),
+        };
+        let tail = |to: &str| match rest {
+            Some(rest) => format!("{to}.{rest}"),
+            None => to.to_string(),
+        };
+        // The words a binding starts with keep their meaning whatever else is
+        // named like them: `input.x` is what was given, even in a flow with a
+        // statement called `input` (which is read as `steps.input.x`).
+        if crate::BINDING_ROOTS.contains(&root) {
+            return crate::bound(said);
+        }
+        if let Some((_, to)) = self.scope.names.iter().rev().find(|(n, _)| n == root) {
+            return tail(&to.clone());
+        }
+        if self.scope.steps.iter().any(|n| n == root) {
+            return format!("steps.{said}");
+        }
+        if self.scope.takes.iter().any(|n| n == root) {
+            return format!("input.{said}");
+        }
+        crate::bound(said)
     }
 
     /// `let refund-limit = 200 USD` — a figure with a name: one entry of
@@ -1223,6 +1428,9 @@ impl<'a> Reader<'a> {
                 if let Some(at) = after(t, "takes ") {
                     lone(self, "what this takes");
                     if let Some(node) = self.shapes(&l, at) {
+                        if kind == Kind::Flow {
+                            self.scope.takes.extend(names_of(&node));
+                        }
                         self.put(map, taken.into(), span, node);
                     }
                 } else if let Some(at) = after(t, "gives ") {

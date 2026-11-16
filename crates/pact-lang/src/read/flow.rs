@@ -45,7 +45,6 @@
 //! says `answered:` the order written here does not.
 
 use super::*;
-use crate::bound;
 
 /// The openings a statement can have, for a refusal's fix.
 pub(super) const OPENINGS: &[&str] = &[
@@ -71,6 +70,35 @@ enum Ends {
     /// Wherever the decision says; what is written after it is where its
     /// branches come back together.
     Decides,
+}
+
+/// The pieces of `a: x, b: "one, two", c: y` between its commas, a comma
+/// inside double quotes being part of what is quoted.
+fn outside_quotes(text: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let (mut from, mut quoted) = (0, false);
+    for (i, c) in text.char_indices() {
+        match c {
+            '"' => quoted = !quoted,
+            ',' if !quoted => {
+                out.push(&text[from..i]);
+                from = i + 1;
+            }
+            _ => {}
+        }
+    }
+    out.push(&text[from..]);
+    out
+}
+
+/// Whether what follows a `<name> = ` is a value and not a statement: a path
+/// (`seen.total`, `item`, `input.order`), with nothing a statement has.
+fn is_a_path(said: &str) -> bool {
+    !said.is_empty()
+        && !said.ends_with(')')
+        && said.chars().all(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        && !PLAIN.iter().any(|(w, _)| *w == said)
+        && !matches!(said, "answer" | "together" | "repeat" | "decide")
 }
 
 /// `<target>(<what it is given>)`: the target and where its bracket opens.
@@ -113,6 +141,8 @@ enum Line2 {
     Step(Box<Step>),
     /// It was a statement and it was wrong; the problem is already reported.
     Refused,
+    /// It gave a value a name, and is no stage.
+    Named,
     NotOne,
 }
 
@@ -138,7 +168,7 @@ impl<'a> Reader<'a> {
                         steps.push(*step);
                         continue;
                     }
-                    Line2::Refused => continue,
+                    Line2::Refused | Line2::Named => continue,
                     Line2::NotOne => {}
                 }
             }
@@ -233,6 +263,20 @@ impl<'a> Reader<'a> {
         };
         let said = &t[at..];
         let whole = self.whole(&l);
+        // `price = seen.total` — a name for a value. No stage: wherever the
+        // name is read afterwards, that path is what is read.
+        if let Some((name, _)) = &named
+            && is_a_path(said)
+            && (said.contains('.')
+                || crate::BINDING_ROOTS.contains(&said)
+                || self.scope.takes.iter().any(|n| n == said)
+                || self.scope.steps.iter().any(|n| n == said)
+                || self.scope.names.iter().any(|(n, _)| n == said))
+        {
+            let to = self.path(said, &whole);
+            self.scope.names.push((name.clone(), to));
+            return Line2::Named;
+        }
         let mut fields = Map::new();
         let does = |me: &mut Self, fields: &mut Map, what: &str, at: &Span| {
             me.put(fields, "does".to_string(), at.clone(), s(what, at));
@@ -309,7 +353,8 @@ impl<'a> Reader<'a> {
             };
             does(self, &mut fields, "each", &whole);
             let ls = self.at(&l, t.len() - list.len(), list.len());
-            self.put(&mut fields, "over".to_string(), ls.clone(), s(bound(list), &ls));
+            let over = self.path(list, &ls);
+            self.put(&mut fields, "over".to_string(), ls.clone(), s(over, &ls));
             let inner = self.flow_body(rest, Kind::Stage, true);
             self.merge(&mut fields, inner);
             default = "each".to_string();
@@ -362,7 +407,8 @@ impl<'a> Reader<'a> {
             let what = said[n..].trim();
             does(self, &mut fields, "stop", &whole);
             let ws = self.at(&l, at + n, what.len());
-            self.put(&mut fields, "stops".to_string(), ws.clone(), s(bound(what), &ws));
+            let stops = self.path(what, &ws);
+            self.put(&mut fields, "stops".to_string(), ws.clone(), s(stops, &ws));
             self.beneath(rest, &mut fields);
             default = "stop".to_string();
         } else if let Some(n) = after(said, "ask ") {
@@ -389,6 +435,7 @@ impl<'a> Reader<'a> {
         }
 
         let (name, at) = named.unwrap_or((default, whole));
+        self.scope.steps.push(name.clone());
         Line2::Step(Box::new(Step {
             name,
             at,
@@ -507,7 +554,7 @@ impl<'a> Reader<'a> {
     fn binds(&mut self, l: &Line, at: usize) -> Option<Node> {
         let mut m = Map::new();
         let mut from = at;
-        for piece in l.text[at..].split(',') {
+        for piece in outside_quotes(&l.text[at..]) {
             let here = from;
             from += piece.len() + 1;
             let lead = piece.len() - piece.trim_start().len();
@@ -536,7 +583,8 @@ impl<'a> Reader<'a> {
             }
             let value_at = here + piece.rfind(value).unwrap_or(lead);
             let vs = self.at(l, value_at, value.len());
-            self.put(&mut m, key.to_string(), ks, s(bound(value), &vs));
+            let from = self.path(value, &vs);
+            self.put(&mut m, key.to_string(), ks, s(from, &vs));
         }
         Some(Node::map(m, self.whole(l)))
     }

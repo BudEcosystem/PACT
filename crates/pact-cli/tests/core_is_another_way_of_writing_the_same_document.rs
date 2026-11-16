@@ -246,3 +246,169 @@ fn the_shipped_core_example_loads_clean() {
         .expect("runs");
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stdout));
 }
+
+// ── names, values, programs and patterns ─────────────────────────────────────
+
+const TILL: &str = r#"program add-up(amounts: list of number) gives total: number
+  description: Adds a list of numbers.
+  engine: wasm
+  determinism: pure
+  fuel:
+    runs-for-at-most: 1s
+    when-it-runs-out: stop-and-say-so
+
+"#;
+
+#[test]
+fn what_a_flow_takes_is_read_by_its_name_and_a_value_can_be_given_one() {
+    let core = shown(
+        "names",
+        "flow look(order: text) gives facts: text\n  description: Looks one order up.\n  \
+         seen = orders/look(order: order)\n  found = seen.facts\n  answer with facts: found\n",
+    );
+    let keywords = shown(
+        "names-keywords",
+        "workflow look\n  description: Looks one order up.\n  takes order: text\n  gives facts: text\n  \
+         seen = call orders/look with order: input.order\n  answer with facts: seen.facts\n",
+    );
+    // `found = seen.facts` is no stage: it is a name, and the document has none of it.
+    assert_eq!(core, keywords);
+    let steps: Vec<&String> = core["workflows"]["look"]["steps"].as_object().unwrap().keys().collect();
+    assert_eq!(steps, ["seen", "answer"]);
+}
+
+#[test]
+fn a_statement_named_like_an_input_is_the_statement_from_then_on() {
+    let doc = shown(
+        "shadow",
+        "flow look(order: text) gives facts: text\n  description: Looks one order up.\n  \
+         order = orders/look(order: order)\n  answer with facts: order.facts\n",
+    );
+    let steps = &doc["workflows"]["look"]["steps"];
+    assert_eq!(steps["order"]["bind"]["order"], "input.order", "before it: what was given");
+    assert_eq!(steps["answer"]["bind"]["facts"], "steps.order.facts", "after it: the statement");
+}
+
+#[test]
+fn a_fixed_value_in_a_statement_is_a_named_value_and_the_same_one_is_filed_once() {
+    let doc = shown(
+        "said",
+        "flow tag(order: text) gives note: text, again: text, most: money\n  description: Tags.\n  \
+         answer with note: \"checked, and filed\", again: \"checked, and filed\", most: 200 USD\n",
+    );
+    let bind = &doc["workflows"]["tag"]["steps"]["answer"]["bind"];
+    assert_eq!(bind["note"], "values.said-checked-and-filed");
+    assert_eq!(bind["again"], "values.said-checked-and-filed", "a comma inside quotes is part of the words");
+    assert_eq!(bind["most"], "values.said-200-usd");
+    let values = doc["values"].as_object().unwrap();
+    assert_eq!(values.len(), 2);
+    assert_eq!(values["said-checked-and-filed"]["value"], "checked, and filed");
+    assert_eq!(values["said-200-usd"]["value"], "200 USD");
+    // It is the document a `let` and `values.<name>` have always made.
+    let by_let = shown(
+        "said-let",
+        "let said-checked-and-filed = \"checked, and filed\"\nlet said-200-usd = 200 USD\n\n\
+         flow tag(order: text) gives note: text, again: text, most: money\n  description: Tags.\n  \
+         answer with note: values.said-checked-and-filed, again: values.said-checked-and-filed, \
+         most: values.said-200-usd\n",
+    );
+    assert_eq!(doc, by_let);
+}
+
+#[test]
+fn a_fixed_value_is_held_to_the_shape_it_fills() {
+    // `"perhaps"` where the flow gives `one of approved, declined`.
+    let (ok, _, all) = pact(
+        "said-wrong",
+        &["check"],
+        "flow rule(order: text) gives decision: one of approved, declined\n  description: Rules.\n  \
+         answer with decision: \"perhaps\"\n",
+    );
+    assert!(!ok, "{all}");
+    assert!(all.contains("rule: loader/a-call-that-does-not-fit"), "{all}");
+    assert!(
+        all.contains("which is `perhaps`") && all.contains("fix: Write one of: `approved`, `declined`."),
+        "{all}"
+    );
+    let (ok, _, all) = pact(
+        "said-right",
+        &["check"],
+        "flow rule(order: text) gives decision: one of approved, declined\n  description: Rules.\n  \
+         answer with decision: \"approved\"\n",
+    );
+    assert!(ok, "{all}");
+}
+
+#[test]
+fn a_capability_carried_out_by_a_program_hands_it_the_same_inputs_and_hands_back_its_answer() {
+    let core = shown(
+        "by-program",
+        &format!(
+            "{TILL}actor till\n  description: Works out what an order comes to.\n\n  \
+             can total(amounts: list of number) gives total: number\n    by program add-up\n"
+        ),
+    );
+    let keywords = shown(
+        "by-program-keywords",
+        &format!(
+            "{TILL}workflow till-total\n  description: Works out what an order comes to (till can total)\n  \
+             takes amounts: list of number\n  gives total: number\n  \
+             run = call add-up with amounts: input.amounts\n  answer with total: run.total\n"
+        ),
+    );
+    assert_eq!(core, keywords);
+}
+
+#[test]
+fn a_pattern_is_defined_on_one_line_and_what_is_made_from_it_fills_its_blanks() {
+    let core = shown(
+        "define",
+        "define desk-for(domain: text, cap: money) as agent\n  \
+         description: A desk that answers questions about <domain>.\n  \
+         spends under <cap> a request\n  when it runs out: stop and say so\n  \
+         instructions: Answer questions about <domain>, briefly.\n\n\
+         agent billing-desk is desk-for(domain: billing, cap: 0.10 USD)\n",
+    );
+    let keywords = shown(
+        "define-keywords",
+        "agent desk-for\n  description: A desk that answers questions about <domain>.\n  \
+         spends under <cap> a request\n  when it runs out: stop and say so\n  \
+         instructions: Answer questions about <domain>, briefly.\n  base: yes\n  expects:\n    \
+         domain:\n      shape: text\n    cap:\n      shape: money\n\n\
+         agent billing-desk\n  based on desk-for with domain: billing, cap: 0.10 USD\n",
+    );
+    assert_eq!(core, keywords);
+    // The pattern never runs; what is made from it is whole.
+    let agents: Vec<&String> = core["agents"].as_object().unwrap().keys().collect();
+    assert_eq!(agents, ["billing-desk"]);
+    assert_eq!(
+        core["agents"]["billing-desk"]["instructions"],
+        "Answer questions about billing, briefly."
+    );
+    assert_eq!(core["agents"]["billing-desk"]["limits"]["cost-per-request-under"], "0.10 USD");
+}
+
+#[test]
+fn a_blank_left_unfilled_or_a_pattern_that_is_not_there_is_refused_by_the_rules_patterns_always_had() {
+    let pattern = "define desk-for(domain: text) as agent\n  description: About <domain>.\n  \
+                   instructions: Answer about <domain>.\n\n";
+    let (ok, _, all) = pact("unfilled", &["check"], &format!("{pattern}agent billing-desk is desk-for()\n"));
+    assert!(!ok, "{all}");
+    assert!(all.contains("domain"), "{all}");
+    let (ok, _, all) = pact("no-pattern", &["check"], "agent billing-desk is nobody(domain: billing)\n");
+    assert!(!ok, "{all}");
+    assert!(all.contains("nobody"), "{all}");
+    let (ok, _, all) = pact("no-kind", &["check"], "define desk-for(domain: text)\n  description: D.\n");
+    assert!(!ok, "{all}");
+    assert!(all.contains("A `define` says what kind of thing the pattern is."), "{all}");
+}
+
+#[test]
+fn the_second_shipped_core_example_loads_clean() {
+    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/core/shop");
+    let out = Command::new(env!("CARGO_BIN_EXE_pact"))
+        .args(["check", root, "--deny-warnings"])
+        .output()
+        .expect("runs");
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stdout));
+}

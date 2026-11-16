@@ -54,14 +54,53 @@ flow decide-all(orders: list of text) gives summary: text, verdicts: list of ver
   answer with summary: told.summary, verdicts: each.items
 ```
 
-`flow` is another word for `workflow`. `x = name(k: v)` is another way of
-writing `x = call name with k: v`. Inside a flow, what it was given is read as
-`input.<name>`.
+`flow` is another word for `workflow`, and `x = name(k: v)` another way of
+writing `x = call name with k: v`.
 
-Two things a statement cannot do, on purpose: state a value of its own
-(`decision: "approved"` is refused), and work one out (`a + b`). A value comes
-from something the flow was given or something it called. To judge or compute,
-call something that does.
+## Names and values
+
+```text
+flow refund-one(order: text, amounts: list of number) gives decision: one of approved, declined, total: number, note: text
+  description: Look an order up, total it, and decide.
+  seen = orders/look(order: order)
+  facts = seen.facts
+  sum = till.total(amounts: amounts)
+  ruled = till.judge(order: order, facts: facts)
+  answer with decision: ruled.decision, total: sum.total, note: "decided by the till"
+```
+
+- **What a flow takes is read by its name.** `order` is `input.order`.
+- **A value can be given a name.** `facts = seen.facts` is not a step; `facts`
+  is that value wherever it is read afterwards.
+- **A statement can state a fixed value**: words in double quotes, or a figure
+  (`200 USD`). It is held to the shape it fills, so `decision: "perhaps"` is
+  refused where only `approved` or `declined` may go.
+
+A statement still cannot work a value out (`a + b`). To compute, call something
+that does:
+
+```text
+actor till
+  description: Works out what an order comes to.
+  can total(amounts: list of number) gives total: number
+    by program add-up
+```
+
+## A pattern, and what is made from it
+
+```text
+define desk-for(domain: text, cap: money) as agent
+  description: A desk that answers questions about <domain>.
+  spends under <cap> a request
+  when it runs out: stop and say so
+  instructions: Answer questions about <domain>, briefly.
+
+agent billing-desk is desk-for(domain: billing, cap: 0.10 USD)
+agent tech-desk is desk-for(domain: technical problems, cap: 0.05 USD)
+```
+
+A pattern never runs. What is made from it is a whole agent, with the blanks
+filled as values.
 
 ## Two ways to run a workspace
 
@@ -127,7 +166,10 @@ What holds for a cell:
   and its teammates. A helper it defines may use no tool its writer does not,
   and take no more steps.
 - **It may define agents, flows and shapes, and nothing of the workspace's
-  own**: no tool, no policy, no egress line.
+  own**: no tool, no policy, no egress line, no pattern.
+- **It may not state a value of its own.** An author may; a model's cell moves
+  values and never makes one, so a model's judgment is always something an
+  agent was asked for.
 - **It never replaces something that is there**, and what it defines is gone
   when the call ends. The workspace is then the one it was, to the fingerprint.
 - **Values stay whole.** The model is shown a few words of each
@@ -138,8 +180,18 @@ admitted at the first try; after a refusal the model writes one that is
 admitted; 20,000 orders are worked on from a preview; and a note telling the
 agent to define a tool and make a payment results in neither.
 
+## Keeping what a run defined
+
+```python
+session.promote(text, proposed_by="desk-summarise", approved_by="priya")
+```
+
+What a cell defines is gone when the call ends. Keeping it for the workspace
+needs a person named, and where the workspace says who owns its parts
+(`owners:`), one of them. The journal records who approved it.
+
 ## What is not there yet
 
-Words made from other words (`define`), a capability carried out by a program,
-a parameter read by its bare name, and the model's cells as a loop shape inside
-an ordinary agent run. The plan says in what order they come.
+Working a value out in a statement, and the model's cells as a stage inside an
+ordinary agent run: acting by a cell is its own entry point, and it says on its
+result which of the agent's settings it did not carry out.

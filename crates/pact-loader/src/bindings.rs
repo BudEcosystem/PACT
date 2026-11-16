@@ -1070,6 +1070,7 @@ impl<'a> Flow<'a> {
         diags: &mut Diagnostics,
     ) {
         let Some((have, have_written)) = self.shape_of(frames, &entry.node) else {
+            self.a_fixed_value_that_cannot_be_it(stage, against, key, (want, written), entry, diags);
             return;
         };
         if self.shapes.fits(&have.shape, &want.shape) {
@@ -1090,6 +1091,81 @@ impl<'a> Flow<'a> {
                 "Bind a value that is `{}` here, or change what {name} {takes}.",
                 want.shape.written()
             ),
+        ));
+    }
+
+    /// A named figure with no `shape:` of its own, bound where only certain
+    /// values can go.
+    ///
+    /// `values.<name>` written with no `shape:` is "read as written", so
+    /// nothing said what it is and the binding was let through whatever it
+    /// filled: `decision: values.verdict`, holding `perhaps`, into an answer
+    /// that is `one of approved, declined`, loaded clean and stopped the run
+    /// when it got there. A figure is the one thing in a binding whose VALUE
+    /// the checker has in front of it, so where the place it fills says
+    /// which values it may hold, the value is read here:
+    ///
+    /// * `one of a, b` — it must be one of them;
+    /// * a list, or a shape with parts — one figure is neither.
+    ///
+    /// Found by PACT Core (docs/100 §17), where a statement may state a value
+    /// (`answer with decision: "approved"`) and that value is such a figure.
+    fn a_fixed_value_that_cannot_be_it(
+        &self,
+        stage: &str,
+        against: &Against,
+        key: &str,
+        (want, written): (&Line, &str),
+        entry: &Entry,
+        diags: &mut Diagnostics,
+    ) {
+        let Some(read) = entry.node.as_str().map(str::trim) else {
+            return;
+        };
+        let Some(figure) = read.strip_prefix("values.").filter(|n| !n.contains('.')) else {
+            return;
+        };
+        let Some(held) = self
+            .document
+            .get("values")
+            .and_then(|v| v.get(figure))
+            .filter(|v| v.get("shape").is_none())
+            .and_then(|v| v.get("value"))
+        else {
+            return;
+        };
+        let said = match held.as_str() {
+            Some(text) => text.trim().to_string(),
+            None => held.to_json().to_string(),
+        };
+        let cannot = match &want.shape {
+            Shape::OneOf(choices) => !choices.iter().any(|c| c.trim() == said),
+            Shape::ListOf(_) | Shape::Named(_) => true,
+            _ => false,
+        };
+        if !cannot {
+            return;
+        }
+        let (name, takes) = (&against.name, against.takes);
+        diags.push(Diagnostic::error(
+            "loader/a-call-that-does-not-fit",
+            entry.node.span.clone(),
+            format!(
+                "'{stage}' fills `{key}:` of {name} from '{read}', which is `{said}`, and \
+                 {name} {takes} `{}` there, so the value could not be read as what it is \
+                 given for.",
+                written.trim()
+            ),
+            match &want.shape {
+                Shape::OneOf(choices) => format!(
+                    "Write one of: {}. Or change what {name} {takes}.",
+                    choices.iter().map(|c| format!("`{c}`")).collect::<Vec<_>>().join(", ")
+                ),
+                other => format!(
+                    "Bind a value that is `{}` here, or change what {name} {takes}.",
+                    other.written()
+                ),
+            },
         ));
     }
 

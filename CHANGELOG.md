@@ -18,10 +18,23 @@ option. `docs/100-PACT-CORE-A-WRITABLE-KERNEL-LANGUAGE.md` is the plan; this is 
 - **An actor**: one name with several capabilities. Beneath each `can`, `by model` makes it an
   agent (`<actor>-<capability>`, with what the actor shares) and statements make it a workflow.
   Called as `desk.judge(…)`.
+- **What a flow takes, by its name** (`order` is `input.order`); **a name for a value**
+  (`facts = seen.facts`, which is no step); **a fixed value in a statement** (`note: "decided by
+  the till"`, `most: 200 USD`), filed once under `values:`.
+- **A capability a program carries out**: `by program add-up` beneath a `can`.
+- **A pattern on one line**: `define desk-for(domain: text) as agent`, and `agent billing-desk is
+  desk-for(domain: billing)`. It is `base: yes` with `expects:`, and `based on … with`.
 - None of these is a new thing in the document: a workspace written with them and the same one
   written in keywords load to the identical document and the identical fingerprint.
 - `examples/core/refund-desk` is a workspace written this way. With it, every one of the 76
   kernel operations is written in a shipped tree that loads; four were written in none.
+
+### What `pact check` now says
+
+- **A named figure with no `shape:` is held to where it is bound.** `values.verdict` holding
+  `perhaps`, bound into an answer that is `one of approved, declined`, loaded and stopped the run
+  when it got there. It is refused (`loader/a-call-that-does-not-fit`), and so is one figure bound
+  where a list or a shape with parts goes.
 
 ### Two ways to run a workspace
 
@@ -32,6 +45,11 @@ option. `docs/100-PACT-CORE-A-WRITABLE-KERNEL-LANGUAGE.md` is the plan; this is 
   a version it had reached.
 - **Pre-compiled** (`session.compile_plan`, `Plan.load`): checked once and sealed. A plan runs
   with no checker beside it, refuses every proposal, and refuses to load if it was edited.
+
+- **`Session.promote`**: what a run defined is kept for the workspace only with a person named,
+  and an owner where the workspace names owners. **`Session.agent` / `Session.flow`**: what a run
+  is handed is kept while nothing it depends on has changed (`session.depends_on`).
+  **`Session.pinned` / `Session.still`**: whether a waiting run can go on by itself after a change.
 
 ### A model that acts by writing a cell
 
@@ -45,7 +63,7 @@ option. `docs/100-PACT-CORE-A-WRITABLE-KERNEL-LANGUAGE.md` is the plan; this is 
 
 ### What a runtime must match
 
-- **`tests/conformance/cells.json`**, 21 cases on `examples/core/refund-desk`, 18 of them attacks.
+- **`tests/conformance/cells.json`**, 25 cases on `examples/core/refund-desk`, 21 of them attacks.
   What is held is which door refuses each (`checker` with its rule, `floor`, `meter`, `collision`,
   `reach`, `wider`), not a guard's wording.
 
@@ -60,9 +78,10 @@ five other things the live runs found.
 
 ### Still owed
 
-- `define` and the keywords as a prelude; a kernel interpreter; cached plans; promotion.
+- A kernel interpreter; acting by cells as a stage of an ordinary agent run.
+- The keywords will not become a library of words: all 579 were classified, and each is an
+  operation or a parameter of one (`docs/100` §17.6).
 - The checker's fix for a loop with no ceiling suggests `ask-a-person`, which a cell cannot use.
-- A statement cannot state a value of its own, or give a value another name.
 - No second runtime replays `cells.json` yet.
 
 ## 2026-11 — an agent's answer is held to what the agent says it gives (15 November)
