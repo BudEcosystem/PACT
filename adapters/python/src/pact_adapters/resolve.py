@@ -1470,8 +1470,13 @@ def evaluate(
     min_cases: int = 5,
     judge: Any = None,
     metrics: Any = None,
+    taken_on_every_case: "frozenset[str]" = frozenset(),
 ) -> Verdict:
     """Score one model on one strategy against the author's own suite.
+
+    `taken_on_every_case` names the metrics the agent's `accept-when:` lines
+    read (`_selection.metrics_read`); `evals.check` takes each of them on every
+    case, so the mean a line is held to is over the whole suite.
 
     `document` is REQUIRED and keyword-only, because the one thing it is for is
     the thing that is silently wrong when it is missing: an agent with a `team:`
@@ -1570,7 +1575,8 @@ def evaluate(
                 ),
             )
             break
-        results.append(check(case, result, rules, judge=judge, metrics=metrics))
+        results.append(check(case, result, rules, judge=judge, metrics=metrics,
+                             taken_on_every_case=taken_on_every_case))
         spends.append(None if "cost-per-request-under" in (result.unmetered or ()) else result.spent)
     if silence is not None:
         # UNDECIDED with no RESULTS kept, where `_run_every_case` keeps what it
@@ -1767,7 +1773,8 @@ def resolve(
         candidate = transform(spec)
         v = evaluate(candidate, cases, rules, bar, transport_for, requested,
                      strategy_name, tools, document=document, judge=judge,
-                     metrics=scores)
+                     metrics=scores,
+                     taken_on_every_case=_selection.metrics_read(needs.get("accept-when") or ()))
         last = v
         if v.outcome == "PASS":
             # 96 §B4: passing the suite is necessary, not sufficient — what the
@@ -1937,7 +1944,8 @@ def _cheapest_passing(
         for strategy_name, transform in strategies.items():
             v = evaluate(transform(spec), cases, rules, bar, transport_for,
                          entry.name, strategy_name, tools, document=document,
-                         judge=judge, metrics=scores)
+                         judge=judge, metrics=scores,
+                         taken_on_every_case=_selection.metrics_read(needs.get("accept-when") or ()))
             if v.outcome == "PASS" and (short := _short_of(needs, v, document)):
                 ruled_out.append(f"{entry.name} passed the suite and {short}")
                 scored_it = True

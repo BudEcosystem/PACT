@@ -2167,9 +2167,11 @@ groups:
           among the models that pass, which one PACT picks. `cheapest` is the
           usual answer and what you get if you leave this out. `fastest`
           picks the one whose first words come back soonest — what a voice
-          agent wants. `best-on-the-evals` picks the highest score whatever it
-          costs. A model that fails the checks is never picked, whichever you
-          write.
+          agent wants. `best-on-the-evals` picks the one that passed the
+          largest share of your evals' cases, whatever it costs, the cheaper
+          of two that passed the same share. A model that fails the checks is
+          never picked, whichever you write. A `model:` you name is used as
+          named: this only chooses when `model:` is left out.
       accept-when:
         # 96 §B4. A model is ACCEPTED for this agent when every line holds —
         # `mmlu.score > 50`, `refund-tone.score >= 0.8`, `cost < 0.05 USD` —
@@ -2201,11 +2203,14 @@ groups:
           `terminal-bench.score >= 40`, `refund-tone.score >= 0.8`, `pass-rate
           >= 90%`, `cost < 0.05 USD`. A benchmark is named as the model
           catalogue names it under `benchmarks:`; a check of your own by the
-          `name:` it has in your suite's `metrics:`. `pass-rate` and `cost` are
-          what a model scored and spent on your own cases, on average, and
-          `input-price`, `output-price` (per million tokens), `context-window`
-          and `first-words-within` are what the catalogue records. Leave it out
-          and every model that passes your checks is acceptable.
+          `name:` it has in your suite's `metrics:`, and that check is taken on
+          every case, so its score is over all of them. `pass-rate` and `cost`
+          are what a model scored and spent on your own cases, on average —
+          `cost` is what the agent's own calls spent, not what grading them
+          cost — and `input-price`, `output-price` (per million tokens),
+          `context-window` and `first-words-within` are what the catalogue
+          records. Leave it out and every model that passes your checks is
+          acceptable.
       context-at-least:
         # Was `type: text`, so `context-at-least: banana` loaded clean and
         # reached the resolver verbatim, where it was compared against a real

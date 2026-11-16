@@ -50,6 +50,7 @@ __all__ = [
     "held_after",
     "held_before",
     "measured",
+    "metrics_read",
     "parse",
     "parse_all",
 ]
@@ -264,13 +265,24 @@ def held_before(line: Line, entry: Any) -> "tuple[bool, str]":
     return False, f"has {line.measure} {have:g}, so `{line.written}` does not hold"
 
 
+def metrics_read(lines: Sequence[Line]) -> frozenset[str]:
+    """The suite metrics these lines hold a model to, by name.
+
+    Each is taken on every case of the suite, a failed one included
+    (`evals.check`), so `<name>.score` and `<name>.pass-rate` are over every
+    case the suite has and not over the easier ones a model got through.
+    """
+    return frozenset(line.measure for line in lines if line.kind == "metric")
+
+
 def measured(outcomes: Sequence[Any], spent: "Sequence[float | None]" = ()) -> dict[str, float]:
     """What a candidate scored and spent on the suite: the figures `AFTER` lines read.
 
     `pass-rate` over every case; each metric's `score` (its mean) and
-    `pass-rate` over the cases it was taken on — a case that failed earlier is
-    not scored again, so its count is `<name>.cases`; `cost` the mean over the
-    cases whose spend was metered, absent when none was.
+    `pass-rate` over the cases it was taken on, counted as `<name>.cases` — every
+    case for a metric an `accept-when:` line reads (`metrics_read`), and for any
+    other the cases no earlier rule failed; `cost` the mean over the cases whose
+    spend was metered, absent when none was.
     """
     out: dict[str, float] = {}
     if outcomes:

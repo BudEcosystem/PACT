@@ -19,7 +19,7 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from pact_adapters import benchmarks, resolve, selection  # noqa: E402
-from pact_adapters.evals import CaseOutcome, Verdict  # noqa: E402
+from pact_adapters.evals import Case, CaseOutcome, Verdict  # noqa: E402
 from trees import REPO, shown  # noqa: E402
 
 TABLE = yaml.safe_load((REPO / "spec/accept-when.yaml").read_text(encoding="utf-8"))
@@ -95,6 +95,35 @@ def test_what_a_model_scored_and_spent_on_the_suite_is_held_after_it_passes() ->
     assert "does not hold" in held("pass-rate >= 90%")
     unmetered = Verdict("PASS", 1.0, 0.5, outcomes, measured=selection.measured(outcomes, [None] * 3))
     assert "never metered" in resolve._short_of({"accept-when": (_line("cost < 0.05 USD"),)}, unmetered, doc)
+
+
+def test_a_metric_an_accept_line_reads_is_taken_on_every_case() -> None:
+    """A mean over only the cases a model got past their first failure is a mean over an easier
+    subset, and favours the model that failed more; so a metric `accept-when:` reads is taken on
+    every case, and any other still stops at the first failure."""
+    from pact_adapters.evals import check
+    from pact_adapters.harness import RunResult
+    from pact_adapters.providers import MetricSpec
+
+    brevity = MetricSpec.parse({"uri": "pact:at_most_words", "name": "brevity", "with": {"words": 4}})
+    cases = [Case("easy", "a refund?", {"answer": "refunded"}), Case("hard", "a refund?", {"answer": "refunded"})]
+    answers = [RunResult("refunded"), RunResult("I cannot say anything about that refund at all today")]
+    read = selection.metrics_read(
+        [selection.parse("brevity.score >= 0.8", benchmarks=BENCH, metrics={"brevity"}), _line("mmlu > 50")]
+    )
+    assert read == {"brevity"}
+    early = [check(c, r, [], metrics=[brevity]) for c, r in zip(cases, answers)]
+    every = [check(c, r, [], metrics=[brevity], taken_on_every_case=read) for c, r in zip(cases, answers)]
+    assert [o.passed for o in early] == [o.passed for o in every] == [True, False]
+    assert every[1].why == early[1].why, "the case fails for the reason it failed before"
+    assert selection.measured(early) == {"pass-rate": 0.5, "brevity.score": 1.0, "brevity.cases": 1.0}
+    taken = selection.measured(every)
+    assert taken["brevity.cases"] == 2.0 and taken["brevity.score"] < 1.0
+    held = lambda outcomes: selection.held_after(  # noqa: E731
+        selection.parse("brevity.score >= 0.8", benchmarks=BENCH, metrics={"brevity"}),
+        selection.measured(outcomes),
+    )
+    assert held(early)[0] and not held(every)[0]
 
 
 def test_the_desk_reads_its_own_lines_and_its_named_metric() -> None:
