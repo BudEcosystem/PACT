@@ -84,6 +84,26 @@ five other things the live runs found.
 - The checker's fix for a loop with no ceiling suggests `ask-a-person`, which a cell cannot use.
 - No second runtime replays `cells.json` yet.
 
+## 2026-11 — a counting rule may name one action of a tool (16 November)
+
+`if payments is called more than 1 time in one run, …` counted every call of the tool. In the worked
+refund desk that rule exists to stop a second refund, and it stopped a ticket naming two orders at its
+second look-up, before any refund was made.
+
+### What an author can now do
+
+- **Count one action:** in both counting sentences `<a tool>` may be `<tool>/<action>`, such as
+  `if payments/issue-refund is called more than 1 time in one run, stop and say "…"`, which counts that
+  action's calls only. `payments` alone still counts every call of the tool.
+
+### What holds now
+
+- **The action is checked where it is written.** `pact check` resolves the action against that tool's
+  own `actions:` and refuses a misspelt one with `schema/no-such-name`, offering the tool's actions.
+- **`so-far` names the action.** The Python port writes each earlier call as `<tool>/<action>` when it
+  names one, and counts a `<tool>/<action>` rule against those entries only.
+- **The refund desk counts refunds.** `stop-runaway-refunds` names `payments/issue-refund`.
+
 ## 2026-11 — an agent's words are filled by one renderer in every port (16 November)
 
 Each runtime filled an agent's words its own way. Python rendered a `jinja` workspace with Jinja2 and

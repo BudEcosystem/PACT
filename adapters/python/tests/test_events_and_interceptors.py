@@ -339,8 +339,8 @@ def test_the_worked_examples_second_refund_is_stopped_by_the_rule_that_says_so(
 
     def script() -> Script:
         return Script([
-            Turn("first", (ToolCall("payments", {"amount": "10.00 USD"}),)),
-            Turn("second", (ToolCall("payments", {"amount": "10.00 USD"}),)),
+            Turn("first", (ToolCall("payments", {"action": "issue-refund", "amount": "10.00 USD"}),)),
+            Turn("second", (ToolCall("payments", {"action": "issue-refund", "amount": "10.00 USD"}),)),
         ])
 
     result = allowing_the_connection(
@@ -692,6 +692,38 @@ def test_the_same_rule_leaves_the_first_call_alone() -> None:
         "step.tool.before", {"name": "payments", "args": {}, "so-far": ["zendesk"]}
     )
     assert decision.is_noop
+
+
+def test_a_rule_naming_one_action_counts_that_action_only() -> None:
+    """`payments/issue-refund` is a second refund, not a second look-up: a
+    ticket naming two orders looks both up before it refunds either."""
+    chain = _one_rule(
+        'if payments/issue-refund is called more than 1 time in one run, stop and say "no"',
+        ["stop-the-run"],
+    )
+    look_up = {"action": "look-up-order"}
+    refund = {"action": "issue-refund"}
+    _, second_look_up = chain.run(
+        "step.tool.before",
+        {"name": "payments", "args": look_up, "so-far": ["payments/look-up-order"]},
+    )
+    assert second_look_up.is_noop
+    _, first_refund = chain.run(
+        "step.tool.before",
+        {"name": "payments", "args": refund, "so-far": ["payments/look-up-order", "payments/look-up-order"]},
+    )
+    assert first_refund.is_noop
+    _, second_refund = chain.run(
+        "step.tool.before",
+        {"name": "payments", "args": refund, "so-far": ["payments/look-up-order", "payments/issue-refund"]},
+    )
+    assert second_refund.stop == "no"
+    # The bare tool still counts every call, whatever action each names.
+    tool_wide = _one_rule('if payments is called more than 1 time in one run, stop and say "no"', ["stop-the-run"])
+    _, any_second = tool_wide.run(
+        "step.tool.before", {"name": "payments", "args": refund, "so-far": ["payments/look-up-order"]}
+    )
+    assert any_second.stop == "no"
 
 
 def test_a_redirect_rule_that_did_not_declare_send_elsewhere_is_refused_at_load() -> None:

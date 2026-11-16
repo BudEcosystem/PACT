@@ -488,3 +488,33 @@ fn show_prints_the_loaded_document() {
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("show emits valid JSON");
     assert!(v["agents"]["refund-desk"]["instructions"].is_string());
 }
+
+#[test]
+fn a_counting_rule_may_name_one_action_and_a_missing_action_is_refused_with_the_tool_s_own() {
+    // The worked example counts `payments/issue-refund`: counting `payments`
+    // counted its look-ups too, so a ticket naming two orders stopped at the
+    // second look-up. The action resolves against that tool's `actions:`.
+    let out = pact().args(["check", &example()]).output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stdout));
+
+    let root = broken(
+        "count-an-action",
+        &[(
+            "interceptors/stop-runaway-refunds.yaml",
+            "if payments/issue-refund is called",
+            "if payments/issue-refnd is called",
+        )],
+    );
+    let out = pact().args(["check", &root]).output().unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(!out.status.success(), "{text}");
+    assert!(
+        text.contains("'payments/issue-refnd', and there is no such entry in the `actions:` of `tools/payments.yaml`"),
+        "{text}"
+    );
+    assert!(
+        text.contains("Change it to one of: payments/issue-refund, payments/look-up-order — or add an `issue-refnd:` entry under `actions:` in `tools/payments.yaml`."),
+        "{text}"
+    );
+    assert!(text.contains("schema/no-such-name"), "{text}");
+}
