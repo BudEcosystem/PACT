@@ -47,7 +47,7 @@ so plainly rather than leaving it to be discovered.
 
 | | |
 |---|---|
-| Tests | **5,310** — 1719 Rust, 3591 adapter |
+| Tests | **5,329** — 1720 Rust, 3609 adapter |
 | Schema kinds | **70** |
 | Framework targets | **7**, over 2 runtimes |
 | Eve capabilities accounted for | **101 of 101** |
@@ -68,7 +68,7 @@ so plainly rather than leaving it to be discovered.
   [Gaps and blockers](status/gaps.md), in that order
 - **Comparing with Vercel Eve?** [Compared to Eve](status/eve.md) — a measured
   comparison, including where Eve is better
-- **Building on it?** [The 69 kinds](reference/kinds.md) and
+- **Building on it?** [The 70 kinds](reference/kinds.md) and
   [Adapters](reference/adapters.md)
 
 ---

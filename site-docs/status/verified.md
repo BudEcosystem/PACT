@@ -12,9 +12,9 @@ from an earlier document.
 
 | Claim | Value | How to check |
 |---|---|---|
-| Rust tests | **1719** | `cargo test --workspace` |
-| Adapter tests | **3591** | `cd adapters/python && uv run pytest tests/ -q` |
-| Total | **5,310** | both of the above |
+| Rust tests | **1720** | `cargo test --workspace` |
+| Adapter tests | **3609** | `cd adapters/python && uv run pytest tests/ -q` |
+| Total | **5,329** | both of the above |
 | TypeScript type-checks | clean | `cd adapters/typescript && npx tsc --noEmit` |
 | Lints | clean | `cargo clippy --all-targets` |
 | Worked example loads | 498 settings | `cargo run -p pact-cli -- check examples/refund-desk` |
