@@ -52,3 +52,44 @@ not-lines:
   - {written: "mmlu", rule: loader/not-a-comparison, because: "no comparison at all"}
   - {written: "mmlu >", rule: loader/not-a-comparison, because: "a comparison with nothing to compare against"}
   - {written: "> 50", rule: loader/not-a-comparison, because: "a comparison of nothing"}
+
+# A benchmark figure that says how it was measured (`provenance.sample-size`,
+# `population`, `interval`). Each row is one catalogue figure — `value:` and the
+# provenance fields beside it, on `benchmark:` (default `mmlu`) — and one bar,
+# written as an `accept-when:` line (`written:`) or a `needs.scores:` entry
+# (`scores:`). `holds:` is the decision; `says:` is the reason both runtimes
+# print, word for word, when it is given; `warns:` is the checker's warning on
+# the figure. `>`/`>=` hold only when `value:` and `interval.low` hold, `<`/`<=`
+# only when `value:` and `interval.high` hold, and `=` is decided on `value:`.
+figures:
+  - written: "mmlu.score > 75"
+    value: "78"
+    sample-size: 200
+    population: 14042
+    interval: {low: 71.6, high: 83.1, level: 0.95}
+    holds: no
+    says: "has mmlu 78, on a subset of 200 of 14042 cases, 95% interval 71.6 to 83.1, which reaches past the bar, so `mmlu.score > 75` holds only within noise"
+    because: the point clears the bar and the interval's low end does not
+  - {written: "mmlu.score > 75", value: "78", interval: {low: 76, high: 83.1, level: 0.95}, holds: yes, because: the whole interval clears the bar}
+  - {written: "mmlu.score > 80", value: "78", interval: {low: 71.6, high: 83.1, level: 0.95}, holds: no, says: "has mmlu 78, so `mmlu.score > 80` does not hold", because: the point itself falls short}
+  - {written: "mmlu.score <= 80", value: "78", interval: {low: 71.6, high: 83.1, level: 0.95}, holds: no, because: "a `<=` line is read on the interval's high end"}
+  - {written: "mmlu.score <= 85", value: "78", interval: {low: 71.6, high: 83.1, level: 0.95}, holds: yes, because: the high end is under the bar too}
+  - {written: "mmlu.score = 78", value: "78", interval: {low: 71.6, high: 83.1, level: 0.95}, holds: yes, because: "`=` is decided on the point alone"}
+  - {written: "win-rate >= 60%", benchmark: win-rate, value: "0.65", interval: {low: 0.55, high: 0.75, level: 0.9}, holds: no, because: a fraction benchmark's interval is out of one}
+  - {written: "mmlu.score > 75", value: "78", sample-size: 200, population: 14042, holds: yes, warns: loader/a-subset-figure-with-no-interval, because: with no interval the line decides on the point}
+  - {written: "mmlu.score > 75", value: "78", sample-size: 14042, population: 14042, holds: yes, because: a figure on every case is no subset}
+  - {scores: {mmlu: "> 75"}, value: "78", interval: {low: 71.6, high: 83.1, level: 0.95}, holds: no, says: "has mmlu 78, 95% interval 71.6 to 83.1, which reaches past the bar, so `scores.mmlu: > 75` holds only within noise", because: "`needs.scores:` holds a benchmark to the bar `accept-when:` does"}
+  - {scores: {mmlu: "> 75"}, value: "78", interval: {low: 76, high: 83.1, level: 0.95}, holds: yes, because: the whole interval clears the bar}
+
+# A measurement that cannot be one. The checker refuses it with `rule:` where
+# it is written; the reference resolver drops the figure, so a line on it
+# accepts no model (`no recorded mmlu score`). `field:` names a figure other than
+# a benchmark score, which nothing samples.
+not-measurements:
+  - {value: "78", interval: {low: 83.1, high: 71.6, level: 0.95}, rule: loader/an-interval-out-of-order, because: the low end is above the high end}
+  - {value: "78", interval: {low: 71.6, high: 83.1, level: 95}, rule: loader/a-confidence-level-that-is-not-a-share, because: a level is a share such as 0.95}
+  - {value: "78", sample-size: 20000, population: 14042, rule: loader/more-cases-than-the-benchmark-has, because: more cases than the benchmark has}
+  - {value: "78", interval: {low: 71.6, high: 101, level: 0.95}, rule: loader/an-interval-off-the-benchmark-scale, because: a percent benchmark is out of 100}
+  - {benchmark: win-rate, value: "0.65", interval: {low: 0.55, high: 1.2, level: 0.95}, rule: loader/an-interval-off-the-benchmark-scale, because: a fraction benchmark is out of one}
+  - {field: context-window, value: "128k", interval: {low: 120000, high: 130000, level: 0.95}, rule: loader/a-measurement-on-a-figure-nothing-samples, because: a context window is not sampled}
+  - {field: first-words-within, value: "800ms", sample-size: 50, rule: loader/a-measurement-on-a-figure-nothing-samples, because: a speed is a length of time, and a bare low and high would be ambiguous}

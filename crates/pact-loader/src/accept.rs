@@ -30,6 +30,18 @@
 //! | `loader/two-metrics-one-name` | two of the suite's metrics would be called by one name |
 //! | `loader/a-metric-named-like-a-figure` | a metric is called by a benchmark's or a figure's name |
 //! | `loader/a-benchmark-nobody-has-measured` (warning) | no catalogue row records the benchmark a line names, so the line accepts no model yet |
+//! | `loader/an-interval-out-of-order` | a workspace figure's `provenance.interval` has its `low` above its `high` |
+//! | `loader/a-confidence-level-that-is-not-a-share` | an interval's `level` is not between zero and one (`95` for `0.95`) |
+//! | `loader/more-cases-than-the-benchmark-has` | a figure's `sample-size` is above its `population` |
+//! | `loader/an-interval-off-the-benchmark-scale` | a bound is below zero or above the top of the benchmark's `scale:` (100 for `percent`, 1 for `fraction`) |
+//! | `loader/a-measurement-on-a-figure-nothing-samples` | `sample-size`, `population` or `interval` on a `reasoning:`, `context-window` or `first-words-within` figure |
+//! | `loader/a-subset-figure-with-no-interval` (warning) | a figure taken on fewer cases than the benchmark has records no interval, so a line reads it as if it were the whole benchmark's |
+//!
+//! A benchmark figure's measurement (`provenance.sample-size`, `population`,
+//! `interval`) changes what a line decides: `>`/`>=` hold only when `value:`
+//! and `interval.low` hold, `<`/`<=` only when `value:` and `interval.high`
+//! hold. The resolver drops a figure whose measurement is refused here, so a
+//! line on it accepts no model.
 
 use pact_diag::{Diagnostic, Diagnostics, Span};
 use pact_doc::{Node, Value};
@@ -395,8 +407,161 @@ pub fn check(document: &Node, builtin: &str, diags: &mut Diagnostics) {
     }
 }
 
+/// The provenance fields that say how a figure was measured.
+const MEASURED: [&str; 3] = ["sample-size", "population", "interval"];
+
+/// The highest a figure can be on a benchmark `scale:`; the lowest is zero.
+fn scale_top(scale: &str) -> Option<f64> {
+    match scale {
+        "percent" => Some(100.0),
+        "fraction" => Some(1.0),
+        _ => None,
+    }
+}
+
+/// A number as YAML wrote it.
+fn number_in(node: &Node) -> Option<f64> {
+    match node.value {
+        Value::Int(i) => Some(i as f64),
+        Value::Float(f) => Some(f),
+        _ => None,
+    }
+}
+
+/// Refuse a measurement the resolver could not read on a workspace row's
+/// benchmark figure (`selection.measurement_of`), where the author wrote it.
+fn measurement(model: &str, name: &str, scale: &str, figure: &Node, diags: &mut Diagnostics) {
+    let Some(provenance) = figure.get("provenance") else {
+        return;
+    };
+    let count = |key: &str| match provenance.get(key).map(|n| &n.value) {
+        Some(Value::Int(i)) => Some(*i),
+        _ => None,
+    };
+    let (sample, population) = (count("sample-size"), count("population"));
+    if let (Some(sample), Some(population)) = (sample, population)
+        && sample > population
+    {
+        diags.push(Diagnostic::error(
+            "loader/more-cases-than-the-benchmark-has",
+            provenance
+                .get("sample-size")
+                .map_or(figure.span.clone(), |n| n.span.clone()),
+            format!(
+                "'{model}' says its {name} figure was taken on {sample} cases, and the \
+                     benchmark has {population}."
+            ),
+            "Write the number of cases the figure was measured on as `sample-size:`, and the \
+                 number the whole benchmark has as `population:`.",
+        ));
+    }
+    let Some(interval) = provenance.get("interval") else {
+        if let (Some(sample), Some(population)) = (sample, population)
+            && sample < population
+        {
+            diags.push(Diagnostic::warning(
+                "loader/a-subset-figure-with-no-interval",
+                provenance
+                    .get("sample-size")
+                    .map_or(figure.span.clone(), |n| n.span.clone()),
+                format!(
+                    "'{model}' took its {name} figure on {sample} of {population} cases and \
+                         records no interval, so a line reads it as if it were the whole \
+                         benchmark's score."
+                ),
+                "Add `interval: {low, high, level}` from the measurement, so a line is held \
+                     to how far the figure could be off.",
+            ));
+        }
+        return;
+    };
+    let bound = |key: &str| interval.get(key).and_then(number_in);
+    if let (Some(low), Some(high)) = (bound("low"), bound("high")) {
+        if low > high {
+            diags.push(Diagnostic::error(
+                "loader/an-interval-out-of-order",
+                interval.span.clone(),
+                format!(
+                    "'{model}' gives its {name} figure an interval from {low} to {high}, and the \
+                     low end is above the high end."
+                ),
+                "Swap `low:` and `high:`.",
+            ));
+        }
+        if let Some(top) = scale_top(scale)
+            && (low < 0.0 || high > top)
+        {
+            diags.push(Diagnostic::error(
+                "loader/an-interval-off-the-benchmark-scale",
+                interval.span.clone(),
+                format!(
+                    "'{model}' gives its {name} figure an interval from {low} to {high}, and \
+                         {name} is scored on the {scale} scale, from 0 to {top}."
+                ),
+                format!("Write both bounds on the benchmark's own scale, from 0 to {top}."),
+            ));
+        }
+    }
+    if let Some(level) = bound("level")
+        && !(level > 0.0 && level < 1.0)
+    {
+        diags.push(Diagnostic::error(
+            "loader/a-confidence-level-that-is-not-a-share",
+            interval
+                .get("level")
+                .map_or(interval.span.clone(), |n| n.span.clone()),
+            format!(
+                "'{model}' gives its {name} interval a confidence level of {level}, and a \
+                     level is a share between zero and one."
+            ),
+            "Write it as a share, like `0.95` for 95%.",
+        ));
+    }
+}
+
+/// Refuse a measurement on a workspace row's figure that is not a benchmark
+/// score: a reasoning rung, a context window and a speed are not sampled.
+fn unsampled(model: &str, row: &Node, diags: &mut Diagnostics) {
+    let capabilities = row.get("capabilities");
+    let speed = row.get("speed");
+    for (field, figure) in [
+        ("reasoning", row.get("reasoning")),
+        (
+            "context-window",
+            capabilities.and_then(|c| c.get("context-window")),
+        ),
+        (
+            "first-words-within",
+            speed.and_then(|s| s.get("first-words-within")),
+        ),
+    ] {
+        let Some(provenance) = figure
+            .and_then(|f| f.get("provenance"))
+            .and_then(Node::as_map)
+        else {
+            continue;
+        };
+        for (key, entry) in provenance {
+            if MEASURED.contains(&key.as_str()) {
+                diags.push(Diagnostic::error(
+                    "loader/a-measurement-on-a-figure-nothing-samples",
+                    entry.key_span.clone(),
+                    format!(
+                        "'{model}' says how its {field} was sampled (`{key}:`), and {field} is \
+                         not taken on a sample of a benchmark's cases."
+                    ),
+                    format!(
+                        "Take `{key}:` out; it belongs on a benchmark figure under `benchmarks:`."
+                    ),
+                ));
+            }
+        }
+    }
+}
+
 /// Every benchmark some row of either catalogue has a score for, by its key —
-/// refusing a workspace row's score under a name no benchmark has.
+/// refusing a workspace row's score under a name no benchmark has, and a
+/// workspace figure's measurement the resolver could not read.
 fn recorded(
     builtin: &str,
     document: &Node,
@@ -410,6 +575,9 @@ fn recorded(
             continue;
         };
         for (model, row) in rows {
+            if own {
+                unsampled(model, &row.node, diags);
+            }
             for (name, figure) in row
                 .node
                 .get("benchmarks")
@@ -418,8 +586,11 @@ fn recorded(
                 .flatten()
             {
                 match benchmarks.get(&name.trim().to_lowercase()) {
-                    Some((key, _)) => {
+                    Some((key, scale)) => {
                         out.insert(key.clone());
+                        if own {
+                            measurement(model, name, scale, &figure.node, diags);
+                        }
                     }
                     None if own => diags.push(Diagnostic::error(
                         "loader/a-score-for-no-benchmark",
@@ -503,6 +674,94 @@ mod tests {
                 read(written, &benchmarks, &metrics, &at).unwrap_err().0,
                 rule,
                 "{written}"
+            );
+        }
+    }
+
+    /// A workspace catalogue holding one row's figure, in the table's world,
+    /// checked the way `pact check` checks it: what `recorded` reports.
+    fn measured(table: &Node, row: &Node) -> Diagnostics {
+        use serde_json::{Map as J, json};
+        let mut provenance = J::new();
+        provenance.insert("source".into(), json!("measured here"));
+        for key in MEASURED {
+            if let Some(field) = row.get(key) {
+                provenance.insert(key.into(), field.to_json());
+            }
+        }
+        let figure =
+            json!({"value": row.get("value").unwrap().to_json(), "provenance": provenance});
+        let model = match row.get("field").and_then(Node::as_str) {
+            Some("context-window") => json!({"capabilities": {"context-window": figure}}),
+            Some("first-words-within") => json!({"speed": {"first-words-within": figure}}),
+            Some(other) => panic!("no figure called {other}"),
+            None => {
+                let on = row
+                    .get("benchmark")
+                    .and_then(Node::as_str)
+                    .unwrap_or("mmlu");
+                json!({"benchmarks": {on: figure}})
+            }
+        };
+        let scales: J<String, serde_json::Value> = table
+            .get("benchmarks")
+            .and_then(Node::as_map)
+            .unwrap()
+            .iter()
+            .map(|(name, scale)| (name.clone(), json!({"scale": scale.node.as_str().unwrap()})))
+            .collect();
+        let document = json!({"models": {"benchmarks": scales, "models": {"m": model}}});
+        let document = pact_doc::parse_yaml(
+            &document.to_string(),
+            camino::Utf8Path::new("workspace.yaml"),
+        )
+        .unwrap();
+        let mut diags = Diagnostics::new();
+        recorded("", &document, &benchmarks("", &document), &mut diags);
+        diags
+    }
+
+    /// The table's `figures:` are measurements the checker reads without an
+    /// error, and its `not-measurements:` are refused with their `rule:`.
+    #[test]
+    fn every_measurement_in_the_shared_table_is_checked_as_it_says() {
+        let table =
+            pact_doc::parse_yaml(VECTORS, camino::Utf8Path::new("accept-when.yaml")).unwrap();
+        let rules = |d: &Diagnostics, severity: pact_diag::Severity| -> Vec<&'static str> {
+            d.items()
+                .iter()
+                .filter(|i| i.severity == severity)
+                .map(|i| i.rule)
+                .collect()
+        };
+        for row in table.get("figures").and_then(Node::as_list).unwrap() {
+            let diags = measured(&table, row);
+            let said = row
+                .get("written")
+                .map_or_else(|| format!("{:?}", row.get("scores")), |w| format!("{w:?}"));
+            assert_eq!(
+                rules(&diags, pact_diag::Severity::Error),
+                Vec::<&str>::new(),
+                "{said}"
+            );
+            let warns: Vec<&str> = row
+                .get("warns")
+                .and_then(Node::as_str)
+                .into_iter()
+                .collect();
+            assert_eq!(rules(&diags, pact_diag::Severity::Warning), warns, "{said}");
+        }
+        for row in table
+            .get("not-measurements")
+            .and_then(Node::as_list)
+            .unwrap()
+        {
+            let diags = measured(&table, row);
+            let rule = row.get("rule").and_then(Node::as_str).unwrap();
+            assert_eq!(
+                rules(&diags, pact_diag::Severity::Error),
+                vec![rule],
+                "{rule}"
             );
         }
     }

@@ -21,6 +21,67 @@ holds that did not; the commits are listed under it for whoever wants the detail
 - **The `deepeval` extra installs `datasets` and `pandas`.** DeepEval's benchmarks import them when
   they are built and its package declares neither, so a benchmark run failed on its first line.
 
+## 2026-11 — a measured figure says how it was measured, and a line is held to its interval (16 November)
+
+A figure's `provenance:` said where a number came from but not how much of the benchmark it rests on
+or how sure it is. A runtime that measures figures itself (Bud Meta Harness measures MMLU on a few
+hundred questions at onboarding) kept that under its own `x-` key and held a line to the interval,
+while the reference held it to the point — so one tree and one catalogue could bind different models
+in two runtimes.
+
+### What an author can now write
+
+- **`provenance.sample-size:` and `provenance.population:`** — on a benchmark figure, how many of the
+  benchmark's cases it was measured on, out of how many it has. Fewer than the population makes it a
+  subset figure, and a refusal that names the figure says so.
+- **`provenance.interval: {low, high, level}`** — on a benchmark figure, the confidence interval
+  around `value:`, on the benchmark's own scale, with the level as a share (`0.95`).
+
+### What holds now
+
+- **Every runtime holds a line to the interval's far bound.** On a benchmark figure with an
+  `interval:`, a `>`/`>=` line holds only when `value:` and `interval.low` both hold, and a `<`/`<=`
+  line only when `value:` and `interval.high` both hold; `=` is decided on `value:`. `mmlu: 78` with a
+  95% interval of 71.6 to 83.1 does not clear `mmlu.score > 75`: *"has mmlu 78, on a subset of 200 of
+  14042 cases, 95% interval 71.6 to 83.1, which reaches past the bar, so `mmlu.score > 75` holds only
+  within noise"*. A figure without an interval decides on `value:` as before.
+- **`needs.scores:` holds a benchmark to the same bar.** It compared the point alone, so one benchmark
+  under `scores:` and under `accept-when:` could decide differently.
+- **The checker refuses a measurement that cannot be one**, where it is written:
+  `loader/an-interval-out-of-order`, `loader/a-confidence-level-that-is-not-a-share`,
+  `loader/more-cases-than-the-benchmark-has`, `loader/an-interval-off-the-benchmark-scale`, and
+  `loader/a-measurement-on-a-figure-nothing-samples` (a reasoning rung, a context window or a speed),
+  and warns `loader/a-subset-figure-with-no-interval`. The reference resolver drops such a figure, so
+  a line on it says the figure was never recorded rather than reading it as its point.
+- `spec/accept-when.yaml` gains `figures:` (decisions) and `not-measurements:` (refusals), read by the
+  Rust checker and the Python resolver alike.
+- The golden `tests/golden/schema-fields.txt` re-sorts `action.moves-hardware`: `field_inventory` is
+  ordered, and master had a hand-inserted line out of order.
+
+## 2026-11 — a runtime may serve a workspace without its broken agents (16 November)
+
+An error in any file of a workspace withdrew all of it: `pact discover` printed `skipping <root>: N
+problem(s)` and `pact show` exited 1, so a runtime serving a tree that is edited while it runs stopped
+serving every agent the moment one agent was edited badly, agents nobody had touched among them.
+
+### What holds now
+
+- **`--leave-out-broken-agents` leaves out an agent whose own folder holds the errors, and serves the
+  rest.** With it, when every error lies in some agents' folders (`agents/<key>/…`), `pact show` and
+  `pact discover` validate the workspace again without those agents and serve it if it then loads,
+  exit 0. Each left-out agent's problems print on stderr as warnings, with `loader/agent-left-out`
+  naming it.
+- **A runtime hears which agents were left out.** `pact discover --leave-out-broken-agents` adds
+  `"left-out": [{ "id": "pact:<key>", "problems": N }]` to the workspace's inventory, so a runtime can
+  keep serving the version it last had of them.
+- **Anything else still refuses the workspace.** An error outside the agents' folders, or one the
+  reduced workspace still has (a teammate naming a left-out agent), keeps the whole workspace refused.
+- **Without the flag nothing changes.** `pact show`'s exit code is how a session's door and a sealed
+  plan decide that a document loads, and neither may lose an agent quietly, so isolation is asked for.
+- **The author is still told.** `pact check <root>` refuses the tree. `pact check <agent>` for a clean
+  agent beside broken ones now says `loader/other-agents-left-out` (a runtime that leaves them out runs
+  this agent) instead of `loader/the-workspace-around-it-is-broken`.
+
 ## 2026-11 — PACT Core, first phase: actors and functions the checker reads, and a workspace that changes while it runs (16 November)
 
 The seven primitives were a way of classifying PACT (`docs/97`: "a mental model, not a syntax").
