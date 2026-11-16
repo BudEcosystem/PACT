@@ -123,13 +123,83 @@ def test_a_tool_answer_is_not_kept_where_never_from_refuses_it() -> None:
 
 
 def test_a_workspace_detectors_placeholder_is_named_for_it() -> None:
-    """`⟦order-reference-1⟧`, not an anonymous `⟦hidden-1⟧`: a reviewer reads what kind it was."""
-    from pact_adapters.detectors import DECLARED
-    from pact_adapters.interceptors import _thing_of
+    """`⟦order-reference-1⟧`, not an anonymous `⟦hidden-1⟧`: a reviewer reads what kind it was.
 
-    held = DECLARED.set({"order reference": "(?:ORD-[0-9]{8})"})
-    try:
-        assert _thing_of("(?:ORD-[0-9]{8})") == "order reference"
-    finally:
-        DECLARED.reset(held)
-    assert _thing_of("(?:ORD-[0-9]{8})") == "", "with no detectors in scope, nothing to name it by"
+    Read from a real run, because the name has to survive the chain being read:
+    the workspace's `detectors:` are in scope while it is, and out of scope by
+    the time the run hides the value."""
+    doc = _doc(True)
+    doc["detectors"] = {"order reference": {"looks-like": ["ORD-[0-9]{8}"], "examples": ["ORD-12345678"]}}
+    doc["redaction"]["hide"].append("anything that looks like an order reference")
+    model = Echo("payments", "charge")
+    asyncio.run(run(AgentSpec.from_document(doc, "a"), model, f"order ORD-20261115, card {CARD}", {"payments": lambda a: "ok"}))
+    assert "order ⟦order-reference-1⟧, card ⟦card-number-1⟧" in model.seen[0], model.seen[0]
+
+
+def test_a_placeholder_the_request_does_not_hold_is_never_sent() -> None:
+    """A guessed placeholder, or another request's, is not passed to the tool as text."""
+    got: list[dict] = []
+    model = Echo("payments", "charge")
+    spec = AgentSpec.from_document(_doc(True), "a")
+    out = asyncio.run(
+        run(spec, model, "please charge my card ⟦card-number-7⟧", {"payments": lambda a: (got.append(dict(a)), "ok")[1]})
+    )
+    assert got == [], got
+    said = out.steps[0].tool_results[0]
+    assert "⟦card-number-7⟧ stands for no value this request holds" in said, said
+
+
+TEAM = {
+    "redaction": {"hide": ["anything that looks like a card number"]},
+    "agents": {
+        "desk": {
+            "description": "Takes the request and hands the charge to the cashier.",
+            "instructions": "Ask the cashier to charge the card.",
+            "team": {"cashier": "charges a card"},
+        },
+        "cashier": {"description": "Charges a card.", "instructions": "Charge it.", "uses": ["payments"]},
+    },
+    "tools": _doc(True)["tools"],
+}
+
+
+def test_a_member_restores_the_placeholder_its_lead_minted() -> None:
+    """The vault is the request's (docs/98 WP-11): a lead whose team gets hidden
+    values keeps them as placeholders, and its member's action gets the card."""
+    from pact_adapters.harness import delegate_by_running
+    from pact_adapters.script import Script, Turn
+    from pact_adapters.transports.mock import ReferenceTransport
+
+    got: list[dict] = []
+    payments = {"payments": lambda a: (got.append(dict(a)), "charged")[1]}
+    seen: list[str] = []
+
+    class Lead:
+        async def model_call(self, system, history, tools):  # type: ignore[no-untyped-def]
+            said = " ".join(str(m.get("content")) for m in history)
+            seen.append(said)
+            if any(m.get("role") == "tool" for m in history):
+                return "Charged.", []
+            card = str(history[0].get("content")).split("card ")[-1]
+            return "", [ToolCall("cashier", {"question": f"charge {card}"})]
+
+        def __getattr__(self, name: str) -> Any:
+            if name == "unenforced":
+                return lambda: ()
+            raise AttributeError(name)
+
+    def cashier_for(member: AgentSpec) -> ReferenceTransport:
+        return ReferenceTransport(Script([
+            Turn("", (ToolCall("payments", {"action": "charge", "card": "⟦card-number-1⟧"}),)),
+            Turn("done"),
+        ]))
+
+    spec = AgentSpec.from_document(TEAM, "desk")
+    assert spec.team_gets_hidden and not spec.gets_hidden
+    out = asyncio.run(run(
+        spec, Lead(), f"please charge my card {CARD}", payments,
+        ask_member=delegate_by_running(TEAM, cashier_for, tool_impls=payments),
+    ))
+    assert out.halted == "final", out.halted
+    assert got and got[0]["card"] == CARD, got
+    assert CARD not in " ".join(seen) and "⟦card-number-1⟧" in seen[0], seen

@@ -482,6 +482,7 @@ Guide: [`site-docs/guide/programs-in-the-language.md`](site-docs/guide/programs-
 ```bash
 pact write my-agent                      # print any workspace as one .pact file
 pact build my-agent.pact --to my-agent   # write the folder a file stands for
+pact fill desk my-agent --run-inputs '{"brand": "Acme"}'  # the words a model reads at a run's start
 ```
 ```
 Wrote 7 file(s) to my-agent. `pact check my-agent` reads the same workspace as `pact check my-agent.pact`.
@@ -1000,11 +1001,11 @@ framework is an extra.
 |---|---|
 | **Design** | Thesis, 29 binding decisions, FRD (120 requirements), 60-row refusal ledger — complete |
 | **Research** | 14 source-grounded studies, ~15,750 lines, over 140 repos (~15 GB) + 57 papers |
-| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **5257 tests (1711 Rust + 3546 adapter), clippy clean, TypeScript type-checked** |
+| **Code** | Loader, diagnostics, schema engine, CLI, harness, resolver, evals, SLO — **5246 tests (1703 Rust + 3543 adapter), clippy clean, TypeScript type-checked** |
 | **Adapters** | **All 7 named targets**, proven against one shared conformance suite |
 
 ```bash
-./scripts/test-all.sh          # 5257 tests, Rust + 7 adapters, fully offline
+./scripts/test-all.sh          # 5246 tests, Rust + 7 adapters, fully offline
 ```
 
 **What is still owed** is not hidden — it lives in

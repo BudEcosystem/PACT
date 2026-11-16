@@ -726,6 +726,145 @@ models:
     # checked 2026-07-28 by jithinvg@bud.studio.
     cost: { input-per-mtok: 5.00 USD, output-per-mtok: 30.00 USD }
 
+  # ───────────────────────────────────────────── OpenAI's low-cost rows
+  #
+  # The three cheapest models OpenAI still serves, so an agent with
+  # `cost-per-request-under:` or "the cheapest model that passes" can land on
+  # this vendor below the mid row, and a tree can name them without adding a
+  # workspace catalogue layer. Every figure below is read from the same pinned
+  # dependencies as the rows above, at the versions `adapters/python/uv.lock`
+  # pins today: `genai-prices` 0.1.9 (`genai_prices/data.py`, the `openai`
+  # provider's entry for each id, fields `context_window`,
+  # `prices.input_mtok` and `prices.output_mtok`) and Pydantic AI 2.54
+  # (`profiles/openai.py`, `_REASONING_SUPPORT_BY_PREFIX`). Read 2026-11-16 by
+  # jithinvg@bud.studio.
+  #
+  # IMAGES: all three accept images on OpenAI's API, but no dependency this
+  # distribution ships states it for these ids, so `modality-in` stays `[text]`
+  # under the same rule as `gpt-5.4-mini`: claiming too little costs a
+  # candidacy with a printed reason, claiming too much fails mid-run.
+
+  gpt-5-mini:
+    family: gpt-5
+    tier: mid
+    also-known-as:
+      - "openai/gpt-5-mini"
+    served-by:
+      - { runtime: openai-api }
+    capabilities:
+      # Same source as `gpt-5.4-mini`: `parallel_tool_calls` on the vendored
+      # OpenAI request type.
+      tool-calling: parallel
+      modality-in: [text]
+      modality-out: [text]
+      ignores: [top-k]
+      ignores-while-thinking: [temperature, top-p, presence-penalty, frequency-penalty]
+      # `'gpt-5': _ALWAYS_ON_REASONING`, the prefix that covers the original
+      # GPT-5 family "(incl. -mini/-pro/-codex)".
+      thinks-unless-told: yes   # `thinking_enabled_by_default`
+      context-window:
+        value: 400000
+        provenance:
+          source: >
+            `genai-prices` 0.1.9, bundled data at `genai_prices/data.py`,
+            pinned in `adapters/python/uv.lock`. Read from the `openai`
+            provider's `gpt-5-mini` entry, field `context_window`.
+          date: 2026-11-16
+          as-of: 2026-11-16
+          recorded-by: jithinvg@bud.studio
+    reasoning:
+      value: unknown
+      provenance:
+        source: >
+          No positioning statement maps onto the four-rung ladder and no
+          benchmark figure has been measured on this distribution. Written
+          `unknown`: Y12 makes UNKNOWN bind and rank last.
+        harness: none
+        as-of: 2026-11-16
+        recorded-by: jithinvg@bud.studio
+    # `genai-prices` 0.1.9, `openai` provider, `gpt-5-mini`, fields
+    # `prices.input_mtok` and `prices.output_mtok`. Cached input is 0.025 USD.
+    cost: { input-per-mtok: 0.25 USD, output-per-mtok: 2.00 USD }
+
+  gpt-5-nano:
+    family: gpt-5
+    tier: small
+    also-known-as:
+      - "openai/gpt-5-nano"
+    served-by:
+      - { runtime: openai-api }
+    capabilities:
+      tool-calling: parallel
+      modality-in: [text]
+      modality-out: [text]
+      ignores: [top-k]
+      ignores-while-thinking: [temperature, top-p, presence-penalty, frequency-penalty]
+      thinks-unless-told: yes   # `thinking_enabled_by_default`, as `gpt-5-mini`
+      context-window:
+        value: 400000
+        provenance:
+          source: >
+            `genai-prices` 0.1.9, bundled data at `genai_prices/data.py`,
+            pinned in `adapters/python/uv.lock`. Read from the `openai`
+            provider's `gpt-5-nano` entry, field `context_window`.
+          date: 2026-11-16
+          as-of: 2026-11-16
+          recorded-by: jithinvg@bud.studio
+    reasoning:
+      value: unknown
+      provenance:
+        source: >
+          No positioning statement maps onto the four-rung ladder and no
+          benchmark figure has been measured on this distribution. Written
+          `unknown`: Y12 makes UNKNOWN bind and rank last.
+        harness: none
+        as-of: 2026-11-16
+        recorded-by: jithinvg@bud.studio
+    # `genai-prices` 0.1.9, `openai` provider, `gpt-5-nano`. Cached input is
+    # 0.005 USD.
+    cost: { input-per-mtok: 0.05 USD, output-per-mtok: 0.40 USD }
+
+  gpt-4o-mini:
+    family: gpt-4o
+    tier: small
+    also-known-as:
+      - "openai/gpt-4o-mini"
+      # The dated snapshot `genai-prices` matches to the same entry.
+      - "gpt-4o-mini-2024-07-18"
+    served-by:
+      - { runtime: openai-api }
+    capabilities:
+      tool-calling: parallel
+      modality-in: [text]
+      modality-out: [text]
+      # No prefix in `_REASONING_SUPPORT_BY_PREFIX` matches, so Pydantic AI
+      # treats it as a model that does not reason: no `thinks-unless-told`, and
+      # sampling parameters are sent. `top_k` is still never sent.
+      ignores: [top-k]
+      context-window:
+        value: 128000
+        provenance:
+          source: >
+            `genai-prices` 0.1.9, bundled data at `genai_prices/data.py`,
+            pinned in `adapters/python/uv.lock`. Read from the `openai`
+            provider's `gpt-4o-mini` entry, field `context_window`.
+          date: 2026-11-16
+          as-of: 2026-11-16
+          recorded-by: jithinvg@bud.studio
+    reasoning:
+      value: unknown
+      provenance:
+        source: >
+          No positioning statement maps onto the four-rung ladder and no
+          benchmark figure has been measured on this distribution. Written
+          `unknown`: Y12 makes UNKNOWN bind and rank last.
+        harness: none
+        as-of: 2026-11-16
+        recorded-by: jithinvg@bud.studio
+    # `genai-prices` 0.1.9, `openai` provider, `gpt-4o-mini`. Cached input is
+    # 0.075 USD.
+    cost: { input-per-mtok: 0.15 USD, output-per-mtok: 0.60 USD }
+
   # The second hosted vendor with a price, which is what makes the ceiling a
   # ceiling rather than an Anthropic feature. It is also the only row here whose
   # image support is stated by its own source rather than left out for want of
@@ -830,3 +969,114 @@ models:
     # `prices.input_mtok` and `prices.output_mtok`. Published 2026-07-22,
     # checked 2026-07-28 by jithinvg@bud.studio.
     cost: { input-per-mtok: 2.00 USD, output-per-mtok: 6.00 USD }
+
+  # ───────────────────────────────────────────── DeepSeek (hosted)
+  #
+  # Every fact below is read from DeepSeek's own API documentation on
+  # 2026-11-11: the pricing page (https://api-docs.deepseek.com/quick_start/pricing)
+  # and the thinking-mode guide (https://api-docs.deepseek.com/guides/thinking_mode).
+  # Neither page carries a revision date, so `date:` is the day it was read.
+  #
+  # PRICE: DeepSeek publishes two rates, peak (01:00–04:00 and 06:00–10:00 UTC,
+  # Monday to Friday) and off-peak at half of peak, plus a cache-hit input rate.
+  # A row holds one price, and `cost <` lines must never pass on a figure a run
+  # can exceed, so `cost:` records the PEAK cache-miss rates; off-peak and
+  # cache-hit rates are written beside it for a runtime that meters them.
+
+  deepseek-flash:
+    family: deepseek-v4
+    tier: small
+    # `deepseek-v4-flash` and `deepseek-v4-flash-vision-exp` are the legacy names
+    # the pricing page says are still accepted and routed to this model.
+    also-known-as:
+      - "deepseek-flash"
+      - "deepseek/deepseek-flash"
+      - "deepseek-v4-flash"
+      - "deepseek-v4-flash-vision-exp"
+    served-by:
+      - { runtime: deepseek-api }
+    capabilities:
+      # Tool use is what the API is for and is sourced by its OpenAI- and
+      # Anthropic-compatible formats; neither page says several calls come back
+      # at once, so `single`, the same rule as the Gemini and Grok rows.
+      tool-calling: single
+      # The pricing page: vision is supported on `deepseek-flash`.
+      modality-in: [text, image]
+      modality-out: [text]
+      # Thinking-mode guide: "Thinking mode does not support the `temperature`,
+      # `presence_penalty`, or `frequency_penalty` parameters" — setting them
+      # "will not trigger an error but will also have no effect". `top-p` is not
+      # listed: on this model it takes effect only WHILE thinking (range
+      # 0.95–1.0) and is ignored otherwise, a case `ignores-while-thinking`
+      # cannot say, so it is left to the runtime rather than mis-stated.
+      ignores-while-thinking: [temperature, presence-penalty, frequency-penalty]
+      # "Thinking mode is enabled by default, with the default effort being `high`."
+      thinks-unless-told: yes
+      context-window:
+        value: 1048576
+        provenance:
+          source: >
+            DeepSeek pricing page, context length "1M" for `deepseek-flash`
+            (DeepSeek-V4.1-Flash-1017); the exact token count is the one the
+            DeepSeek `/models` listing declares for both official models.
+          date: 2026-11-11
+          as-of: 2026-11-11
+          recorded-by: jithinvg@bud.studio
+    reasoning:
+      value: unknown
+      provenance:
+        source: >
+          No positioning statement maps onto the four-rung ladder and no
+          benchmark figure has been measured on this distribution. Written
+          `unknown`: Y12 makes UNKNOWN bind and rank last.
+        harness: none
+        as-of: 2026-11-11
+        recorded-by: jithinvg@bud.studio
+    # Peak cache-miss input 0.30 USD and output 1.20 USD per million tokens.
+    # Off-peak: 0.15 USD in, 0.60 USD out. Cache-hit input: 0.006 USD peak,
+    # 0.003 USD off-peak. Read 2026-11-11 by jithinvg@bud.studio.
+    cost: { input-per-mtok: 0.30 USD, output-per-mtok: 1.20 USD }
+
+  deepseek-v4-pro:
+    family: deepseek-v4
+    tier: frontier
+    also-known-as:
+      - "deepseek-v4-pro"
+      - "deepseek/deepseek-v4-pro"
+    served-by:
+      - { runtime: deepseek-api }
+    capabilities:
+      # Same source and rule as `deepseek-flash`.
+      tool-calling: single
+      # The pricing page: vision is not supported on `deepseek-v4-pro`.
+      modality-in: [text]
+      modality-out: [text]
+      # Thinking-mode guide: temperature and both penalties have no effect while
+      # thinking, and for `deepseek-v4-pro` "in thinking mode your value is
+      # ignored" for `top_p`.
+      ignores-while-thinking: [temperature, top-p, presence-penalty, frequency-penalty]
+      thinks-unless-told: yes
+      context-window:
+        value: 1048576
+        provenance:
+          source: >
+            DeepSeek pricing page, context length "1M" for `deepseek-v4-pro`
+            (DeepSeek-V4-Pro-0813); the exact token count is the one the
+            DeepSeek `/models` listing declares for both official models.
+          date: 2026-11-11
+          as-of: 2026-11-11
+          recorded-by: jithinvg@bud.studio
+    reasoning:
+      value: unknown
+      provenance:
+        source: >
+          No positioning statement maps onto the four-rung ladder and no
+          benchmark figure has been measured on this distribution. Written
+          `unknown`: Y12 makes UNKNOWN bind and rank last.
+        harness: none
+        as-of: 2026-11-11
+        recorded-by: jithinvg@bud.studio
+    # Peak cache-miss input 1.32 USD and output 3.96 USD per million tokens.
+    # Off-peak: 0.66 USD in, 1.98 USD out. Cache-hit input: 0.044 USD peak,
+    # 0.022 USD off-peak. Read 2026-11-11 by jithinvg@bud.studio.
+    cost: { input-per-mtok: 1.32 USD, output-per-mtok: 3.96 USD }

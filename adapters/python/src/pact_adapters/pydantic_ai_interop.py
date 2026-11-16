@@ -1172,6 +1172,7 @@ _RUNTIME_PROVIDERS: dict[str, str] = {
     "openai-api": "openai",
     "google-api": "google",
     "xai-api": "xai",
+    "deepseek-api": "deepseek",
     "ollama": "ollama",
 }
 

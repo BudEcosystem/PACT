@@ -84,6 +84,63 @@ five other things the live runs found.
 - The checker's fix for a loop with no ceiling suggests `ask-a-person`, which a cell cannot use.
 - No second runtime replays `cells.json` yet.
 
+## 2026-11 — an agent's words are filled by one renderer in every port (16 November)
+
+Each runtime filled an agent's words its own way. Python rendered a `jinja` workspace with Jinja2 and
+printed `True`, `None`, `5.0` and Python lists where MiniJinja prints `true`, `none`, `5` and JSON; a
+runtime in TypeScript had no renderer at all; and nothing held the ports to one answer.
+
+### What an author can now do
+
+- **See the words a run starts with:** `pact fill <agent> [PATH] --run-inputs <json> --remembered
+  <json>` prints the agent's `instructions:` (or `--field description`) filled for one run, in either
+  `template-language:`, and refuses at exit 1, naming the value, when the run did not give one.
+
+### What holds now
+
+- **One renderer, three ports.** `pact_loader::fill` is the reference; `crates/pact-fill-wasm` builds it
+  as a WebAssembly module with no imports, which `adapters/typescript/src/fill.ts` loads; `holes.fill`
+  is the Python port. `tests/conformance/fill.json` (40 cases: holes, escapes, near misses, every shared
+  filter and test, missing values) holds all three to the same words.
+- **What a template prints follows the holes rule.** Text as written; anything else as JSON with `, `
+  and `: ` between items, non-ASCII kept, and a number as ECMAScript writes it (`2`, not `2.0`;
+  `0.000015`; `1e+21`), in a hole's value as in `{{ ... }}`. A float that is a whole number now goes
+  into a hole without its `.0`.
+- **A mapping keeps its order** in a template (`| items`), as Jinja2 keeps it: MiniJinja is built with
+  `preserve_order`.
+- **Fast enough to run in process:** the WebAssembly fill of a Jinja desk takes p95 0.1 ms
+  (`adapters/typescript/bench-fill.mts`).
+
+## 2026-11 — a workspace's own detector names its placeholder in a run (15 November)
+
+A redaction that hides `anything that looks like an order reference`, with that detector declared
+under `detectors:`, put `⟦hidden-1⟧` in the conversation where `⟦order-reference-1⟧` was meant: the
+placeholder's name was looked up from the pattern when the run hid the value, and by then the
+workspace's detectors were no longer in scope, which they are only while the chain is read.
+
+### What holds now
+
+- **A compiled hiding sentence keeps the thing it names.** Each pattern carries `card number`, or the
+  declared detector's name, so a placeholder is named for it whenever it is minted. The test reads the
+  name from a real run rather than from the lookup with the detectors put back in scope by hand.
+
+## 2026-11 — a hidden value belongs to the request, not the run (15 November)
+
+`gets-hidden-values: yes` put a card back only for an action of the agent whose own redaction hid
+it. A lead that hands the charge to a cashier hid the card one way, `[removed]`, because the lead
+uses no such action itself, so the cashier's action could never get the number back; and a
+placeholder the run's vault did not hold was sent to the tool as text.
+
+### What holds now
+
+- **The vault is the request's.** `AgentSpec.team_gets_hidden` says a member of the agent's team, at
+  any depth, uses such an action; such a lead keeps hidden values as placeholders, and the vault
+  rides the grant to every member (`run(vault=...)`, as `board=` does), so the member's action gets
+  back the card its lead hid.
+- **A placeholder the request does not hold is never sent.** The call is not made; the model reads
+  `not done: ⟦card-number-7⟧ stands for no value this request holds — use only the placeholders this
+  conversation showed you, exactly as written` (`Vault.unknown`).
+
 ## 2026-11 — an agent's answer is held to what the agent says it gives (15 November)
 
 `answers-with:` is a promise to whoever calls the agent. The reference harness put the shape to

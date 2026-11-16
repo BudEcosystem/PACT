@@ -375,6 +375,22 @@ not do.
   with no globals and `StrictUndefined`, and never rendered again. A customer who
   types `{{ 7*7 }}` is quoted, not obeyed, which closes the server-side template
   injection hole every Jinja deployment has to close.
+- **What a template prints follows the holes rule.** Text is printed as written;
+  any other value (`true`, `null`, a number, a list, a mapping) as JSON with `, `
+  and `: ` between items and a number as ECMAScript writes it (`5`, not `5.0`),
+  so every port prints the same words: Jinja2 alone prints `True`, `None`, `5.0`
+  and a Python list, and a TypeScript runtime holds no `5.0` apart from `5`.
+
+**One renderer, three ports** (`crates/pact-loader/src/fill.rs`). `pact fill
+<agent> [PATH] --run-inputs <json> --remembered <json>` prints an agent's words
+filled for one run, for either language; `crates/pact-fill-wasm` is the same
+function as a WebAssembly module with no imports, which
+`adapters/typescript/src/fill.ts` loads, so a TypeScript runtime fills words in
+process with the engine the checker reads them with; `holes.fill` is the Python
+port. `tests/conformance/fill.json` holds all three to the same answers. Measured
+on one core of a 2026 desktop, the WebAssembly fill of a Jinja desk takes p95
+0.1 ms and a 200-line holes text p95 0.4 ms in process
+(`adapters/typescript/bench-fill.mts`), after a 3 ms load.
 
 **Deliberately not templated:** `question.says` (the wording a human approver reads
 is fixed wording the author wrote; the field's own help says so), `evals` `judged:`

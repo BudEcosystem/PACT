@@ -1,3 +1,5 @@
 [toolchain]
 channel = "stable"
 components = ["clippy", "rustfmt"]
+# `crates/pact-fill-wasm` is built for WebAssembly by `scripts/test-all.sh`.
+targets = ["wasm32-unknown-unknown"]

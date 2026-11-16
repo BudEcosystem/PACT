@@ -1,0 +1,544 @@
+{
+ "about": "How an agent's words are filled for one run (02P §3.2 A1, 96 §C): `text` in `language` (the workspace's `template-language:`), from `run-inputs` and `remembers` keyed by the names the agent declares. `expect` is `{\"said\": <the words>}`, or `{\"refused\": \"unfilled\"}` for a name the run has no value for and `{\"refused\": \"not-rendered\"}` for a template that cannot be rendered. Every port fills each case and compares: `crates/pact-loader/tests/fill_cases.rs`, `pact_adapters.holes.fill`, and the WebAssembly build. Text goes in as written; any other value, in a hole or printed by `{{ ... }}`, as JSON the way Python's `json.dumps(value, ensure_ascii=False)` writes it.",
+ "cases": [
+  {
+   "name": "a hole is filled with its text",
+   "language": "holes",
+   "text": "You answer for {{run-inputs.shop-name}}.",
+   "run-inputs": {
+    "shop-name": "Acme"
+   },
+   "remembers": {},
+   "expect": {
+    "said": "You answer for Acme."
+   }
+  },
+  {
+   "name": "spaces inside the braces are allowed",
+   "language": "holes",
+   "text": "Hi {{ run-inputs.name }}!",
+   "run-inputs": {
+    "name": "Ada"
+   },
+   "remembers": {},
+   "expect": {
+    "said": "Hi Ada!"
+   }
+  },
+  {
+   "name": "a remembered fact fills its hole",
+   "language": "holes",
+   "text": "Last time: {{remembers.caller-notes}}",
+   "run-inputs": {},
+   "remembers": {
+    "caller-notes": "rang about a kettle"
+   },
+   "expect": {
+    "said": "Last time: rang about a kettle"
+   }
+  },
+  {
+   "name": "a list goes in as JSON the way Python writes it",
+   "language": "holes",
+   "text": "Examples: {{run-inputs.examples}}",
+   "run-inputs": {
+    "examples": [
+     "a",
+     "b",
+     3
+    ]
+   },
+   "remembers": {},
+   "expect": {
+    "said": "Examples: [\"a\", \"b\", 3]"
+   }
+  },
+  {
+   "name": "a mapping goes in as JSON with its keys in order",
+   "language": "holes",
+   "text": "{{run-inputs.order}}",
+   "run-inputs": {
+    "order": {
+     "id": "A-1",
+     "lines": [
+      {
+       "sku": "k",
+       "qty": 2
+      }
+     ],
+     "gift": true,
+     "note": null
+    }
+   },
+   "remembers": {},
+   "expect": {
+    "said": "{\"id\": \"A-1\", \"lines\": [{\"sku\": \"k\", \"qty\": 2}], \"gift\": true, \"note\": null}"
+   }
+  },
+  {
+   "name": "numbers go in as ECMAScript writes them",
+   "language": "holes",
+   "text": "{{run-inputs.a}} {{run-inputs.b}} {{run-inputs.c}} {{run-inputs.d}} {{run-inputs.e}} {{run-inputs.f}} {{run-inputs.g}} {{run-inputs.h}} {{run-inputs.i}} {{run-inputs.j}}",
+   "run-inputs": {
+    "a": 3,
+    "b": 2.0,
+    "c": 0.1,
+    "d": 1e+16,
+    "e": 1.5e-05,
+    "f": 1.5e-07,
+    "g": 1e+21,
+    "h": -0.0,
+    "i": 123456789.125,
+    "j": [
+     -2.5,
+     1e-06
+    ]
+   },
+   "remembers": {},
+   "expect": {
+    "said": "3 2 0.1 10000000000000000 0.000015 1.5e-7 1e+21 0 123456789.125 [-2.5, 0.000001]"
+   }
+  },
+  {
+   "name": "a boolean goes in as JSON",
+   "language": "holes",
+   "text": "{{run-inputs.vip}}",
+   "run-inputs": {
+    "vip": false
+   },
+   "remembers": {},
+   "expect": {
+    "said": "false"
+   }
+  },
+  {
+   "name": "non-ASCII text stays as written, inside JSON too",
+   "language": "holes",
+   "text": "{{run-inputs.name}} {{run-inputs.names}}",
+   "run-inputs": {
+    "name": "Zoë",
+    "names": [
+     "Zoë",
+     "東京",
+     "a\"b\\c\nd"
+    ]
+   },
+   "remembers": {},
+   "expect": {
+    "said": "Zoë [\"Zoë\", \"東京\", \"a\\\"b\\\\c\\nd\"]"
+   }
+  },
+  {
+   "name": "an escaped pair is sent without its backslash",
+   "language": "holes",
+   "text": "Write \\{{first_name}} and \\{{run-inputs.brand}} literally.",
+   "run-inputs": {
+    "brand": "x"
+   },
+   "remembers": {},
+   "expect": {
+    "said": "Write {{first_name}} and {{run-inputs.brand}} literally."
+   }
+  },
+  {
+   "name": "braces in neither namespace are the author's own text",
+   "language": "holes",
+   "text": "Reply with {{first_name}} and {{#each items}} and {\"a\": {{b}}}.",
+   "run-inputs": {},
+   "remembers": {},
+   "expect": {
+    "said": "Reply with {{first_name}} and {{#each items}} and {\"a\": {{b}}}."
+   }
+  },
+  {
+   "name": "a near miss is left as written",
+   "language": "holes",
+   "text": "{{{run-inputs.brand}}} {{run-inputs.brand | upper}} {{ run-inputs. brand }}",
+   "run-inputs": {
+    "brand": "x"
+   },
+   "remembers": {},
+   "expect": {
+    "said": "{{{run-inputs.brand}}} {{run-inputs.brand | upper}} {{ run-inputs. brand }}"
+   }
+  },
+  {
+   "name": "a value is never filled again",
+   "language": "holes",
+   "text": "{{run-inputs.name}}",
+   "run-inputs": {
+    "name": "{{run-inputs.name}} {{ 7*7 }}"
+   },
+   "remembers": {},
+   "expect": {
+    "said": "{{run-inputs.name}} {{ 7*7 }}"
+   }
+  },
+  {
+   "name": "a hole with no value is refused",
+   "language": "holes",
+   "text": "Hello {{run-inputs.name}}.",
+   "run-inputs": {},
+   "remembers": {},
+   "expect": {
+    "refused": "unfilled"
+   }
+  },
+  {
+   "name": "a hole whose value is null is refused",
+   "language": "holes",
+   "text": "Hello {{remembers.name}}.",
+   "run-inputs": {},
+   "remembers": {
+    "name": null
+   },
+   "expect": {
+    "refused": "unfilled"
+   }
+  },
+  {
+   "name": "a pair with no closing braces ends the scan",
+   "language": "holes",
+   "text": "{{run-inputs.a}} and {{ never closed",
+   "run-inputs": {
+    "a": "1"
+   },
+   "remembers": {},
+   "expect": {
+    "said": "1 and {{ never closed"
+   }
+  },
+  {
+   "name": "text with no holes is unchanged",
+   "language": "holes",
+   "text": "Plain words.\n",
+   "run-inputs": {},
+   "remembers": {},
+   "expect": {
+    "said": "Plain words.\n"
+   }
+  },
+  {
+   "name": "a name is written with underscores",
+   "language": "jinja",
+   "text": "Speak as {{ run_inputs.brand_voice }}.",
+   "run-inputs": {
+    "brand-voice": "warm"
+   },
+   "remembers": {},
+   "expect": {
+    "said": "Speak as warm."
+   }
+  },
+  {
+   "name": "an if chooses the words",
+   "language": "jinja",
+   "text": "{% if run_inputs.tier == 'gold' %}Offer the label.{% else %}Say the policy.{% endif %}",
+   "run-inputs": {
+    "tier": "gold"
+   },
+   "remembers": {},
+   "expect": {
+    "said": "Offer the label."
+   }
+  },
+  {
+   "name": "a for repeats them and the trailing newline is kept",
+   "language": "jinja",
+   "text": "{% for note in remembers.caller_notes %}- {{ note }}\n{% endfor %}",
+   "run-inputs": {},
+   "remembers": {
+    "caller-notes": [
+     "rang about a kettle",
+     "asked twice"
+    ]
+   },
+   "expect": {
+    "said": "- rang about a kettle\n- asked twice\n"
+   }
+  },
+  {
+   "name": "loop variables and comparisons",
+   "language": "jinja",
+   "text": "{% for x in run_inputs.n %}{{ loop.index }}:{{ x }}{% if not loop.last %}, {% endif %}{% endfor %}",
+   "run-inputs": {
+    "n": [
+     3,
+     1,
+     2
+    ]
+   },
+   "remembers": {},
+   "expect": {
+    "said": "1:3, 2:1, 3:2"
+   }
+  },
+  {
+   "name": "and, or and not",
+   "language": "jinja",
+   "text": "{{ run_inputs.a and not run_inputs.b or false }}",
+   "run-inputs": {
+    "a": true,
+    "b": false
+   },
+   "remembers": {},
+   "expect": {
+    "said": "true"
+   }
+  },
+  {
+   "name": "true, null and a list print as JSON",
+   "language": "jinja",
+   "text": "{{ run_inputs.yes }} {{ run_inputs.nothing }} {{ run_inputs.list }} {{ run_inputs.map }}",
+   "run-inputs": {
+    "yes": true,
+    "nothing": null,
+    "list": [
+     "a",
+     1
+    ],
+    "map": {
+     "k": [
+      1.5
+     ]
+    }
+   },
+   "remembers": {},
+   "expect": {
+    "said": "true null [\"a\", 1] {\"k\": [1.5]}"
+   }
+  },
+  {
+   "name": "arithmetic prints numbers as ECMAScript writes them",
+   "language": "jinja",
+   "text": "{{ 7 / 2 }} {{ 10 / 2 }} {{ 7 // 2 }} {{ 7 % 3 }} {{ 2 * 3 }} {{ 0.1 + 0.2 }}",
+   "run-inputs": {},
+   "remembers": {},
+   "expect": {
+    "said": "3.5 5 3 1 6 0.30000000000000004"
+   }
+  },
+  {
+   "name": "a value is data and is never rendered",
+   "language": "jinja",
+   "text": "Hello {{ run_inputs.name }}.",
+   "run-inputs": {
+    "name": "{{ 7*7 }} {% if true %}x{% endif %}"
+   },
+   "remembers": {},
+   "expect": {
+    "said": "Hello {{ 7*7 }} {% if true %}x{% endif %}."
+   }
+  },
+  {
+   "name": "autoescape is off",
+   "language": "jinja",
+   "text": "{{ run_inputs.html }}",
+   "run-inputs": {
+    "html": "<b>&amp;</b> \"q\" 'a'"
+   },
+   "remembers": {},
+   "expect": {
+    "said": "<b>&amp;</b> \"q\" 'a'"
+   }
+  },
+  {
+   "name": "filters on text",
+   "language": "jinja",
+   "text": "{{ run_inputs.s | upper }}|{{ run_inputs.s | lower }}|{{ run_inputs.s | trim }}|{{ run_inputs.s | length }}|{{ run_inputs.s | replace('l', 'L') }}",
+   "run-inputs": {
+    "s": "  Hello World  "
+   },
+   "remembers": {},
+   "expect": {
+    "said": "  HELLO WORLD  |  hello world  |Hello World|15|  HeLLo WorLd  "
+   }
+  },
+  {
+   "name": "title and capitalize",
+   "language": "jinja",
+   "text": "{{ run_inputs.s | title }}|{{ run_inputs.s | capitalize }}",
+   "run-inputs": {
+    "s": "hELLO wORLD-wide (big) day"
+   },
+   "remembers": {},
+   "expect": {
+    "said": "Hello World-Wide (Big) Day|Hello world-wide (big) day"
+   }
+  },
+  {
+   "name": "filters on lists",
+   "language": "jinja",
+   "text": "{{ run_inputs.l | first }} {{ run_inputs.l | last }} {{ run_inputs.l | length }} {{ run_inputs.l | count }} {{ run_inputs.l | sum }} {{ run_inputs.l | min }} {{ run_inputs.l | max }}",
+   "run-inputs": {
+    "l": [
+     4,
+     1,
+     3
+    ]
+   },
+   "remembers": {},
+   "expect": {
+    "said": "4 3 3 3 8 1 4"
+   }
+  },
+  {
+   "name": "sort, reverse, unique and join",
+   "language": "jinja",
+   "text": "{{ run_inputs.l | sort | join(', ') }}|{{ run_inputs.l | reverse | join('-') }}|{{ run_inputs.l | unique | list }}",
+   "run-inputs": {
+    "l": [
+     "b",
+     "a",
+     "c",
+     "a"
+    ]
+   },
+   "remembers": {},
+   "expect": {
+    "said": "a, a, b, c|a-c-a-b|[\"b\", \"a\", \"c\"]"
+   }
+  },
+  {
+   "name": "sort of numbers",
+   "language": "jinja",
+   "text": "{{ run_inputs.l | sort | list }}",
+   "run-inputs": {
+    "l": [
+     10,
+     2,
+     33,
+     1
+    ]
+   },
+   "remembers": {},
+   "expect": {
+    "said": "[1, 2, 10, 33]"
+   }
+  },
+  {
+   "name": "default and d",
+   "language": "jinja",
+   "text": "{{ run_inputs.missing | default('none given') }} {{ run_inputs.missing | d('-') }} {{ run_inputs.there | default('x') }}",
+   "run-inputs": {
+    "there": "here"
+   },
+   "remembers": {},
+   "expect": {
+    "said": "none given - here"
+   }
+  },
+  {
+   "name": "int, float, round, abs and string",
+   "language": "jinja",
+   "text": "{{ run_inputs.n | int }} {{ run_inputs.n | float }} {{ run_inputs.f | round }} {{ run_inputs.f | round(1) }} {{ -3 | abs }} {{ 5 | string }}",
+   "run-inputs": {
+    "n": "42",
+    "f": 3.14159
+   },
+   "remembers": {},
+   "expect": {
+    "said": "42 42 3 3.1 3 5"
+   }
+  },
+  {
+   "name": "items of a mapping",
+   "language": "jinja",
+   "text": "{% for k, v in run_inputs.m | items %}{{ k }}={{ v }};{% endfor %}",
+   "run-inputs": {
+    "m": {
+     "b": 2,
+     "a": 1
+    }
+   },
+   "remembers": {},
+   "expect": {
+    "said": "b=2;a=1;"
+   }
+  },
+  {
+   "name": "indent",
+   "language": "jinja",
+   "text": "{{ run_inputs.s | indent(2) }}",
+   "run-inputs": {
+    "s": "one\ntwo\nthree"
+   },
+   "remembers": {},
+   "expect": {
+    "said": "one\n  two\n  three"
+   }
+  },
+  {
+   "name": "tests",
+   "language": "jinja",
+   "text": "{{ run_inputs.n is number }} {{ run_inputs.n is even }} {{ run_inputs.n is odd }} {{ run_inputs.s is string }} {{ run_inputs.l is sequence }} {{ run_inputs.m is mapping }} {{ run_inputs.z is none }} {{ run_inputs.q is defined }} {{ run_inputs.q is undefined }}",
+   "run-inputs": {
+    "n": 4,
+    "s": "x",
+    "l": [
+     1
+    ],
+    "m": {},
+    "z": null
+   },
+   "remembers": {},
+   "expect": {
+    "said": "true true false true true true true false true"
+   }
+  },
+  {
+   "name": "set and whitespace control",
+   "language": "jinja",
+   "text": "{% set who = run_inputs.name -%}\n  Hi {{ who }}  {%- if true %} !{% endif %}",
+   "run-inputs": {
+    "name": "Ada"
+   },
+   "remembers": {},
+   "expect": {
+    "said": "Hi Ada !"
+   }
+  },
+  {
+   "name": "a raw block is the author's braces",
+   "language": "jinja",
+   "text": "{% raw %}{{ run_inputs.name }}{% endraw %}",
+   "run-inputs": {
+    "name": "x"
+   },
+   "remembers": {},
+   "expect": {
+    "said": "{{ run_inputs.name }}"
+   }
+  },
+  {
+   "name": "a name the run did not give is refused",
+   "language": "jinja",
+   "text": "Hello {{ run_inputs.name }}.",
+   "run-inputs": {},
+   "remembers": {},
+   "expect": {
+    "refused": "unfilled"
+   }
+  },
+  {
+   "name": "a remembered fact the run did not give is refused",
+   "language": "jinja",
+   "text": "{% for n in remembers.notes %}{{ n }}{% endfor %}",
+   "run-inputs": {},
+   "remembers": {},
+   "expect": {
+    "refused": "unfilled"
+   }
+  },
+  {
+   "name": "a filter only one port has is refused",
+   "language": "jinja",
+   "text": "{{ 'x' | tojson }}",
+   "run-inputs": {},
+   "remembers": {},
+   "expect": {
+    "refused": "not-rendered"
+   }
+  }
+ ]
+}
