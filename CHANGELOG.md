@@ -3,6 +3,43 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — a measured figure says how it was measured, and a line is held to its interval (16 November)
+
+A figure's `provenance:` said where a number came from but not how much of the benchmark it rests on
+or how sure it is. A runtime that measures figures itself (Bud Meta Harness measures MMLU on a few
+hundred questions at onboarding) kept that under its own `x-` key and held a line to the interval,
+while the reference held it to the point — so one tree and one catalogue could bind different models
+in two runtimes.
+
+### What an author can now write
+
+- **`provenance.sample-size:` and `provenance.population:`** — on a benchmark figure, how many of the
+  benchmark's cases it was measured on, out of how many it has. Fewer than the population makes it a
+  subset figure, and a refusal that names the figure says so.
+- **`provenance.interval: {low, high, level}`** — on a benchmark figure, the confidence interval
+  around `value:`, on the benchmark's own scale, with the level as a share (`0.95`).
+
+### What holds now
+
+- **Every runtime holds a line to the interval's far bound.** On a benchmark figure with an
+  `interval:`, a `>`/`>=` line holds only when `value:` and `interval.low` both hold, and a `<`/`<=`
+  line only when `value:` and `interval.high` both hold; `=` is decided on `value:`. `mmlu: 78` with a
+  95% interval of 71.6 to 83.1 does not clear `mmlu.score > 75`: *"has mmlu 78, on a subset of 200 of
+  14042 cases, 95% interval 71.6 to 83.1, which reaches past the bar, so `mmlu.score > 75` holds only
+  within noise"*. A figure without an interval decides on `value:` as before.
+- **`needs.scores:` holds a benchmark to the same bar.** It compared the point alone, so one benchmark
+  under `scores:` and under `accept-when:` could decide differently.
+- **The checker refuses a measurement that cannot be one**, where it is written:
+  `loader/an-interval-out-of-order`, `loader/a-confidence-level-that-is-not-a-share`,
+  `loader/more-cases-than-the-benchmark-has`, `loader/an-interval-off-the-benchmark-scale`, and
+  `loader/a-measurement-on-a-figure-nothing-samples` (a reasoning rung, a context window or a speed),
+  and warns `loader/a-subset-figure-with-no-interval`. The reference resolver drops such a figure, so
+  a line on it says the figure was never recorded rather than reading it as its point.
+- `spec/accept-when.yaml` gains `figures:` (decisions) and `not-measurements:` (refusals), read by the
+  Rust checker and the Python resolver alike.
+- The golden `tests/golden/schema-fields.txt` re-sorts `action.moves-hardware`: `field_inventory` is
+  ordered, and master had a hand-inserted line out of order.
+
 ## 2026-11 — a runtime may serve a workspace without its broken agents (16 November)
 
 An error in any file of a workspace withdrew all of it: `pact discover` printed `skipping <root>: N
