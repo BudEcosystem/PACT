@@ -61,7 +61,7 @@ from .diagnostics import locate
 from .events import Bus
 from .facts import TURN_ENDS, Fact, Facts
 from .holes import fill
-from .interceptors import Chain
+from .interceptors import Chain, counted_name
 from .ir import RUN_WITHOUT_IT, AgentSpec, PluginSpec, SkillSpec
 from .answers_fit import CHECKS_FAILED, Held, fields_of
 from .limits import RAN_OUT, Action, Ceiling, Limits, Meter, Reached, money, step_ceiling
@@ -3122,8 +3122,8 @@ async def run(
                 {
                     "name": call.name,
                     "args": args,
-                    "so-far": [c.name for s in result.steps for c in s.tool_calls]
-                    + [c.name for c in ran],
+                    "so-far": [counted_name(c.name, c.args) for s in result.steps for c in s.tool_calls]
+                    + [counted_name(c.name, c.args) for c in ran],
                 },
             )
             # What the rule left is what happened. A `hide-values` rule masking

@@ -1716,6 +1716,15 @@ def _substitute(text: str, patterns: Sequence[Hiding]) -> str:
     return "".join(out)
 
 
+def counted_name(name: str, args: Mapping[str, Any]) -> str:
+    """How a call is written in `so-far`: `<tool>/<action>` when it names an
+    action, so a counting sentence may name one action of a tool, and the bare
+    tool otherwise.
+    """
+    action = str(args.get("action") or "").strip()
+    return f"{name}/{action}" if action and "/" not in name else name
+
+
 def _call_limit(
     tool: str, at_most: int, *, stop: str = "", to: str = ""
 ) -> Callable[[dict[str, Any]], Decision | None]:
@@ -1732,13 +1741,19 @@ def _call_limit(
     a counter in this process would start again at nought — so the second refund
     the rule exists to stop would be the first one it ever saw.
     """
-    head = tool.split("/")[0]
+    head, _, action = tool.partition("/")
+
+    def counted(name: object) -> bool:
+        # `payments/issue-refund` counts that action's calls only; `payments`
+        # counts every call of the tool, whichever action it names.
+        return str(name) == tool if action else str(name).split("/")[0] == head
 
     def check(payload: dict[str, Any]) -> Decision | None:
-        if str(payload.get("name", "")).split("/")[0] != head:
+        args = payload.get("args")
+        if not counted(counted_name(str(payload.get("name", "")), args if isinstance(args, dict) else {})):
             return None
         so_far = payload.get("so-far") or ()
-        already = sum(1 for n in so_far if str(n).split("/")[0] == head)
+        already = sum(1 for n in so_far if counted(n))
         if already < at_most:
             return None
         # Built fresh each time it fires rather than shared: a `Decision` is an
