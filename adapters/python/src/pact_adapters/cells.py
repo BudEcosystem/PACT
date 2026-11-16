@@ -12,7 +12,7 @@ worked on where it is, however large, while the model is shown a few words of
 it (`previews`).
 
 A refused cell is not the end. The model is told why, in the checker's own
-sentence or the session guard's, and writes another, `tries` times in all:
+sentence or the session's, and writes another, `tries` times in all:
 the count an answer that does not fit its shape already has (`answers_fit`).
 """
 

@@ -10,7 +10,7 @@ model wrote during a run (`cell`). Every proposal goes through one door:
 The judge is the same `pact` binary that checks a tree before any run (law 8
 of `docs/97-PRIMITIVES.md`: "two phases, one checker"). Nothing here re-reads
 a rule of the checker in Python. What this module adds are the facts only a
-session can know, each a guard with a name: who is proposing and what THEY
+session can know, each a door with a name: who is proposing and what THEY
 were given (`reach`, `wider`), what a model may define at all (`floor`), how
 much checking one proposal may cost (`meter`), and that a name already taken
 is never quietly replaced by a model (`collision`).
@@ -79,9 +79,9 @@ class Admission:
     #: The session's version once this was decided: new when admitted, the
     #: one it had when refused.
     version: str
-    #: Why it was refused: the checker's own sentences, or the guard's.
+    #: Why it was refused: the checker's own sentences, or the session's.
     said: tuple[str, ...] = ()
-    #: Which door refused it: `checker`, or the session guard by name.
+    #: Which door refused it: `checker`, or the session's own by name.
     refused_by: str = ""
     #: What it defined, as `collection/name`.
     names: tuple[str, ...] = ()
@@ -351,10 +351,10 @@ class Session:
         if document is None:
             shutil.rmtree(staged, ignore_errors=True)
             return self._refused("checker", problems, started)
-        guard = held(document) if held is not None else None
-        if guard is not None:
+        outside = held(document) if held is not None else None
+        if outside is not None:
             shutil.rmtree(staged, ignore_errors=True)
-            return self._refused(guard[0], guard[1], started)
+            return self._refused(outside[0], outside[1], started)
         before = self.document
         self._swap(staged, document)
         names = tuple(

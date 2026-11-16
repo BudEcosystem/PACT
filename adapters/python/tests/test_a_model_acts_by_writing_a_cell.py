@@ -19,7 +19,12 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from pact_adapters.cells import NO_CELL, act_by_a_cell, cell_in, what_it_may_call  # noqa: E402
-from pact_adapters.previews import GRAMMAR, is_cut, preview  # noqa: E402
+from pact_adapters.previews import GRAMMAR, preview  # noqa: E402
+
+
+def is_cut(shown: str) -> bool:
+    """Whether a preview says its value was cut."""
+    return shown.startswith(("list(", "text(", "record("))
 from pact_adapters.session import Session  # noqa: E402
 from pact_adapters.workflow_runtime import Callers  # noqa: E402
 

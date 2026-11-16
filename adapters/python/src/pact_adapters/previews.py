@@ -58,7 +58,3 @@ def preview(value: Any, *, items: int = ITEMS, characters: int = CHARACTERS) -> 
         return f"record({len(value)} fields; {names}, …)"
     return json.dumps(value, ensure_ascii=False, default=str)
 
-
-def is_cut(shown: str) -> bool:
-    """Whether a preview says its value was cut."""
-    return any(mark in shown for mark in ("list(", "text(", "record("))
