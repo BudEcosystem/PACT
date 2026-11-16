@@ -33,7 +33,7 @@ requires it, and deleting it leaves a working agent.
 
 - **[What do you write?](concepts/what.md)**
   Files. One rule — *a directory is a field; a field may be a directory* —
-  and 69 kinds you never have to memorise.
+  and 70 kinds you never have to memorise.
 
 </div>
 
@@ -48,7 +48,7 @@ so plainly rather than leaving it to be discovered.
 | | |
 |---|---|
 | Tests | **5,310** — 1719 Rust, 3591 adapter |
-| Schema kinds | **69** |
+| Schema kinds | **70** |
 | Framework targets | **7**, over 2 runtimes |
 | Eve capabilities accounted for | **101 of 101** |
 | Worked example | 43 files, 498 settings, 1 payload script |

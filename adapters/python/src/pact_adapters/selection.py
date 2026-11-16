@@ -30,6 +30,18 @@ A figure nobody recorded does not hold: a model with no `mmlu` score is not
 accepted by `mmlu.score > 50`, an unpriced one by `input-price < 3 USD`, one
 whose cost was never metered by `cost < 0.05 USD`. Each says why, so the
 author can record the figure (`benchmarks.record`) rather than guess.
+
+## A measured figure
+
+A benchmark figure may say how it was measured: `provenance.sample-size:` and
+`population:` (how many of the benchmark's cases it rests on, out of how many),
+and `provenance.interval:` (`low`, `high`, `level`). A line with `>` or `>=`
+holds only when both `value:` and `interval.low` hold; one with `<` or `<=`
+only when both `value:` and `interval.high` hold; `=` is decided on `value:`
+alone. So a score of 78 with a 95% interval of 71.6 to 83.1 does not clear
+`mmlu.score > 75`: the line holds only within noise, and the reason says so.
+Every runtime holds the line this way, so one tree and one catalogue bind one
+model wherever they are read.
 """
 
 from __future__ import annotations
@@ -45,13 +57,17 @@ __all__ = [
     "AFTER",
     "BEFORE",
     "Line",
+    "Measurement",
     "Unreadable",
     "benchmarks_of",
     "held_after",
     "held_before",
     "measured",
+    "measurement_of",
     "parse",
     "parse_all",
+    "reaches",
+    "within_noise",
 ]
 
 #: The figures every model has, and the unit each is written in.
@@ -98,6 +114,123 @@ class Line:
         from .resolve import _HOLDS
 
         return _HOLDS["=" if self.op == "==" else self.op](have, self.value)
+
+
+#: The highest a figure can be on each benchmark scale; the lowest is zero.
+_SCALE_TOP = {"percent": 100.0, "fraction": 1.0}
+
+
+@dataclass(frozen=True)
+class Measurement:
+    """How a recorded benchmark figure was measured (`provenance.sample-size`,
+    `population` and `interval`). A bound is on the figure's own scale."""
+
+    sample_size: "int | None" = None
+    population: "int | None" = None
+    low: "float | None" = None
+    high: "float | None" = None
+    #: The confidence level, as a share such as `0.95`.
+    level: "float | None" = None
+
+    @property
+    def subset(self) -> bool:
+        """Taken on fewer cases than the benchmark has."""
+        return (
+            self.sample_size is not None
+            and self.population is not None
+            and self.sample_size < self.population
+        )
+
+    def text(self) -> str:
+        """`on a subset of 200 of 14042 cases, 95% interval 71.6 to 83.1`, or `""`.
+
+        The wording Bud Meta Harness prints for the same figure, so a refusal
+        reads the same in both runtimes.
+        """
+        parts = []
+        if self.sample_size is not None:
+            of = "" if self.population is None else f" of {self.population}"
+            parts.append(f"{'on a subset of' if self.subset else 'on'} {self.sample_size}{of} cases")
+        if self.low is not None and self.high is not None and self.level is not None:
+            parts.append(f"{self.level * 100:g}% interval {self.low:g} to {self.high:g}")
+        return ", ".join(parts)
+
+
+def _count(written: Any, field: str) -> "int | None":
+    if written is None:
+        return None
+    if isinstance(written, bool) or not isinstance(written, int) or written < 1:
+        raise Unreadable(f"`{field}: {written}` is not a number of cases")
+    return written
+
+
+def _bound(written: Any, field: str) -> float:
+    if isinstance(written, bool) or not isinstance(written, (int, float)) or not math.isfinite(written):
+        raise Unreadable(f"`interval.{field}: {written}` is not a figure")
+    return float(written)
+
+
+def measurement_of(provenance: Any, scale: "str | None") -> "Measurement | None":
+    """The measurement a figure's `provenance:` records, or `None` when it records none.
+
+    `scale` is the benchmark's `scale:` (`percent` or `fraction`), or `None`
+    for a name no benchmark has. `Unreadable` when the measurement cannot be
+    one: a count that is not a whole number above zero, more cases than the
+    benchmark has, an interval missing a bound or its level, bounds out of
+    order or off the benchmark's scale, or a level that is not a share. The
+    catalogue drops such a figure rather than read it as its point, so a line
+    on it says the figure was never recorded (`crates/pact-loader/src/accept.rs`
+    refuses the same rows where they are written).
+    """
+    if not isinstance(provenance, Mapping):
+        return None
+    sample = _count(provenance.get("sample-size"), "sample-size")
+    population = _count(provenance.get("population"), "population")
+    if sample is not None and population is not None and sample > population:
+        raise Unreadable(f"{sample} cases is more than the benchmark's {population}")
+    interval = provenance.get("interval")
+    if interval is None:
+        if sample is None and population is None:
+            return None
+        return Measurement(sample_size=sample, population=population)
+    if not isinstance(interval, Mapping):
+        raise Unreadable("`interval:` is not a `low`, `high` and `level`")
+    low, high, level = (_bound(interval.get(k), k) for k in ("low", "high", "level"))
+    if low > high:
+        raise Unreadable(f"the interval's low {low:g} is above its high {high:g}")
+    if not 0.0 < level < 1.0:
+        raise Unreadable(f"a confidence level is a share such as 0.95, not {level:g}")
+    top = _SCALE_TOP.get(scale or "")
+    if top is not None and (low < 0.0 or high > top):
+        raise Unreadable(f"the interval {low:g} to {high:g} is off the {scale} scale, 0 to {top:g}")
+    return Measurement(sample_size=sample, population=population, low=low, high=high, level=level)
+
+
+def reaches(op: str, have: float, measurement: "Measurement | None", bar: float) -> bool:
+    """Whether a benchmark figure meets `<op> <bar>`, held to its interval's far bound.
+
+    `>`/`>=` need `have` and the interval's low to hold, `<`/`<=` `have` and
+    its high; `=` is decided on `have` alone, as is a figure with no interval.
+    `accept-when:` and `needs.scores:` both decide through this, so a
+    benchmark under either is held to one bar.
+    """
+    from .resolve import _HOLDS
+
+    op = "=" if op == "==" else op
+    if not _HOLDS[op](have, bar):
+        return False
+    if measurement is None or measurement.low is None or measurement.high is None or op == "=":
+        return True
+    return _HOLDS[op](measurement.low if op in (">", ">=") else measurement.high, bar)
+
+
+def within_noise(measure: str, have: float, measurement: "Measurement | None", written: str) -> str:
+    """The reason a line the point clears but the interval does not is refused."""
+    said = measurement.text() if measurement is not None else ""
+    return (
+        f"has {measure} {have:g}, {said}, which reaches past the bar, so `{written}` holds "
+        f"only within noise"
+    )
 
 
 def benchmarks_of(document: Mapping[str, Any] | None = None) -> dict[str, tuple[str, str]]:
@@ -243,6 +376,9 @@ def held_before(line: Line, entry: Any) -> "tuple[bool, str]":
     if line.kind == "benchmark":
         have = (entry.scores or {}).get(line.measure)
         noun = f"no recorded {line.measure} score"
+        taken = (getattr(entry, "measurements", None) or {}).get(line.measure)
+        if have is not None and line.holds(float(have)) and not reaches(line.op, float(have), taken, line.value):
+            return False, within_noise(line.measure, float(have), taken, line.written)
     elif line.measure == "input-price":
         have = None if entry.cost is None else entry.cost * 1000.0
         noun = "no published input price"

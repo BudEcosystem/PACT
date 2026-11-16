@@ -51,6 +51,103 @@ def test_every_line_the_checker_refuses_is_refused_here_too(row: dict) -> None:
     assert not said or any(s in str(why.value) for s in said), str(why.value)
 
 
+_MEASURED = ("sample-size", "population", "interval")
+
+
+def _measured_row(tmp_path: Path, row: dict) -> resolve.ModelEntry:
+    """The table's world as a workspace catalogue whose one row records the vector's figure."""
+    provenance = {"source": "measured here", **{k: row[k] for k in _MEASURED if k in row}}
+    catalogue = {
+        "version": 1,
+        "benchmarks": {name: {"scale": scale} for name, scale in TABLE["benchmarks"].items()},
+        "models": {"m": {"benchmarks": {row.get("benchmark", "mmlu"): {"value": row["value"], "provenance": provenance}}}},
+    }
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models/catalog.yaml").write_text(yaml.safe_dump(catalogue, sort_keys=False))
+    entry = resolve.load_catalogue(workspace=tmp_path).get("m")
+    assert entry is not None
+    return entry
+
+
+def _bar(row: dict) -> dict:
+    """The vector's bar as the `needs` `satisfies` reads: an `accept-when:` line or `needs.scores:`."""
+    if "scores" in row:
+        return {"scores": row["scores"]}
+    return {"accept-when": (_line(row["written"]),)}
+
+
+@pytest.mark.parametrize("row", TABLE["figures"], ids=lambda r: f"{r.get('written') or r.get('scores')}: {r['because']}")
+def test_a_measured_figure_is_held_to_its_interval_as_the_table_says(tmp_path: Path, row: dict) -> None:
+    ok, why = _measured_row(tmp_path, row).satisfies(_bar(row))
+    assert ok == (row["holds"] is True), why
+    if "says" in row:
+        assert why == row["says"]
+
+
+@pytest.mark.parametrize(
+    "row", [r for r in TABLE["not-measurements"] if "field" not in r], ids=lambda r: r["rule"] + ": " + r["because"],
+)
+def test_a_measurement_that_cannot_be_one_drops_its_figure(tmp_path: Path, row: dict) -> None:
+    benchmark = row.get("benchmark", "mmlu")
+    entry = _measured_row(tmp_path, row)
+    assert benchmark not in entry.scores and benchmark not in entry.measurements
+    ok, why = entry.satisfies({"accept-when": (_line(f"{benchmark} >= 0"),)})
+    assert not ok and f"no recorded {benchmark} score" in why
+
+
+AUTHORED_CATALOGUE = """\
+version: 1
+models:
+  measured-here:
+    description: A model this machine serves, with an MMLU figure taken on a subset.
+    served-by:
+      - { runtime: ollama, endpoint: local }
+    benchmarks:
+      mmlu:
+        value: "78"
+        provenance:
+          source: measured on this machine
+          sample-size: 200
+          population: 14042
+          interval: { low: 71.6, high: 83.1, level: 0.95 }
+"""
+
+
+@pytest.mark.parametrize(
+    "needs, written",
+    [
+        ("because: it answers exam questions\naccept-when:\n  - mmlu.score > 75\n", "mmlu.score > 75"),
+        ("because: it answers exam questions\nscores:\n  mmlu: \"> 75\"\n", "scores.mmlu: > 75"),
+    ],
+    ids=["accept-when", "needs.scores"],
+)
+def test_an_authored_figure_that_clears_a_bar_only_within_noise_binds_no_model(
+    tmp_path: Path, needs: str, written: str,
+) -> None:
+    """The authored path: `models/catalog.yaml` and `needs.yaml` written, checked by `pact check`,
+    shown by `pact show`, and bound the way the suite binds the model it scores on."""
+    from pact_adapters.ir import AgentSpec
+    from pact_adapters.scoring import _bind
+    from trees import pact
+
+    root = tmp_path / "w"
+    (root / "agents/desk").mkdir(parents=True)
+    (root / "models").mkdir()
+    (root / "workspace.yaml").write_text("name: measured\nallow-egress: []\n")
+    (root / "agents/desk/agent.yaml").write_text("description: answers\ninstructions: Answer.\nmodel: measured-here\n")
+    (root / "agents/desk/needs.yaml").write_text(needs)
+    (root / "models/catalog.yaml").write_text(AUTHORED_CATALOGUE)
+    checked = pact("check", str(root))
+    assert checked.returncode == 0, checked.stdout + checked.stderr
+    doc = shown(root)
+    entry, said, problem = _bind(doc, AgentSpec.from_document(doc, "desk", source=root), "desk", "", "", root)
+    assert entry is None and problem is None
+    assert (
+        "has mmlu 78, on a subset of 200 of 14042 cases, 95% interval 71.6 to 83.1, which reaches past "
+        f"the bar, so `{written}` holds only within noise"
+    ) in said, said
+
+
 def _entry(**kw) -> resolve.ModelEntry:
     return resolve.ModelEntry(**{"name": "m", "tier": "mid", "cost": 0.001, "scores": {}, **kw})
 

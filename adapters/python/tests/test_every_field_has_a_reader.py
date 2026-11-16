@@ -149,15 +149,6 @@ DELEGATED: dict[str, str] = {
     # from. Nothing at run time should behave differently because of it.
     "provenance.recorded-by": "who wrote the figure down, for a reviewer",
     "provenance.contamination": "a caveat on a benchmark figure, for a reviewer",
-    # How a measured figure was taken. The reference holds an accept-when line
-    # to `value:` as before; these are for a reviewer, and for a runtime that
-    # holds the line to the interval or reports a subset figure as one.
-    "provenance.sample-size": "cases a measured figure was taken on, for a reviewer",
-    "provenance.population": "cases the benchmark has, read against sample-size",
-    "provenance.interval": "the interval around a measured figure, for a reviewer",
-    "figure-interval.low": "an interval's lower bound, for a reviewer",
-    "figure-interval.high": "an interval's upper bound, for a reviewer",
-    "figure-interval.level": "an interval's confidence level, for a reviewer",
     # ---- Surfaced when this file stopped counting its own prose as a reader. ----
     #
     # None of the six below is new: each has been unread for as long as it has
