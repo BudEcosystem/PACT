@@ -73,6 +73,12 @@ The loaded document as JSON — what every adapter actually receives. Useful for
 seeing what the [Expansion Rule](../concepts/expansion-rule.md) produced from
 your tree, and what a `based-on:` inherited.
 
+With `--leave-out-broken-agents`, a workspace whose problems all lie in some
+agents' own folders (`agents/<key>/…`) is printed without those agents, and
+each one left out is named on stderr (`loader/agent-left-out`). Without it, one
+problem anywhere exits 1, which is how a session's door and a sealed plan know
+a document loads.
+
 ## `pact waits`
 
 Every point where a run can stop and wait for a person, with the deadline a
@@ -106,6 +112,15 @@ for a runtime deciding whether to take the tree: `boundary` is `open` (no
 `allow-egress:` line, so everything may talk outside), `closed` (`[]`) or
 `listed`, and `allows` is the parts written. An absent line and an empty list
 are opposite answers, and `allows` is empty for both: read `boundary`.
+
+A runtime serving a tree that is edited while it runs passes
+`--leave-out-broken-agents`, so that one agent's bad edit does not take the
+workspace's other agents out of service. A workspace whose problems all lie in
+some agents' own folders is then listed without those agents, with
+`"left-out": [{ "id": "pact:<key>", "problems": N }]` naming each one, and the
+runtime can keep serving the version it last had of them. A problem anywhere
+else, or one the workspace still has without them (a teammate naming a
+left-out agent), skips the workspace as before.
 
 ```console
 $ pact discover tests/trees/workflows-16-trial-booking
