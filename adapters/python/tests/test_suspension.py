@@ -828,8 +828,8 @@ def test_two_calls_to_one_tool_in_one_step_are_two_waits_with_two_screens() -> N
     def script() -> Script:
         return Script([
             Turn("issuing both", [
-                ToolCall("payments", {"order-number": "A-300", "amount": "300.00 USD"}),
-                ToolCall("payments", {"order-number": "A-250", "amount": "250.00 USD"}),
+                ToolCall("payments", {"action": "issue-refund", "order-number": "A-300", "amount": "300.00 USD"}),
+                ToolCall("payments", {"action": "issue-refund", "order-number": "A-250", "amount": "250.00 USD"}),
             ]),
             Turn(fits("done")),
         ])

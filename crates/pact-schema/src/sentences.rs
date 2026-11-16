@@ -35,7 +35,7 @@
 //! * `recognises:` — a hole whose values are a closed list (`<a thing>` is one
 //!   of card number, bank account, email address, phone number, social security number).
 //! * `resolve:` — a hole that names something the workspace has (`<a tool>` is
-//!   a key of `tools:`).
+//!   a key of `tools:`, or `<tool>/<action>`, one of that tool's `actions:`).
 //!
 //! Capture is unambiguous because the matcher takes the FIRST reading that
 //! walks the whole sentence, which is the same reading `Forms::recognise`

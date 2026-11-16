@@ -1273,8 +1273,17 @@ impl Schema {
                         // says depends only on the word, so working it out again
                         // per line would be the same answer computed twice and
                         // one more place for the two copies to differ.
-                        if let Some(missing) =
-                            self.look_up(&holder.names, &[], written, at, &f.name)
+                        // `<tool>/<action>` names one action of a tool, as the counting
+                        // sentences may: the tool resolves as a tool, and the action
+                        // against that tool's own `actions:`.
+                        let (tool, action) = match written.split_once('/') {
+                            Some((tool, action)) if collection == "tools" => (tool, Some(action)),
+                            _ => (written.as_str(), None),
+                        };
+                        let missing = self
+                            .look_up(&holder.names, &[], tool, at, &f.name)
+                            .or_else(|| action.and_then(|action| missing_action(at, tool, action)));
+                        if let Some(missing) = missing
                         {
                             unknown_name
                                 .entry((hole.clone(), written.clone()))
@@ -2530,6 +2539,31 @@ fn or_list(items: &[String]) -> String {
         Some((last, [])) => last.clone(),
         Some((last, front)) => format!("{} or {last}", front.join(", ")),
     }
+}
+
+/// The refusal for `<tool>/<action>` when the tool has no such action: the
+/// tool's own `actions:` are the only place the action could be, so they are
+/// the choices, and the fix is an entry there.
+fn missing_action(at: &Where, tool: &str, action: &str) -> Option<NotFound> {
+    let actions = at
+        .resolve("tools")
+        .0
+        .and_then(|tools| tools.get(tool))
+        .and_then(|entry| entry.node.get("actions"))
+        .and_then(Node::as_map);
+    if actions.is_some_and(|map| map.contains_key(action)) {
+        return None;
+    }
+    let mut known: Vec<String> = actions.map(|map| map.keys().cloned().collect()).unwrap_or_default();
+    known.sort();
+    let places = format!("the `actions:` of `tools/{tool}.yaml`");
+    Some(NotFound {
+        add: format!("add an `{action}:` entry under `actions:` in `tools/{tool}.yaml`"),
+        places,
+        choices: known.iter().map(|name| format!("{tool}/{name}")).collect::<Vec<_>>().join(", "),
+        elsewhere: None,
+        add_a_file: None,
+    })
 }
 
 /// A name that resolved against nothing: where it was looked for, what is there

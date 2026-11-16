@@ -132,7 +132,7 @@
       }
     },
     "examples/refund-desk": {
-      "digest": "sha256:a365ebff810c0a7327141fbcc05a1e1d49dea6e7497e10fc60d7e0ecc6db821b",
+      "digest": "sha256:06ce6de675911af68ebd8026feb87cca614218c1c6d1bbb0f85df976010a23ed",
       "workflows": {}
     },
     "examples/language/help-centre": {
