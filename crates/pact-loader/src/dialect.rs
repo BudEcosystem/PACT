@@ -116,14 +116,7 @@ impl Reader {
     }
 
     fn starts_with(&self, text: &str) -> bool {
-        let mut i = self.at;
-        for c in text.chars() {
-            if self.chars.get(i) != Some(&c) {
-                return false;
-            }
-            i += 1;
-        }
-        true
+        (self.at..).zip(text.chars()).all(|(i, c)| self.chars.get(i) == Some(&c))
     }
 
     fn pattern(&mut self) -> Read<()> {
