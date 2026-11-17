@@ -5,6 +5,7 @@ action.claim-lasts	duration | S-EXEC | expert | optional
 action.description	text | S-ROUTE | core | optional
 action.gets-hidden-values	yes-no | S-GOV | expert | optional
 action.inspects	list of text | S-EXEC | core | optional
+action.moves-hardware	yes-no | S-EXEC | core | optional
 action.needs-a-person	yes-no | S-EXEC | core | optional
 action.passes	map of text | S-CAP | expert | optional
 action.program	text | S-EXEC | expert | optional
@@ -14,7 +15,6 @@ action.remember-as	text | S-EXEC | expert | optional
 action.same-request-key	text | S-EXEC | core | optional
 action.same-request-key-across	one-of | S-EXEC | expert | optional
 action.spends-money	yes-no | S-EXEC | core | optional
-action.moves-hardware	yes-no | S-EXEC | core | optional
 action.status-check	text | S-EXEC | expert | optional
 action.takes	map of answer-shape | S-CAP | core | optional
 action.topics	list of text | S-GOV | core | optional
@@ -118,6 +118,9 @@ event.judged	yes-no | S-EXEC | expert | optional
 event.more-than	integer | S-CTRL | core | optional
 event.topic	text | S-EXEC | core | optional
 event.when-this	list of group:when-this | S-EXEC | core | optional
+figure-interval.high	number | S-GOV | expert | required
+figure-interval.level	number | S-GOV | expert | required
+figure-interval.low	number | S-GOV | expert | required
 figure.provenance	group:provenance | S-GOV | expert | optional
 figure.value	text | S-CAP | expert | required
 if-it-fails.after-that	one-of | S-EXEC | core | required
@@ -291,7 +294,10 @@ provenance.as-of	text | S-GOV | expert | optional
 provenance.contamination	text | S-GOV | expert | optional
 provenance.date	text | S-GOV | expert | optional
 provenance.harness	text | S-GOV | expert | optional
+provenance.interval	group:figure-interval | S-GOV | expert | optional
+provenance.population	integer | S-GOV | expert | optional
 provenance.recorded-by	text | S-GOV | expert | optional
+provenance.sample-size	integer | S-GOV | expert | optional
 provenance.source	text | S-GOV | expert | required
 published-tool.answers-with	anything | S-CAP | expert | optional
 published-tool.description	text | S-GEN | expert | optional

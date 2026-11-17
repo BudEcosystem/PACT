@@ -41,7 +41,7 @@ import subprocess
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, TypeVar
 
 import yaml
 
@@ -160,6 +160,11 @@ class ModelEntry:
     output_cost: "float | None" = None
     capabilities: frozenset[str] = frozenset()
     scores: dict[str, float] = None  # type: ignore[assignment]
+    #: How each benchmark figure in `scores` was measured, keyed like `scores`;
+    #: a figure published without `sample-size:`, `population:` or `interval:`
+    #: has no entry. `accept-when:` and `needs.scores:` hold a line to the
+    #: interval's far bound as well as the figure (`selection.reaches`).
+    measurements: "Mapping[str, _selection.Measurement]" = field(default_factory=dict)
     #: How much this model can hold, in tokens. `None` means the catalogue says
     #: `unknown` — not "small", and not "ask again later". It is here rather than
     #: on a second record beside it because a window is a fact about a model, and
@@ -297,6 +302,11 @@ class ModelEntry:
             op, value = wanted
             if not _HOLDS[op](have, value):
                 return False, f"{metric} {have} is not {op} {value:g}"
+            # The bar `accept-when:` holds a benchmark to, so the same figure
+            # under either spelling decides the same way.
+            taken = self.measurements.get(metric)
+            if not _selection.reaches(op, have, taken, value):
+                return False, _selection.within_noise(metric, have, taken, f"scores.{metric}: {threshold}")
         wanted = _tokens(needs.get("context-at-least"))
         if wanted is not None and self.context_window is not None:
             if self.context_window < wanted:
@@ -724,13 +734,15 @@ def _parse(text: str, shown: str) -> Catalogue:
         window, trouble = _window(shown, lines, name, caps.get("context-window"))
         if trouble is not None:
             problems.append(trouble)
+        scores, measurements = _benchmarks(row.get("benchmarks"), names)
         entry = ModelEntry(
             name=name,
             tier=str(row.get("tier") or "mid"),
             cost=_cost(row.get("cost")),
             output_cost=_cost(row.get("cost"), "output-per-mtok"),
             capabilities=_capabilities(caps),
-            scores=_canonical(_benchmarks(row.get("benchmarks")), names),
+            scores=_canonical(scores, names),
+            measurements=_canonical(measurements, names),
             context_window=window,
             aliases=frozenset(
                 str(a) for a in (row.get("also-known-as") or []) if isinstance(a, str)
@@ -970,8 +982,10 @@ def _threshold(written: Any) -> "tuple[str, float] | None":
     return None
 
 
-def _benchmarks(written: Any) -> dict[str, float]:
-    """Published benchmark figures for one row, by metric name.
+def _benchmarks(
+    written: Any, names: "Mapping[str, tuple[str, str]]",
+) -> "tuple[dict[str, float], dict[str, _selection.Measurement]]":
+    """Published benchmark figures for one row, by metric name, and how each was measured.
 
     This came back `{}` unconditionally — the argument was not even read — so
     `satisfies()` answered *"no published {metric} score"* for every candidate on
@@ -989,18 +1003,36 @@ def _benchmarks(written: Any) -> dict[str, float]:
     A figure written `unknown`, or one that is not a number, is DROPPED rather
     than kept as zero. Zero would satisfy no threshold and read as a measurement;
     absent is the truth, and `satisfies()` says *"no published X score"* about it.
+
+    A figure whose `provenance:` records a measurement that cannot be one
+    (`selection.measurement_of`: an interval out of order or off the benchmark's
+    scale named in `names`, a level that is not a share, more cases than the
+    benchmark has) is dropped the same way, never read as its point figure.
     """
     if not isinstance(written, dict):
-        return {}
+        return {}, {}
     out: dict[str, float] = {}
+    measured: dict[str, _selection.Measurement] = {}
     for metric, figure in written.items():
+        provenance = None
         if isinstance(figure, dict):
-            figure = figure.get("value")
+            figure, provenance = figure.get("value"), figure.get("provenance")
         try:
-            out[str(metric)] = float(figure)  # type: ignore[arg-type]
+            value = float(figure)  # type: ignore[arg-type]
         except (TypeError, ValueError):
             continue          # `unknown`, or prose — see the docstring
-    return out
+        known = names.get(str(metric).strip().lower())
+        try:
+            taken = _selection.measurement_of(provenance, known[1] if known else None)
+        except _selection.Unreadable:
+            continue          # a measurement that cannot be one — see the docstring
+        out[str(metric)] = value
+        if taken is not None:
+            measured[str(metric)] = taken
+    return out, measured
+
+
+_Figure = TypeVar("_Figure")
 
 
 def _milliseconds(written: Any) -> "float | None":
@@ -1016,8 +1048,8 @@ def _milliseconds(written: Any) -> "float | None":
     return None if found is None else found * 1000.0
 
 
-def _canonical(scores: dict[str, float], names: dict[str, tuple[str, str]]) -> dict[str, float]:
-    """A row's scores under the names it wrote AND each benchmark's own key."""
+def _canonical(scores: "dict[str, _Figure]", names: "Mapping[str, tuple[str, str]]") -> "dict[str, _Figure]":
+    """A row's scores, or their measurements, under the names it wrote AND each benchmark's own key."""
     out = dict(scores)
     for written, figure in scores.items():
         key = names.get(written.strip().lower())

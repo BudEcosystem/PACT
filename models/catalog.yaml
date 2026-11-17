@@ -167,6 +167,9 @@ benchmarks:
     description: Grade-school science questions, challenge set.
     also-known-as: [ARC, ARC-Challenge]
     runs: deepeval:ARC
+    # DeepEval's ARC runs the easy set unless told otherwise, and this row's
+    # figure is the challenge set's.
+    with: {mode: challenge}
   winogrande:
     description: Resolving which thing a pronoun refers to, adversarially chosen.
     also-known-as: [WinoGrande]

@@ -16,7 +16,7 @@ mod suites;
 
 use anyhow::{Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
-use pact_diag::Diagnostics;
+use pact_diag::{Diagnostics, Severity};
 use pact_loader::Loader;
 
 const USAGE: &str = "\
@@ -62,6 +62,13 @@ OPTIONS:
                           of the run, the same way.
     --field <field>       For `pact fill`: `instructions` (the default) or
                           `description`.
+    --leave-out-broken-agents
+                          For `pact show` and `pact discover`: when every problem
+                          of a workspace lies in some agents' own folders, leave
+                          those agents out and serve the rest, naming each one
+                          left out. For a runtime serving a tree that is edited
+                          while it runs. Without it, one problem anywhere
+                          refuses the whole workspace.
     --unsafe-spec         Validate against $PACT_SPEC instead of the specification
                           compiled into this binary. Development builds only, and
                           the source is named on every run that uses it.
@@ -84,6 +91,7 @@ const OPTIONS: &[&str] = &[
     "--run-inputs",
     "--remembered",
     "--field",
+    "--leave-out-broken-agents",
 ];
 
 /// The options that are followed by a value, which is theirs and not a path.
@@ -357,6 +365,11 @@ fn run() -> Result<i32> {
     // `loader/never-offered` used to offer a fix that was itself refused when
     // typed, and this would have made that a wall.
     let deny_warnings = args.iter().any(|a| a == "--deny-warnings");
+    // For a runtime serving a tree that is edited while it runs: one agent's bad
+    // edit leaves that agent out instead of the whole workspace. Opt-in, because
+    // `pact show`'s exit code is also how a session's door and a sealed plan
+    // decide that a document loads, and neither may lose an agent quietly.
+    let leave_out_broken = args.iter().any(|a| a == "--leave-out-broken-agents");
     // Where this operator's agents really answer, for `pact card`.
     //
     // `agent_card` always took a base and the CLI always passed the literal
@@ -411,9 +424,9 @@ fn run() -> Result<i32> {
     match cmd {
         "about" => about(),
         "check" => check(&path, quiet, unsafe_spec, deny_warnings),
-        "show" => show(&path, unsafe_spec),
+        "show" => show(&path, unsafe_spec, leave_out_broken),
         "waits" => waits_cmd(&path, unsafe_spec),
-        "discover" => discover_cmd(&path, unsafe_spec),
+        "discover" => discover_cmd(&path, unsafe_spec, leave_out_broken),
         "write" => write_cmd(&path),
         "build" => {
             let to = args
@@ -1561,11 +1574,37 @@ fn validate_as(
     Option<pact_doc::Node>,
     Diagnostics,
     Vec<pact_loader::report::Substitution>,
+    &'static str,
+)> {
+    validate_leaving_out(path, unsafe_spec, &[])
+}
+
+/// [`validate_as`], with the named agents taken out of the document before
+/// anything else reads it, as though their folders were not there.
+fn validate_leaving_out(
+    path: &Utf8PathBuf,
+    unsafe_spec: bool,
+    left_out: &[String],
+) -> Result<(
+    Option<pact_doc::Node>,
+    Diagnostics,
+    Vec<pact_loader::report::Substitution>,
     // What it was validated as: `workspace`, `agent`, or `""` where it never
     // got as far as being one or the other.
     &'static str,
 )> {
     let (mut node, mut diags) = load(path)?;
+    if !left_out.is_empty()
+        && let Some(agents) = node
+            .as_mut()
+            .and_then(|root| root.as_map_mut())
+            .and_then(|root| root.get_mut("agents"))
+            .and_then(|entry| entry.node.as_map_mut())
+    {
+        for key in left_out {
+            agents.shift_remove(key);
+        }
+    }
 
     // `based-on:` is resolved BEFORE the schema sees anything (G11). A derived
     // entry has to be validated as the thing it becomes: validating it as
@@ -2055,6 +2094,77 @@ fn validate(
 )> {
     let (node, diags, substituted, _) = validate_as(path, unsafe_spec)?;
     Ok((node, diags, substituted))
+}
+
+/// A workspace as a runtime reads it: whole when it loads, or without the
+/// agents whose own folders hold every error, when the rest then loads.
+struct Isolated {
+    node: Option<pact_doc::Node>,
+    diags: Diagnostics,
+    /// Each agent left out, with how many errors its own files hold.
+    left_out: Vec<(String, usize)>,
+}
+
+/// Validate `path` the way `show` and `discover` serve it to a runtime that
+/// passed `--leave-out-broken-agents`; without it (`leave_out` false) the
+/// workspace is validated whole, as every other command validates it.
+///
+/// An error in one agent's own files (`agents/<key>/…`) used to withdraw the
+/// whole workspace, so editing one agent online took every other agent of the
+/// workspace out of service with it. When every error lies in the folders of
+/// some agents, those agents are left out, the rest is validated again without
+/// them, and it is served if it then loads, with each left-out agent's
+/// problems printed as warnings. An error anywhere else, or one the reduced
+/// document still has (a teammate naming a left-out agent), keeps the whole
+/// workspace refused, as before. `pact check` still refuses the tree.
+fn isolate(path: &Utf8PathBuf, unsafe_spec: bool, leave_out: bool) -> Result<Isolated> {
+    let (node, diags, _, _) = validate_as(path, unsafe_spec)?;
+    let whole = |node, diags| Isolated { node, diags, left_out: Vec::new() };
+    if !leave_out || !diags.has_errors() || !path.is_dir() {
+        return Ok(whole(node, diags));
+    }
+    let mut counts: Vec<(String, usize)> = Vec::new();
+    for d in diags.items().iter().filter(|d| d.severity == Severity::Error) {
+        let file = d.span.file.as_str();
+        let relative = file
+            .strip_prefix(path.as_str())
+            .unwrap_or(file)
+            .trim_start_matches("./")
+            .trim_start_matches('/');
+        let key = relative
+            .strip_prefix("agents/")
+            .and_then(|rest| rest.split('/').next())
+            .filter(|key| !key.is_empty() && path.join("agents").join(key).is_dir());
+        let Some(key) = key else {
+            return Ok(whole(node, diags));
+        };
+        match counts.iter_mut().find(|(k, _)| k == key) {
+            Some((_, n)) => *n += 1,
+            None => counts.push((key.to_string(), 1)),
+        }
+    }
+    counts.sort();
+    let keys: Vec<String> = counts.iter().map(|(k, _)| k.clone()).collect();
+    let (reduced, mut kept, _, _) = validate_leaving_out(path, unsafe_spec, &keys)?;
+    if kept.has_errors() || reduced.is_none() {
+        return Ok(whole(node, diags));
+    }
+    kept.borrow_sources_from(&diags);
+    for (key, n) in &counts {
+        kept.push(pact_diag::Diagnostic::warning(
+            "loader/agent-left-out",
+            pact_diag::Span::in_folder(path.join("agents").join(key), "agent.yaml"),
+            format!(
+                "Agent '{key}' is left out until its {n} problem(s) are fixed; the workspace's other agents load without it."
+            ),
+            format!("Run `pact check {path}` and fix what it prints under `agents/{key}/`."),
+        ));
+    }
+    for mut d in diags.items().iter().filter(|d| d.severity == Severity::Error).cloned() {
+        d.severity = Severity::Warning;
+        kept.push(d);
+    }
+    Ok(Isolated { node: reduced, diags: kept, left_out: counts })
 }
 
 /// The folder a path names, which is the path itself when it is one.
@@ -2635,8 +2745,9 @@ fn check_in_context(
     // Printing only the named folder's problems is right — it is the question
     // that was asked — but staying SILENT about the rest was the same false `OK`
     // C13 was about, reached a different way. `pact discover` refuses a workspace
-    // it cannot load whole (`skipping <root>: N problem(s)`, then `[]`), so an
-    // agent in a tree with an error anywhere in it cannot be run by any runtime,
+    // it cannot load whole (`skipping <root>: N problem(s)`, then `[]`), and with
+    // `--leave-out-broken-agents` one whose errors are not all in some agents'
+    // own folders, so an agent in such a tree cannot be run by any runtime,
     // however clean its own folder is. Measured, before this:
     //
     // ```text
@@ -2652,7 +2763,30 @@ fn check_in_context(
     // be answering for somebody else's file; `--deny-warnings` still fails, and
     // `pact check <root>` is named so the next step is one command away.
     let elsewhere = whole.error_count() - mine.error_count();
-    if elsewhere > 0 {
+    // When every problem elsewhere lies in other agents' own folders, `show` and
+    // `discover` with `--leave-out-broken-agents` leave those agents out and
+    // serve this one (see [`isolate`]).
+    let key = here.file_name().map(str::to_string);
+    let runs_without_them = elsewhere > 0
+        && mine.error_count() == 0
+        && isolate(root, unsafe_spec, true).is_ok_and(|served| {
+            !served.diags.has_errors() && !served.left_out.iter().any(|(k, _)| Some(k) == key.as_ref())
+        });
+    if runs_without_them {
+        let start =
+            pact_loader::firstfile::to_start(root, &pact_loader::policy::Policy::default(), root);
+        mine.push(pact_diag::Diagnostic::warning(
+            "loader/other-agents-left-out",
+            pact_diag::Span::in_folder(root.as_str(), start.as_str()),
+            format!(
+                "'{root}' — the workspace this agent is in — has {elsewhere} \
+                 problem(s) in other agents' folders: a runtime that reads it \
+                 with `--leave-out-broken-agents` runs this agent without them; \
+                 any other skips the whole workspace until they are fixed."
+            ),
+            format!("Run `pact check {root}` to see them, and fix those too."),
+        ));
+    } else if elsewhere > 0 {
         let start =
             pact_loader::firstfile::to_start(root, &pact_loader::policy::Policy::default(), root);
         mine.push(pact_diag::Diagnostic::warning(
@@ -2661,7 +2795,8 @@ fn check_in_context(
             format!(
                 "'{root}' — the workspace this agent is in — has {elsewhere} \
                  problem(s) in other files, so nothing in this tree can run yet: \
-                 `pact discover` skips a workspace it cannot load whole."
+                 `pact discover` skips a workspace whose problems are not all in \
+                 some agents' own folders."
             ),
             format!("Run `pact check {root}` to see them, and fix those too."),
         ));
@@ -2792,7 +2927,7 @@ fn described_with_a_hole(
 
 /// D2/AC-6.1: the runtime finds agents by walking the tree. No registration
 /// step, no build artifact, no `.pact/` dependency.
-fn discover_cmd(path: &Utf8PathBuf, unsafe_spec: bool) -> Result<i32> {
+fn discover_cmd(path: &Utf8PathBuf, unsafe_spec: bool, leave_out_broken: bool) -> Result<i32> {
     let roots = discover::find_workspaces(path, 6);
     let mut out = Vec::new();
     for root in &roots {
@@ -2800,8 +2935,8 @@ fn discover_cmd(path: &Utf8PathBuf, unsafe_spec: bool) -> Result<i32> {
         // schema sees anything (G11), so the inventory publishes each agent as
         // the thing it becomes. The bare re-load this replaces published
         // `model: null` and `limits: null` for every derived agent (D-5).
-        let (node, mut d, _) = match validate(root, unsafe_spec) {
-            Ok(v) => v,
+        let (node, mut d, left_out) = match isolate(root, unsafe_spec, leave_out_broken) {
+            Ok(Isolated { node, diags, left_out }) => (node, diags, left_out),
             Err(e) => {
                 // Never silent: a folder this walk found and then could not
                 // read is named, the way every other skip here is.
@@ -2839,10 +2974,26 @@ fn discover_cmd(path: &Utf8PathBuf, unsafe_spec: bool) -> Result<i32> {
         if !d.is_empty() {
             eprint!("{}", d.render());
         }
-        out.push(discover::inventory(&discover::Found {
+        let mut inventory = discover::inventory(&discover::Found {
             root: root.clone(),
             document,
-        }));
+        });
+        // The agents this workspace holds and does not serve until their own
+        // problems are fixed, so a runtime can keep what it last served of them.
+        if !left_out.is_empty()
+            && let Some(object) = inventory.as_object_mut()
+        {
+            object.insert(
+                "left-out".into(),
+                serde_json::Value::Array(
+                    left_out
+                        .iter()
+                        .map(|(key, problems)| serde_json::json!({ "id": format!("pact:{key}"), "problems": problems }))
+                        .collect(),
+                ),
+            );
+        }
+        out.push(inventory);
     }
     out!(
         "{}",
@@ -3193,11 +3344,11 @@ fn build_cmd(path: &Utf8PathBuf, named: bool, to: Option<Utf8PathBuf>) -> Result
     Ok(0)
 }
 
-fn show(path: &Utf8PathBuf, unsafe_spec: bool) -> Result<i32> {
+fn show(path: &Utf8PathBuf, unsafe_spec: bool, leave_out_broken: bool) -> Result<i32> {
     // Validated, for the reason `waits_cmd` gives: every adapter in this
     // repository reads its document through `pact show`, so a tree that only
     // `check` refuses is a tree every adapter accepts.
-    let (node, mut diags, _) = validate(path, unsafe_spec)?;
+    let Isolated { node, mut diags, .. } = isolate(path, unsafe_spec, leave_out_broken)?;
     if diags.has_errors() {
         eprint!("{}", diags.render());
         return Ok(1);

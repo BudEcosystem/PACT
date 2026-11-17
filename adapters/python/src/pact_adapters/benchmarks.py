@@ -154,6 +154,10 @@ def record(
     data = data if isinstance(data, dict) else {}
     data.setdefault("version", 1)
     rows = data.setdefault("models", {})
+    # Under the row's own id, whichever of its ids the caller wrote: the catalogue
+    # is layered by row id (`resolve._layer`), so a row written under an alias
+    # would be a second candidate beside the distribution's, not the same model.
+    model = _row_id(model, rows)
     if model not in rows:
         # A workspace row REPLACES the distribution's row of the same name — the catalogue is
         # layered row by row (`resolve._layer`) — so a row holding only this figure would lose
@@ -165,6 +169,24 @@ def record(
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
     return path
+
+
+def _row_id(model: str, rows: Mapping[str, Any]) -> str:
+    """The id of the row `model` names, in the workspace's `rows` or the distribution's.
+
+    A row answers to its id and to every `also-known-as:` entry. A name no row
+    answers to is a new row's id, as written.
+    """
+    from .resolve import BUILTIN_CATALOGUE
+
+    shipped = (yaml.safe_load(Path(BUILTIN_CATALOGUE).read_text(encoding="utf-8")) or {}).get("models") or {}
+    for layer in (rows, shipped):
+        if model in layer:
+            return model
+        for name, row in layer.items():
+            if isinstance(row, Mapping) and model in (row.get("also-known-as") or []):
+                return str(name)
+    return model
 
 
 def _shipped_row(model: str) -> dict[str, Any]:
