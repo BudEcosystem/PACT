@@ -208,6 +208,8 @@ model-can.tool-calling	one-of | S-CAP | expert | optional
 model-can.voices	list of text | S-CAP | expert | optional
 model-cost.input-per-mtok	text | S-GOV | expert | optional
 model-cost.output-per-mtok	text | S-GOV | expert | optional
+model-requires.accelerator	one-of | S-CAP | expert | optional
+model-requires.memory	group:figure | S-CAP | expert | optional
 model-speed.first-words-within	group:figure | S-CAP | expert | optional
 model.also-known-as	list of text | S-CAP | expert | optional
 model.benchmarks	map of group:figure | S-CAP | expert | optional
@@ -217,7 +219,9 @@ model.description	text | S-GEN | expert | optional
 model.family	text | S-GEN | expert | optional
 model.kind	one-of | S-CAP | expert | optional
 model.reasoning	group:figure | S-CAP | expert | optional
+model.requires	group:model-requires | S-CAP | expert | optional
 model.served-by	list of group:served-by | S-CAP | expert | optional
+model.size	group:figure | S-CAP | expert | optional
 model.speed	group:model-speed | S-CAP | expert | optional
 model.tier	one-of | S-CAP | expert | optional
 moment.after	duration | S-CTRL | core | optional

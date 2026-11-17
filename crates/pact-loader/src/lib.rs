@@ -154,6 +154,7 @@ pub mod failures;
 pub mod fill;
 pub mod firstfile;
 pub mod handover;
+pub mod hardware;
 pub mod holes;
 pub mod interfaces;
 pub mod jinja;
