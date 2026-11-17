@@ -3,6 +3,53 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — a catalogue row says what a model needs of the machine that runs it (17 November)
+
+A runtime choosing among models served on its own machine could not tell whether the machine could
+hold one: a row said where a model was served and what it cost, never how big it was or how much
+memory it took, so a local row the machine could not load was bound and failed on its first call.
+
+### What an author can now write
+
+- **`size:`** — a figure: how many parameters the model has, as a count (`7.6B`, `405B`, `500M`),
+  with its provenance, or `unknown`.
+- **`requires: {memory, accelerator}`** — `memory:` is a figure: how much memory loading and running
+  the model as served takes (`4.7 GB`, `9 GiB`); `accelerator: gpu` says it runs only on an
+  accelerator, so `memory:` is the accelerator's memory.
+
+### What holds now
+
+- **A runtime that knows its machine leaves out a model served on that machine alone that the
+  machine cannot hold**, with a sentence: *"needs 9 GB of memory, and this machine has 8 GB"*, *"runs
+  only on an accelerator, and this machine has none"*. A row with no figure, a machine figure the
+  runtime does not know, and a row some runtime serves elsewhere are never left out for it. The
+  reference reads the machine's memory when it scores (`pact_adapters.machine.this_machine`); it does
+  not know an accelerator, so it decides nothing on one.
+- **The checker refuses a figure no runtime could read**, where it is written:
+  `loader/a-parameter-count-that-does-not-read` and `loader/a-memory-figure-that-does-not-read` (a
+  bare `8` could be bytes or gigabytes).
+- `spec/hardware-fit.yaml` holds the readings and the decisions; the Rust checker reads its value
+  sections and the Python resolver all of it. The shipped rows record no `size:` or `requires:` yet:
+  each figure needs a source somebody else can follow.
+
+## 2026-11 — a metric a model is held to is taken on every case, and `prefer:` says what "best" means (16 November)
+
+### What holds now
+
+- **A metric an `accept-when:` line reads is taken on every case.** A case stops at its first failed
+  rule, so `refund-tone.score >= 0.8` was held to the mean over only the cases a model got past their
+  first failure — an easier subset, which favoured the model that failed more. The reference now
+  takes each metric an `accept-when:` line names on every case, a failed one included (the case still
+  fails, for the reason it failed before); `<metric>.score`, `<metric>.pass-rate` and
+  `<metric>.cases` are over the whole suite. Any other metric still stops at the first failure, so a
+  suite nobody holds a model to costs no more grading than before.
+- **`best-on-the-evals` is the largest share of the suite's cases passed**, the cheaper of two that
+  passed the same share. The help said "the highest score", which could be read as a metric's mean.
+- **`prefer:` chooses only when `model:` is left out.** A named `model:` is used as named; the help
+  now says so.
+- **`cost` is what the agent's own calls spent per case**, not what grading them cost; the help now
+  says so.
+
 ## 2026-11 — a benchmark named in any script, a figure recorded under an alias, and DeepEval's ARC challenge set (16 November)
 
 ### What holds now

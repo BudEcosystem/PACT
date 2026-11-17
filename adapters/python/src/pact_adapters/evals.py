@@ -632,6 +632,7 @@ def check(
     judge: "Judge | None" = None,
     metrics: "list[MetricSpec] | None" = None,
     run_program: "Callable[[str, dict[str, Any]], str] | None" = None,
+    taken_on_every_case: "frozenset[str] | set[str]" = frozenset(),
 ) -> CaseOutcome:
     """Grade one case. Deterministic first, always, and a judge only if needed.
 
@@ -641,6 +642,13 @@ def check(
     reaches the second pass, and a suite that wrote no `judged:` rule finds
     nothing to do in it. That is what makes "a suite decidable without a model
     must never invoke one" a property of the code rather than a promise.
+
+    `taken_on_every_case` names the metrics an `accept-when:` line holds a
+    model to (`refund-tone.score >= 0.8`). Each of them is taken on this case
+    even after an earlier rule failed it, and the outcome still fails: a mean
+    taken only over the cases a model got past the first failure is a mean over
+    an easier subset, and it would favour the model that failed more. Every
+    other metric still stops at the first failure.
 
     `judge` is how weights are reached, supplied by whoever runs the suite in the
     same way the transport is for a run — `judge.judge_of(doc)` builds it from
@@ -669,27 +677,34 @@ def check(
     reader who was never shown them.
     """
     text = result.output.lower()
+    scores = list(metrics or [])
+    unenforced: list[str] = []
+    scored: dict[str, float] = {}
+
+    def failed(why: str) -> CaseOutcome:
+        # The metrics `accept-when:` reads are taken on every case; see above.
+        for spec in scores:
+            if spec.name in taken_on_every_case and spec.name not in scored:
+                _scores_below(spec, case, result, unenforced, judge, run_program, scored=scored)
+        return CaseOutcome(case.key, False, why, tuple(unenforced), dict(scored))
 
     for key, want in case.expect.items():
         if not isinstance(want, str):
             continue
         needle = want.strip().lower()
         if needle and not _states(text, needle):
-            return CaseOutcome(case.key, False, f"expected {key} {want!r}, got {result.output!r}")
+            return failed(f"expected {key} {want!r}, got {result.output!r}")
 
     # The case's own extra rules, then the suite's. Case first, because a case
     # rule is about this situation and reads as the more specific failure.
     written = list(case.must_also) + list(rules)
-    scores = list(metrics or [])
 
-    unenforced: list[str] = []
-    scored: dict[str, float] = {}
     for rule in written:
         if rule.kind == JUDGED:
             continue
         broken = _breaks(rule, result, text, unenforced=unenforced, run_program=run_program)
         if broken:
-            return CaseOutcome(case.key, False, broken, tuple(unenforced))
+            return failed(broken)
 
     for spec in scores:
         if not spec.deterministic:
@@ -699,21 +714,21 @@ def check(
         # pass, and only for a case nothing cheaper already settled.
         missed = _scores_below(spec, case, result, unenforced, scored=scored)
         if missed:
-            return CaseOutcome(case.key, False, missed, tuple(unenforced), dict(scored))
+            return failed(missed)
 
     for rule in written:
         if rule.kind != JUDGED:
             continue
         broken = _breaks(rule, result, text, judge, unenforced, case)
         if broken:
-            return CaseOutcome(case.key, False, broken, tuple(unenforced))
+            return failed(broken)
 
     for spec in scores:
         if spec.deterministic:
             continue
         missed = _scores_below(spec, case, result, unenforced, judge, run_program, scored=scored)
         if missed:
-            return CaseOutcome(case.key, False, missed, tuple(unenforced), dict(scored))
+            return failed(missed)
 
     return CaseOutcome(case.key, True, "", tuple(unenforced), dict(scored))
 

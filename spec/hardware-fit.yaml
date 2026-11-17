@@ -1,0 +1,76 @@
+# What a model needs of the machine that runs it (`size:`, `requires:` on a
+# catalogue row), held to one table. The checker
+# (`crates/pact-loader/src/hardware.rs`) reads `sizes:`, `not-sizes:`,
+# `memories:` and `not-memories:`; the Python resolver
+# (`pact_adapters.machine`) reads every section. A runtime that binds a model
+# for a machine it knows decides each `fits:` row as written, and prints `says:`
+# word for word.
+
+# `size.value:` — a parameter count, a number with an optional K, M, B or T.
+sizes:
+  - {written: "7.6B", reads: 7600000000}
+  - {written: "405b", reads: 405000000000}
+  - {written: "500M", reads: 500000000}
+  - {written: "1.24 B", reads: 1240000000}
+  - {written: "8000000000", reads: 8000000000}
+  - {written: "1.8T", reads: 1800000000000}
+  - {written: "unknown", reads: unknown}
+
+not-sizes:
+  - {written: "7.6 GB", because: a size counts parameters, not bytes}
+  - {written: "big", because: not a count}
+  - {written: "0B", because: a model has at least one parameter}
+  - {written: "-7B", because: a count is not negative}
+  - {written: "7.6 billion", because: "the unit is one letter: `7.6B`"}
+
+# `requires.memory.value:` — an amount of memory with its unit; decimal GB and
+# binary GiB are both read, and a bare number is refused.
+memories:
+  - {written: "4.7 GB", reads: 4700000000}
+  - {written: "9 GiB", reads: 9663676416}
+  - {written: "800 MB", reads: 800000000}
+  - {written: "16GB", reads: 16000000000}
+  - {written: "1 TB", reads: 1000000000000}
+  - {written: "512 MiB", reads: 536870912}
+  - {written: "unknown", reads: unknown}
+
+not-memories:
+  - {written: "8", because: a bare number could be bytes or gigabytes}
+  - {written: "8 G", because: "the unit is `GB` or `GiB`"}
+  - {written: "8 gb", because: "units are written `GB`, `GiB`, as a datasheet writes them"}
+  - {written: "0 GB", because: running a model takes some memory}
+  - {written: "7.6B", because: a memory figure is an amount of memory, not a parameter count}
+
+# A row served on this machine alone, against what the runtime knows of the
+# machine (`memory:`, and `accelerator-memory:`, where `none` means it has no
+# accelerator). A machine figure that is left out is not known, and nothing is
+# decided on it.
+fits:
+  - {memory: "4.7 GB", machine: {memory: "16 GB"}, fits: yes, because: the machine holds it}
+  - memory: "9 GB"
+    machine: {memory: "8 GB"}
+    fits: no
+    says: "needs 9 GB of memory, and this machine has 8 GB"
+    because: the model needs more memory than the machine has
+  - {memory: "9 GB", machine: {}, fits: yes, because: a runtime that does not know the machine leaves nothing out}
+  - {memory: unknown, machine: {memory: "8 GB"}, fits: yes, because: a row that records no figure is not left out}
+  - memory: "6 GB"
+    accelerator: gpu
+    machine: {memory: "64 GB", accelerator-memory: none}
+    fits: no
+    says: "runs only on an accelerator, and this machine has none"
+    because: the machine's own memory does not run an accelerator-only model
+  - {memory: "6 GB", accelerator: gpu, machine: {memory: "64 GB", accelerator-memory: "8 GB"}, fits: yes, because: the accelerator holds it}
+  - memory: "12 GB"
+    accelerator: gpu
+    machine: {memory: "64 GB", accelerator-memory: "8 GB"}
+    fits: no
+    says: "needs 12 GB of accelerator memory, and this machine has 8 GB"
+    because: the accelerator is too small
+  - {memory: "12 GB", accelerator: gpu, machine: {memory: "64 GB"}, fits: yes, because: "the runtime does not know the accelerator, so it does not decide on it"}
+  - memory: "16 GiB"
+    machine: {memory: "15.6 GB"}
+    fits: no
+    says: "needs 16 GiB of memory, and this machine has 15.6 GB"
+    because: GiB are binary, so 16 GiB is more than 15.6 GB
+  - {memory: "900 GB", served-elsewhere: yes, machine: {memory: "8 GB"}, fits: yes, because: a runtime reaches it off this machine}

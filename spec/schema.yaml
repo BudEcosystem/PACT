@@ -1848,6 +1848,24 @@ groups:
           how quickly it answers, and where those figures came from. Read when
           an agent says `prefer: fastest`, and when a `feel: voice` agent is
           matched against how long the first words may take.
+      size:
+        type: group:figure
+        surface: S-CAP
+        tier: expert
+        kernel-op: actor.figures
+        help: >
+          how many parameters it has, as a count — `7.6B`, `405B`, `500M` — with
+          where that figure came from. Write `unknown` if nobody has published it.
+      requires:
+        type: group:model-requires
+        surface: S-CAP
+        tier: expert
+        kernel-op: actor.figures
+        help: >
+          what a machine needs to run it where it is served on that machine
+          (`endpoint: local`). A runtime that knows the machine leaves out a
+          local model the machine cannot hold, and says so; a model with no
+          figure here is not left out.
       copied-from:
         type: group:copied-from
         surface: S-GOV
@@ -2032,6 +2050,29 @@ groups:
           how long before the first words (or the first sound) come back, as a
           length of time — `400ms` — with where that figure came from
 
+  model-requires:
+    describe: something a model's needs of the machine that runs it can have
+    fields:
+      memory:
+        type: group:figure
+        surface: S-CAP
+        tier: expert
+        kernel-op: actor.figures
+        help: >
+          how much memory it takes to load the model as it is served and answer
+          — `4.7 GB`, `9 GiB`, `800 MB` — with where that figure came from.
+          With `accelerator: gpu` this is the accelerator's memory; otherwise it
+          is the machine's own.
+      accelerator:
+        type: one-of
+        choices: [none, gpu]
+        surface: S-CAP
+        tier: expert
+        help: >
+          `gpu` when the model runs only on an accelerator, so `memory:` is
+          the accelerator's memory and a machine without one cannot run it.
+          Leave it out, or write `none`, when it runs from the machine's own
+          memory, whether or not an accelerator speeds it up.
   copied-from:
     describe: something a record of where a copied catalogue row came from can have
     fields:
@@ -2247,9 +2288,11 @@ groups:
           among the models that pass, which one PACT picks. `cheapest` is the
           usual answer and what you get if you leave this out. `fastest`
           picks the one whose first words come back soonest — what a voice
-          agent wants. `best-on-the-evals` picks the highest score whatever it
-          costs. A model that fails the checks is never picked, whichever you
-          write.
+          agent wants. `best-on-the-evals` picks the one that passed the
+          largest share of your evals' cases, whatever it costs, the cheaper
+          of two that passed the same share. A model that fails the checks is
+          never picked, whichever you write. A `model:` you name is used as
+          named: this only chooses when `model:` is left out.
       accept-when:
         # 96 §B4. A model is ACCEPTED for this agent when every line holds —
         # `mmlu.score > 50`, `refund-tone.score >= 0.8`, `cost < 0.05 USD` —
@@ -2281,11 +2324,14 @@ groups:
           `terminal-bench.score >= 40`, `refund-tone.score >= 0.8`, `pass-rate
           >= 90%`, `cost < 0.05 USD`. A benchmark is named as the model
           catalogue names it under `benchmarks:`; a check of your own by the
-          `name:` it has in your suite's `metrics:`. `pass-rate` and `cost` are
-          what a model scored and spent on your own cases, on average, and
-          `input-price`, `output-price` (per million tokens), `context-window`
-          and `first-words-within` are what the catalogue records. Leave it out
-          and every model that passes your checks is acceptable.
+          `name:` it has in your suite's `metrics:`, and that check is taken on
+          every case, so its score is over all of them. `pass-rate` and `cost`
+          are what a model scored and spent on your own cases, on average —
+          `cost` is what the agent's own calls spent, not what grading them
+          cost — and `input-price`, `output-price` (per million tokens),
+          `context-window` and `first-words-within` are what the catalogue
+          records. Leave it out and every model that passes your checks is
+          acceptable.
       context-at-least:
         # Was `type: text`, so `context-at-least: banana` loaded clean and
         # reached the resolver verbatim, where it was compared against a real

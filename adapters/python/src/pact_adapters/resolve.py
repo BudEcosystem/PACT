@@ -46,6 +46,7 @@ from typing import Any, Callable, Mapping, TypeVar
 import yaml
 
 from . import egress as _egress
+from . import machine as _machine
 from . import selection as _selection
 from .diagnostics import Problem
 from .evals import (
@@ -226,6 +227,27 @@ class ModelEntry:
     languages: tuple[str, ...] = ()
     sessions: frozenset[str] = frozenset()
     dimensions: "int | None" = None
+    #: `size:` as a number of parameters, or `None` when the row does not say.
+    parameters: "float | None" = None
+    #: `requires.memory:` in bytes and as written, and `requires.accelerator:`
+    #: (`gpu` or `none`). `fits_machine` holds a row served only on this machine
+    #: to them; a row that does not say is never left out for it.
+    memory_bytes: "int | None" = None
+    memory_written: str = ""
+    accelerator: str = "none"
+    #: Some `served-by:` entry reaches it somewhere other than this machine, so
+    #: what this machine can hold does not decide whether it can be used.
+    served_elsewhere: bool = False
+
+    def fits_machine(self, machine: "_machine.Machine") -> tuple[bool, str]:
+        """Whether `machine` can run this model where it is served, and why not.
+
+        Only a row served on this machine alone is judged: one some runtime
+        serves elsewhere is reached there whatever this machine holds.
+        """
+        if not self.served_locally or self.served_elsewhere:
+            return True, ""
+        return _machine.fits(self.memory_written, self.memory_bytes, self.accelerator, machine)
 
     def fits_voice(self, plan: Any, role: str) -> tuple[bool, str]:
         """Whether this model can play `role` in voice plan `plan` (`voice.VoicePlan`), and why not.
@@ -252,7 +274,7 @@ class ModelEntry:
             return False, "cannot listen while it speaks (its row has no `sessions: [duplex]`)"
         return True, ""
 
-    def satisfies(self, needs: dict[str, Any]) -> tuple[bool, str]:
+    def satisfies(self, needs: dict[str, Any], machine: "_machine.Machine | None" = None) -> tuple[bool, str]:
         """Cheap pre-filter. Never a substitute for an eval verdict (FR-2.1.2).
 
         `needs` is the flat shape `needs_of` produces from the author's own
@@ -264,6 +286,9 @@ class ModelEntry:
         Two rules, and the difference between them is the whole of Y12:
         a figure the catalogue RECORDS and that falls short **filters**; a figure
         the catalogue says is `unknown` **binds and ranks last**.
+
+        `machine`, when the runtime knows it, also leaves out a row served on
+        this machine alone that the machine cannot hold (`fits_machine`).
         """
         # 96 §A2. An agent's model reads and writes. A row that embeds,
         # transcribes, speaks or reranks computes a different function, and the
@@ -326,6 +351,8 @@ class ModelEntry:
                 "is only reachable over the network, and this workspace does "
                 "not let the model call leave the box"
             )
+        if machine is not None:
+            return self.fits_machine(machine)
         return True, ""
 
     def ignored_settings(self, settings: "Mapping[str, Any] | None") -> list[str]:
@@ -762,6 +789,7 @@ def _parse(text: str, shown: str) -> Catalogue:
             languages=_words(caps.get("languages")),
             sessions=frozenset(_words(caps.get("sessions"))),
             dimensions=_dimensions(caps.get("dimensions")),
+            **_hardware(row),
         )
         entries.append(entry)
         for key in (name, *entry.aliases):
@@ -775,6 +803,31 @@ def _parse(text: str, shown: str) -> Catalogue:
                      f"use one of: {', '.join(sorted(e.name for e in entries)) or '(none)'}")
         )
     return Catalogue(tuple(entries), default, tuple(problems), by_id)
+
+
+def _hardware(row: dict[str, Any]) -> dict[str, Any]:
+    """`size:`, `requires:` and whether some `served-by:` entry is off this machine, as `ModelEntry` fields.
+
+    A figure that does not read is left unsaid here; the checker refuses it
+    where it is written (`loader/a-parameter-count-that-does-not-read`,
+    `loader/a-memory-figure-that-does-not-read`).
+    """
+    size = row.get("size")
+    requires = row.get("requires") if isinstance(row.get("requires"), dict) else {}
+    memory = requires.get("memory") if isinstance(requires.get("memory"), dict) else {}
+    written = str(memory.get("value") or "").strip()
+    amount = _machine.bytes_of(written)
+    served = row.get("served-by") if isinstance(row.get("served-by"), list) else []
+    return {
+        "parameters": _machine.parameters_of(size.get("value")) if isinstance(size, dict) else None,
+        "memory_bytes": amount,
+        "memory_written": written if amount is not None else "",
+        "accelerator": "gpu" if str(requires.get("accelerator") or "").strip() == "gpu" else "none",
+        "served_elsewhere": any(
+            isinstance(entry, dict) and str(entry.get("endpoint") or "").strip() != "local"
+            for entry in served
+        ),
+    }
 
 
 def _words(written: Any) -> tuple[str, ...]:
@@ -1502,8 +1555,13 @@ def evaluate(
     min_cases: int = 5,
     judge: Any = None,
     metrics: Any = None,
+    taken_on_every_case: "frozenset[str]" = frozenset(),
 ) -> Verdict:
     """Score one model on one strategy against the author's own suite.
+
+    `taken_on_every_case` names the metrics the agent's `accept-when:` lines
+    read (`_selection.metrics_read`); `evals.check` takes each of them on every
+    case, so the mean a line is held to is over the whole suite.
 
     `document` is REQUIRED and keyword-only, because the one thing it is for is
     the thing that is silently wrong when it is missing: an agent with a `team:`
@@ -1602,7 +1660,8 @@ def evaluate(
                 ),
             )
             break
-        results.append(check(case, result, rules, judge=judge, metrics=metrics))
+        results.append(check(case, result, rules, judge=judge, metrics=metrics,
+                             taken_on_every_case=taken_on_every_case))
         spends.append(None if "cost-per-request-under" in (result.unmetered or ()) else result.spent)
     if silence is not None:
         # UNDECIDED with no RESULTS kept, where `_run_every_case` keeps what it
@@ -1799,7 +1858,8 @@ def resolve(
         candidate = transform(spec)
         v = evaluate(candidate, cases, rules, bar, transport_for, requested,
                      strategy_name, tools, document=document, judge=judge,
-                     metrics=scores)
+                     metrics=scores,
+                     taken_on_every_case=_selection.metrics_read(needs.get("accept-when") or ()))
         last = v
         if v.outcome == "PASS":
             # 96 §B4: passing the suite is necessary, not sufficient — what the
@@ -1969,7 +2029,8 @@ def _cheapest_passing(
         for strategy_name, transform in strategies.items():
             v = evaluate(transform(spec), cases, rules, bar, transport_for,
                          entry.name, strategy_name, tools, document=document,
-                         judge=judge, metrics=scores)
+                         judge=judge, metrics=scores,
+                         taken_on_every_case=_selection.metrics_read(needs.get("accept-when") or ()))
             if v.outcome == "PASS" and (short := _short_of(needs, v, document)):
                 ruled_out.append(f"{entry.name} passed the suite and {short}")
                 scored_it = True

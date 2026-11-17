@@ -2075,6 +2075,9 @@ fn validate_leaving_out(
         // 96 §B4: what an agent accepts a model on — a benchmark, a metric of
         // its suite, a price — read the way the resolver will decide it.
         pact_loader::accept::check(root, BUILTIN_CATALOGUE, &mut diags);
+        // What a model needs of the machine that runs it, read the way a runtime
+        // holding a machine to it will read it (`spec/hardware-fit.yaml`).
+        pact_loader::hardware::check(root, &mut diags);
         // A row of the workspace's own catalogue copied from the distribution's,
         // which the distribution has corrected since.
         pact_loader::copies::check(root, BUILTIN_CATALOGUE, &mut diags);
