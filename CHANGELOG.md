@@ -3,6 +3,35 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — a catalogue row says what a model needs of the machine that runs it (17 November)
+
+A runtime choosing among models served on its own machine could not tell whether the machine could
+hold one: a row said where a model was served and what it cost, never how big it was or how much
+memory it took, so a local row the machine could not load was bound and failed on its first call.
+
+### What an author can now write
+
+- **`size:`** — a figure: how many parameters the model has, as a count (`7.6B`, `405B`, `500M`),
+  with its provenance, or `unknown`.
+- **`requires: {memory, accelerator}`** — `memory:` is a figure: how much memory loading and running
+  the model as served takes (`4.7 GB`, `9 GiB`); `accelerator: gpu` says it runs only on an
+  accelerator, so `memory:` is the accelerator's memory.
+
+### What holds now
+
+- **A runtime that knows its machine leaves out a model served on that machine alone that the
+  machine cannot hold**, with a sentence: *"needs 9 GB of memory, and this machine has 8 GB"*, *"runs
+  only on an accelerator, and this machine has none"*. A row with no figure, a machine figure the
+  runtime does not know, and a row some runtime serves elsewhere are never left out for it. The
+  reference reads the machine's memory when it scores (`pact_adapters.machine.this_machine`); it does
+  not know an accelerator, so it decides nothing on one.
+- **The checker refuses a figure no runtime could read**, where it is written:
+  `loader/a-parameter-count-that-does-not-read` and `loader/a-memory-figure-that-does-not-read` (a
+  bare `8` could be bytes or gigabytes).
+- `spec/hardware-fit.yaml` holds the readings and the decisions; the Rust checker reads its value
+  sections and the Python resolver all of it. The shipped rows record no `size:` or `requires:` yet:
+  each figure needs a source somebody else can follow.
+
 ## 2026-11 — a measured figure says how it was measured, and a line is held to its interval (16 November)
 
 A figure's `provenance:` said where a number came from but not how much of the benchmark it rests on

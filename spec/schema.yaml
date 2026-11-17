@@ -1848,6 +1848,24 @@ groups:
           how quickly it answers, and where those figures came from. Read when
           an agent says `prefer: fastest`, and when a `feel: voice` agent is
           matched against how long the first words may take.
+      size:
+        type: group:figure
+        surface: S-CAP
+        tier: expert
+        kernel-op: actor.figures
+        help: >
+          how many parameters it has, as a count — `7.6B`, `405B`, `500M` — with
+          where that figure came from. Write `unknown` if nobody has published it.
+      requires:
+        type: group:model-requires
+        surface: S-CAP
+        tier: expert
+        kernel-op: actor.figures
+        help: >
+          what a machine needs to run it where it is served on that machine
+          (`endpoint: local`). A runtime that knows the machine leaves out a
+          local model the machine cannot hold, and says so; a model with no
+          figure here is not left out.
 
   served-by:
     describe: something a way of serving a model can have
@@ -2019,6 +2037,30 @@ groups:
         help: >
           how long before the first words (or the first sound) come back, as a
           length of time — `400ms` — with where that figure came from
+
+  model-requires:
+    describe: something a model's needs of the machine that runs it can have
+    fields:
+      memory:
+        type: group:figure
+        surface: S-CAP
+        tier: expert
+        kernel-op: actor.figures
+        help: >
+          how much memory it takes to load the model as it is served and answer
+          — `4.7 GB`, `9 GiB`, `800 MB` — with where that figure came from.
+          With `accelerator: gpu` this is the accelerator's memory; otherwise it
+          is the machine's own.
+      accelerator:
+        type: one-of
+        choices: [none, gpu]
+        surface: S-CAP
+        tier: expert
+        help: >
+          `gpu` when the model runs only on an accelerator, so `memory:` is
+          the accelerator's memory and a machine without one cannot run it.
+          Leave it out, or write `none`, when it runs from the machine's own
+          memory, whether or not an accelerator speeds it up.
 
   figure:
     describe: something a recorded figure can have

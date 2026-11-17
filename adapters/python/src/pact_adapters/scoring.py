@@ -49,6 +49,7 @@ from urllib.parse import urlparse
 import yaml
 
 from . import egress as _egress
+from . import machine as _machine
 from .diagnostics import Problem
 from .evals import (
     Case,
@@ -1114,12 +1115,15 @@ def _bind(
     catalogue = load_catalogue(workspace=root)
     needs = needs_of(document, key)
     written = _needs_file(root, key)
+    # A model served on this machine alone is held to what the machine has
+    # (`requires:`); this machine's memory is what the scoring run will use.
+    machine = _machine.this_machine()
 
     wanted, because = asked, "you asked for it with `--model`"
     if not wanted and spec.model:
         wanted, because = spec.model, f"`model:` in agents/{key}/agent.yaml pins it"
     if not wanted:
-        picked = _cheapest_that_qualifies(catalogue.entries, needs)
+        picked = _cheapest_that_qualifies(catalogue.entries, needs, machine=machine)
         if picked is None:
             return None, (
                 f"no model in `models/catalog.yaml` meets what {written} asks for, "
@@ -1132,7 +1136,7 @@ def _bind(
         # picks". Where it does not qualify, picking it anyway would be picking a
         # model the author's own `needs:` refuses.
         fallback = catalogue.get(catalogue.default)
-        if fallback is not None and fallback.satisfies(needs)[0]:
+        if fallback is not None and fallback.satisfies(needs, machine)[0]:
             picked = fallback
         wanted = picked.name
         because = (
@@ -1150,9 +1154,9 @@ def _bind(
                 + ", ".join(sorted(e.name for e in catalogue.entries)),
         )
 
-    ok, why = entry.satisfies(needs)
+    ok, why = entry.satisfies(needs, machine)
     if not ok:
-        better = _cheapest_that_qualifies(catalogue.entries, needs, exclude=entry.name)
+        better = _cheapest_that_qualifies(catalogue.entries, needs, exclude=entry.name, machine=machine)
         advice = (
             f" `{better.name}` does meet it — score on that with "
             f"`--model {better.name}`."
@@ -1170,7 +1174,7 @@ def _bind(
     if not asked:
         for fallback in spec.models[1:]:
             row = catalogue.get(fallback)
-            meets, lacks = row.satisfies(needs) if row is not None else (False, "")
+            meets, lacks = row.satisfies(needs, machine) if row is not None else (False, "")
             if not meets:
                 return None, (
                     f"`{fallback}`, a fallback in `model:` for {key}, "
@@ -1240,11 +1244,11 @@ def _needs_file(root: Path, key: str) -> str:
 
 
 def _cheapest_that_qualifies(
-    entries, needs: dict[str, Any], exclude: str = ""
+    entries, needs: dict[str, Any], exclude: str = "", machine: "_machine.Machine | None" = None
 ) -> "ModelEntry | None":
-    """The first model D11 would offer: cheapest that meets the author's needs."""
+    """The first model D11 would offer: cheapest that meets the author's needs and fits `machine`."""
     ranked = sorted(
-        (e for e in entries if e.name != exclude and e.satisfies(needs)[0]),
+        (e for e in entries if e.name != exclude and e.satisfies(needs, machine)[0]),
         key=lambda e: e.ranks_after(needs),
     )
     return ranked[0] if ranked else None
