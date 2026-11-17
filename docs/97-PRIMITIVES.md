@@ -1745,6 +1745,7 @@ words for a person, with no behaviour.
 | `model.speed` | Store + Actor |
 | `model.size` | Store |
 | `model.requires` | Store + Actor |
+| `model.copied-from` | Store + Check |
 | `served-by.runtime` | Actor |
 | `served-by.endpoint` | Actor + Allowance |
 | `served-by.region` | Allowance + Store + Actor |
@@ -1763,6 +1764,7 @@ words for a person, with no behaviour.
 | `model-speed.first-words-within` | Store |
 | `model-requires.memory` | Store + Actor |
 | `model-requires.accelerator` | Actor |
+| `copied-from.digest` | Store + Check |
 | `figure.value` | Store + Actor |
 | `figure.provenance` | Store + Actor |
 | `provenance.source` | Store |

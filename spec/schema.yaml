@@ -1866,6 +1866,18 @@ groups:
           (`endpoint: local`). A runtime that knows the machine leaves out a
           local model the machine cannot hold, and says so; a model with no
           figure here is not left out.
+      copied-from:
+        type: group:copied-from
+        surface: S-GOV
+        tier: expert
+        help: >
+          on a row of your own `models/catalog.yaml` that began as a copy of the
+          distribution's row of the same name: which version of that row it
+          copied. A workspace row replaces the distribution's whole, so a copy
+          keeps the price, the window and the serving it was copied with; `pact
+          check` warns when the distribution's row has changed since, naming
+          the fields that now differ. `benchmarks.record` writes it when it
+          copies a row.
 
   served-by:
     describe: something a way of serving a model can have
@@ -2061,6 +2073,18 @@ groups:
           the accelerator's memory and a machine without one cannot run it.
           Leave it out, or write `none`, when it runs from the machine's own
           memory, whether or not an accelerator speeds it up.
+  copied-from:
+    describe: something a record of where a copied catalogue row came from can have
+    fields:
+      digest:
+        type: text
+        required: yes
+        surface: S-GOV
+        tier: expert
+        help: >
+          `sha256:` and the hex digest of the distribution's row as it was when
+          it was copied: its JSON as `pact show` prints it, with every mapping's
+          keys sorted and no spaces.
 
   figure:
     describe: something a recorded figure can have

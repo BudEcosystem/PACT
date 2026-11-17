@@ -2078,6 +2078,9 @@ fn validate_leaving_out(
         // What a model needs of the machine that runs it, read the way a runtime
         // holding a machine to it will read it (`spec/hardware-fit.yaml`).
         pact_loader::hardware::check(root, &mut diags);
+        // A row of the workspace's own catalogue copied from the distribution's,
+        // which the distribution has corrected since.
+        pact_loader::copies::check(root, BUILTIN_CATALOGUE, &mut diags);
         // 96 §B5: a `settings:` line the pinned model would throw away.
         pact_loader::settings::check(root, BUILTIN_CATALOGUE, &mut diags);
         diags.sort();
