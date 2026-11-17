@@ -33,6 +33,42 @@ A tree whose detector writes a pattern outside the dialect no longer loads: rewr
 (a lookbehind usually becomes a group around the part before, a `(?<name>...)` becomes
 `(?P<name>...)`).
 
+## 2026-11 — a metric a model is held to is taken on every case, and `prefer:` says what "best" means (16 November)
+
+### What holds now
+
+- **A metric an `accept-when:` line reads is taken on every case.** A case stops at its first failed
+  rule, so `refund-tone.score >= 0.8` was held to the mean over only the cases a model got past their
+  first failure — an easier subset, which favoured the model that failed more. The reference now
+  takes each metric an `accept-when:` line names on every case, a failed one included (the case still
+  fails, for the reason it failed before); `<metric>.score`, `<metric>.pass-rate` and
+  `<metric>.cases` are over the whole suite. Any other metric still stops at the first failure, so a
+  suite nobody holds a model to costs no more grading than before.
+- **`best-on-the-evals` is the largest share of the suite's cases passed**, the cheaper of two that
+  passed the same share. The help said "the highest score", which could be read as a metric's mean.
+- **`prefer:` chooses only when `model:` is left out.** A named `model:` is used as named; the help
+  now says so.
+- **`cost` is what the agent's own calls spent per case**, not what grading them cost; the help now
+  says so.
+
+## 2026-11 — a benchmark named in any script, a figure recorded under an alias, and DeepEval's ARC challenge set (16 November)
+
+### What holds now
+
+- **An `accept-when:` name is everything before the comparison, in both ports.** The Python reader
+  took only `[A-Za-z0-9 _.()+-]`, so `τ-bench.score > 50` — an alias the catalogue publishes for
+  tau-bench — was not a comparison there while the checker read it. `spec/accept-when.yaml` gains the
+  row, and `> 50` (no name at all) as a refused one.
+- **`benchmarks.record` writes a figure under the row's own id.** Recorded under an alias
+  (`qwen2.5:7b-instruct`), it made a second workspace row beside the distribution's, and the
+  catalogue, layered by id, offered both as candidates. It now finds the row the name answers to, in
+  the workspace or the distribution, and writes there.
+- **The shipped `arc` row runs the challenge set.** DeepEval's ARC runs the easy set unless told
+  otherwise, so a figure measured for the row (`ARC-Challenge`) was the easy set's. The row now says
+  `with: {mode: challenge}`, read into DeepEval's `ARCMode`.
+- **The `deepeval` extra installs `datasets` and `pandas`.** DeepEval's benchmarks import them when
+  they are built and its package declares neither, so a benchmark run failed on its first line.
+
 ## 2026-11 — a measured figure says how it was measured, and a line is held to its interval (16 November)
 
 A figure's `provenance:` said where a number came from but not how much of the benchmark it rests on
