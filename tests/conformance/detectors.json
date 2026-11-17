@@ -1,0 +1,7033 @@
+{
+ "about": "The detector dialect (spec/schema.yaml, `detectors`): which `looks-like:` patterns every runtime reads alike, and what each finds. A case with `outside: true` writes something the dialect does not read: `pact check` refuses it (`loader/looks-like-outside-the-dialect`) with `reason`, and so does every port; every other case is in the dialect, and `finds` lists, for each text (by its index in `texts`) where the pattern finds anything, every match Python's `re.finditer` yields, in order. A text not listed finds nothing. Every port reads every case: `crates/pact-loader/tests/detector_dialect_cases.rs` (in or outside), `adapters/python/tests/test_every_port_reads_one_detector_dialect.py` (Python's `re`, and the TypeScript port through `adapters/typescript/read-detectors.mts`).",
+ "texts": [
+  "",
+  " ",
+  "plain words only",
+  "Order ORD-12345678 shipped",
+  "ORD-1234567",
+  "ord-12345678",
+  "ORD-123456789",
+  "card 4111 1111 1111 1111 expires 09/27",
+  "card 4111-1111-1111-1111",
+  "card 4111111111111111",
+  "4111 1111 1111 1111",
+  "4111 1111 1111 1111",
+  "4111.1111.1111.1111",
+  "amount 1234.56",
+  "version 1.2.3",
+  "6011 0009 9013 9424 123",
+  "IBAN GB82 WEST 1234 5698 7654 32",
+  "iban gb82west12345698765432",
+  "sort code 12-34-56",
+  "account 12345678",
+  "acct 000123456789",
+  "hash 3f2a9c1b8e7d6a5f4e3d2c1b0a9f8e7d",
+  "mail jane.doe+desk@example.co.uk",
+  "mail jörg@bücher.de",
+  "not@mail",
+  "call +1 (555) 123-4567",
+  "call 020 7946 0958",
+  "date 2026-07-15",
+  "at 2026-10-05 09:00",
+  "ssn 123-45-6789",
+  "ssn 123 45 6789",
+  "ssn 123456789",
+  "id 1234567890123",
+  "١٢٣٤٥٦٧٨",
+  "digits １２３",
+  "Straße 12",
+  "STRASSE 12",
+  "café au lait",
+  "CAFÉ",
+  "naïve",
+  "Σσς",
+  "line one\nline two",
+  "trailing newline\n",
+  "tab\tseparated",
+  "unit\u001fseparator",
+  "nextline",
+  "emoji 😀 face",
+  "under_score_word",
+  "Ⅷ roman",
+  "x́ combining",
+  "a.b",
+  "a\nb",
+  "a\rb",
+  "ab",
+  "AB",
+  "aB",
+  "foo bar",
+  "foobar",
+  "{\"ref\": \"ORD-12345678\"}",
+  "[1, 2, 3]",
+  "refund this order",
+  "REFUND THIS ORDER",
+  "the end",
+  "end\n",
+  "\nstart",
+  "k",
+  "K",
+  "K"
+ ],
+ "cases": [
+  {
+   "looks-like": "ORD-[0-9]{8}",
+   "outside": false,
+   "finds": [
+    {
+     "in": 3,
+     "found": [
+      "ORD-12345678"
+     ]
+    },
+    {
+     "in": 6,
+     "found": [
+      "ORD-12345678"
+     ]
+    },
+    {
+     "in": 58,
+     "found": [
+      "ORD-12345678"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "\\d+",
+   "outside": false,
+   "finds": [
+    {
+     "in": 3,
+     "found": [
+      "12345678"
+     ]
+    },
+    {
+     "in": 4,
+     "found": [
+      "1234567"
+     ]
+    },
+    {
+     "in": 5,
+     "found": [
+      "12345678"
+     ]
+    },
+    {
+     "in": 6,
+     "found": [
+      "123456789"
+     ]
+    },
+    {
+     "in": 7,
+     "found": [
+      "4111",
+      "1111",
+      "1111",
+      "1111",
+      "09",
+      "27"
+     ]
+    },
+    {
+     "in": 8,
+     "found": [
+      "4111",
+      "1111",
+      "1111",
+      "1111"
+     ]
+    },
+    {
+     "in": 9,
+     "found": [
+      "4111111111111111"
+     ]
+    },
+    {
+     "in": 10,
+     "found": [
+      "4111",
+      "1111",
+      "1111",
+      "1111"
+     ]
+    },
+    {
+     "in": 11,
+     "found": [
+      "4111",
+      "1111",
+      "1111",
+      "1111"
+     ]
+    },
+    {
+     "in": 12,
+     "found": [
+      "4111",
+      "1111",
+      "1111",
+      "1111"
+     ]
+    },
+    {
+     "in": 13,
+     "found": [
+      "1234",
+      "56"
+     ]
+    },
+    {
+     "in": 14,
+     "found": [
+      "1",
+      "2",
+      "3"
+     ]
+    },
+    {
+     "in": 15,
+     "found": [
+      "6011",
+      "0009",
+      "9013",
+      "9424",
+      "123"
+     ]
+    },
+    {
+     "in": 16,
+     "found": [
+      "82",
+      "1234",
+      "5698",
+      "7654",
+      "32"
+     ]
+    },
+    {
+     "in": 17,
+     "found": [
+      "82",
+      "12345698765432"
+     ]
+    },
+    {
+     "in": 18,
+     "found": [
+      "12",
+      "34",
+      "56"
+     ]
+    },
+    {
+     "in": 19,
+     "found": [
+      "12345678"
+     ]
+    },
+    {
+     "in": 20,
+     "found": [
+      "000123456789"
+     ]
+    },
+    {
+     "in": 21,
+     "found": [
+      "3",
+      "2",
+      "9",
+      "1",
+      "8",
+      "7",
+      "6",
+      "5",
+      "4",
+      "3",
+      "2",
+      "1",
+      "0",
+      "9",
+      "8",
+      "7"
+     ]
+    },
+    {
+     "in": 25,
+     "found": [
+      "1",
+      "555",
+      "123",
+      "4567"
+     ]
+    },
+    {
+     "in": 26,
+     "found": [
+      "020",
+      "7946",
+      "0958"
+     ]
+    },
+    {
+     "in": 27,
+     "found": [
+      "2026",
+      "07",
+      "15"
+     ]
+    },
+    {
+     "in": 28,
+     "found": [
+      "2026",
+      "10",
+      "05",
+      "09",
+      "00"
+     ]
+    },
+    {
+     "in": 29,
+     "found": [
+      "123",
+      "45",
+      "6789"
+     ]
+    },
+    {
+     "in": 30,
+     "found": [
+      "123",
+      "45",
+      "6789"
+     ]
+    },
+    {
+     "in": 31,
+     "found": [
+      "123456789"
+     ]
+    },
+    {
+     "in": 32,
+     "found": [
+      "1234567890123"
+     ]
+    },
+    {
+     "in": 33,
+     "found": [
+      "١٢٣٤٥٦٧٨"
+     ]
+    },
+    {
+     "in": 34,
+     "found": [
+      "１２３"
+     ]
+    },
+    {
+     "in": 35,
+     "found": [
+      "12"
+     ]
+    },
+    {
+     "in": 36,
+     "found": [
+      "12"
+     ]
+    },
+    {
+     "in": 58,
+     "found": [
+      "12345678"
+     ]
+    },
+    {
+     "in": 59,
+     "found": [
+      "1",
+      "2",
+      "3"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "\\D+",
+   "outside": false,
+   "finds": [
+    {
+     "in": 1,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 2,
+     "found": [
+      "plain words only"
+     ]
+    },
+    {
+     "in": 3,
+     "found": [
+      "Order ORD-",
+      " shipped"
+     ]
+    },
+    {
+     "in": 4,
+     "found": [
+      "ORD-"
+     ]
+    },
+    {
+     "in": 5,
+     "found": [
+      "ord-"
+     ]
+    },
+    {
+     "in": 6,
+     "found": [
+      "ORD-"
+     ]
+    },
+    {
+     "in": 7,
+     "found": [
+      "card ",
+      " ",
+      " ",
+      " ",
+      " expires ",
+      "/"
+     ]
+    },
+    {
+     "in": 8,
+     "found": [
+      "card ",
+      "-",
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 9,
+     "found": [
+      "card "
+     ]
+    },
+    {
+     "in": 10,
+     "found": [
+      " ",
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 11,
+     "found": [
+      " ",
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 12,
+     "found": [
+      ".",
+      ".",
+      "."
+     ]
+    },
+    {
+     "in": 13,
+     "found": [
+      "amount ",
+      "."
+     ]
+    },
+    {
+     "in": 14,
+     "found": [
+      "version ",
+      ".",
+      "."
+     ]
+    },
+    {
+     "in": 15,
+     "found": [
+      " ",
+      " ",
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 16,
+     "found": [
+      "IBAN GB",
+      " WEST ",
+      " ",
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 17,
+     "found": [
+      "iban gb",
+      "west"
+     ]
+    },
+    {
+     "in": 18,
+     "found": [
+      "sort code ",
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 19,
+     "found": [
+      "account "
+     ]
+    },
+    {
+     "in": 20,
+     "found": [
+      "acct "
+     ]
+    },
+    {
+     "in": 21,
+     "found": [
+      "hash ",
+      "f",
+      "a",
+      "c",
+      "b",
+      "e",
+      "d",
+      "a",
+      "f",
+      "e",
+      "d",
+      "c",
+      "b",
+      "a",
+      "f",
+      "e",
+      "d"
+     ]
+    },
+    {
+     "in": 22,
+     "found": [
+      "mail jane.doe+desk@example.co.uk"
+     ]
+    },
+    {
+     "in": 23,
+     "found": [
+      "mail jörg@bücher.de"
+     ]
+    },
+    {
+     "in": 24,
+     "found": [
+      "not@mail"
+     ]
+    },
+    {
+     "in": 25,
+     "found": [
+      "call +",
+      " (",
+      ") ",
+      "-"
+     ]
+    },
+    {
+     "in": 26,
+     "found": [
+      "call ",
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 27,
+     "found": [
+      "date ",
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 28,
+     "found": [
+      "at ",
+      "-",
+      "-",
+      " ",
+      ":"
+     ]
+    },
+    {
+     "in": 29,
+     "found": [
+      "ssn ",
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 30,
+     "found": [
+      "ssn ",
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 31,
+     "found": [
+      "ssn "
+     ]
+    },
+    {
+     "in": 32,
+     "found": [
+      "id "
+     ]
+    },
+    {
+     "in": 34,
+     "found": [
+      "digits "
+     ]
+    },
+    {
+     "in": 35,
+     "found": [
+      "Straße "
+     ]
+    },
+    {
+     "in": 36,
+     "found": [
+      "STRASSE "
+     ]
+    },
+    {
+     "in": 37,
+     "found": [
+      "café au lait"
+     ]
+    },
+    {
+     "in": 38,
+     "found": [
+      "CAFÉ"
+     ]
+    },
+    {
+     "in": 39,
+     "found": [
+      "naïve"
+     ]
+    },
+    {
+     "in": 40,
+     "found": [
+      "Σσς"
+     ]
+    },
+    {
+     "in": 41,
+     "found": [
+      "line one\nline two"
+     ]
+    },
+    {
+     "in": 42,
+     "found": [
+      "trailing newline\n"
+     ]
+    },
+    {
+     "in": 43,
+     "found": [
+      "tab\tseparated"
+     ]
+    },
+    {
+     "in": 44,
+     "found": [
+      "unit\u001fseparator"
+     ]
+    },
+    {
+     "in": 45,
+     "found": [
+      "nextline"
+     ]
+    },
+    {
+     "in": 46,
+     "found": [
+      "emoji 😀 face"
+     ]
+    },
+    {
+     "in": 47,
+     "found": [
+      "under_score_word"
+     ]
+    },
+    {
+     "in": 48,
+     "found": [
+      "Ⅷ roman"
+     ]
+    },
+    {
+     "in": 49,
+     "found": [
+      "x́ combining"
+     ]
+    },
+    {
+     "in": 50,
+     "found": [
+      "a.b"
+     ]
+    },
+    {
+     "in": 51,
+     "found": [
+      "a\nb"
+     ]
+    },
+    {
+     "in": 52,
+     "found": [
+      "a\rb"
+     ]
+    },
+    {
+     "in": 53,
+     "found": [
+      "ab"
+     ]
+    },
+    {
+     "in": 54,
+     "found": [
+      "AB"
+     ]
+    },
+    {
+     "in": 55,
+     "found": [
+      "aB"
+     ]
+    },
+    {
+     "in": 56,
+     "found": [
+      "foo bar"
+     ]
+    },
+    {
+     "in": 57,
+     "found": [
+      "foobar"
+     ]
+    },
+    {
+     "in": 58,
+     "found": [
+      "{\"ref\": \"ORD-",
+      "\"}"
+     ]
+    },
+    {
+     "in": 59,
+     "found": [
+      "[",
+      ", ",
+      ", ",
+      "]"
+     ]
+    },
+    {
+     "in": 60,
+     "found": [
+      "refund this order"
+     ]
+    },
+    {
+     "in": 61,
+     "found": [
+      "REFUND THIS ORDER"
+     ]
+    },
+    {
+     "in": 62,
+     "found": [
+      "the end"
+     ]
+    },
+    {
+     "in": 63,
+     "found": [
+      "end\n"
+     ]
+    },
+    {
+     "in": 64,
+     "found": [
+      "\nstart"
+     ]
+    },
+    {
+     "in": 65,
+     "found": [
+      "k"
+     ]
+    },
+    {
+     "in": 66,
+     "found": [
+      "K"
+     ]
+    },
+    {
+     "in": 67,
+     "found": [
+      "K"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "\\w+",
+   "outside": false,
+   "finds": [
+    {
+     "in": 2,
+     "found": [
+      "plain",
+      "words",
+      "only"
+     ]
+    },
+    {
+     "in": 3,
+     "found": [
+      "Order",
+      "ORD",
+      "12345678",
+      "shipped"
+     ]
+    },
+    {
+     "in": 4,
+     "found": [
+      "ORD",
+      "1234567"
+     ]
+    },
+    {
+     "in": 5,
+     "found": [
+      "ord",
+      "12345678"
+     ]
+    },
+    {
+     "in": 6,
+     "found": [
+      "ORD",
+      "123456789"
+     ]
+    },
+    {
+     "in": 7,
+     "found": [
+      "card",
+      "4111",
+      "1111",
+      "1111",
+      "1111",
+      "expires",
+      "09",
+      "27"
+     ]
+    },
+    {
+     "in": 8,
+     "found": [
+      "card",
+      "4111",
+      "1111",
+      "1111",
+      "1111"
+     ]
+    },
+    {
+     "in": 9,
+     "found": [
+      "card",
+      "4111111111111111"
+     ]
+    },
+    {
+     "in": 10,
+     "found": [
+      "4111",
+      "1111",
+      "1111",
+      "1111"
+     ]
+    },
+    {
+     "in": 11,
+     "found": [
+      "4111",
+      "1111",
+      "1111",
+      "1111"
+     ]
+    },
+    {
+     "in": 12,
+     "found": [
+      "4111",
+      "1111",
+      "1111",
+      "1111"
+     ]
+    },
+    {
+     "in": 13,
+     "found": [
+      "amount",
+      "1234",
+      "56"
+     ]
+    },
+    {
+     "in": 14,
+     "found": [
+      "version",
+      "1",
+      "2",
+      "3"
+     ]
+    },
+    {
+     "in": 15,
+     "found": [
+      "6011",
+      "0009",
+      "9013",
+      "9424",
+      "123"
+     ]
+    },
+    {
+     "in": 16,
+     "found": [
+      "IBAN",
+      "GB82",
+      "WEST",
+      "1234",
+      "5698",
+      "7654",
+      "32"
+     ]
+    },
+    {
+     "in": 17,
+     "found": [
+      "iban",
+      "gb82west12345698765432"
+     ]
+    },
+    {
+     "in": 18,
+     "found": [
+      "sort",
+      "code",
+      "12",
+      "34",
+      "56"
+     ]
+    },
+    {
+     "in": 19,
+     "found": [
+      "account",
+      "12345678"
+     ]
+    },
+    {
+     "in": 20,
+     "found": [
+      "acct",
+      "000123456789"
+     ]
+    },
+    {
+     "in": 21,
+     "found": [
+      "hash",
+      "3f2a9c1b8e7d6a5f4e3d2c1b0a9f8e7d"
+     ]
+    },
+    {
+     "in": 22,
+     "found": [
+      "mail",
+      "jane",
+      "doe",
+      "desk",
+      "example",
+      "co",
+      "uk"
+     ]
+    },
+    {
+     "in": 23,
+     "found": [
+      "mail",
+      "jörg",
+      "bücher",
+      "de"
+     ]
+    },
+    {
+     "in": 24,
+     "found": [
+      "not",
+      "mail"
+     ]
+    },
+    {
+     "in": 25,
+     "found": [
+      "call",
+      "1",
+      "555",
+      "123",
+      "4567"
+     ]
+    },
+    {
+     "in": 26,
+     "found": [
+      "call",
+      "020",
+      "7946",
+      "0958"
+     ]
+    },
+    {
+     "in": 27,
+     "found": [
+      "date",
+      "2026",
+      "07",
+      "15"
+     ]
+    },
+    {
+     "in": 28,
+     "found": [
+      "at",
+      "2026",
+      "10",
+      "05",
+      "09",
+      "00"
+     ]
+    },
+    {
+     "in": 29,
+     "found": [
+      "ssn",
+      "123",
+      "45",
+      "6789"
+     ]
+    },
+    {
+     "in": 30,
+     "found": [
+      "ssn",
+      "123",
+      "45",
+      "6789"
+     ]
+    },
+    {
+     "in": 31,
+     "found": [
+      "ssn",
+      "123456789"
+     ]
+    },
+    {
+     "in": 32,
+     "found": [
+      "id",
+      "1234567890123"
+     ]
+    },
+    {
+     "in": 33,
+     "found": [
+      "١٢٣٤٥٦٧٨"
+     ]
+    },
+    {
+     "in": 34,
+     "found": [
+      "digits",
+      "１２３"
+     ]
+    },
+    {
+     "in": 35,
+     "found": [
+      "Straße",
+      "12"
+     ]
+    },
+    {
+     "in": 36,
+     "found": [
+      "STRASSE",
+      "12"
+     ]
+    },
+    {
+     "in": 37,
+     "found": [
+      "café",
+      "au",
+      "lait"
+     ]
+    },
+    {
+     "in": 38,
+     "found": [
+      "CAFÉ"
+     ]
+    },
+    {
+     "in": 39,
+     "found": [
+      "naïve"
+     ]
+    },
+    {
+     "in": 40,
+     "found": [
+      "Σσς"
+     ]
+    },
+    {
+     "in": 41,
+     "found": [
+      "line",
+      "one",
+      "line",
+      "two"
+     ]
+    },
+    {
+     "in": 42,
+     "found": [
+      "trailing",
+      "newline"
+     ]
+    },
+    {
+     "in": 43,
+     "found": [
+      "tab",
+      "separated"
+     ]
+    },
+    {
+     "in": 44,
+     "found": [
+      "unit",
+      "separator"
+     ]
+    },
+    {
+     "in": 45,
+     "found": [
+      "next",
+      "line"
+     ]
+    },
+    {
+     "in": 46,
+     "found": [
+      "emoji",
+      "face"
+     ]
+    },
+    {
+     "in": 47,
+     "found": [
+      "under_score_word"
+     ]
+    },
+    {
+     "in": 48,
+     "found": [
+      "Ⅷ",
+      "roman"
+     ]
+    },
+    {
+     "in": 49,
+     "found": [
+      "x",
+      "combining"
+     ]
+    },
+    {
+     "in": 50,
+     "found": [
+      "a",
+      "b"
+     ]
+    },
+    {
+     "in": 51,
+     "found": [
+      "a",
+      "b"
+     ]
+    },
+    {
+     "in": 52,
+     "found": [
+      "a",
+      "b"
+     ]
+    },
+    {
+     "in": 53,
+     "found": [
+      "ab"
+     ]
+    },
+    {
+     "in": 54,
+     "found": [
+      "AB"
+     ]
+    },
+    {
+     "in": 55,
+     "found": [
+      "aB"
+     ]
+    },
+    {
+     "in": 56,
+     "found": [
+      "foo",
+      "bar"
+     ]
+    },
+    {
+     "in": 57,
+     "found": [
+      "foobar"
+     ]
+    },
+    {
+     "in": 58,
+     "found": [
+      "ref",
+      "ORD",
+      "12345678"
+     ]
+    },
+    {
+     "in": 59,
+     "found": [
+      "1",
+      "2",
+      "3"
+     ]
+    },
+    {
+     "in": 60,
+     "found": [
+      "refund",
+      "this",
+      "order"
+     ]
+    },
+    {
+     "in": 61,
+     "found": [
+      "REFUND",
+      "THIS",
+      "ORDER"
+     ]
+    },
+    {
+     "in": 62,
+     "found": [
+      "the",
+      "end"
+     ]
+    },
+    {
+     "in": 63,
+     "found": [
+      "end"
+     ]
+    },
+    {
+     "in": 64,
+     "found": [
+      "start"
+     ]
+    },
+    {
+     "in": 65,
+     "found": [
+      "k"
+     ]
+    },
+    {
+     "in": 66,
+     "found": [
+      "K"
+     ]
+    },
+    {
+     "in": 67,
+     "found": [
+      "K"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "\\W",
+   "outside": false,
+   "finds": [
+    {
+     "in": 1,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 2,
+     "found": [
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 3,
+     "found": [
+      " ",
+      "-",
+      " "
+     ]
+    },
+    {
+     "in": 4,
+     "found": [
+      "-"
+     ]
+    },
+    {
+     "in": 5,
+     "found": [
+      "-"
+     ]
+    },
+    {
+     "in": 6,
+     "found": [
+      "-"
+     ]
+    },
+    {
+     "in": 7,
+     "found": [
+      " ",
+      " ",
+      " ",
+      " ",
+      " ",
+      " ",
+      "/"
+     ]
+    },
+    {
+     "in": 8,
+     "found": [
+      " ",
+      "-",
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 9,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 10,
+     "found": [
+      " ",
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 11,
+     "found": [
+      " ",
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 12,
+     "found": [
+      ".",
+      ".",
+      "."
+     ]
+    },
+    {
+     "in": 13,
+     "found": [
+      " ",
+      "."
+     ]
+    },
+    {
+     "in": 14,
+     "found": [
+      " ",
+      ".",
+      "."
+     ]
+    },
+    {
+     "in": 15,
+     "found": [
+      " ",
+      " ",
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 16,
+     "found": [
+      " ",
+      " ",
+      " ",
+      " ",
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 17,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 18,
+     "found": [
+      " ",
+      " ",
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 19,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 20,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 21,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 22,
+     "found": [
+      " ",
+      ".",
+      "+",
+      "@",
+      ".",
+      "."
+     ]
+    },
+    {
+     "in": 23,
+     "found": [
+      " ",
+      "@",
+      "."
+     ]
+    },
+    {
+     "in": 24,
+     "found": [
+      "@"
+     ]
+    },
+    {
+     "in": 25,
+     "found": [
+      " ",
+      "+",
+      " ",
+      "(",
+      ")",
+      " ",
+      "-"
+     ]
+    },
+    {
+     "in": 26,
+     "found": [
+      " ",
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 27,
+     "found": [
+      " ",
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 28,
+     "found": [
+      " ",
+      "-",
+      "-",
+      " ",
+      ":"
+     ]
+    },
+    {
+     "in": 29,
+     "found": [
+      " ",
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 30,
+     "found": [
+      " ",
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 31,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 32,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 34,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 35,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 36,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 37,
+     "found": [
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 41,
+     "found": [
+      " ",
+      "\n",
+      " "
+     ]
+    },
+    {
+     "in": 42,
+     "found": [
+      " ",
+      "\n"
+     ]
+    },
+    {
+     "in": 43,
+     "found": [
+      "\t"
+     ]
+    },
+    {
+     "in": 44,
+     "found": [
+      "\u001f"
+     ]
+    },
+    {
+     "in": 45,
+     "found": [
+      ""
+     ]
+    },
+    {
+     "in": 46,
+     "found": [
+      " ",
+      "😀",
+      " "
+     ]
+    },
+    {
+     "in": 48,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 49,
+     "found": [
+      "́",
+      " "
+     ]
+    },
+    {
+     "in": 50,
+     "found": [
+      "."
+     ]
+    },
+    {
+     "in": 51,
+     "found": [
+      "\n"
+     ]
+    },
+    {
+     "in": 52,
+     "found": [
+      "\r"
+     ]
+    },
+    {
+     "in": 56,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 58,
+     "found": [
+      "{",
+      "\"",
+      "\"",
+      ":",
+      " ",
+      "\"",
+      "-",
+      "\"",
+      "}"
+     ]
+    },
+    {
+     "in": 59,
+     "found": [
+      "[",
+      ",",
+      " ",
+      ",",
+      " ",
+      "]"
+     ]
+    },
+    {
+     "in": 60,
+     "found": [
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 61,
+     "found": [
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 62,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 63,
+     "found": [
+      "\n"
+     ]
+    },
+    {
+     "in": 64,
+     "found": [
+      "\n"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "\\s",
+   "outside": false,
+   "finds": [
+    {
+     "in": 1,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 2,
+     "found": [
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 3,
+     "found": [
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 7,
+     "found": [
+      " ",
+      " ",
+      " ",
+      " ",
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 8,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 9,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 10,
+     "found": [
+      " ",
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 11,
+     "found": [
+      " ",
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 13,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 14,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 15,
+     "found": [
+      " ",
+      " ",
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 16,
+     "found": [
+      " ",
+      " ",
+      " ",
+      " ",
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 17,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 18,
+     "found": [
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 19,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 20,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 21,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 22,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 23,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 25,
+     "found": [
+      " ",
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 26,
+     "found": [
+      " ",
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 27,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 28,
+     "found": [
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 29,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 30,
+     "found": [
+      " ",
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 31,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 32,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 34,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 35,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 36,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 37,
+     "found": [
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 41,
+     "found": [
+      " ",
+      "\n",
+      " "
+     ]
+    },
+    {
+     "in": 42,
+     "found": [
+      " ",
+      "\n"
+     ]
+    },
+    {
+     "in": 43,
+     "found": [
+      "\t"
+     ]
+    },
+    {
+     "in": 44,
+     "found": [
+      "\u001f"
+     ]
+    },
+    {
+     "in": 45,
+     "found": [
+      ""
+     ]
+    },
+    {
+     "in": 46,
+     "found": [
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 48,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 49,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 51,
+     "found": [
+      "\n"
+     ]
+    },
+    {
+     "in": 52,
+     "found": [
+      "\r"
+     ]
+    },
+    {
+     "in": 56,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 58,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 59,
+     "found": [
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 60,
+     "found": [
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 61,
+     "found": [
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 62,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 63,
+     "found": [
+      "\n"
+     ]
+    },
+    {
+     "in": 64,
+     "found": [
+      "\n"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "\\S+",
+   "outside": false,
+   "finds": [
+    {
+     "in": 2,
+     "found": [
+      "plain",
+      "words",
+      "only"
+     ]
+    },
+    {
+     "in": 3,
+     "found": [
+      "Order",
+      "ORD-12345678",
+      "shipped"
+     ]
+    },
+    {
+     "in": 4,
+     "found": [
+      "ORD-1234567"
+     ]
+    },
+    {
+     "in": 5,
+     "found": [
+      "ord-12345678"
+     ]
+    },
+    {
+     "in": 6,
+     "found": [
+      "ORD-123456789"
+     ]
+    },
+    {
+     "in": 7,
+     "found": [
+      "card",
+      "4111",
+      "1111",
+      "1111",
+      "1111",
+      "expires",
+      "09/27"
+     ]
+    },
+    {
+     "in": 8,
+     "found": [
+      "card",
+      "4111-1111-1111-1111"
+     ]
+    },
+    {
+     "in": 9,
+     "found": [
+      "card",
+      "4111111111111111"
+     ]
+    },
+    {
+     "in": 10,
+     "found": [
+      "4111",
+      "1111",
+      "1111",
+      "1111"
+     ]
+    },
+    {
+     "in": 11,
+     "found": [
+      "4111",
+      "1111",
+      "1111",
+      "1111"
+     ]
+    },
+    {
+     "in": 12,
+     "found": [
+      "4111.1111.1111.1111"
+     ]
+    },
+    {
+     "in": 13,
+     "found": [
+      "amount",
+      "1234.56"
+     ]
+    },
+    {
+     "in": 14,
+     "found": [
+      "version",
+      "1.2.3"
+     ]
+    },
+    {
+     "in": 15,
+     "found": [
+      "6011",
+      "0009",
+      "9013",
+      "9424",
+      "123"
+     ]
+    },
+    {
+     "in": 16,
+     "found": [
+      "IBAN",
+      "GB82",
+      "WEST",
+      "1234",
+      "5698",
+      "7654",
+      "32"
+     ]
+    },
+    {
+     "in": 17,
+     "found": [
+      "iban",
+      "gb82west12345698765432"
+     ]
+    },
+    {
+     "in": 18,
+     "found": [
+      "sort",
+      "code",
+      "12-34-56"
+     ]
+    },
+    {
+     "in": 19,
+     "found": [
+      "account",
+      "12345678"
+     ]
+    },
+    {
+     "in": 20,
+     "found": [
+      "acct",
+      "000123456789"
+     ]
+    },
+    {
+     "in": 21,
+     "found": [
+      "hash",
+      "3f2a9c1b8e7d6a5f4e3d2c1b0a9f8e7d"
+     ]
+    },
+    {
+     "in": 22,
+     "found": [
+      "mail",
+      "jane.doe+desk@example.co.uk"
+     ]
+    },
+    {
+     "in": 23,
+     "found": [
+      "mail",
+      "jörg@bücher.de"
+     ]
+    },
+    {
+     "in": 24,
+     "found": [
+      "not@mail"
+     ]
+    },
+    {
+     "in": 25,
+     "found": [
+      "call",
+      "+1",
+      "(555)",
+      "123-4567"
+     ]
+    },
+    {
+     "in": 26,
+     "found": [
+      "call",
+      "020",
+      "7946",
+      "0958"
+     ]
+    },
+    {
+     "in": 27,
+     "found": [
+      "date",
+      "2026-07-15"
+     ]
+    },
+    {
+     "in": 28,
+     "found": [
+      "at",
+      "2026-10-05",
+      "09:00"
+     ]
+    },
+    {
+     "in": 29,
+     "found": [
+      "ssn",
+      "123-45-6789"
+     ]
+    },
+    {
+     "in": 30,
+     "found": [
+      "ssn",
+      "123",
+      "45",
+      "6789"
+     ]
+    },
+    {
+     "in": 31,
+     "found": [
+      "ssn",
+      "123456789"
+     ]
+    },
+    {
+     "in": 32,
+     "found": [
+      "id",
+      "1234567890123"
+     ]
+    },
+    {
+     "in": 33,
+     "found": [
+      "١٢٣٤٥٦٧٨"
+     ]
+    },
+    {
+     "in": 34,
+     "found": [
+      "digits",
+      "１２３"
+     ]
+    },
+    {
+     "in": 35,
+     "found": [
+      "Straße",
+      "12"
+     ]
+    },
+    {
+     "in": 36,
+     "found": [
+      "STRASSE",
+      "12"
+     ]
+    },
+    {
+     "in": 37,
+     "found": [
+      "café",
+      "au",
+      "lait"
+     ]
+    },
+    {
+     "in": 38,
+     "found": [
+      "CAFÉ"
+     ]
+    },
+    {
+     "in": 39,
+     "found": [
+      "naïve"
+     ]
+    },
+    {
+     "in": 40,
+     "found": [
+      "Σσς"
+     ]
+    },
+    {
+     "in": 41,
+     "found": [
+      "line",
+      "one",
+      "line",
+      "two"
+     ]
+    },
+    {
+     "in": 42,
+     "found": [
+      "trailing",
+      "newline"
+     ]
+    },
+    {
+     "in": 43,
+     "found": [
+      "tab",
+      "separated"
+     ]
+    },
+    {
+     "in": 44,
+     "found": [
+      "unit",
+      "separator"
+     ]
+    },
+    {
+     "in": 45,
+     "found": [
+      "next",
+      "line"
+     ]
+    },
+    {
+     "in": 46,
+     "found": [
+      "emoji",
+      "😀",
+      "face"
+     ]
+    },
+    {
+     "in": 47,
+     "found": [
+      "under_score_word"
+     ]
+    },
+    {
+     "in": 48,
+     "found": [
+      "Ⅷ",
+      "roman"
+     ]
+    },
+    {
+     "in": 49,
+     "found": [
+      "x́",
+      "combining"
+     ]
+    },
+    {
+     "in": 50,
+     "found": [
+      "a.b"
+     ]
+    },
+    {
+     "in": 51,
+     "found": [
+      "a",
+      "b"
+     ]
+    },
+    {
+     "in": 52,
+     "found": [
+      "a",
+      "b"
+     ]
+    },
+    {
+     "in": 53,
+     "found": [
+      "ab"
+     ]
+    },
+    {
+     "in": 54,
+     "found": [
+      "AB"
+     ]
+    },
+    {
+     "in": 55,
+     "found": [
+      "aB"
+     ]
+    },
+    {
+     "in": 56,
+     "found": [
+      "foo",
+      "bar"
+     ]
+    },
+    {
+     "in": 57,
+     "found": [
+      "foobar"
+     ]
+    },
+    {
+     "in": 58,
+     "found": [
+      "{\"ref\":",
+      "\"ORD-12345678\"}"
+     ]
+    },
+    {
+     "in": 59,
+     "found": [
+      "[1,",
+      "2,",
+      "3]"
+     ]
+    },
+    {
+     "in": 60,
+     "found": [
+      "refund",
+      "this",
+      "order"
+     ]
+    },
+    {
+     "in": 61,
+     "found": [
+      "REFUND",
+      "THIS",
+      "ORDER"
+     ]
+    },
+    {
+     "in": 62,
+     "found": [
+      "the",
+      "end"
+     ]
+    },
+    {
+     "in": 63,
+     "found": [
+      "end"
+     ]
+    },
+    {
+     "in": 64,
+     "found": [
+      "start"
+     ]
+    },
+    {
+     "in": 65,
+     "found": [
+      "k"
+     ]
+    },
+    {
+     "in": 66,
+     "found": [
+      "K"
+     ]
+    },
+    {
+     "in": 67,
+     "found": [
+      "K"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "\\bfoo\\b",
+   "outside": false,
+   "finds": [
+    {
+     "in": 56,
+     "found": [
+      "foo"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "\\Bbar",
+   "outside": false,
+   "finds": [
+    {
+     "in": 57,
+     "found": [
+      "bar"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "^line",
+   "outside": false,
+   "finds": [
+    {
+     "in": 41,
+     "found": [
+      "line"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "two$",
+   "outside": false,
+   "finds": [
+    {
+     "in": 41,
+     "found": [
+      "two"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "newline$",
+   "outside": false,
+   "finds": [
+    {
+     "in": 42,
+     "found": [
+      "newline"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "(?m:^line two$)",
+   "outside": false,
+   "finds": [
+    {
+     "in": 41,
+     "found": [
+      "line two"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "(?m:one$)",
+   "outside": false,
+   "finds": [
+    {
+     "in": 41,
+     "found": [
+      "one"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "(?s:a.b)",
+   "outside": false,
+   "finds": [
+    {
+     "in": 50,
+     "found": [
+      "a.b"
+     ]
+    },
+    {
+     "in": 51,
+     "found": [
+      "a\nb"
+     ]
+    },
+    {
+     "in": 52,
+     "found": [
+      "a\rb"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "a.b",
+   "outside": false,
+   "finds": [
+    {
+     "in": 50,
+     "found": [
+      "a.b"
+     ]
+    },
+    {
+     "in": 52,
+     "found": [
+      "a\rb"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "\\Aend",
+   "outside": false,
+   "finds": [
+    {
+     "in": 63,
+     "found": [
+      "end"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "end\\Z",
+   "outside": false,
+   "finds": [
+    {
+     "in": 62,
+     "found": [
+      "end"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "(?i:straße)",
+   "outside": false,
+   "finds": [
+    {
+     "in": 35,
+     "found": [
+      "Straße"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "(?i:café)",
+   "outside": false,
+   "finds": [
+    {
+     "in": 37,
+     "found": [
+      "café"
+     ]
+    },
+    {
+     "in": 38,
+     "found": [
+      "CAFÉ"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "(?i:k)",
+   "outside": false,
+   "finds": [
+    {
+     "in": 22,
+     "found": [
+      "k",
+      "k"
+     ]
+    },
+    {
+     "in": 65,
+     "found": [
+      "k"
+     ]
+    },
+    {
+     "in": 66,
+     "found": [
+      "K"
+     ]
+    },
+    {
+     "in": 67,
+     "found": [
+      "K"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "(?i:[a-z]+)",
+   "outside": false,
+   "finds": [
+    {
+     "in": 2,
+     "found": [
+      "plain",
+      "words",
+      "only"
+     ]
+    },
+    {
+     "in": 3,
+     "found": [
+      "Order",
+      "ORD",
+      "shipped"
+     ]
+    },
+    {
+     "in": 4,
+     "found": [
+      "ORD"
+     ]
+    },
+    {
+     "in": 5,
+     "found": [
+      "ord"
+     ]
+    },
+    {
+     "in": 6,
+     "found": [
+      "ORD"
+     ]
+    },
+    {
+     "in": 7,
+     "found": [
+      "card",
+      "expires"
+     ]
+    },
+    {
+     "in": 8,
+     "found": [
+      "card"
+     ]
+    },
+    {
+     "in": 9,
+     "found": [
+      "card"
+     ]
+    },
+    {
+     "in": 13,
+     "found": [
+      "amount"
+     ]
+    },
+    {
+     "in": 14,
+     "found": [
+      "version"
+     ]
+    },
+    {
+     "in": 16,
+     "found": [
+      "IBAN",
+      "GB",
+      "WEST"
+     ]
+    },
+    {
+     "in": 17,
+     "found": [
+      "iban",
+      "gb",
+      "west"
+     ]
+    },
+    {
+     "in": 18,
+     "found": [
+      "sort",
+      "code"
+     ]
+    },
+    {
+     "in": 19,
+     "found": [
+      "account"
+     ]
+    },
+    {
+     "in": 20,
+     "found": [
+      "acct"
+     ]
+    },
+    {
+     "in": 21,
+     "found": [
+      "hash",
+      "f",
+      "a",
+      "c",
+      "b",
+      "e",
+      "d",
+      "a",
+      "f",
+      "e",
+      "d",
+      "c",
+      "b",
+      "a",
+      "f",
+      "e",
+      "d"
+     ]
+    },
+    {
+     "in": 22,
+     "found": [
+      "mail",
+      "jane",
+      "doe",
+      "desk",
+      "example",
+      "co",
+      "uk"
+     ]
+    },
+    {
+     "in": 23,
+     "found": [
+      "mail",
+      "j",
+      "rg",
+      "b",
+      "cher",
+      "de"
+     ]
+    },
+    {
+     "in": 24,
+     "found": [
+      "not",
+      "mail"
+     ]
+    },
+    {
+     "in": 25,
+     "found": [
+      "call"
+     ]
+    },
+    {
+     "in": 26,
+     "found": [
+      "call"
+     ]
+    },
+    {
+     "in": 27,
+     "found": [
+      "date"
+     ]
+    },
+    {
+     "in": 28,
+     "found": [
+      "at"
+     ]
+    },
+    {
+     "in": 29,
+     "found": [
+      "ssn"
+     ]
+    },
+    {
+     "in": 30,
+     "found": [
+      "ssn"
+     ]
+    },
+    {
+     "in": 31,
+     "found": [
+      "ssn"
+     ]
+    },
+    {
+     "in": 32,
+     "found": [
+      "id"
+     ]
+    },
+    {
+     "in": 34,
+     "found": [
+      "digits"
+     ]
+    },
+    {
+     "in": 35,
+     "found": [
+      "Stra",
+      "e"
+     ]
+    },
+    {
+     "in": 36,
+     "found": [
+      "STRASSE"
+     ]
+    },
+    {
+     "in": 37,
+     "found": [
+      "caf",
+      "au",
+      "lait"
+     ]
+    },
+    {
+     "in": 38,
+     "found": [
+      "CAF"
+     ]
+    },
+    {
+     "in": 39,
+     "found": [
+      "na",
+      "ve"
+     ]
+    },
+    {
+     "in": 41,
+     "found": [
+      "line",
+      "one",
+      "line",
+      "two"
+     ]
+    },
+    {
+     "in": 42,
+     "found": [
+      "trailing",
+      "newline"
+     ]
+    },
+    {
+     "in": 43,
+     "found": [
+      "tab",
+      "separated"
+     ]
+    },
+    {
+     "in": 44,
+     "found": [
+      "unit",
+      "separator"
+     ]
+    },
+    {
+     "in": 45,
+     "found": [
+      "next",
+      "line"
+     ]
+    },
+    {
+     "in": 46,
+     "found": [
+      "emoji",
+      "face"
+     ]
+    },
+    {
+     "in": 47,
+     "found": [
+      "under",
+      "score",
+      "word"
+     ]
+    },
+    {
+     "in": 48,
+     "found": [
+      "roman"
+     ]
+    },
+    {
+     "in": 49,
+     "found": [
+      "x",
+      "combining"
+     ]
+    },
+    {
+     "in": 50,
+     "found": [
+      "a",
+      "b"
+     ]
+    },
+    {
+     "in": 51,
+     "found": [
+      "a",
+      "b"
+     ]
+    },
+    {
+     "in": 52,
+     "found": [
+      "a",
+      "b"
+     ]
+    },
+    {
+     "in": 53,
+     "found": [
+      "ab"
+     ]
+    },
+    {
+     "in": 54,
+     "found": [
+      "AB"
+     ]
+    },
+    {
+     "in": 55,
+     "found": [
+      "aB"
+     ]
+    },
+    {
+     "in": 56,
+     "found": [
+      "foo",
+      "bar"
+     ]
+    },
+    {
+     "in": 57,
+     "found": [
+      "foobar"
+     ]
+    },
+    {
+     "in": 58,
+     "found": [
+      "ref",
+      "ORD"
+     ]
+    },
+    {
+     "in": 60,
+     "found": [
+      "refund",
+      "this",
+      "order"
+     ]
+    },
+    {
+     "in": 61,
+     "found": [
+      "REFUND",
+      "THIS",
+      "ORDER"
+     ]
+    },
+    {
+     "in": 62,
+     "found": [
+      "the",
+      "end"
+     ]
+    },
+    {
+     "in": 63,
+     "found": [
+      "end"
+     ]
+    },
+    {
+     "in": 64,
+     "found": [
+      "start"
+     ]
+    },
+    {
+     "in": 65,
+     "found": [
+      "k"
+     ]
+    },
+    {
+     "in": 66,
+     "found": [
+      "K"
+     ]
+    },
+    {
+     "in": 67,
+     "found": [
+      "K"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "(?i:ab)",
+   "outside": false,
+   "finds": [
+    {
+     "in": 43,
+     "found": [
+      "ab"
+     ]
+    },
+    {
+     "in": 53,
+     "found": [
+      "ab"
+     ]
+    },
+    {
+     "in": 54,
+     "found": [
+      "AB"
+     ]
+    },
+    {
+     "in": 55,
+     "found": [
+      "aB"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "[^\\W\\d]+",
+   "outside": false,
+   "finds": [
+    {
+     "in": 2,
+     "found": [
+      "plain",
+      "words",
+      "only"
+     ]
+    },
+    {
+     "in": 3,
+     "found": [
+      "Order",
+      "ORD",
+      "shipped"
+     ]
+    },
+    {
+     "in": 4,
+     "found": [
+      "ORD"
+     ]
+    },
+    {
+     "in": 5,
+     "found": [
+      "ord"
+     ]
+    },
+    {
+     "in": 6,
+     "found": [
+      "ORD"
+     ]
+    },
+    {
+     "in": 7,
+     "found": [
+      "card",
+      "expires"
+     ]
+    },
+    {
+     "in": 8,
+     "found": [
+      "card"
+     ]
+    },
+    {
+     "in": 9,
+     "found": [
+      "card"
+     ]
+    },
+    {
+     "in": 13,
+     "found": [
+      "amount"
+     ]
+    },
+    {
+     "in": 14,
+     "found": [
+      "version"
+     ]
+    },
+    {
+     "in": 16,
+     "found": [
+      "IBAN",
+      "GB",
+      "WEST"
+     ]
+    },
+    {
+     "in": 17,
+     "found": [
+      "iban",
+      "gb",
+      "west"
+     ]
+    },
+    {
+     "in": 18,
+     "found": [
+      "sort",
+      "code"
+     ]
+    },
+    {
+     "in": 19,
+     "found": [
+      "account"
+     ]
+    },
+    {
+     "in": 20,
+     "found": [
+      "acct"
+     ]
+    },
+    {
+     "in": 21,
+     "found": [
+      "hash",
+      "f",
+      "a",
+      "c",
+      "b",
+      "e",
+      "d",
+      "a",
+      "f",
+      "e",
+      "d",
+      "c",
+      "b",
+      "a",
+      "f",
+      "e",
+      "d"
+     ]
+    },
+    {
+     "in": 22,
+     "found": [
+      "mail",
+      "jane",
+      "doe",
+      "desk",
+      "example",
+      "co",
+      "uk"
+     ]
+    },
+    {
+     "in": 23,
+     "found": [
+      "mail",
+      "jörg",
+      "bücher",
+      "de"
+     ]
+    },
+    {
+     "in": 24,
+     "found": [
+      "not",
+      "mail"
+     ]
+    },
+    {
+     "in": 25,
+     "found": [
+      "call"
+     ]
+    },
+    {
+     "in": 26,
+     "found": [
+      "call"
+     ]
+    },
+    {
+     "in": 27,
+     "found": [
+      "date"
+     ]
+    },
+    {
+     "in": 28,
+     "found": [
+      "at"
+     ]
+    },
+    {
+     "in": 29,
+     "found": [
+      "ssn"
+     ]
+    },
+    {
+     "in": 30,
+     "found": [
+      "ssn"
+     ]
+    },
+    {
+     "in": 31,
+     "found": [
+      "ssn"
+     ]
+    },
+    {
+     "in": 32,
+     "found": [
+      "id"
+     ]
+    },
+    {
+     "in": 34,
+     "found": [
+      "digits"
+     ]
+    },
+    {
+     "in": 35,
+     "found": [
+      "Straße"
+     ]
+    },
+    {
+     "in": 36,
+     "found": [
+      "STRASSE"
+     ]
+    },
+    {
+     "in": 37,
+     "found": [
+      "café",
+      "au",
+      "lait"
+     ]
+    },
+    {
+     "in": 38,
+     "found": [
+      "CAFÉ"
+     ]
+    },
+    {
+     "in": 39,
+     "found": [
+      "naïve"
+     ]
+    },
+    {
+     "in": 40,
+     "found": [
+      "Σσς"
+     ]
+    },
+    {
+     "in": 41,
+     "found": [
+      "line",
+      "one",
+      "line",
+      "two"
+     ]
+    },
+    {
+     "in": 42,
+     "found": [
+      "trailing",
+      "newline"
+     ]
+    },
+    {
+     "in": 43,
+     "found": [
+      "tab",
+      "separated"
+     ]
+    },
+    {
+     "in": 44,
+     "found": [
+      "unit",
+      "separator"
+     ]
+    },
+    {
+     "in": 45,
+     "found": [
+      "next",
+      "line"
+     ]
+    },
+    {
+     "in": 46,
+     "found": [
+      "emoji",
+      "face"
+     ]
+    },
+    {
+     "in": 47,
+     "found": [
+      "under_score_word"
+     ]
+    },
+    {
+     "in": 48,
+     "found": [
+      "Ⅷ",
+      "roman"
+     ]
+    },
+    {
+     "in": 49,
+     "found": [
+      "x",
+      "combining"
+     ]
+    },
+    {
+     "in": 50,
+     "found": [
+      "a",
+      "b"
+     ]
+    },
+    {
+     "in": 51,
+     "found": [
+      "a",
+      "b"
+     ]
+    },
+    {
+     "in": 52,
+     "found": [
+      "a",
+      "b"
+     ]
+    },
+    {
+     "in": 53,
+     "found": [
+      "ab"
+     ]
+    },
+    {
+     "in": 54,
+     "found": [
+      "AB"
+     ]
+    },
+    {
+     "in": 55,
+     "found": [
+      "aB"
+     ]
+    },
+    {
+     "in": 56,
+     "found": [
+      "foo",
+      "bar"
+     ]
+    },
+    {
+     "in": 57,
+     "found": [
+      "foobar"
+     ]
+    },
+    {
+     "in": 58,
+     "found": [
+      "ref",
+      "ORD"
+     ]
+    },
+    {
+     "in": 60,
+     "found": [
+      "refund",
+      "this",
+      "order"
+     ]
+    },
+    {
+     "in": 61,
+     "found": [
+      "REFUND",
+      "THIS",
+      "ORDER"
+     ]
+    },
+    {
+     "in": 62,
+     "found": [
+      "the",
+      "end"
+     ]
+    },
+    {
+     "in": 63,
+     "found": [
+      "end"
+     ]
+    },
+    {
+     "in": 64,
+     "found": [
+      "start"
+     ]
+    },
+    {
+     "in": 65,
+     "found": [
+      "k"
+     ]
+    },
+    {
+     "in": 66,
+     "found": [
+      "K"
+     ]
+    },
+    {
+     "in": 67,
+     "found": [
+      "K"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "[\\S]+",
+   "outside": false,
+   "finds": [
+    {
+     "in": 2,
+     "found": [
+      "plain",
+      "words",
+      "only"
+     ]
+    },
+    {
+     "in": 3,
+     "found": [
+      "Order",
+      "ORD-12345678",
+      "shipped"
+     ]
+    },
+    {
+     "in": 4,
+     "found": [
+      "ORD-1234567"
+     ]
+    },
+    {
+     "in": 5,
+     "found": [
+      "ord-12345678"
+     ]
+    },
+    {
+     "in": 6,
+     "found": [
+      "ORD-123456789"
+     ]
+    },
+    {
+     "in": 7,
+     "found": [
+      "card",
+      "4111",
+      "1111",
+      "1111",
+      "1111",
+      "expires",
+      "09/27"
+     ]
+    },
+    {
+     "in": 8,
+     "found": [
+      "card",
+      "4111-1111-1111-1111"
+     ]
+    },
+    {
+     "in": 9,
+     "found": [
+      "card",
+      "4111111111111111"
+     ]
+    },
+    {
+     "in": 10,
+     "found": [
+      "4111",
+      "1111",
+      "1111",
+      "1111"
+     ]
+    },
+    {
+     "in": 11,
+     "found": [
+      "4111",
+      "1111",
+      "1111",
+      "1111"
+     ]
+    },
+    {
+     "in": 12,
+     "found": [
+      "4111.1111.1111.1111"
+     ]
+    },
+    {
+     "in": 13,
+     "found": [
+      "amount",
+      "1234.56"
+     ]
+    },
+    {
+     "in": 14,
+     "found": [
+      "version",
+      "1.2.3"
+     ]
+    },
+    {
+     "in": 15,
+     "found": [
+      "6011",
+      "0009",
+      "9013",
+      "9424",
+      "123"
+     ]
+    },
+    {
+     "in": 16,
+     "found": [
+      "IBAN",
+      "GB82",
+      "WEST",
+      "1234",
+      "5698",
+      "7654",
+      "32"
+     ]
+    },
+    {
+     "in": 17,
+     "found": [
+      "iban",
+      "gb82west12345698765432"
+     ]
+    },
+    {
+     "in": 18,
+     "found": [
+      "sort",
+      "code",
+      "12-34-56"
+     ]
+    },
+    {
+     "in": 19,
+     "found": [
+      "account",
+      "12345678"
+     ]
+    },
+    {
+     "in": 20,
+     "found": [
+      "acct",
+      "000123456789"
+     ]
+    },
+    {
+     "in": 21,
+     "found": [
+      "hash",
+      "3f2a9c1b8e7d6a5f4e3d2c1b0a9f8e7d"
+     ]
+    },
+    {
+     "in": 22,
+     "found": [
+      "mail",
+      "jane.doe+desk@example.co.uk"
+     ]
+    },
+    {
+     "in": 23,
+     "found": [
+      "mail",
+      "jörg@bücher.de"
+     ]
+    },
+    {
+     "in": 24,
+     "found": [
+      "not@mail"
+     ]
+    },
+    {
+     "in": 25,
+     "found": [
+      "call",
+      "+1",
+      "(555)",
+      "123-4567"
+     ]
+    },
+    {
+     "in": 26,
+     "found": [
+      "call",
+      "020",
+      "7946",
+      "0958"
+     ]
+    },
+    {
+     "in": 27,
+     "found": [
+      "date",
+      "2026-07-15"
+     ]
+    },
+    {
+     "in": 28,
+     "found": [
+      "at",
+      "2026-10-05",
+      "09:00"
+     ]
+    },
+    {
+     "in": 29,
+     "found": [
+      "ssn",
+      "123-45-6789"
+     ]
+    },
+    {
+     "in": 30,
+     "found": [
+      "ssn",
+      "123",
+      "45",
+      "6789"
+     ]
+    },
+    {
+     "in": 31,
+     "found": [
+      "ssn",
+      "123456789"
+     ]
+    },
+    {
+     "in": 32,
+     "found": [
+      "id",
+      "1234567890123"
+     ]
+    },
+    {
+     "in": 33,
+     "found": [
+      "١٢٣٤٥٦٧٨"
+     ]
+    },
+    {
+     "in": 34,
+     "found": [
+      "digits",
+      "１２３"
+     ]
+    },
+    {
+     "in": 35,
+     "found": [
+      "Straße",
+      "12"
+     ]
+    },
+    {
+     "in": 36,
+     "found": [
+      "STRASSE",
+      "12"
+     ]
+    },
+    {
+     "in": 37,
+     "found": [
+      "café",
+      "au",
+      "lait"
+     ]
+    },
+    {
+     "in": 38,
+     "found": [
+      "CAFÉ"
+     ]
+    },
+    {
+     "in": 39,
+     "found": [
+      "naïve"
+     ]
+    },
+    {
+     "in": 40,
+     "found": [
+      "Σσς"
+     ]
+    },
+    {
+     "in": 41,
+     "found": [
+      "line",
+      "one",
+      "line",
+      "two"
+     ]
+    },
+    {
+     "in": 42,
+     "found": [
+      "trailing",
+      "newline"
+     ]
+    },
+    {
+     "in": 43,
+     "found": [
+      "tab",
+      "separated"
+     ]
+    },
+    {
+     "in": 44,
+     "found": [
+      "unit",
+      "separator"
+     ]
+    },
+    {
+     "in": 45,
+     "found": [
+      "next",
+      "line"
+     ]
+    },
+    {
+     "in": 46,
+     "found": [
+      "emoji",
+      "😀",
+      "face"
+     ]
+    },
+    {
+     "in": 47,
+     "found": [
+      "under_score_word"
+     ]
+    },
+    {
+     "in": 48,
+     "found": [
+      "Ⅷ",
+      "roman"
+     ]
+    },
+    {
+     "in": 49,
+     "found": [
+      "x́",
+      "combining"
+     ]
+    },
+    {
+     "in": 50,
+     "found": [
+      "a.b"
+     ]
+    },
+    {
+     "in": 51,
+     "found": [
+      "a",
+      "b"
+     ]
+    },
+    {
+     "in": 52,
+     "found": [
+      "a",
+      "b"
+     ]
+    },
+    {
+     "in": 53,
+     "found": [
+      "ab"
+     ]
+    },
+    {
+     "in": 54,
+     "found": [
+      "AB"
+     ]
+    },
+    {
+     "in": 55,
+     "found": [
+      "aB"
+     ]
+    },
+    {
+     "in": 56,
+     "found": [
+      "foo",
+      "bar"
+     ]
+    },
+    {
+     "in": 57,
+     "found": [
+      "foobar"
+     ]
+    },
+    {
+     "in": 58,
+     "found": [
+      "{\"ref\":",
+      "\"ORD-12345678\"}"
+     ]
+    },
+    {
+     "in": 59,
+     "found": [
+      "[1,",
+      "2,",
+      "3]"
+     ]
+    },
+    {
+     "in": 60,
+     "found": [
+      "refund",
+      "this",
+      "order"
+     ]
+    },
+    {
+     "in": 61,
+     "found": [
+      "REFUND",
+      "THIS",
+      "ORDER"
+     ]
+    },
+    {
+     "in": 62,
+     "found": [
+      "the",
+      "end"
+     ]
+    },
+    {
+     "in": 63,
+     "found": [
+      "end"
+     ]
+    },
+    {
+     "in": 64,
+     "found": [
+      "start"
+     ]
+    },
+    {
+     "in": 65,
+     "found": [
+      "k"
+     ]
+    },
+    {
+     "in": 66,
+     "found": [
+      "K"
+     ]
+    },
+    {
+     "in": 67,
+     "found": [
+      "K"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "[\\W\\d]",
+   "outside": false,
+   "finds": [
+    {
+     "in": 1,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 2,
+     "found": [
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 3,
+     "found": [
+      " ",
+      "-",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      " "
+     ]
+    },
+    {
+     "in": 4,
+     "found": [
+      "-",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7"
+     ]
+    },
+    {
+     "in": 5,
+     "found": [
+      "-",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8"
+     ]
+    },
+    {
+     "in": 6,
+     "found": [
+      "-",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9"
+     ]
+    },
+    {
+     "in": 7,
+     "found": [
+      " ",
+      "4",
+      "1",
+      "1",
+      "1",
+      " ",
+      "1",
+      "1",
+      "1",
+      "1",
+      " ",
+      "1",
+      "1",
+      "1",
+      "1",
+      " ",
+      "1",
+      "1",
+      "1",
+      "1",
+      " ",
+      " ",
+      "0",
+      "9",
+      "/",
+      "2",
+      "7"
+     ]
+    },
+    {
+     "in": 8,
+     "found": [
+      " ",
+      "4",
+      "1",
+      "1",
+      "1",
+      "-",
+      "1",
+      "1",
+      "1",
+      "1",
+      "-",
+      "1",
+      "1",
+      "1",
+      "1",
+      "-",
+      "1",
+      "1",
+      "1",
+      "1"
+     ]
+    },
+    {
+     "in": 9,
+     "found": [
+      " ",
+      "4",
+      "1",
+      "1",
+      "1",
+      "1",
+      "1",
+      "1",
+      "1",
+      "1",
+      "1",
+      "1",
+      "1",
+      "1",
+      "1",
+      "1",
+      "1"
+     ]
+    },
+    {
+     "in": 10,
+     "found": [
+      "4",
+      "1",
+      "1",
+      "1",
+      " ",
+      "1",
+      "1",
+      "1",
+      "1",
+      " ",
+      "1",
+      "1",
+      "1",
+      "1",
+      " ",
+      "1",
+      "1",
+      "1",
+      "1"
+     ]
+    },
+    {
+     "in": 11,
+     "found": [
+      "4",
+      "1",
+      "1",
+      "1",
+      " ",
+      "1",
+      "1",
+      "1",
+      "1",
+      " ",
+      "1",
+      "1",
+      "1",
+      "1",
+      " ",
+      "1",
+      "1",
+      "1",
+      "1"
+     ]
+    },
+    {
+     "in": 12,
+     "found": [
+      "4",
+      "1",
+      "1",
+      "1",
+      ".",
+      "1",
+      "1",
+      "1",
+      "1",
+      ".",
+      "1",
+      "1",
+      "1",
+      "1",
+      ".",
+      "1",
+      "1",
+      "1",
+      "1"
+     ]
+    },
+    {
+     "in": 13,
+     "found": [
+      " ",
+      "1",
+      "2",
+      "3",
+      "4",
+      ".",
+      "5",
+      "6"
+     ]
+    },
+    {
+     "in": 14,
+     "found": [
+      " ",
+      "1",
+      ".",
+      "2",
+      ".",
+      "3"
+     ]
+    },
+    {
+     "in": 15,
+     "found": [
+      "6",
+      "0",
+      "1",
+      "1",
+      " ",
+      "0",
+      "0",
+      "0",
+      "9",
+      " ",
+      "9",
+      "0",
+      "1",
+      "3",
+      " ",
+      "9",
+      "4",
+      "2",
+      "4",
+      " ",
+      "1",
+      "2",
+      "3"
+     ]
+    },
+    {
+     "in": 16,
+     "found": [
+      " ",
+      "8",
+      "2",
+      " ",
+      " ",
+      "1",
+      "2",
+      "3",
+      "4",
+      " ",
+      "5",
+      "6",
+      "9",
+      "8",
+      " ",
+      "7",
+      "6",
+      "5",
+      "4",
+      " ",
+      "3",
+      "2"
+     ]
+    },
+    {
+     "in": 17,
+     "found": [
+      " ",
+      "8",
+      "2",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "9",
+      "8",
+      "7",
+      "6",
+      "5",
+      "4",
+      "3",
+      "2"
+     ]
+    },
+    {
+     "in": 18,
+     "found": [
+      " ",
+      " ",
+      "1",
+      "2",
+      "-",
+      "3",
+      "4",
+      "-",
+      "5",
+      "6"
+     ]
+    },
+    {
+     "in": 19,
+     "found": [
+      " ",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8"
+     ]
+    },
+    {
+     "in": 20,
+     "found": [
+      " ",
+      "0",
+      "0",
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9"
+     ]
+    },
+    {
+     "in": 21,
+     "found": [
+      " ",
+      "3",
+      "2",
+      "9",
+      "1",
+      "8",
+      "7",
+      "6",
+      "5",
+      "4",
+      "3",
+      "2",
+      "1",
+      "0",
+      "9",
+      "8",
+      "7"
+     ]
+    },
+    {
+     "in": 22,
+     "found": [
+      " ",
+      ".",
+      "+",
+      "@",
+      ".",
+      "."
+     ]
+    },
+    {
+     "in": 23,
+     "found": [
+      " ",
+      "@",
+      "."
+     ]
+    },
+    {
+     "in": 24,
+     "found": [
+      "@"
+     ]
+    },
+    {
+     "in": 25,
+     "found": [
+      " ",
+      "+",
+      "1",
+      " ",
+      "(",
+      "5",
+      "5",
+      "5",
+      ")",
+      " ",
+      "1",
+      "2",
+      "3",
+      "-",
+      "4",
+      "5",
+      "6",
+      "7"
+     ]
+    },
+    {
+     "in": 26,
+     "found": [
+      " ",
+      "0",
+      "2",
+      "0",
+      " ",
+      "7",
+      "9",
+      "4",
+      "6",
+      " ",
+      "0",
+      "9",
+      "5",
+      "8"
+     ]
+    },
+    {
+     "in": 27,
+     "found": [
+      " ",
+      "2",
+      "0",
+      "2",
+      "6",
+      "-",
+      "0",
+      "7",
+      "-",
+      "1",
+      "5"
+     ]
+    },
+    {
+     "in": 28,
+     "found": [
+      " ",
+      "2",
+      "0",
+      "2",
+      "6",
+      "-",
+      "1",
+      "0",
+      "-",
+      "0",
+      "5",
+      " ",
+      "0",
+      "9",
+      ":",
+      "0",
+      "0"
+     ]
+    },
+    {
+     "in": 29,
+     "found": [
+      " ",
+      "1",
+      "2",
+      "3",
+      "-",
+      "4",
+      "5",
+      "-",
+      "6",
+      "7",
+      "8",
+      "9"
+     ]
+    },
+    {
+     "in": 30,
+     "found": [
+      " ",
+      "1",
+      "2",
+      "3",
+      " ",
+      "4",
+      "5",
+      " ",
+      "6",
+      "7",
+      "8",
+      "9"
+     ]
+    },
+    {
+     "in": 31,
+     "found": [
+      " ",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9"
+     ]
+    },
+    {
+     "in": 32,
+     "found": [
+      " ",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "0",
+      "1",
+      "2",
+      "3"
+     ]
+    },
+    {
+     "in": 33,
+     "found": [
+      "١",
+      "٢",
+      "٣",
+      "٤",
+      "٥",
+      "٦",
+      "٧",
+      "٨"
+     ]
+    },
+    {
+     "in": 34,
+     "found": [
+      " ",
+      "１",
+      "２",
+      "３"
+     ]
+    },
+    {
+     "in": 35,
+     "found": [
+      " ",
+      "1",
+      "2"
+     ]
+    },
+    {
+     "in": 36,
+     "found": [
+      " ",
+      "1",
+      "2"
+     ]
+    },
+    {
+     "in": 37,
+     "found": [
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 41,
+     "found": [
+      " ",
+      "\n",
+      " "
+     ]
+    },
+    {
+     "in": 42,
+     "found": [
+      " ",
+      "\n"
+     ]
+    },
+    {
+     "in": 43,
+     "found": [
+      "\t"
+     ]
+    },
+    {
+     "in": 44,
+     "found": [
+      "\u001f"
+     ]
+    },
+    {
+     "in": 45,
+     "found": [
+      ""
+     ]
+    },
+    {
+     "in": 46,
+     "found": [
+      " ",
+      "😀",
+      " "
+     ]
+    },
+    {
+     "in": 48,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 49,
+     "found": [
+      "́",
+      " "
+     ]
+    },
+    {
+     "in": 50,
+     "found": [
+      "."
+     ]
+    },
+    {
+     "in": 51,
+     "found": [
+      "\n"
+     ]
+    },
+    {
+     "in": 52,
+     "found": [
+      "\r"
+     ]
+    },
+    {
+     "in": 56,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 58,
+     "found": [
+      "{",
+      "\"",
+      "\"",
+      ":",
+      " ",
+      "\"",
+      "-",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "\"",
+      "}"
+     ]
+    },
+    {
+     "in": 59,
+     "found": [
+      "[",
+      "1",
+      ",",
+      " ",
+      "2",
+      ",",
+      " ",
+      "3",
+      "]"
+     ]
+    },
+    {
+     "in": 60,
+     "found": [
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 61,
+     "found": [
+      " ",
+      " "
+     ]
+    },
+    {
+     "in": 62,
+     "found": [
+      " "
+     ]
+    },
+    {
+     "in": 63,
+     "found": [
+      "\n"
+     ]
+    },
+    {
+     "in": 64,
+     "found": [
+      "\n"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "[^\\s\\d]+",
+   "outside": false,
+   "finds": [
+    {
+     "in": 2,
+     "found": [
+      "plain",
+      "words",
+      "only"
+     ]
+    },
+    {
+     "in": 3,
+     "found": [
+      "Order",
+      "ORD-",
+      "shipped"
+     ]
+    },
+    {
+     "in": 4,
+     "found": [
+      "ORD-"
+     ]
+    },
+    {
+     "in": 5,
+     "found": [
+      "ord-"
+     ]
+    },
+    {
+     "in": 6,
+     "found": [
+      "ORD-"
+     ]
+    },
+    {
+     "in": 7,
+     "found": [
+      "card",
+      "expires",
+      "/"
+     ]
+    },
+    {
+     "in": 8,
+     "found": [
+      "card",
+      "-",
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 9,
+     "found": [
+      "card"
+     ]
+    },
+    {
+     "in": 12,
+     "found": [
+      ".",
+      ".",
+      "."
+     ]
+    },
+    {
+     "in": 13,
+     "found": [
+      "amount",
+      "."
+     ]
+    },
+    {
+     "in": 14,
+     "found": [
+      "version",
+      ".",
+      "."
+     ]
+    },
+    {
+     "in": 16,
+     "found": [
+      "IBAN",
+      "GB",
+      "WEST"
+     ]
+    },
+    {
+     "in": 17,
+     "found": [
+      "iban",
+      "gb",
+      "west"
+     ]
+    },
+    {
+     "in": 18,
+     "found": [
+      "sort",
+      "code",
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 19,
+     "found": [
+      "account"
+     ]
+    },
+    {
+     "in": 20,
+     "found": [
+      "acct"
+     ]
+    },
+    {
+     "in": 21,
+     "found": [
+      "hash",
+      "f",
+      "a",
+      "c",
+      "b",
+      "e",
+      "d",
+      "a",
+      "f",
+      "e",
+      "d",
+      "c",
+      "b",
+      "a",
+      "f",
+      "e",
+      "d"
+     ]
+    },
+    {
+     "in": 22,
+     "found": [
+      "mail",
+      "jane.doe+desk@example.co.uk"
+     ]
+    },
+    {
+     "in": 23,
+     "found": [
+      "mail",
+      "jörg@bücher.de"
+     ]
+    },
+    {
+     "in": 24,
+     "found": [
+      "not@mail"
+     ]
+    },
+    {
+     "in": 25,
+     "found": [
+      "call",
+      "+",
+      "(",
+      ")",
+      "-"
+     ]
+    },
+    {
+     "in": 26,
+     "found": [
+      "call"
+     ]
+    },
+    {
+     "in": 27,
+     "found": [
+      "date",
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 28,
+     "found": [
+      "at",
+      "-",
+      "-",
+      ":"
+     ]
+    },
+    {
+     "in": 29,
+     "found": [
+      "ssn",
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 30,
+     "found": [
+      "ssn"
+     ]
+    },
+    {
+     "in": 31,
+     "found": [
+      "ssn"
+     ]
+    },
+    {
+     "in": 32,
+     "found": [
+      "id"
+     ]
+    },
+    {
+     "in": 34,
+     "found": [
+      "digits"
+     ]
+    },
+    {
+     "in": 35,
+     "found": [
+      "Straße"
+     ]
+    },
+    {
+     "in": 36,
+     "found": [
+      "STRASSE"
+     ]
+    },
+    {
+     "in": 37,
+     "found": [
+      "café",
+      "au",
+      "lait"
+     ]
+    },
+    {
+     "in": 38,
+     "found": [
+      "CAFÉ"
+     ]
+    },
+    {
+     "in": 39,
+     "found": [
+      "naïve"
+     ]
+    },
+    {
+     "in": 40,
+     "found": [
+      "Σσς"
+     ]
+    },
+    {
+     "in": 41,
+     "found": [
+      "line",
+      "one",
+      "line",
+      "two"
+     ]
+    },
+    {
+     "in": 42,
+     "found": [
+      "trailing",
+      "newline"
+     ]
+    },
+    {
+     "in": 43,
+     "found": [
+      "tab",
+      "separated"
+     ]
+    },
+    {
+     "in": 44,
+     "found": [
+      "unit",
+      "separator"
+     ]
+    },
+    {
+     "in": 45,
+     "found": [
+      "next",
+      "line"
+     ]
+    },
+    {
+     "in": 46,
+     "found": [
+      "emoji",
+      "😀",
+      "face"
+     ]
+    },
+    {
+     "in": 47,
+     "found": [
+      "under_score_word"
+     ]
+    },
+    {
+     "in": 48,
+     "found": [
+      "Ⅷ",
+      "roman"
+     ]
+    },
+    {
+     "in": 49,
+     "found": [
+      "x́",
+      "combining"
+     ]
+    },
+    {
+     "in": 50,
+     "found": [
+      "a.b"
+     ]
+    },
+    {
+     "in": 51,
+     "found": [
+      "a",
+      "b"
+     ]
+    },
+    {
+     "in": 52,
+     "found": [
+      "a",
+      "b"
+     ]
+    },
+    {
+     "in": 53,
+     "found": [
+      "ab"
+     ]
+    },
+    {
+     "in": 54,
+     "found": [
+      "AB"
+     ]
+    },
+    {
+     "in": 55,
+     "found": [
+      "aB"
+     ]
+    },
+    {
+     "in": 56,
+     "found": [
+      "foo",
+      "bar"
+     ]
+    },
+    {
+     "in": 57,
+     "found": [
+      "foobar"
+     ]
+    },
+    {
+     "in": 58,
+     "found": [
+      "{\"ref\":",
+      "\"ORD-",
+      "\"}"
+     ]
+    },
+    {
+     "in": 59,
+     "found": [
+      "[",
+      ",",
+      ",",
+      "]"
+     ]
+    },
+    {
+     "in": 60,
+     "found": [
+      "refund",
+      "this",
+      "order"
+     ]
+    },
+    {
+     "in": 61,
+     "found": [
+      "REFUND",
+      "THIS",
+      "ORDER"
+     ]
+    },
+    {
+     "in": 62,
+     "found": [
+      "the",
+      "end"
+     ]
+    },
+    {
+     "in": 63,
+     "found": [
+      "end"
+     ]
+    },
+    {
+     "in": 64,
+     "found": [
+      "start"
+     ]
+    },
+    {
+     "in": 65,
+     "found": [
+      "k"
+     ]
+    },
+    {
+     "in": 66,
+     "found": [
+      "K"
+     ]
+    },
+    {
+     "in": 67,
+     "found": [
+      "K"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "(?P<id>ORD)-\\d{3}",
+   "outside": false,
+   "finds": [
+    {
+     "in": 3,
+     "found": [
+      "ORD-123"
+     ]
+    },
+    {
+     "in": 4,
+     "found": [
+      "ORD-123"
+     ]
+    },
+    {
+     "in": 6,
+     "found": [
+      "ORD-123"
+     ]
+    },
+    {
+     "in": 58,
+     "found": [
+      "ORD-123"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "a{2,}",
+   "outside": false,
+   "finds": []
+  },
+  {
+   "looks-like": "o{1,2}?",
+   "outside": false,
+   "finds": [
+    {
+     "in": 2,
+     "found": [
+      "o",
+      "o"
+     ]
+    },
+    {
+     "in": 5,
+     "found": [
+      "o"
+     ]
+    },
+    {
+     "in": 13,
+     "found": [
+      "o"
+     ]
+    },
+    {
+     "in": 14,
+     "found": [
+      "o"
+     ]
+    },
+    {
+     "in": 18,
+     "found": [
+      "o",
+      "o"
+     ]
+    },
+    {
+     "in": 19,
+     "found": [
+      "o"
+     ]
+    },
+    {
+     "in": 22,
+     "found": [
+      "o",
+      "o"
+     ]
+    },
+    {
+     "in": 24,
+     "found": [
+      "o"
+     ]
+    },
+    {
+     "in": 41,
+     "found": [
+      "o",
+      "o"
+     ]
+    },
+    {
+     "in": 44,
+     "found": [
+      "o"
+     ]
+    },
+    {
+     "in": 46,
+     "found": [
+      "o"
+     ]
+    },
+    {
+     "in": 47,
+     "found": [
+      "o",
+      "o"
+     ]
+    },
+    {
+     "in": 48,
+     "found": [
+      "o"
+     ]
+    },
+    {
+     "in": 49,
+     "found": [
+      "o"
+     ]
+    },
+    {
+     "in": 56,
+     "found": [
+      "o",
+      "o"
+     ]
+    },
+    {
+     "in": 57,
+     "found": [
+      "o",
+      "o"
+     ]
+    },
+    {
+     "in": 60,
+     "found": [
+      "o"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "x*?",
+   "outside": true,
+   "reason": "a pattern that can match an empty value, so it finds something in every text and runtimes disagree on what; make every branch need at least one character"
+  },
+  {
+   "looks-like": "\\x41",
+   "outside": false,
+   "finds": [
+    {
+     "in": 16,
+     "found": [
+      "A"
+     ]
+    },
+    {
+     "in": 36,
+     "found": [
+      "A"
+     ]
+    },
+    {
+     "in": 38,
+     "found": [
+      "A"
+     ]
+    },
+    {
+     "in": 54,
+     "found": [
+      "A"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "\\u00e9",
+   "outside": false,
+   "finds": [
+    {
+     "in": 37,
+     "found": [
+      "é"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "\\U0001F600",
+   "outside": false,
+   "finds": [
+    {
+     "in": 46,
+     "found": [
+      "😀"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "\\.",
+   "outside": false,
+   "finds": [
+    {
+     "in": 12,
+     "found": [
+      ".",
+      ".",
+      "."
+     ]
+    },
+    {
+     "in": 13,
+     "found": [
+      "."
+     ]
+    },
+    {
+     "in": 14,
+     "found": [
+      ".",
+      "."
+     ]
+    },
+    {
+     "in": 22,
+     "found": [
+      ".",
+      ".",
+      "."
+     ]
+    },
+    {
+     "in": 23,
+     "found": [
+      "."
+     ]
+    },
+    {
+     "in": 50,
+     "found": [
+      "."
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "\\-",
+   "outside": false,
+   "finds": [
+    {
+     "in": 3,
+     "found": [
+      "-"
+     ]
+    },
+    {
+     "in": 4,
+     "found": [
+      "-"
+     ]
+    },
+    {
+     "in": 5,
+     "found": [
+      "-"
+     ]
+    },
+    {
+     "in": 6,
+     "found": [
+      "-"
+     ]
+    },
+    {
+     "in": 8,
+     "found": [
+      "-",
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 18,
+     "found": [
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 25,
+     "found": [
+      "-"
+     ]
+    },
+    {
+     "in": 27,
+     "found": [
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 28,
+     "found": [
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 29,
+     "found": [
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 58,
+     "found": [
+      "-"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "\\}",
+   "outside": false,
+   "finds": [
+    {
+     "in": 58,
+     "found": [
+      "}"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "a|b|c",
+   "outside": false,
+   "finds": [
+    {
+     "in": 2,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 7,
+     "found": [
+      "c",
+      "a"
+     ]
+    },
+    {
+     "in": 8,
+     "found": [
+      "c",
+      "a"
+     ]
+    },
+    {
+     "in": 9,
+     "found": [
+      "c",
+      "a"
+     ]
+    },
+    {
+     "in": 13,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 17,
+     "found": [
+      "b",
+      "a",
+      "b"
+     ]
+    },
+    {
+     "in": 18,
+     "found": [
+      "c"
+     ]
+    },
+    {
+     "in": 19,
+     "found": [
+      "a",
+      "c",
+      "c"
+     ]
+    },
+    {
+     "in": 20,
+     "found": [
+      "a",
+      "c",
+      "c"
+     ]
+    },
+    {
+     "in": 21,
+     "found": [
+      "a",
+      "a",
+      "c",
+      "b",
+      "a",
+      "c",
+      "b",
+      "a"
+     ]
+    },
+    {
+     "in": 22,
+     "found": [
+      "a",
+      "a",
+      "a",
+      "c"
+     ]
+    },
+    {
+     "in": 23,
+     "found": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    {
+     "in": 24,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 25,
+     "found": [
+      "c",
+      "a"
+     ]
+    },
+    {
+     "in": 26,
+     "found": [
+      "c",
+      "a"
+     ]
+    },
+    {
+     "in": 27,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 28,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 35,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 37,
+     "found": [
+      "c",
+      "a",
+      "a",
+      "a"
+     ]
+    },
+    {
+     "in": 39,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 42,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 43,
+     "found": [
+      "a",
+      "b",
+      "a",
+      "a"
+     ]
+    },
+    {
+     "in": 44,
+     "found": [
+      "a",
+      "a"
+     ]
+    },
+    {
+     "in": 46,
+     "found": [
+      "a",
+      "c"
+     ]
+    },
+    {
+     "in": 47,
+     "found": [
+      "c"
+     ]
+    },
+    {
+     "in": 48,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 49,
+     "found": [
+      "c",
+      "b"
+     ]
+    },
+    {
+     "in": 50,
+     "found": [
+      "a",
+      "b"
+     ]
+    },
+    {
+     "in": 51,
+     "found": [
+      "a",
+      "b"
+     ]
+    },
+    {
+     "in": 52,
+     "found": [
+      "a",
+      "b"
+     ]
+    },
+    {
+     "in": 53,
+     "found": [
+      "a",
+      "b"
+     ]
+    },
+    {
+     "in": 55,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 56,
+     "found": [
+      "b",
+      "a"
+     ]
+    },
+    {
+     "in": 57,
+     "found": [
+      "b",
+      "a"
+     ]
+    },
+    {
+     "in": 64,
+     "found": [
+      "a"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "(?:foo|bar)+",
+   "outside": false,
+   "finds": [
+    {
+     "in": 56,
+     "found": [
+      "foo",
+      "bar"
+     ]
+    },
+    {
+     "in": 57,
+     "found": [
+      "foobar"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "[]a]",
+   "outside": false,
+   "finds": [
+    {
+     "in": 2,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 7,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 8,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 9,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 13,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 17,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 19,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 20,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 21,
+     "found": [
+      "a",
+      "a",
+      "a",
+      "a"
+     ]
+    },
+    {
+     "in": 22,
+     "found": [
+      "a",
+      "a",
+      "a"
+     ]
+    },
+    {
+     "in": 23,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 24,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 25,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 26,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 27,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 28,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 35,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 37,
+     "found": [
+      "a",
+      "a",
+      "a"
+     ]
+    },
+    {
+     "in": 39,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 42,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 43,
+     "found": [
+      "a",
+      "a",
+      "a"
+     ]
+    },
+    {
+     "in": 44,
+     "found": [
+      "a",
+      "a"
+     ]
+    },
+    {
+     "in": 46,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 48,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 50,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 51,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 52,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 53,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 55,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 56,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 57,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 59,
+     "found": [
+      "]"
+     ]
+    },
+    {
+     "in": 64,
+     "found": [
+      "a"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "[a-]",
+   "outside": false,
+   "finds": [
+    {
+     "in": 2,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 3,
+     "found": [
+      "-"
+     ]
+    },
+    {
+     "in": 4,
+     "found": [
+      "-"
+     ]
+    },
+    {
+     "in": 5,
+     "found": [
+      "-"
+     ]
+    },
+    {
+     "in": 6,
+     "found": [
+      "-"
+     ]
+    },
+    {
+     "in": 7,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 8,
+     "found": [
+      "a",
+      "-",
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 9,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 13,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 17,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 18,
+     "found": [
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 19,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 20,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 21,
+     "found": [
+      "a",
+      "a",
+      "a",
+      "a"
+     ]
+    },
+    {
+     "in": 22,
+     "found": [
+      "a",
+      "a",
+      "a"
+     ]
+    },
+    {
+     "in": 23,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 24,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 25,
+     "found": [
+      "a",
+      "-"
+     ]
+    },
+    {
+     "in": 26,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 27,
+     "found": [
+      "a",
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 28,
+     "found": [
+      "a",
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 29,
+     "found": [
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 35,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 37,
+     "found": [
+      "a",
+      "a",
+      "a"
+     ]
+    },
+    {
+     "in": 39,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 42,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 43,
+     "found": [
+      "a",
+      "a",
+      "a"
+     ]
+    },
+    {
+     "in": 44,
+     "found": [
+      "a",
+      "a"
+     ]
+    },
+    {
+     "in": 46,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 48,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 50,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 51,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 52,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 53,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 55,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 56,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 57,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 58,
+     "found": [
+      "-"
+     ]
+    },
+    {
+     "in": 64,
+     "found": [
+      "a"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "[-a]",
+   "outside": false,
+   "finds": [
+    {
+     "in": 2,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 3,
+     "found": [
+      "-"
+     ]
+    },
+    {
+     "in": 4,
+     "found": [
+      "-"
+     ]
+    },
+    {
+     "in": 5,
+     "found": [
+      "-"
+     ]
+    },
+    {
+     "in": 6,
+     "found": [
+      "-"
+     ]
+    },
+    {
+     "in": 7,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 8,
+     "found": [
+      "a",
+      "-",
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 9,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 13,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 17,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 18,
+     "found": [
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 19,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 20,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 21,
+     "found": [
+      "a",
+      "a",
+      "a",
+      "a"
+     ]
+    },
+    {
+     "in": 22,
+     "found": [
+      "a",
+      "a",
+      "a"
+     ]
+    },
+    {
+     "in": 23,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 24,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 25,
+     "found": [
+      "a",
+      "-"
+     ]
+    },
+    {
+     "in": 26,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 27,
+     "found": [
+      "a",
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 28,
+     "found": [
+      "a",
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 29,
+     "found": [
+      "-",
+      "-"
+     ]
+    },
+    {
+     "in": 35,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 37,
+     "found": [
+      "a",
+      "a",
+      "a"
+     ]
+    },
+    {
+     "in": 39,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 42,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 43,
+     "found": [
+      "a",
+      "a",
+      "a"
+     ]
+    },
+    {
+     "in": 44,
+     "found": [
+      "a",
+      "a"
+     ]
+    },
+    {
+     "in": 46,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 48,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 50,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 51,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 52,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 53,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 55,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 56,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 57,
+     "found": [
+      "a"
+     ]
+    },
+    {
+     "in": 58,
+     "found": [
+      "-"
+     ]
+    },
+    {
+     "in": 64,
+     "found": [
+      "a"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "[\\]]",
+   "outside": false,
+   "finds": [
+    {
+     "in": 59,
+     "found": [
+      "]"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "[\\\\]",
+   "outside": false,
+   "finds": []
+  },
+  {
+   "looks-like": "refund (this|that) order",
+   "outside": false,
+   "finds": [
+    {
+     "in": 60,
+     "found": [
+      "refund this order"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "\\t",
+   "outside": false,
+   "finds": [
+    {
+     "in": 43,
+     "found": [
+      "\t"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "\\n",
+   "outside": false,
+   "finds": [
+    {
+     "in": 41,
+     "found": [
+      "\n"
+     ]
+    },
+    {
+     "in": 42,
+     "found": [
+      "\n"
+     ]
+    },
+    {
+     "in": 51,
+     "found": [
+      "\n"
+     ]
+    },
+    {
+     "in": 63,
+     "found": [
+      "\n"
+     ]
+    },
+    {
+     "in": 64,
+     "found": [
+      "\n"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "(?<=x)y",
+   "outside": true,
+   "reason": "a lookaround `(?<=...)`, which the Rust regex crate does not read"
+  },
+  {
+   "looks-like": "(?=a)",
+   "outside": true,
+   "reason": "a lookaround `(?=...)`, which the Rust regex crate does not read"
+  },
+  {
+   "looks-like": "(a)\\1",
+   "outside": true,
+   "reason": "`\\1`, a back-reference or an octal escape, which the Rust regex crate does not read"
+  },
+  {
+   "looks-like": "a{,3}",
+   "outside": true,
+   "reason": "a `{,m}` quantifier with no lower bound, which the Rust regex crate does not read; write `{0,m}`"
+  },
+  {
+   "looks-like": "(?i)foo",
+   "outside": true,
+   "reason": "a flag for the whole pattern, which the reference adapter cannot read inside a detector; write `(?i:...)` around the part it applies to"
+  },
+  {
+   "looks-like": "a++",
+   "outside": true,
+   "reason": "a possessive quantifier, which the Rust regex crate does not read"
+  },
+  {
+   "looks-like": "[[:alpha:]]",
+   "outside": true,
+   "reason": "a `[` inside a class, which the Rust regex crate reads as a nested class; write `\\[`"
+  },
+  {
+   "looks-like": "[a&&b]",
+   "outside": true,
+   "reason": "`&&` inside a class, which the Rust regex crate reads as a set operation; escape one of the two"
+  },
+  {
+   "looks-like": "\\p{L}",
+   "outside": true,
+   "reason": "the escape `\\p`, which Python's re and the Rust regex crate do not read alike"
+  },
+  {
+   "looks-like": "\\z",
+   "outside": true,
+   "reason": "the escape `\\z`, which Python's re and the Rust regex crate do not read alike"
+  },
+  {
+   "looks-like": "(?#note)a",
+   "outside": true,
+   "reason": "a comment group, which the Rust regex crate does not read"
+  },
+  {
+   "looks-like": "(?>a)",
+   "outside": true,
+   "reason": "an atomic group, which the Rust regex crate does not read"
+  },
+  {
+   "looks-like": "(?<name>a)",
+   "outside": true,
+   "reason": "a named group written `(?<name>...)`, which Python's re refuses; write `(?P<name>...)`"
+  },
+  {
+   "looks-like": "a{",
+   "outside": true,
+   "reason": "a `{` that is no quantifier; write `\\{` for the character"
+  },
+  {
+   "looks-like": "{2}",
+   "outside": true,
+   "reason": "a quantifier with nothing before it to repeat"
+  },
+  {
+   "looks-like": "*a",
+   "outside": true,
+   "reason": "a quantifier with nothing before it to repeat"
+  },
+  {
+   "looks-like": "(a",
+   "outside": true,
+   "reason": "a group that is never closed"
+  },
+  {
+   "looks-like": "a)",
+   "outside": true,
+   "reason": "a `)` that closes no group; write `\\)` for the character"
+  },
+  {
+   "looks-like": "[a",
+   "outside": true,
+   "reason": "a class `[` that is never closed"
+  },
+  {
+   "looks-like": "\\0",
+   "outside": true,
+   "reason": "`\\0`, a back-reference or an octal escape, which the Rust regex crate does not read"
+  },
+  {
+   "looks-like": "(?x:a b)",
+   "outside": true,
+   "reason": "the flag `x`, which the PACT dialect does not read; it reads `i`, `m` and `s`"
+  },
+  {
+   "looks-like": "(?-i:a)",
+   "outside": true,
+   "reason": "a group that turns a flag off, which the PACT dialect does not read"
+  },
+  {
+   "looks-like": "[\\d-z]",
+   "outside": true,
+   "reason": "a range whose end is a class such as `\\d`"
+  },
+  {
+   "looks-like": "[z-a]",
+   "outside": true,
+   "reason": "a range whose end comes before its start"
+  },
+  {
+   "looks-like": "[\\b]",
+   "outside": true,
+   "reason": "`\\b` inside a class, which Python reads as a backspace and the Rust regex crate refuses"
+  },
+  {
+   "looks-like": "a**",
+   "outside": true,
+   "reason": "two quantifiers in a row; put the first in a group `(?:...)`"
+  },
+  {
+   "looks-like": "a{4294967295}",
+   "outside": true,
+   "reason": "a quantifier `{4294967295}` above the largest repetition count Python's re reads"
+  },
+  {
+   "looks-like": "(?i:[à-ÿ])",
+   "outside": true,
+   "reason": "a range of letters beyond ASCII inside `(?i:...)`, which the PACT dialect does not read; list the letters"
+  },
+  {
+   "looks-like": "(?P<n>a)(?P<n>b)",
+   "outside": true,
+   "reason": "the group name `n` written twice"
+  },
+  {
+   "looks-like": "é+",
+   "outside": false,
+   "finds": [
+    {
+     "in": 37,
+     "found": [
+      "é"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "😀",
+   "outside": false,
+   "finds": [
+    {
+     "in": 46,
+     "found": [
+      "😀"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "a?",
+   "outside": true,
+   "reason": "a pattern that can match an empty value, so it finds something in every text and runtimes disagree on what; make every branch need at least one character"
+  },
+  {
+   "looks-like": "^$",
+   "outside": true,
+   "reason": "a pattern that can match an empty value, so it finds something in every text and runtimes disagree on what; make every branch need at least one character"
+  },
+  {
+   "looks-like": "\\b",
+   "outside": true,
+   "reason": "a pattern that can match an empty value, so it finds something in every text and runtimes disagree on what; make every branch need at least one character"
+  },
+  {
+   "looks-like": "(?:a|)",
+   "outside": true,
+   "reason": "a pattern that can match an empty value, so it finds something in every text and runtimes disagree on what; make every branch need at least one character"
+  },
+  {
+   "looks-like": "a{0,3}",
+   "outside": true,
+   "reason": "a pattern that can match an empty value, so it finds something in every text and runtimes disagree on what; make every branch need at least one character"
+  },
+  {
+   "looks-like": "(?:ab)*|c",
+   "outside": true,
+   "reason": "a pattern that can match an empty value, so it finds something in every text and runtimes disagree on what; make every branch need at least one character"
+  },
+  {
+   "looks-like": "(?i:ORD)-\\d{8}",
+   "outside": false,
+   "finds": [
+    {
+     "in": 3,
+     "found": [
+      "ORD-12345678"
+     ]
+    },
+    {
+     "in": 5,
+     "found": [
+      "ord-12345678"
+     ]
+    },
+    {
+     "in": 6,
+     "found": [
+      "ORD-12345678"
+     ]
+    },
+    {
+     "in": 58,
+     "found": [
+      "ORD-12345678"
+     ]
+    }
+   ]
+  },
+  {
+   "looks-like": "[A-Z]{2}\\d{6}",
+   "outside": false,
+   "finds": []
+  },
+  {
+   "looks-like": "\\bR-\\d+\\b",
+   "outside": false,
+   "finds": []
+  }
+ ]
+}

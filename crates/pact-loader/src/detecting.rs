@@ -5,6 +5,7 @@
 //! | `loader/effect-of-no-call` | `effect:` on a condition that looks at a value; it is about the call a `tool:` line names |
 //! | `loader/a-value-word-on-a-call` | `in-share:` or `looks-like:` on a condition that looks at a call (`tool:`); both read a value |
 //! | `loader/looks-like-nothing-known` | `looks-like:` names neither a built-in recogniser nor one of `detectors:` |
+//! | `loader/looks-like-outside-the-dialect` | a `detectors:` entry's `looks-like:` pattern is outside the detector dialect ([`crate::dialect`]) |
 //!
 //! Where a hiding SENTENCE names a detector, the schema's sentence check
 //! resolves it (`pact-schema`, the `<a thing>` hole). This holds the condition
@@ -32,6 +33,61 @@ pub fn check(root: &Node, diags: &mut Diagnostics) {
         .map(|m| m.keys().cloned().collect())
         .unwrap_or_default();
     walk(root, &declared, diags);
+    if let Some(detectors) = root.get("detectors").and_then(Node::as_map) {
+        for (name, entry) in detectors {
+            patterns_of(name, &entry.node, diags);
+        }
+    }
+}
+
+/// Hold one declared detector's `looks-like:` lines to the dialect: each line
+/// on its own, so the message points at it, and then the lines joined as every
+/// runtime joins them, which only a group name written in two lines fails.
+fn patterns_of(name: &str, detector: &Node, diags: &mut Diagnostics) {
+    let Some(written) = detector.get("looks-like") else {
+        return;
+    };
+    let lines: Vec<&Node> = match written.as_list() {
+        Some(items) => items.iter().collect(),
+        None => vec![written],
+    };
+    let mut texts = Vec::new();
+    for line in lines {
+        let Some(text) = line.as_str() else {
+            continue;
+        };
+        if let Some(outside) = crate::dialect::outside(text) {
+            diags.push(outside_the_dialect(name, text, &outside, line.span.clone()));
+            return;
+        }
+        texts.push(text);
+    }
+    let joined = crate::dialect::joined(&texts);
+    if let Some(outside) = crate::dialect::outside(&joined) {
+        diags.push(outside_the_dialect(name, &joined, &outside, written.span.clone()));
+    }
+}
+
+fn outside_the_dialect(
+    name: &str,
+    pattern: &str,
+    outside: &crate::dialect::Outside,
+    span: pact_diag::Span,
+) -> Diagnostic {
+    Diagnostic::error(
+        "loader/looks-like-outside-the-dialect",
+        span,
+        format!(
+            "The detector '{name}' looks like `{pattern}`, which writes {} (at character {}). \
+             Python and the Rust regex crate would not detect the same values with it.",
+            outside.reason,
+            outside.at + 1
+        ),
+        "Write the pattern in the detector dialect: literals, `.`, `^`, `$`, `\\b`, `\\d \\w \\s` \
+         and their capitals, `[...]`, `(?:...)`, `(?P<name>...)`, `(?i:...)`, alternation and \
+         `* + ? {n} {n,} {n,m}` (spec/schema.yaml, `detectors`)."
+            .to_string(),
+    )
 }
 
 fn walk(node: &Node, declared: &[String], diags: &mut Diagnostics) {
