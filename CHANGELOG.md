@@ -3,6 +3,24 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — a metric a model is held to is taken on every case, and `prefer:` says what "best" means (16 November)
+
+### What holds now
+
+- **A metric an `accept-when:` line reads is taken on every case.** A case stops at its first failed
+  rule, so `refund-tone.score >= 0.8` was held to the mean over only the cases a model got past their
+  first failure — an easier subset, which favoured the model that failed more. The reference now
+  takes each metric an `accept-when:` line names on every case, a failed one included (the case still
+  fails, for the reason it failed before); `<metric>.score`, `<metric>.pass-rate` and
+  `<metric>.cases` are over the whole suite. Any other metric still stops at the first failure, so a
+  suite nobody holds a model to costs no more grading than before.
+- **`best-on-the-evals` is the largest share of the suite's cases passed**, the cheaper of two that
+  passed the same share. The help said "the highest score", which could be read as a metric's mean.
+- **`prefer:` chooses only when `model:` is left out.** A named `model:` is used as named; the help
+  now says so.
+- **`cost` is what the agent's own calls spent per case**, not what grading them cost; the help now
+  says so.
+
 ## 2026-11 — a benchmark named in any script, a figure recorded under an alias, and DeepEval's ARC challenge set (16 November)
 
 ### What holds now
