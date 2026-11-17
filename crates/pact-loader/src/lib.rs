@@ -149,6 +149,7 @@ pub mod currency;
 pub mod deciding;
 pub mod derive;
 pub mod detecting;
+pub mod dialect;
 pub mod effects;
 pub mod exactly_once;
 pub mod failures;

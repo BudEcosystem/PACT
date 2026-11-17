@@ -3,6 +3,36 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — one detector dialect, read alike by every runtime (17 November)
+
+A workspace's `detectors:` wrote their `looks-like:` patterns as any regular expression Python's `re`
+compiled. A runtime written in another language reads them with its own engine, and engines disagree
+on lookaround, back-references, `\b` beside non-ASCII letters, `$` before a final newline and what an
+empty match steps past, so one tree could hide a card number on one runtime and let it through on
+another.
+
+### What holds now
+
+- **`pact check` holds every `looks-like:` line to the detector dialect** (spec/schema.yaml,
+  `detector.looks-like`; `crates/pact-loader/src/dialect.rs`) and refuses the rest with
+  `loader/looks-like-outside-the-dialect`, naming what the pattern writes and where. The dialect is
+  what Python's `re` and the Rust `regex` crate both read, with Python's meaning: literals, `.`, `^`,
+  `$`, `\A`, `\Z`, `\b`, `\B`, the class escapes, `[...]` with ranges, character escapes, groups,
+  `(?P<name>...)`, `(?i:...)`, `(?m:...)`, `(?s:...)`, alternation and the quantifiers with their lazy
+  forms. A pattern that can match an empty value is outside it.
+- **A TypeScript port** (`adapters/typescript/src/detectors.ts`) translates exactly the patterns in
+  the dialect to JavaScript that finds what Python's `re` finds, refuses the rest with the checker's
+  reasons, compiles a workspace's `detectors:` (holding each to its `examples:`) and carries the five
+  built-in recognisers.
+- **Shared cases** (`tests/conformance/detectors.json`): 87 patterns over 68 texts, each in or outside
+  the dialect with its reason, and every match `re.finditer` yields for the ones in it. The checker
+  (`detector_dialect_cases.rs`), the reference and the TypeScript port
+  (`test_every_port_reads_one_detector_dialect.py`) read every case alike.
+
+A tree whose detector writes a pattern outside the dialect no longer loads: rewrite it in the dialect
+(a lookbehind usually becomes a group around the part before, a `(?<name>...)` becomes
+`(?P<name>...)`).
+
 ## 2026-11 — a catalogue row says what a model needs of the machine that runs it (17 November)
 
 A runtime choosing among models served on its own machine could not tell whether the machine could

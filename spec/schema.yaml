@@ -3539,7 +3539,16 @@ groups:
         kernel-op: check.detector
         help: >
           the patterns it matches, as regular expressions — `ORD-[0-9]{8}`. Any
-          one matching is enough.
+          one matching is enough. Each is written in the detector dialect, the
+          part of regular expressions every runtime reads alike: literals, `.`,
+          `^`, `$`, `\A`, `\Z`, `\b`, `\B`, `\d \D \w \W \s \S`, `[...]`
+          with ranges, the escapes `\n \t \r \f \v \a \xHH \uHHHH
+          \UHHHHHHHH` and escaped punctuation, `(...)`, `(?:...)`,
+          `(?P<name>...)`, `(?i:...)`, `(?m:...)`, `(?s:...)`, `|`, and `* + ?
+          {n} {n,} {n,m}` with their lazy forms. A pattern that can match an
+          empty value, or writes anything else (lookaround, back-references,
+          `(?<name>...)`, flags for the whole pattern, `{,m}`, nested classes,
+          `\p{...}`), is refused, naming what it writes.
       examples:
         type: list of text
         surface: S-GEN
