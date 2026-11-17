@@ -1,0 +1,34 @@
+# The digest `copied-from.digest` records for a distribution row, held to one
+# value in every runtime. It is `sha256:` and the hex SHA-256 of the row's JSON
+# as `pact show` prints it, with every mapping's keys sorted and no spaces.
+# The Rust checker (`crates/pact-loader/src/copies.rs`) digests each `row:` as
+# loaded; the Python writer (`pact_adapters.benchmarks.row_digest`) digests the
+# JSON `pact show` prints for the same row. Both must give `digest:`.
+digests:
+  - because: whole numbers, decimals and a share stay as the loader read them
+    row:
+      tier: small
+      description: "A model written with the words an author uses — café, naïve, 日本語"
+      capabilities:
+        dimensions: 768
+        context-window:
+          value: 32k
+          provenance: {source: the model card, as-of: 2026-07-28}
+      benchmarks:
+        mmlu:
+          value: "78"
+          provenance:
+            source: measured here
+            sample-size: 200
+            population: 14042
+            interval: {low: 71.6, high: 83.1, level: 0.95}
+      cost: {input-per-mtok: 0.10 USD, output-per-mtok: 0.40 USD}
+    digest: "sha256:f0774b8ee0a8ce8d2fb2802eef45f95c05fe4cf1603e30abc930d9e989a75ff7"
+  - because: key order in the file does not move the digest, and list order does
+    row:
+      served-by:
+        - {runtime: ollama, endpoint: local}
+        - {endpoint: local, runtime: vllm}
+      also-known-as: ["b-model:7b", b-model]
+      tier: mid
+    digest: "sha256:bdf87889208feeb0553891b9cf6cc1499dd82e53d3831e801c9f29f754f1a5b7"

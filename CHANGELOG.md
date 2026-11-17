@@ -98,6 +98,28 @@ memory it took, so a local row the machine could not load was bound and failed o
 - **The `deepeval` extra installs `datasets` and `pandas`.** DeepEval's benchmarks import them when
   they are built and its package declares neither, so a benchmark run failed on its first line.
 
+## 2026-11 — a copied catalogue row says which row it copied, and check says when that row moves on (17 November)
+
+Recording one benchmark figure for a shipped model copies the distribution's whole row into the
+workspace's `models/catalog.yaml` first, because a workspace row replaces the shipped one whole. The
+copy then kept the price, the window and the serving it was copied with, and when the distribution
+corrected that row the workspace went on binding against the old facts with nothing said.
+
+### What an author can now write
+
+- **`copied-from: {digest}`** on a row of the workspace's own catalogue: `sha256:` and the hex
+  digest of the distribution's row as it was copied (its JSON as `pact show` prints it, keys sorted,
+  no spaces). `benchmarks.record` writes it whenever it copies a row.
+
+### What holds now
+
+- **`pact check` warns `loader/a-copied-row-behind-the-distribution`** when the distribution's row
+  of that name (or alias) no longer has that digest, naming the fields where the copy and the
+  shipped row now differ and giving the digest to write once they are reconciled; and when the
+  distribution no longer has the row at all.
+- `spec/copied-rows.yaml` holds the Rust checker and the Python writer to the same digests, for a row
+  with whole numbers, decimals, a share, a date and non-ASCII text.
+
 ## 2026-11 — a measured figure says how it was measured, and a line is held to its interval (16 November)
 
 A figure's `provenance:` said where a number came from but not how much of the benchmark it rests on

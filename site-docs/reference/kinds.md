@@ -1,11 +1,11 @@
-# The 71 kinds
+# The 72 kinds
 
 Generated from `spec/schema.yaml`. Every kind, what it is for, and how
 many fields it has. You do not need to learn these — `pact check` names the
 right one when you need it.
 
 
-**71 kinds.** A kind is a *shape a document can take*, not a file you must
+**72 kinds.** A kind is a *shape a document can take*, not a file you must
 write: most workspaces use a dozen.
 
 
@@ -70,9 +70,10 @@ write: most workspaces use a dozen.
 | `call-order` | 2 | `call`, `first` |
 | `benchmark` | 5 | — |
 | `catalog` | 4 | — |
+| `copied-from` | 1 | — |
 | `figure` | 2 | — |
 | `limits` | 24 | `feel`, `finishes-within`, `starts-from`, `paused-during`, `milestones` |
-| `model` | 13 | — |
+| `model` | 14 | — |
 | `model-can` | 12 | — |
 | `model-cost` | 2 | — |
 | `model-requires` | 2 | — |
