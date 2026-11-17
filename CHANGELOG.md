@@ -3,6 +3,24 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — a benchmark named in any script, a figure recorded under an alias, and DeepEval's ARC challenge set (16 November)
+
+### What holds now
+
+- **An `accept-when:` name is everything before the comparison, in both ports.** The Python reader
+  took only `[A-Za-z0-9 _.()+-]`, so `τ-bench.score > 50` — an alias the catalogue publishes for
+  tau-bench — was not a comparison there while the checker read it. `spec/accept-when.yaml` gains the
+  row, and `> 50` (no name at all) as a refused one.
+- **`benchmarks.record` writes a figure under the row's own id.** Recorded under an alias
+  (`qwen2.5:7b-instruct`), it made a second workspace row beside the distribution's, and the
+  catalogue, layered by id, offered both as candidates. It now finds the row the name answers to, in
+  the workspace or the distribution, and writes there.
+- **The shipped `arc` row runs the challenge set.** DeepEval's ARC runs the easy set unless told
+  otherwise, so a figure measured for the row (`ARC-Challenge`) was the easy set's. The row now says
+  `with: {mode: challenge}`, read into DeepEval's `ARCMode`.
+- **The `deepeval` extra installs `datasets` and `pandas`.** DeepEval's benchmarks import them when
+  they are built and its package declares neither, so a benchmark run failed on its first line.
+
 ## 2026-11 — a measured figure says how it was measured, and a line is held to its interval (16 November)
 
 A figure's `provenance:` said where a number came from but not how much of the benchmark it rests on

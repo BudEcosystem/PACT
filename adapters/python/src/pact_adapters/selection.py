@@ -80,7 +80,9 @@ BEFORE: dict[str, str] = {
 AFTER: dict[str, str] = {"pass-rate": "fraction", "cost": "money"}
 
 _OPS = (">=", "<=", "==", ">", "<", "=")
-_LINE = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9 _.()+-]*?)\s*(>=|<=|==|>|<|=)\s*(.+?)\s*$")
+#: A name is everything before the first `>`, `<` or `=`, as `accept.rs` reads
+#: it, so a benchmark published as `τ-bench` is a name in both ports.
+_LINE = re.compile(r"^\s*([^<>=]*?)\s*(>=|<=|==|>|<|=)\s*(.+?)\s*$")
 
 
 class Unreadable(ValueError):
@@ -327,7 +329,7 @@ def parse(
 ) -> Line:
     """One line, or `Unreadable` saying why it is not one."""
     found = _LINE.match(str(written))
-    if found is None:
+    if found is None or not found.group(1).strip():
         raise Unreadable(
             f"`{written}` is not a comparison: write a name, then `>`, `>=`, `<`, `<=` or `=`, "
             f"then a figure — `mmlu.score > 50`"
