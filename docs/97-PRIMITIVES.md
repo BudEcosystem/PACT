@@ -1741,6 +1741,7 @@ words for a person, with no behaviour.
 | `model.kind` | Actor |
 | `model.benchmarks` | Store + Actor |
 | `model.speed` | Store + Actor |
+| `model.copied-from` | Store + Check |
 | `served-by.runtime` | Actor |
 | `served-by.endpoint` | Actor + Allowance |
 | `served-by.region` | Allowance + Store + Actor |
@@ -1757,6 +1758,7 @@ words for a person, with no behaviour.
 | `model-can.dimensions` | Shape + Actor |
 | `model-can.context-window` | Store + Actor |
 | `model-speed.first-words-within` | Store |
+| `copied-from.digest` | Store + Check |
 | `figure.value` | Store + Actor |
 | `figure.provenance` | Store + Actor |
 | `provenance.source` | Store |

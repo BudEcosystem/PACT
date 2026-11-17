@@ -23,6 +23,10 @@ from __future__ import annotations
 
 import datetime as _dt
 import enum
+import hashlib
+import json
+import subprocess
+import tempfile
 import typing
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -31,6 +35,7 @@ from typing import Any
 
 import yaml
 
+from .loader import pact_binary
 from .providers import AskModel
 from .selection import benchmarks_of
 
@@ -162,8 +167,14 @@ def record(
         # A workspace row REPLACES the distribution's row of the same name — the catalogue is
         # layered row by row (`resolve._layer`) — so a row holding only this figure would lose
         # where the model is served, its price and its window. The distribution's row is copied
-        # first, and the reviewer reads all of it in the diff.
+        # first, and the reviewer reads all of it in the diff. `copied-from:`
+        # says which version of that row it was, so `pact check` can say when
+        # the distribution's row moves on without the copy
+        # (`loader/a-copied-row-behind-the-distribution`).
         rows[model] = _shipped_row(model)
+        shown = _shipped_as_shown(model)
+        if rows[model] and shown is not None:
+            rows[model]["copied-from"] = {"digest": row_digest(shown)}
     row = rows[model]
     row.setdefault("benchmarks", {})[key] = figure
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -198,6 +209,44 @@ def _shipped_row(model: str) -> dict[str, Any]:
         if name == model or model in (row or {}).get("also-known-as", []):
             return dict(row or {})
     return {}
+
+
+def row_digest(row: Mapping[str, Any]) -> str:
+    """The digest `copied-from.digest` records: `sha256:` and the hex SHA-256 of
+    `row`'s JSON with every mapping's keys sorted and no spaces.
+
+    `row` is the JSON `pact show` printed for the row, so its numbers are the
+    ones the loader read; digesting a YAML reading of its own would let a date
+    or a `1e3` read differently here than in the checker (`spec/copied-rows.yaml`).
+    """
+    text = json.dumps(row, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _shipped_as_shown(model: str) -> "dict[str, Any] | None":
+    """The distribution's row for `model` as `pact show` prints it, or `None` with no loader here.
+
+    `pact show` loads a workspace, so the distribution's catalogue is shown
+    from a scratch workspace that holds nothing else.
+    """
+    from .resolve import BUILTIN_CATALOGUE
+
+    binary = pact_binary()
+    if binary is None:
+        return None
+    with tempfile.TemporaryDirectory() as scratch:
+        root = Path(scratch)
+        (root / "models").mkdir()
+        (root / "models" / "catalog.yaml").write_text(Path(BUILTIN_CATALOGUE).read_text(encoding="utf-8"), encoding="utf-8")
+        (root / "workspace.yaml").write_text("name: shipped-catalogue\n", encoding="utf-8")
+        shown = subprocess.run([str(binary), "show", str(root)], capture_output=True, text=True)
+    if shown.returncode != 0:
+        return None
+    rows = ((json.loads(shown.stdout) or {}).get("models") or {}).get("models") or {}
+    for name, row in rows.items():
+        if name == model or model in (row or {}).get("also-known-as", []):
+            return row
+    return None
 
 
 def run_deepeval(

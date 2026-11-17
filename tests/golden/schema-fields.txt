@@ -84,6 +84,7 @@ context-policy.if-it-still-does-not-fit	one-of | S-GOV | core | optional
 context-policy.summarised-by	text | S-CAP | expert | optional
 context-policy.then	list of group:tidy-step | S-CTRL | expert | optional
 context-policy.when-full	percent | S-CTRL | core | optional
+copied-from.digest	text | S-GOV | expert | required
 credential-reference.by-reference	text | S-CAP | core | required
 cycle-limits.evals	integer | S-GOV | core | optional
 cycle-limits.per-cycle	integer | S-GOV | core | optional
@@ -212,6 +213,7 @@ model-speed.first-words-within	group:figure | S-CAP | expert | optional
 model.also-known-as	list of text | S-CAP | expert | optional
 model.benchmarks	map of group:figure | S-CAP | expert | optional
 model.capabilities	group:model-can | S-CAP | expert | optional
+model.copied-from	group:copied-from | S-GOV | expert | optional
 model.cost	group:model-cost | S-GOV | expert | optional
 model.description	text | S-GEN | expert | optional
 model.family	text | S-GEN | expert | optional

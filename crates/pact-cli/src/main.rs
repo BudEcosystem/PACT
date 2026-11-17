@@ -2075,6 +2075,9 @@ fn validate_leaving_out(
         // 96 §B4: what an agent accepts a model on — a benchmark, a metric of
         // its suite, a price — read the way the resolver will decide it.
         pact_loader::accept::check(root, BUILTIN_CATALOGUE, &mut diags);
+        // A row of the workspace's own catalogue copied from the distribution's,
+        // which the distribution has corrected since.
+        pact_loader::copies::check(root, BUILTIN_CATALOGUE, &mut diags);
         // 96 §B5: a `settings:` line the pinned model would throw away.
         pact_loader::settings::check(root, BUILTIN_CATALOGUE, &mut diags);
         diags.sort();

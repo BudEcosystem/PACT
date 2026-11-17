@@ -144,6 +144,7 @@ pub mod clauses;
 pub mod closed_world;
 pub mod code;
 pub mod conditions;
+pub mod copies;
 pub mod currency;
 pub mod deciding;
 pub mod derive;
