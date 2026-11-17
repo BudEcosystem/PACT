@@ -19,7 +19,7 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from pact_adapters import benchmarks, resolve, selection  # noqa: E402
-from pact_adapters.evals import CaseOutcome, Verdict  # noqa: E402
+from pact_adapters.evals import Case, CaseOutcome, Verdict  # noqa: E402
 from trees import REPO, shown  # noqa: E402
 
 TABLE = yaml.safe_load((REPO / "spec/accept-when.yaml").read_text(encoding="utf-8"))
@@ -194,6 +194,35 @@ def test_what_a_model_scored_and_spent_on_the_suite_is_held_after_it_passes() ->
     assert "never metered" in resolve._short_of({"accept-when": (_line("cost < 0.05 USD"),)}, unmetered, doc)
 
 
+def test_a_metric_an_accept_line_reads_is_taken_on_every_case() -> None:
+    """A mean over only the cases a model got past their first failure is a mean over an easier
+    subset, and favours the model that failed more; so a metric `accept-when:` reads is taken on
+    every case, and any other still stops at the first failure."""
+    from pact_adapters.evals import check
+    from pact_adapters.harness import RunResult
+    from pact_adapters.providers import MetricSpec
+
+    brevity = MetricSpec.parse({"uri": "pact:at_most_words", "name": "brevity", "with": {"words": 4}})
+    cases = [Case("easy", "a refund?", {"answer": "refunded"}), Case("hard", "a refund?", {"answer": "refunded"})]
+    answers = [RunResult("refunded"), RunResult("I cannot say anything about that refund at all today")]
+    read = selection.metrics_read(
+        [selection.parse("brevity.score >= 0.8", benchmarks=BENCH, metrics={"brevity"}), _line("mmlu > 50")]
+    )
+    assert read == {"brevity"}
+    early = [check(c, r, [], metrics=[brevity]) for c, r in zip(cases, answers)]
+    every = [check(c, r, [], metrics=[brevity], taken_on_every_case=read) for c, r in zip(cases, answers)]
+    assert [o.passed for o in early] == [o.passed for o in every] == [True, False]
+    assert every[1].why == early[1].why, "the case fails for the reason it failed before"
+    assert selection.measured(early) == {"pass-rate": 0.5, "brevity.score": 1.0, "brevity.cases": 1.0}
+    taken = selection.measured(every)
+    assert taken["brevity.cases"] == 2.0 and taken["brevity.score"] < 1.0
+    held = lambda outcomes: selection.held_after(  # noqa: E731
+        selection.parse("brevity.score >= 0.8", benchmarks=BENCH, metrics={"brevity"}),
+        selection.measured(outcomes),
+    )
+    assert held(early)[0] and not held(every)[0]
+
+
 def test_the_desk_reads_its_own_lines_and_its_named_metric() -> None:
     doc = shown(TREE)
     needs = resolve.needs_of(doc, "front-desk")
@@ -255,6 +284,30 @@ def test_the_shipped_benchmarks_say_how_each_is_measured() -> None:
     for b in known.values():
         if b.runner == "deepeval":
             assert hasattr(shipped, b.runs.split(":", 1)[1]), b.name
+    # DeepEval's ARC runs the easy set by default; the row's figure is the challenge set's.
+    from deepeval.benchmarks.modes import ARCMode
+
+    assert benchmarks._settings_for(shipped.ARC, known["arc"].with_) == {"mode": ARCMode.CHALLENGE}
+
+
+def test_deepeval_comes_with_what_its_benchmarks_import() -> None:
+    """`datasets` (every benchmark) and `pandas` (MMLU) are imported when a benchmark is built,
+    and DeepEval's own package declares neither, so the `deepeval` extra does."""
+    import importlib
+
+    for module in ("datasets", "pandas"):
+        importlib.import_module(module)
+
+
+def test_a_figure_recorded_under_an_alias_lands_on_the_rows_own_id(tmp_path: Path) -> None:
+    path = benchmarks.record(tmp_path, "qwen2.5:7b-instruct", "mmlu", 70.0, source="a run on this machine")
+    assert list(yaml.safe_load(path.read_text())["models"]) == ["qwen2.5-7b-instruct"]
+    rows = [e for e in resolve.load_catalogue(workspace=tmp_path).entries if "qwen2.5:7b-instruct" in e.aliases]
+    assert [e.name for e in rows] == ["qwen2.5-7b-instruct"], "one candidate, not the alias beside the row"
+    assert rows[0].scores["mmlu"] == pytest.approx(70.0)
+    again = benchmarks.record(tmp_path, "qwen2.5-7b-instruct", "gsm8k", 80.0, source="a run on this machine")
+    figures = yaml.safe_load(again.read_text())["models"]["qwen2.5-7b-instruct"]["benchmarks"]
+    assert set(figures) == {"mmlu", "gsm8k"}
 
 
 def test_a_bound_model_says_which_of_an_agents_settings_it_would_throw_away() -> None:

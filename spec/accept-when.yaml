@@ -16,6 +16,9 @@ benchmarks:
   mmlu: percent
   terminal-bench: percent
   win-rate: fraction
+  # A name is everything before the comparison, in any script: the catalogue
+  # publishes tau-bench as `τ-bench` too.
+  τ-bench: percent
 metrics: [refund-tone]
 
 lines:
@@ -35,6 +38,7 @@ lines:
   - {written: "output-price < 15 USD", measure: output-price, kind: figure, part: "", op: "<", value: "15", unit: money}
   - {written: "context-window >= 32k", measure: context-window, kind: figure, part: "", op: ">=", value: "32000", unit: size}
   - {written: "first-words-within < 500ms", measure: first-words-within, kind: figure, part: "", op: "<", value: "0.5", unit: duration}
+  - {written: "τ-bench.score > 50", measure: τ-bench, kind: benchmark, part: score, op: ">", value: "50", unit: percent}
 
 not-lines:
   - {written: "cost > 0.050", rule: loader/a-comparison-in-the-wrong-unit, because: "an amount with no currency"}
@@ -47,6 +51,7 @@ not-lines:
   - {written: "banana > 3", rule: loader/no-such-measure, because: "nothing is called that"}
   - {written: "mmlu", rule: loader/not-a-comparison, because: "no comparison at all"}
   - {written: "mmlu >", rule: loader/not-a-comparison, because: "a comparison with nothing to compare against"}
+  - {written: "> 50", rule: loader/not-a-comparison, because: "a comparison of nothing"}
 
 # A benchmark figure that says how it was measured (`provenance.sample-size`,
 # `population`, `interval`). Each row is one catalogue figure — `value:` and the
