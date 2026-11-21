@@ -183,3 +183,93 @@ def test_a_growing_each_still_stops_at_its_ceiling() -> None:
     )
     out = asyncio.run(run_workflow(spec, {"tasks": tasks}, Callers(tool=tool)))
     assert out.halted == "stopped" and "items-at-most" in out.said, out
+
+
+def _growing(teamwork: dict[str, Any], fails: tuple[str, ...] = ()) -> tuple[list[dict[str, str]], list[str], WorkflowSpec, Callers]:
+    """t1 and t2 to start with; working t1 adds t3. `fails` names tasks whose call raises."""
+    tasks = [{"id": "t1"}, {"id": "t2"}]
+    done: list[str] = []
+
+    async def tool(tool: str, action: str, inputs: dict) -> dict:
+        task = inputs["task"]
+        done.append(task)
+        if task == "t1":
+            tasks.append({"id": "t3"})
+        await asyncio.sleep(0)
+        if task in fails:
+            raise RuntimeError(f"{task} broke")
+        return {"did": task}
+
+    spec = _flow(
+        {
+            "work": {
+                "does": "each",
+                "over": "input.tasks",
+                "keeps-taking": "yes",
+                "identified-by": ["id"],
+                "teamwork": teamwork,
+                "limits": {"items-at-most": 10, "at-once-at-most": 1, "when-it-runs-out": "stop-and-say-so"},
+                "starts-at": "do",
+                "steps": {"do": {"does": "call", "call": "q/run", "bind": {"task": "item.id"}}},
+                "then": {"answered": "reply"},
+            },
+            "reply": {"does": "answer", "bind": {"items": "steps.work.items"}},
+        },
+        "work",
+    )
+    return tasks, done, spec, Callers(tool=tool)
+
+
+def test_a_growing_each_stops_taking_once_its_teamwork_rule_is_met() -> None:
+    tasks, done, spec, callers = _growing({"waits-for": "anyone"})
+    out = asyncio.run(run_workflow(spec, {"tasks": tasks}, callers))
+    assert out.halted == "final", out.said
+    assert out.steps["work"]["items"][0] == {"did": "t1"}, out.steps["work"]
+    # t2 was already running when t1 answered; t3, which t1 added, is never taken.
+    assert "t3" not in done, "nothing is taken once the rule is met"
+
+
+def test_a_growing_each_carries_on_past_a_failed_item_when_its_teamwork_says_so() -> None:
+    tasks, done, spec, callers = _growing({"if-someone-fails": "carry-on"}, fails=("t2",))
+    out = asyncio.run(run_workflow(spec, {"tasks": tasks}, callers))
+    assert out.halted == "final", out.said
+    assert sorted(done) == ["t1", "t2", "t3"], done
+    assert [item for item in out.steps["work"]["items"] if "failed" in item] != [], out.steps["work"]
+    assert {"did": "t3"} in out.steps["work"]["items"], out.steps["work"]
+
+
+def test_a_growing_each_stops_at_a_failed_item_by_default() -> None:
+    tasks, done, spec, callers = _growing({}, fails=("t1",))
+    out = asyncio.run(run_workflow(spec, {"tasks": tasks}, callers))
+    assert out.halted == "stopped", out
+    assert "t3" not in done, done
+
+
+def test_a_stop_undoes_what_the_stopped_run_did() -> None:
+    calls: list[tuple[str, dict]] = []
+
+    async def tool(tool: str, action: str, inputs: dict) -> dict:
+        calls.append((action, dict(inputs)))
+        if action == "print":
+            await asyncio.sleep(5)
+        return {}
+
+    spec = _flow(
+        {
+            "start": {
+                "does": "call",
+                "call": "printer/print",
+                "waits-for-result": "no",
+                "undone-by": "printer/cancel",
+                "bind": {"doc": "input.doc"},
+                "then": {"answered": "halt"},
+            },
+            "halt": {"does": "stop", "stops": "steps.start.run", "then": {"answered": "reply"}},
+            "reply": {"does": "answer"},
+        },
+        "start",
+    )
+    out = asyncio.run(run_workflow(spec, {"doc": "a"}, Callers(tool=tool)))
+    assert out.halted == "final", out.said
+    assert out.steps["halt"] == {"stopped": True}
+    assert calls[-1] == ("cancel", {"doc": "a"}), calls
