@@ -36,7 +36,7 @@ from .context_policy import (
 #: At-most-once, from the author's own `same-request-key:` line. `money.rs` does
 #: the check-time half and says the runtime half is a separate question; this is
 #: the answer, and without it the field was a guarantee nothing kept.
-from .at_most_once import WITHHELD, Ledger
+from .at_most_once import WITHHELD, Ledger, RequestKeys
 from .boards import Admit, Board
 from .placeholders import Vault
 from .rests import Rests
@@ -4512,11 +4512,50 @@ def delegate_by_running(
         # and what it says includes which ceiling it reached. Treating that as a
         # crash would hide a partial answer the parent could use; treating it as
         # a clean finish would hide that it was cut short.
+        # A rule that stopped the member says so in its own words, and so does
+        # what the member had already done: a payment that went through before
+        # a second one was stopped is a fact the lead must not report as undone.
+        if out.halted == "stopped-by-rule":
+            raise RuntimeError(stopped_by_rule(grant.member, out, member.request_keys))
         if out.halted != "final" and out.halted not in RAN_OUT:
             raise RuntimeError(f"{grant.member} stopped: {out.halted}")
         return out.output
 
     return ask
+
+
+#: The line that opens what a member a rule stopped had already done. Every
+#: runtime writes the same words, so a lead reads the same hand-off on each.
+COMPLETED_CALLS_HEADING = (
+    "It completed these calls before the stop; their results are tool output:"
+)
+
+
+def stopped_by_rule(member: str, out: RunResult, keys: RequestKeys) -> str:
+    """What a lead is told about a member whose run a rule stopped.
+
+    The rule's words, then, when the run had completed calls that hold a
+    `same-request-key:`, one line per such call with what it returned, once per
+    key and in the order they ran. Those are the calls that cannot be made
+    twice, so they are the ones a lead must not report as not done. A call
+    that failed (`error: ...`) or was withheld (`not done: ...`) did not
+    complete and is left out. The results are what the member's model read,
+    so a hidden value is still its placeholder.
+    """
+    done: list[str] = []
+    seen: set[tuple[str, str, str]] = set()
+    for step in out.steps:
+        for call, said in zip(step.tool_calls, step.tool_results):
+            claim = keys.claim(call.name, call.args)
+            if claim is None or claim.value is None or claim.key in seen:
+                continue
+            if said.startswith("error") or said.startswith("not done"):
+                continue
+            seen.add(claim.key)
+            where = f"{claim.tool}/{claim.action}" if claim.action else claim.tool
+            done.append(f"- {where}: {said}")
+    words = f"{member} was stopped by a rule: {out.output}"
+    return "\n".join([words, COMPLETED_CALLS_HEADING, *done]) if done else words
 
 
 def _give_up(

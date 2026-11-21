@@ -3,6 +3,23 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — a member a rule stopped says what it had already done (21 November)
+
+A team member whose run a rule stopped (`stop-the-run`) reached its lead as
+`error: cashier could not answer: cashier stopped: stopped-by-rule`: neither the rule's words nor the
+fact that the member had already made a payment before the rule stopped a second one. A live lead
+then told a customer "not charged" for an order whose money had moved.
+
+### What holds now
+
+- **The lead reads the rule's words and what the member completed.** `harness.stopped_by_rule`
+  writes `<member> was stopped by a rule: <the rule's words>`, then, when the run had completed calls
+  holding a `same-request-key:`, the heading `harness.COMPLETED_CALLS_HEADING` ("It completed these
+  calls before the stop; their results are tool output:") and one line per such call with what it
+  returned, once per key and in the order they ran. A call that failed or was withheld is left out,
+  and a hidden value stays its placeholder. Every runtime writes the same heading, so a lead reads one
+  hand-off on each (`tests/test_a_stopped_member_says_what_it_already_did.py`).
+
 ## 2026-11 — one detector dialect, read alike by every runtime (17 November)
 
 A workspace's `detectors:` wrote their `looks-like:` patterns as any regular expression Python's `re`
