@@ -180,6 +180,10 @@ class RunRef:
 
     id: str
     task: "asyncio.Task[Any]"
+    #: The call's way back (`undone-by:`, the stage's or the action's), which
+    #: a `stop` runs once it has stopped the run, with the call's inputs.
+    undo: str = ""
+    inputs: dict[str, Any] = field(default_factory=dict)
 
     def stop(self) -> bool:
         return self.task.cancel()
@@ -318,6 +322,30 @@ class _Scope:
             remembers=dict(changes.get("remembers", self.remembers)),
             values=self.values,
         )
+
+
+@dataclass(frozen=True)
+class _JoinRule:
+    """How an `each` or a `together` joins what it runs side by side: its
+    `teamwork:`'s `waits-for:`, `enough-is:` and `if-someone-fails:`."""
+
+    waits: str
+    enough: int
+    on_failure: str
+
+    @staticmethod
+    def of(stage: StageSpec) -> "_JoinRule":
+        return _JoinRule(
+            waits=str(stage.teamwork.get("waits-for") or "everyone").strip(),
+            enough=int(stage.teamwork.get("enough-is") or 0),
+            on_failure=str(stage.teamwork.get("if-someone-fails") or "stop-the-others").strip(),
+        )
+
+    def met(self, good: int) -> bool:
+        """Whether `good` answers end the join before everything has ended."""
+        if self.waits in ("anyone", "the-first-good-answer"):
+            return good >= 1
+        return self.waits == "enough-of-them" and bool(self.enough) and good >= self.enough
 
 
 class _Run:
@@ -460,16 +488,22 @@ class _Run:
         if does == "answer":
             return "answered", self.inputs(stage, scope)
         if does == "stop":
-            return "answered", self.stop(stage, scope)
+            return "answered", await self.stop(stage, scope)
         raise Stopped(f"{stage.name!r} does {does!r}, which a workflow does not run")
 
-    def stop(self, stage: StageSpec, scope: _Scope) -> dict[str, Any]:
-        """`does: stop`: cancel a run a `call` started without waiting for it."""
+    async def stop(self, stage: StageSpec, scope: _Scope) -> dict[str, Any]:
+        """`does: stop`: cancel a run a `call` started without waiting for it,
+        then undo what it did as the call's own `undone-by:` says (`stops:`)."""
         ref = scope.read(stage.stops)
         if not isinstance(ref, RunRef):
             raise Stopped(f"{stage.name!r} stops {stage.stops!r}, which is not a run this one started")
         stopped = ref.stop()
         self.result.detached.pop(ref.id, None)
+        if stopped:
+            # Let the cancellation land before the undo runs.
+            await asyncio.gather(ref.task, return_exceptions=True)
+        if ref.undo:
+            await self.invoke(ref.undo, ref.inputs)
         return {"stopped": stopped}
 
     def inputs(self, stage: StageSpec, scope: _Scope) -> dict[str, Any]:
@@ -528,7 +562,12 @@ class _Run:
         name = await self.target(stage, scope)
         inputs = self.inputs(stage, scope)
         if not stage.waits_for_result:
-            ref = RunRef(id=uuid.uuid4().hex, task=asyncio.ensure_future(self.invoke(name, inputs)))
+            ref = RunRef(
+                id=uuid.uuid4().hex,
+                task=asyncio.ensure_future(self.invoke(name, inputs)),
+                undo=stage.undone_by or self._action_undo(name),
+                inputs=inputs,
+            )
             self.result.detached[ref.id] = ref
             return "answered", {"run": ref}
         attempts = max(1, stage.at_most or 1)
@@ -1092,30 +1131,49 @@ class _Run:
         Each time an item finishes the `over:` list is read again, and anything
         new is started. It ends once the list has stopped growing and nothing it
         started is still running — the join over a growing set (docs/97 §2.5).
-        `items-at-most:` still bounds it, counted over everything it took."""
+        `items-at-most:` still bounds it, counted over everything it took. The
+        items are joined by the stage's `teamwork:` as `branches` joins them: a
+        failed item is handled as `if-someone-fails:` says, and once
+        `waits-for:` is met the items still running are stopped and nothing
+        more is taken."""
         def key(it: Any) -> Any:
             if stage.identified_by and isinstance(it, Mapping):
                 return tuple(str(it.get(f)) for f in stage.identified_by)
             return repr(it)
 
+        rule = _JoinRule.of(stage)
         taken = {key(it) for it in items}
         running = {asyncio.ensure_future(one(it)) for it in items}
         answers: list[Any] = []
-        while running:
-            done, running = await asyncio.wait(running, return_when=asyncio.FIRST_COMPLETED)
-            for t in done:
-                answers.append(t.result())
-            now = scope.read(stage.over)
-            for it in now if isinstance(now, (list, tuple)) else ():
-                if key(it) in taken:
-                    continue
-                if ceiling is not None and len(taken) >= ceiling:
-                    raise Stopped(
-                        f"{stage.name!r} has taken {ceiling} items, all its `items-at-most:` allows",
-                        "reached-a-limit",
-                    )
-                taken.add(key(it))
-                running.add(asyncio.ensure_future(one(it)))
+        good = 0
+        try:
+            while running:
+                done, running = await asyncio.wait(running, return_when=asyncio.FIRST_COMPLETED)
+                for t in done:
+                    joined = self.joined(stage, t, rule)
+                    if joined is None:
+                        continue
+                    answered, answer = joined
+                    answers.append(answer)
+                    good += answered
+                if rule.met(good):
+                    break
+                now = scope.read(stage.over)
+                for it in now if isinstance(now, (list, tuple)) else ():
+                    if key(it) in taken:
+                        continue
+                    if ceiling is not None and len(taken) >= ceiling:
+                        raise Stopped(
+                            f"{stage.name!r} has taken {ceiling} items, all its `items-at-most:` allows",
+                            "reached-a-limit",
+                        )
+                    taken.add(key(it))
+                    running.add(asyncio.ensure_future(one(it)))
+        finally:
+            for t in running:
+                t.cancel()
+            if running:
+                await asyncio.gather(*running, return_exceptions=True)
         return answers
 
     async def together(self, stage: StageSpec, scope: _Scope, where: str) -> dict[str, Any]:
@@ -1131,9 +1189,7 @@ class _Run:
 
     async def branches(self, stage: StageSpec, work: list[Awaitable[dict[str, Any]]]) -> list[Any]:
         """Run branches side by side and join them by `teamwork.waits-for`."""
-        waits = str(stage.teamwork.get("waits-for") or "everyone").strip()
-        enough = int(stage.teamwork.get("enough-is") or 0)
-        on_failure = str(stage.teamwork.get("if-someone-fails") or "stop-the-others").strip()
+        rule = _JoinRule.of(stage)
         tasks = [asyncio.ensure_future(w) for w in work]
         got: list[Any] = [ABSENT] * len(tasks)
         good = 0
@@ -1142,28 +1198,12 @@ class _Run:
             while pending:
                 done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
                 for t in done:
-                    i = tasks.index(t)
-                    if t.cancelled():
+                    joined = self.joined(stage, t, rule)
+                    if joined is None:
                         continue
-                    err = t.exception()
-                    if err is not None:
-                        # The RUN was ended, not this branch: no `carry-on`
-                        # carries on past it.
-                        if isinstance(err, Cancelled):
-                            raise err
-                        if isinstance(err, (Stopped, Parked)) and on_failure != "carry-on":
-                            raise err
-                        got[i] = {"failed": str(err)}
-                        if on_failure == "stop-the-others":
-                            raise Stopped(
-                                f"a branch of {stage.name!r} failed: {err}", "a-call-failed"
-                            )
-                        continue
-                    got[i] = t.result()
-                    good += 1
-                if waits in ("anyone", "the-first-good-answer") and good >= 1:
-                    break
-                if waits == "enough-of-them" and enough and good >= enough:
+                    answered, got[tasks.index(t)] = joined
+                    good += answered
+                if rule.met(good):
                     break
         finally:
             for t in pending:
@@ -1171,6 +1211,25 @@ class _Run:
             if pending:
                 await asyncio.gather(*pending, return_exceptions=True)
         return [g for g in got if g is not ABSENT]
+
+    def joined(self, stage: StageSpec, t: "asyncio.Future[Any]", rule: "_JoinRule") -> tuple[bool, Any] | None:
+        """One finished item or branch, as its join takes it: `(True, answer)`,
+        `(False, {"failed": ...})` when `if-someone-fails: carry-on` carries on
+        past it, or `None` when it was cancelled. A failure the join does not
+        carry on past is raised."""
+        if t.cancelled():
+            return None
+        err = t.exception()
+        if err is None:
+            return True, t.result()
+        # The RUN was ended, not this branch: no `carry-on` carries on past it.
+        if isinstance(err, Cancelled):
+            raise err
+        if isinstance(err, (Stopped, Parked)) and rule.on_failure != "carry-on":
+            raise err
+        if rule.on_failure == "stop-the-others":
+            raise Stopped(f"a branch of {stage.name!r} failed: {err}", "a-call-failed")
+        return False, {"failed": str(err)}
 
     def combined(self, stage: StageSpec, answers: list[Any]) -> dict[str, Any]:
         """Each field of the answers made one by its `combines-by:` rule; a field

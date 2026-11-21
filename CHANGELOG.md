@@ -3,6 +3,26 @@
 What changed in PACT, newest first. Each entry says what an author can now write, or what now
 holds that did not; the commits are listed under it for whoever wants the detail.
 
+## 2026-11 — a growing `each` joins by its teamwork, and a `stop` undoes what it stopped (22 November)
+
+An `each` with `keeps-taking: yes` read none of its `teamwork:`: it waited for every item whatever
+`waits-for:` said, and an item that failed ended the run even under `if-someone-fails: carry-on`.
+And `does: stop` cancelled a run a `call` started without waiting for it, but nothing undid what
+that run had done, where the schema's `stops:` says "what it did is undone as its own `undone-by:`
+says".
+
+### What holds now
+
+- **A growing `each` is joined as any other.** `_Run.taking` settles each finished item through the
+  same step as `_Run.branches` (`_Run.joined`, `_JoinRule`): `if-someone-fails: carry-on` records a
+  failed item as `{"failed": ...}` and goes on taking, `stop-the-others` (the default) stops the run,
+  and once `waits-for:` is met (`anyone`, `the-first-good-answer`, `enough-of-them`) the items still
+  running are cancelled and nothing more is taken
+  (`tests/test_forks_stops_and_a_growing_each.py`).
+- **A `stop` undoes the run it stopped.** A detached run (`RunRef`) carries its call's way back, the
+  stage's `undone-by:` or the action's, and the inputs it was called with; `does: stop` cancels the
+  run, waits for the cancellation to land, then calls that undo with those inputs.
+
 ## 2026-11 — a member a rule stopped says what it had already done (21 November)
 
 A team member whose run a rule stopped (`stop-the-run`) reached its lead as
