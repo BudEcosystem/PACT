@@ -224,8 +224,9 @@ def test_a_growing_each_stops_taking_once_its_teamwork_rule_is_met() -> None:
     tasks, done, spec, callers = _growing({"waits-for": "anyone"})
     out = asyncio.run(run_workflow(spec, {"tasks": tasks}, callers))
     assert out.halted == "final", out.said
-    assert out.steps["work"]["items"][0] == {"did": "t1"}, out.steps["work"]
-    # t2 was already running when t1 answered; t3, which t1 added, is never taken.
+    # t1 and t2 run side by side under the gate, so both may have answered when the join reads the first; t3, which
+    # t1 added, is never taken.
+    assert out.steps["work"]["items"] and all(item.get("did") in ("t1", "t2") for item in out.steps["work"]["items"]), out.steps["work"]
     assert "t3" not in done, "nothing is taken once the rule is met"
 
 
